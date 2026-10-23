@@ -17,6 +17,8 @@ import { PortalFetchDto } from '../dto/portal-invoice.dto';
 import { R2Service } from '../../r2/r2.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { InvoiceLifecycleService } from './invoice-lifecycle.service';
+import { InvoiceBranchService } from './invoice-branch.service';
+import { readBranchIds } from '../../common/utils/branch-ids.util';
 import { VinfastPartsService } from '../../vinfast-parts/vinfast-parts.service';
 import { GdtCronStateHelper } from '../helpers/gdt-cron-state.helper';
 import { formatInvoiceProgressRef } from '../helpers/invoice-progress-ref.helper';
@@ -81,6 +83,7 @@ export class InvoicePortalService implements OnModuleInit {
     private readonly r2: R2Service,
     private readonly notificationsService: NotificationsService,
     private readonly lifecycleService: InvoiceLifecycleService,
+    private readonly branchService: InvoiceBranchService,
     private readonly vinfastPartsService: VinfastPartsService,
     @Optional()
     private readonly categoryAutopostService?: InvoiceCategoryAutopostService,
@@ -799,7 +802,9 @@ export class InvoicePortalService implements OnModuleInit {
                 saved.buyerTaxCode,
               );
               if (branchId) {
-                await this.repository.update(saved.id, { branchId });
+                await this.branchService.assign([saved.id], [branchId], {
+                  onlyIfUnassigned: true,
+                });
               }
             }
 
@@ -809,7 +814,9 @@ export class InvoicePortalService implements OnModuleInit {
                 saved.buyerTaxCode,
               );
               if (branchId) {
-                await this.repository.update(saved.id, { branchId });
+                await this.branchService.assign([saved.id], [branchId], {
+                  onlyIfUnassigned: true,
+                });
               }
             }
 
@@ -1236,15 +1243,23 @@ export class InvoicePortalService implements OnModuleInit {
     if (invoice.direction === 'OUT') {
       const updated = await this.repository.findOne({
         where: { id: invoice.id },
-        select: ['id', 'settlementOrder', 'branchId', 'buyerTaxCode'],
+        select: [
+          'id',
+          'settlementOrder',
+          'branchId',
+          'branchIds',
+          'buyerTaxCode',
+        ],
       });
       if (updated) {
         const newBranchId = await this.resolveBranchIdForOut(
           updated.settlementOrder,
           updated.buyerTaxCode,
         );
-        if (newBranchId && updated.branchId !== newBranchId) {
-          await this.repository.update(invoice.id, { branchId: newBranchId });
+        if (newBranchId && readBranchIds(updated).length === 0) {
+          await this.branchService.assign([invoice.id], [newBranchId], {
+            onlyIfUnassigned: true,
+          });
           this.logger.log(
             `Branch updated for invoice ${invoice.invoiceNo}: ${updated.branchId} -> ${newBranchId}`,
           );
@@ -1253,15 +1268,23 @@ export class InvoicePortalService implements OnModuleInit {
     } else if (invoice.direction === 'IN') {
       const updated = await this.repository.findOne({
         where: { id: invoice.id },
-        select: ['id', 'sellerTaxCode', 'buyerTaxCode', 'branchId'],
+        select: [
+          'id',
+          'sellerTaxCode',
+          'buyerTaxCode',
+          'branchId',
+          'branchIds',
+        ],
       });
       if (updated) {
         const newBranchId = await this.resolveBranchIdForIn(
           updated.sellerTaxCode,
           updated.buyerTaxCode,
         );
-        if (newBranchId && updated.branchId !== newBranchId) {
-          await this.repository.update(invoice.id, { branchId: newBranchId });
+        if (newBranchId && readBranchIds(updated).length === 0) {
+          await this.branchService.assign([invoice.id], [newBranchId], {
+            onlyIfUnassigned: true,
+          });
           this.logger.log(
             `Branch updated for IN invoice ${invoice.invoiceNo}: ${updated.branchId} -> ${newBranchId}`,
           );

@@ -24,6 +24,7 @@ import type {
   BankStatementExportHistoryResult,
   BankStatementExportJob,
 } from '../types/bank-statement-export.types';
+import { readBranchIds } from '../../common/utils/branch-ids.util';
 
 export type {
   BankStatementExportProgressEvent,
@@ -319,6 +320,7 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
     const qb = this.transactionQueryService.buildTransactionQueryBuilder(query);
 
     const transactions = await qb.getMany();
+    await this.attachBranchNames(transactions);
 
     onProgress(
       40,
@@ -364,6 +366,26 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
 
     onProgress(100, 'Tạo file hoàn tất!');
     return buffer;
+  }
+
+  /** Gắn tên mọi chi nhánh của từng dòng (`branchNames`), không chỉ chi nhánh đầu. */
+  private async attachBranchNames(
+    transactions: { branchIds?: string[] | null; branchId?: string | null }[],
+  ): Promise<void> {
+    const allIds = [...new Set(transactions.flatMap((t) => readBranchIds(t)))];
+    if (allIds.length === 0) return;
+    const rows: { id: string; name: string }[] =
+      await this.transactionRepo.manager.query(
+        'SELECT id, name FROM erp_branches WHERE id = ANY($1::uuid[])',
+        [allIds],
+      );
+    const nameById = new Map(rows.map((r) => [r.id, r.name]));
+    for (const t of transactions) {
+      (t as { branchNames?: string }).branchNames = readBranchIds(t)
+        .map((id) => nameById.get(id))
+        .filter((name): name is string => !!name)
+        .join(', ');
+    }
   }
 
   private parseSelectedColumns(raw?: string[] | string): string[] | undefined {

@@ -2,6 +2,10 @@ import {
   applyMultiKeywordFilter,
   applyMultiKeywordMultiFieldFilter,
 } from '../../../common/utils/query-builder.util';
+import {
+  applyBranchIdsFilter,
+  NO_BRANCH_FILTER,
+} from '../../../common/utils/branch-ids-filter.util';
 
 export function _applyItemColumnSearch(
   qb: any,
@@ -154,7 +158,9 @@ export function _applyItemColumnSearch(
     } else if (key === 'branchId' || key === 'branchName') {
       applyMultiKeywordMultiFieldFilter(
         qb,
-        ['inv.branch_id', 'b.name', 'b.code'],
+        [
+          "(SELECT string_agg(bb.name || ' ' || bb.code, ' ') FROM erp_branches bb WHERE bb.id = ANY(inv.branch_ids))",
+        ],
         val,
         'itemBranchSearch',
       );
@@ -457,25 +463,11 @@ export function _applyItemColumnFilters(
         qb.andWhere('inv.tax_invoice_status IS NULL');
       }
     } else if (key === 'branchId' || key === 'branchName') {
-      const hasBlank =
-        vals.includes('__BLANK__') ||
-        vals.includes('null') ||
-        vals.includes('');
-      const realVals = vals.filter(
-        (v) => v !== '__BLANK__' && v !== 'null' && v !== '',
+      // Lọc theo mảng branch_ids: hóa đơn nhiều chi nhánh khớp khi trùng bất kỳ chi nhánh nào
+      const mapped = vals.map((v) =>
+        v === '' || v === 'null' ? NO_BRANCH_FILTER : v,
       );
-      if (hasBlank && realVals.length > 0) {
-        qb.andWhere(
-          '(inv.branch_id IN (:...itemBranchVals) OR inv.branch_id IS NULL)',
-          { itemBranchVals: realVals },
-        );
-      } else if (hasBlank) {
-        qb.andWhere('inv.branch_id IS NULL');
-      } else if (realVals.length > 0) {
-        qb.andWhere('inv.branch_id IN (:...itemBranchVals)', {
-          itemBranchVals: realVals,
-        });
-      }
+      applyBranchIdsFilter(qb, mapped, 'itemBranchVals', 'inv.branch_ids');
     } else if (key === 'licensePlate') {
       qb.andWhere('inv.license_plate IN (:...itemLpVals)', {
         itemLpVals: vals,

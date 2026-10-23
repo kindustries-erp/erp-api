@@ -1,7 +1,7 @@
 import {
   applyBranchIdsFilter,
   resolveFilterBranchIds,
-} from './branch-ids-filter.helper';
+} from './branch-ids-filter.util';
 
 const makeQb = () => {
   const calls: { sql: string; params?: any }[] = [];

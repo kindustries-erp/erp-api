@@ -1,7 +1,7 @@
 import {
   applyBranchIdsFilter,
   resolveFilterBranchIds,
-} from '../helpers/branch-ids-filter.helper';
+} from '../../common/utils/branch-ids-filter.util';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';

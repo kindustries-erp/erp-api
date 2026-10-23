@@ -6,6 +6,10 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import {
+  GLOBAL_PREFIX,
+  applyGlobalPrefix,
+} from './common/config/global-prefix.config';
 import * as pg from 'pg';
 
 // Parse TIMESTAMP WITHOUT TIME ZONE as UTC instead of local time
@@ -19,8 +23,8 @@ async function bootstrap() {
   app.use(json({ limit: '10mb' }));
   app.use(urlencoded({ extended: true, limit: '10mb' }));
 
-  // Global prefix: tất cả route sẽ có dạng /api/v1/...
-  app.setGlobalPrefix('api/v1');
+  // Global prefix: route thường có dạng /api/v1/...; route api/v2 được loại trừ (xem global-prefix.config.ts)
+  applyGlobalPrefix(app);
 
   // Cấu hình Global Exception Filter để bắt chi tiết lỗi 500 (VD: TypeORM crashes)
   app.useGlobalFilters(new AllExceptionsFilter());
@@ -74,6 +78,8 @@ async function bootstrap() {
 
   await app.listen(port);
   logger.log(`🚀 Swagger UI đang chạy tại http://localhost:${port}/api/docs`);
-  logger.log(`🚀 Server đang chạy tại http://localhost:${port}/api/v1`);
+  logger.log(
+    `🚀 Server đang chạy tại http://localhost:${port}/${GLOBAL_PREFIX}`,
+  );
 }
 void bootstrap();

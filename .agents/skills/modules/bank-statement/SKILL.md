@@ -465,7 +465,12 @@ src/modules/bank-statements/components/BankStatementsTab/
 ## Đa chi nhánh (branch_ids)
 
 - `erp_bank_transactions.branch_ids uuid[] NOT NULL DEFAULT '{}'` (GIN index); `branch_id` NULLABLE và là chi nhánh chính = `branch_ids[1]`. Mảng rỗng = không chi nhánh (vẫn ghi sổ được).
-- Lọc list/analytics: `branchIds` (mảng, `__BLANK__` = không chi nhánh) qua `applyBranchIdsFilter` (`src/bank-transactions-core/helpers/branch-ids-filter.helper.ts`); `branchId` đơn vẫn chấp nhận (tương thích).
+- Lọc list/analytics: `branchIds` (mảng, `__BLANK__` = không chi nhánh) qua `applyBranchIdsFilter` (`src/common/utils/branch-ids-filter.util.ts`); `branchId` đơn vẫn chấp nhận (tương thích).
+- Chuẩn hóa cặp cột: `normalizeBranchColumns` / `readBranchIds` (`src/common/utils/branch-ids.util.ts`). Sao kê tạo tay (`createManualTransaction`) đi qua hàm này.
+- Cascading filter và column-options theo chi nhánh liệt kê mọi chi nhánh của dòng (`UNNEST` / join `branch_ids`), không chỉ chi nhánh đầu. Tìm kiếm theo tên gộp mọi chi nhánh.
+- Xuất Excel: cột chi nhánh ghi tên mọi chi nhánh (`branchNames`, gắn trong `bank-statement-export-background.service.ts`).
+- Dashboard ngân sách (`dashboard-core`) lọc theo `branch_ids`.
 - Bút toán: mỗi nhóm × chi nhánh chia bình quân bằng `splitEvenly`; nhập tay (`postTransaction`) cũng chia theo `branchIds` qua `createJournalEntriesForBranches`.
 - Export: cột chi nhánh hóa đơn liên kết nối tên bằng `string_agg`.
+- Kiểm tra nhất quán (chỉ đọc): `bun src/erp-invoices-core/scripts/audit-branch-consistency.ts <file.env>`.
 - Chưa làm: import file sao kê không có chi nhánh (`erp_bank_statement_file.branch_id` vẫn NOT NULL, `controller:327` vẫn bắt buộc `branchId`).

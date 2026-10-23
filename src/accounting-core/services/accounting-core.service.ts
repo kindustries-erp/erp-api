@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, Repository } from 'typeorm';
+import { Brackets, Repository, EntityManager } from 'typeorm';
 import { ErpChartOfAccount } from '../entities/erp_chart_of_account.entity';
 import { ErpJournalEntry } from '../entities/erp_journal_entry.entity';
 import { ErpJournalEntryLine } from '../entities/erp_journal_entry_line.entity';
@@ -53,6 +53,7 @@ export class AccountingCoreService {
     branchId: string | null,
     isReceipt?: boolean,
     customPrefix?: string,
+    manager?: EntityManager,
   ): Promise<string> {
     const date = transDate || new Date();
     const year = date.getFullYear();
@@ -75,17 +76,18 @@ export class AccountingCoreService {
     try {
       const cleanBranchId = branchId || null;
       // Atomic Upsert: Tăng sequence nguyên tử an toàn tuyệt đối
-      const res: Array<{ current_value: number }> =
-        await this.journalEntryRepo.manager.query(
-          `
+      const res: Array<{ current_value: number }> = await (
+        manager ?? this.journalEntryRepo.manager
+      ).query(
+        `
         INSERT INTO erp_document_sequences (prefix, period, branch_id, current_value, updated_at)
         VALUES ($1, $2, $3, 1, NOW())
         ON CONFLICT (prefix, period, COALESCE(branch_id, '00000000-0000-0000-0000-000000000000'::uuid))
         DO UPDATE SET current_value = erp_document_sequences.current_value + 1, updated_at = NOW()
         RETURNING current_value;
         `,
-          [docPrefix, yyyymmdd, cleanBranchId],
-        );
+        [docPrefix, yyyymmdd, cleanBranchId],
+      );
 
       if (res && res.length > 0 && res[0].current_value !== undefined) {
         nextCount = Number(res[0].current_value);
@@ -96,7 +98,7 @@ export class AccountingCoreService {
       );
       // Fallback query MAX from erp_journal_entries
       const fullPrefix = `${docPrefix}-${yyyymmdd}`;
-      const lastEntry = await this.journalEntryRepo
+      const lastEntry = await this.entryRepo(manager)
         .createQueryBuilder('je')
         .where('je.entryNo LIKE :prefix', { prefix: `${fullPrefix}-%` })
         .orderBy('je.entryNo', 'DESC')
@@ -115,8 +117,12 @@ export class AccountingCoreService {
     return `${docPrefix}-${yyyymmdd}-${seqStr}`;
   }
 
-  async deleteJournalEntryBySource(sourceId: string, sourceType: string) {
-    await this.journalEntryRepo.update(
+  async deleteJournalEntryBySource(
+    sourceId: string,
+    sourceType: string,
+    manager?: EntityManager,
+  ) {
+    await this.entryRepo(manager).update(
       { sourceId, sourceType },
       { isDeleted: true },
     );
@@ -133,17 +139,6 @@ export class AccountingCoreService {
     );
   }
 
-  async updateJournalEntryBranch(
-    sourceId: string,
-    sourceType: string,
-    branchId: string,
-  ): Promise<void> {
-    await this.journalEntryRepo.update(
-      { sourceId, sourceType, isDeleted: false },
-      { branchId },
-    );
-  }
-
   /**
    * Tạo N bút toán cho một chứng từ, mỗi chi nhánh một bút toán (tiền chia bình quân).
    * branchIds rỗng → 1 bút toán với branchId = null.
@@ -154,6 +149,7 @@ export class AccountingCoreService {
       branchIds: string[];
       lines: BalancedJournalLine[];
     },
+    manager?: EntityManager,
   ): Promise<ErpJournalEntry | null> {
     const { branchIds, lines, ...meta } = data;
     const targets: (string | null)[] = branchIds.length ? branchIds : [null];
@@ -168,19 +164,23 @@ export class AccountingCoreService {
       targets[0],
       meta.isReceipt,
       meta.entryNoPrefix,
+      manager,
     );
 
     let first: ErpJournalEntry | null = null;
     for (const { bucketLines, k } of buckets) {
-      const entry = await this.createJournalEntry({
-        ...meta,
-        branchId: targets[k],
-        entryNo:
-          buckets.length === 1
-            ? baseEntryNo
-            : `${baseEntryNo}${String.fromCharCode(97 + k)}`,
-        lines: bucketLines,
-      });
+      const entry = await this.createJournalEntry(
+        {
+          ...meta,
+          branchId: targets[k],
+          entryNo:
+            buckets.length === 1
+              ? baseEntryNo
+              : `${baseEntryNo}${String.fromCharCode(97 + k)}`,
+          lines: bucketLines,
+        },
+        manager,
+      );
       first ??= entry;
     }
     return first;
@@ -189,14 +189,42 @@ export class AccountingCoreService {
   /**
    * Tái phân bổ bút toán đã ghi sổ của một chứng từ sang danh sách chi nhánh mới:
    * gộp dòng hiện có, xóa mềm bút toán cũ, rồi tạo lại theo chi nhánh.
+   * Toàn bộ bước chạy trong một transaction: lỗi giữa chừng thì bút toán cũ còn nguyên.
    */
   async reallocateJournalEntriesBySource(
     sourceId: string,
     sourceType: string,
     branchIds: string[],
     entryNoPrefix?: string,
+    manager?: EntityManager,
   ): Promise<ErpJournalEntry | null> {
-    const entries = await this.getJournalEntriesBySource(sourceId, sourceType);
+    if (manager) {
+      return this.reallocateWithin(
+        manager,
+        sourceId,
+        sourceType,
+        branchIds,
+        entryNoPrefix,
+      );
+    }
+    return this.journalEntryRepo.manager.transaction((tx) =>
+      this.reallocateWithin(tx, sourceId, sourceType, branchIds, entryNoPrefix),
+    );
+  }
+
+  /** Thân tái phân bổ, chạy trong transaction `manager` (do người gọi mở). */
+  private async reallocateWithin(
+    manager: EntityManager,
+    sourceId: string,
+    sourceType: string,
+    branchIds: string[],
+    entryNoPrefix?: string,
+  ): Promise<ErpJournalEntry | null> {
+    const entries = await this.getJournalEntriesBySource(
+      sourceId,
+      sourceType,
+      manager,
+    );
     if (entries.length === 0) return null;
 
     const head = entries[0];
@@ -209,24 +237,38 @@ export class AccountingCoreService {
       })),
     );
 
-    await this.deleteJournalEntryBySource(sourceId, sourceType);
+    await this.deleteJournalEntryBySource(sourceId, sourceType, manager);
 
-    return this.createJournalEntriesForBranches({
-      branchIds,
-      date: head.date,
-      documentDate: head.documentDate ?? undefined,
-      description: head.description ?? undefined,
-      subjectName: head.subjectName ?? undefined,
-      sourceType,
-      sourceId,
-      reference: head.reference ?? undefined,
-      entryNoPrefix,
-      lines,
-    });
+    return this.createJournalEntriesForBranches(
+      {
+        branchIds,
+        date: head.date,
+        documentDate: head.documentDate ?? undefined,
+        description: head.description ?? undefined,
+        subjectName: head.subjectName ?? undefined,
+        sourceType,
+        sourceId,
+        reference: head.reference ?? undefined,
+        entryNoPrefix,
+        lines,
+      },
+      manager,
+    );
   }
 
-  async getJournalEntriesBySource(sourceId: string, sourceType: string) {
-    return this.journalEntryRepo
+  /** Repository của bút toán, dùng trong transaction nếu có `manager`. */
+  private entryRepo(manager?: EntityManager): Repository<ErpJournalEntry> {
+    return manager
+      ? manager.getRepository(ErpJournalEntry)
+      : this.journalEntryRepo;
+  }
+
+  async getJournalEntriesBySource(
+    sourceId: string,
+    sourceType: string,
+    manager?: EntityManager,
+  ) {
+    return this.entryRepo(manager)
       .createQueryBuilder('je')
       .leftJoinAndSelect('je.lines', 'lines')
       .leftJoinAndSelect('lines.account', 'account')
@@ -249,25 +291,32 @@ export class AccountingCoreService {
       .getOne();
   }
 
-  async createJournalEntry(data: {
-    entryNoPrefix?: string;
-    entryNo?: string;
-    branchId: string | null;
-    date: Date;
-    documentDate?: Date;
-    description?: string;
-    subjectName?: string;
-    sourceType?: string;
-    sourceId?: string;
-    reference?: string | null;
-    isReceipt?: boolean;
-    lines: {
-      accountId: string;
-      debit: number;
-      credit: number;
+  async createJournalEntry(
+    data: {
+      entryNoPrefix?: string;
+      entryNo?: string;
+      branchId: string | null;
+      date: Date;
+      documentDate?: Date;
       description?: string;
-    }[];
-  }) {
+      subjectName?: string;
+      sourceType?: string;
+      sourceId?: string;
+      reference?: string | null;
+      isReceipt?: boolean;
+      lines: {
+        accountId: string;
+        debit: number;
+        credit: number;
+        description?: string;
+      }[];
+    },
+    manager?: EntityManager,
+  ) {
+    const entryRepo = this.entryRepo(manager);
+    const lineRepo = manager
+      ? manager.getRepository(ErpJournalEntryLine)
+      : this.journalEntryLineRepo;
     const entryNo =
       data.entryNo ??
       (await this.generateEntryNo(
@@ -276,6 +325,7 @@ export class AccountingCoreService {
         data.branchId,
         data.isReceipt,
         data.entryNoPrefix,
+        manager,
       ));
 
     const debits = data.lines.filter((l) => l.debit > 0).map((l) => ({ ...l }));
@@ -322,7 +372,7 @@ export class AccountingCoreService {
       j++;
     }
 
-    const entry = this.journalEntryRepo.create({
+    const entry = entryRepo.create({
       branchId: data.branchId,
       entryNo,
       date: data.date,
@@ -334,7 +384,7 @@ export class AccountingCoreService {
       reference: data.reference,
       status: 'POSTED',
       lines: pairedLines.map((l, index) =>
-        this.journalEntryLineRepo.create({
+        lineRepo.create({
           accountId: l.accountId,
           debit: l.debit,
           credit: l.credit,
@@ -344,7 +394,7 @@ export class AccountingCoreService {
       ),
     });
 
-    return this.journalEntryRepo.save(entry);
+    return entryRepo.save(entry);
   }
 
   async getJournalEntries(query: any) {

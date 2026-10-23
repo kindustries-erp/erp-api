@@ -11,6 +11,7 @@ import { AccountingCoreService } from '../../accounting-core/services/accounting
 import { splitEvenly } from '../../common/utils/money-split.util';
 import { UpdateBankTransactionDto } from '../dto/update-bank-transaction.dto';
 import { CreateBankTransactionDto } from '../dto/create-bank-transaction.dto';
+import { normalizeBranchColumns } from '../../common/utils/branch-ids.util';
 import {
   CashflowClassification,
   CashflowPurpose,
@@ -44,6 +45,14 @@ export class TransactionAccountingService {
     this.assertCashflowPair(dto.cashflowClassification, dto.cashflowPurpose);
     const createData = { ...dto };
     delete (createData as any).attributes;
+    // Chuẩn hóa hai cột chi nhánh để branch_ids luôn là nguồn chuẩn
+    Object.assign(
+      createData,
+      normalizeBranchColumns({
+        branchIds: dto.branchIds,
+        branchId: dto.branchId,
+      }),
+    );
     const txn = this.transactionRepo.create(createData);
     return this.transactionRepo.save(txn);
   }
