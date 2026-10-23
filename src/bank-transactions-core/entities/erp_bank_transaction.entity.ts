@@ -67,12 +67,20 @@ export class ErpBankTransaction {
   @JoinColumn({ name: 'cash_book_id' })
   cashBook: ErpCashBook | null;
 
-  @Column({ type: 'uuid', name: 'branch_id' })
-  branchId: string;
+  @Column({ type: 'uuid', name: 'branch_id', nullable: true })
+  branchId: string | null;
 
-  @ManyToOne(() => ErpBranch)
+  @Column({
+    type: 'uuid',
+    array: true,
+    name: 'branch_ids',
+    default: () => "'{}'",
+  })
+  branchIds: string[];
+
+  @ManyToOne(() => ErpBranch, { nullable: true })
   @JoinColumn({ name: 'branch_id' })
-  branch: ErpBranch;
+  branch: ErpBranch | null;
 
   @Column({ type: 'int', name: 'stt', nullable: true })
   stt: number | null;

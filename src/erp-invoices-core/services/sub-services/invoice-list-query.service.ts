@@ -94,7 +94,8 @@ export class InvoiceListQueryService {
     else if (column === 'totalAmount') selectField = 'inv.total_amount';
     else if (column === 'licensePlate') selectField = 'inv.license_plate';
     else if (column === 'settlementOrder') selectField = 'inv.settlement_order';
-    else if (column === 'branchId') selectField = 'inv.branch_id';
+    // branch_ids là mảng: liệt kê mọi chi nhánh đã gán (mảng rỗng không sinh giá trị)
+    else if (column === 'branchId') selectField = 'UNNEST(inv.branch_ids)';
     else if (column === 'notes') selectField = 'inv.notes';
     else return { items: [], total: 0, page, pageSize, totalPages: 0 };
 
@@ -107,6 +108,8 @@ export class InvoiceListQueryService {
         `((${selectField} IS NOT NULL AND CAST(${selectField} AS TEXT) != '') OR (${customSecondaryField} IS NOT NULL AND CAST(${customSecondaryField} AS TEXT) != ''))`,
       );
       qb.groupBy(`${selectField}`).addGroupBy(`${customSecondaryField}`);
+    } else if (column === 'branchId') {
+      qb.select(`DISTINCT ${selectField}`, 'value');
     } else {
       qb.select(`DISTINCT ${selectField}`, 'value');
       if (isDateColumn) {

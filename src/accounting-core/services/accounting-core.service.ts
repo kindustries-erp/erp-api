@@ -19,6 +19,14 @@ const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 import { ErpDocumentSequence } from '../entities/erp_document_sequence.entity';
+import {
+  BalancedJournalLine,
+  splitBalancedLinesByBranch,
+} from '../../common/utils/money-split.util';
+
+type JournalEntryInput = Parameters<
+  AccountingCoreService['createJournalEntry']
+>[0];
 
 @Injectable()
 export class AccountingCoreService {
@@ -42,7 +50,7 @@ export class AccountingCoreService {
   async generateEntryNo(
     sourceType: 'BANK' | 'CASH' | 'INVOICE' | string,
     transDate: Date,
-    branchId: string,
+    branchId: string | null,
     isReceipt?: boolean,
     customPrefix?: string,
   ): Promise<string> {
@@ -136,6 +144,87 @@ export class AccountingCoreService {
     );
   }
 
+  /**
+   * Tạo N bút toán cho một chứng từ, mỗi chi nhánh một bút toán (tiền chia bình quân).
+   * branchIds rỗng → 1 bút toán với branchId = null.
+   * Số chứng từ: base + hậu tố a/b/c khi có nhiều bút toán.
+   */
+  async createJournalEntriesForBranches(
+    data: Omit<JournalEntryInput, 'branchId' | 'entryNo' | 'lines'> & {
+      branchIds: string[];
+      lines: BalancedJournalLine[];
+    },
+  ): Promise<ErpJournalEntry | null> {
+    const { branchIds, lines, ...meta } = data;
+    const targets: (string | null)[] = branchIds.length ? branchIds : [null];
+    const buckets = splitBalancedLinesByBranch(lines, targets.length)
+      .map((bucketLines, k) => ({ bucketLines, k }))
+      .filter((b) => b.bucketLines.length > 0);
+    if (buckets.length === 0) return null;
+
+    const baseEntryNo = await this.generateEntryNo(
+      meta.sourceType || 'BANK',
+      meta.date,
+      targets[0],
+      meta.isReceipt,
+      meta.entryNoPrefix,
+    );
+
+    let first: ErpJournalEntry | null = null;
+    for (const { bucketLines, k } of buckets) {
+      const entry = await this.createJournalEntry({
+        ...meta,
+        branchId: targets[k],
+        entryNo:
+          buckets.length === 1
+            ? baseEntryNo
+            : `${baseEntryNo}${String.fromCharCode(97 + k)}`,
+        lines: bucketLines,
+      });
+      first ??= entry;
+    }
+    return first;
+  }
+
+  /**
+   * Tái phân bổ bút toán đã ghi sổ của một chứng từ sang danh sách chi nhánh mới:
+   * gộp dòng hiện có, xóa mềm bút toán cũ, rồi tạo lại theo chi nhánh.
+   */
+  async reallocateJournalEntriesBySource(
+    sourceId: string,
+    sourceType: string,
+    branchIds: string[],
+    entryNoPrefix?: string,
+  ): Promise<ErpJournalEntry | null> {
+    const entries = await this.getJournalEntriesBySource(sourceId, sourceType);
+    if (entries.length === 0) return null;
+
+    const head = entries[0];
+    const lines: BalancedJournalLine[] = entries.flatMap((entry) =>
+      entry.lines.map((l) => ({
+        accountId: l.accountId,
+        debit: Number(l.debit),
+        credit: Number(l.credit),
+        description: l.description ?? undefined,
+      })),
+    );
+
+    await this.deleteJournalEntryBySource(sourceId, sourceType);
+
+    return this.createJournalEntriesForBranches({
+      branchIds,
+      date: head.date,
+      documentDate: head.documentDate ?? undefined,
+      description: head.description ?? undefined,
+      subjectName: head.subjectName ?? undefined,
+      sourceType,
+      sourceId,
+      reference: head.reference ?? undefined,
+      entryNoPrefix,
+      lines,
+    });
+  }
+
   async getJournalEntriesBySource(sourceId: string, sourceType: string) {
     return this.journalEntryRepo
       .createQueryBuilder('je')
@@ -163,7 +252,7 @@ export class AccountingCoreService {
   async createJournalEntry(data: {
     entryNoPrefix?: string;
     entryNo?: string;
-    branchId: string;
+    branchId: string | null;
     date: Date;
     documentDate?: Date;
     description?: string;
@@ -510,10 +599,22 @@ export class AccountingCoreService {
         colKey === 'branch' ||
         colKey === 'branchId'
       ) {
-        qb.andWhere(
-          '(je.branchId IN (:...fBranches) OR branch.name IN (:...fBranches))',
-          { fBranches: vals },
-        );
+        // '__BLANK__' = bút toán chưa gán chi nhánh (branch_id NULL)
+        const hasBlankBranch = vals.includes('__BLANK__');
+        const realBranches = vals.filter((v) => v !== '__BLANK__');
+        if (hasBlankBranch && realBranches.length > 0) {
+          qb.andWhere(
+            '(je.branchId IS NULL OR je.branchId IN (:...fBranches) OR branch.name IN (:...fBranches))',
+            { fBranches: realBranches },
+          );
+        } else if (hasBlankBranch) {
+          qb.andWhere('je.branchId IS NULL');
+        } else {
+          qb.andWhere(
+            '(je.branchId IN (:...fBranches) OR branch.name IN (:...fBranches))',
+            { fBranches: vals },
+          );
+        }
       } else if (
         colKey === '_subjectName' ||
         colKey === 'subjectName' ||

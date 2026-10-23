@@ -4,7 +4,7 @@ import { parseVNLocalDate } from './date-parser';
 
 export async function parseBidvXlsx(
   buffer: Buffer | any,
-  branchId: string,
+  branchId: string | undefined,
   bankAccountId?: string,
   cashBookId?: string,
   expectedAccountNumber?: string,

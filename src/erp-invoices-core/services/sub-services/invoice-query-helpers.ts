@@ -415,17 +415,18 @@ export function _applyColumnFilters(
         postingStatusVals: vals,
       });
     else if (key === 'branchId') {
+      // branch_ids là mảng 0..N chi nhánh; '__BLANK__' = không gán chi nhánh nào
       const hasBlank = vals.includes('__BLANK__');
       const realVals = vals.filter((v) => v !== '__BLANK__');
       if (hasBlank && realVals.length > 0) {
         qb.andWhere(
-          '(inv.branch_id IN (:...branchVals) OR inv.branch_id IS NULL)',
+          '(inv.branch_ids && ARRAY[:...branchVals]::uuid[] OR cardinality(inv.branch_ids) = 0)',
           { branchVals: realVals },
         );
       } else if (hasBlank) {
-        qb.andWhere('(inv.branch_id IS NULL)');
+        qb.andWhere('cardinality(inv.branch_ids) = 0');
       } else {
-        qb.andWhere('inv.branch_id IN (:...branchVals)', {
+        qb.andWhere('inv.branch_ids && ARRAY[:...branchVals]::uuid[]', {
           branchVals: vals,
         });
       }

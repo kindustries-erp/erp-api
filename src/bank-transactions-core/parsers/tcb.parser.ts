@@ -5,7 +5,7 @@ import { parseVNLocalDate } from './date-parser';
 
 export function parseTcbCsv(
   buffer: Buffer,
-  branchId: string,
+  branchId: string | undefined,
   bankAccountId?: string,
   cashBookId?: string,
   expectedAccountNumber?: string,
@@ -130,7 +130,7 @@ export function parseTcbCsv(
 
 export async function parseTcbXlsx(
   buffer: Buffer | any,
-  branchId: string,
+  branchId: string | undefined,
   bankAccountId?: string,
   cashBookId?: string,
   expectedAccountNumber?: string,

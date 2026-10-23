@@ -207,8 +207,8 @@ export class ErpInvoicesCoreService {
     return this.lifecycleService.cancel(id);
   }
 
-  bulkSetBranch(ids: string[], branchId: string | null) {
-    return this.lifecycleService.bulkSetBranch(ids, branchId);
+  bulkSetBranch(ids: string[], branchIds: string[]) {
+    return this.lifecycleService.bulkSetBranch(ids, branchIds);
   }
 
   bulkSetNotes(ids: string[], notes: string) {
