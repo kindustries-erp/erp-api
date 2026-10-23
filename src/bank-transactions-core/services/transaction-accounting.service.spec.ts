@@ -22,6 +22,9 @@ describe('TransactionAccountingService', () => {
       deleteJournalEntryBySource: jest.fn().mockResolvedValue(undefined),
       generateEntryNo: jest.fn().mockResolvedValue('BANK-0001'),
       createJournalEntry: jest.fn().mockResolvedValue({ id: 'je-1' }),
+      createJournalEntriesForBranches: jest
+        .fn()
+        .mockResolvedValue({ id: 'je-1' }),
       getJournalEntriesBySource: jest.fn().mockResolvedValue([]),
     };
 
@@ -30,6 +33,39 @@ describe('TransactionAccountingService', () => {
       dataSource,
       accountingCoreService,
     );
+  });
+
+  it('postTransaction (nhập tay) tạo bút toán theo danh sách chi nhánh của giao dịch', async () => {
+    transactionRepo.findOne.mockResolvedValue({
+      id: 'txn-1',
+      isDeleted: false,
+      sourceType: 'BANK',
+      branchId: 'branch-1',
+      branchIds: ['branch-1', 'branch-2'],
+      creditAmount: 200,
+      debitAmount: 0,
+      transDate: new Date('2026-07-23'),
+    });
+    dataSource.query.mockResolvedValue([{ id: '1121' }, { id: '331' }]);
+
+    await service
+      .postTransaction('txn-1', {
+        lines: [
+          { accountId: '1121', debit: 200, credit: 0, description: 'Thu' },
+          { accountId: '331', debit: 0, credit: 200, description: 'Thu' },
+        ],
+      } as any)
+      .catch(() => undefined);
+
+    expect(
+      accountingCoreService.createJournalEntriesForBranches,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        branchIds: ['branch-1', 'branch-2'],
+        sourceId: 'txn-1',
+      }),
+    );
+    expect(accountingCoreService.createJournalEntry).not.toHaveBeenCalled();
   });
 
   it('createManualTransaction throws when both bankAccountId and cashBookId are missing', async () => {
@@ -179,6 +215,71 @@ describe('TransactionAccountingService', () => {
             }),
           ],
         }),
+      );
+    });
+
+    it('splits the journal entry evenly across multiple branchIds', async () => {
+      process.env.ENABLE_LIVE_AUTO_POSTING = 'true';
+
+      transactionRepo.findOne.mockResolvedValue({
+        id: 'txn-1',
+        isDeleted: false,
+        sourceType: 'BANK',
+        branchId: 'branch-1',
+        branchIds: ['branch-1', 'branch-2'],
+        bankAccount: { accountingAccountId: '1121-account' },
+        creditAmount: 100,
+        debitAmount: 0,
+        accountingDescription: 'Tien vao tk',
+        correspondentAccountingAccountId: null,
+        transDate: new Date('2026-07-23'),
+      });
+
+      dataSource.query
+        .mockResolvedValueOnce([{ id: '331-account' }])
+        .mockResolvedValueOnce([{ id: '131-account' }])
+        .mockResolvedValueOnce([{ id: 't0001-account' }])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      await service.refreshJournalEntriesForBankTransaction('txn-1');
+
+      const calls = (accountingCoreService.createJournalEntry as jest.Mock).mock
+        .calls;
+      expect(calls).toHaveLength(2);
+      expect(calls.map((c) => c[0].branchId)).toEqual(['branch-1', 'branch-2']);
+      expect(calls.map((c) => c[0].lines[0].debit)).toEqual([50, 50]);
+    });
+
+    it('creates a single entry with null branch when branchIds and branchId are empty', async () => {
+      process.env.ENABLE_LIVE_AUTO_POSTING = 'true';
+
+      transactionRepo.findOne.mockResolvedValue({
+        id: 'txn-1',
+        isDeleted: false,
+        sourceType: 'BANK',
+        branchId: null,
+        branchIds: [],
+        bankAccount: { accountingAccountId: '1121-account' },
+        creditAmount: 100,
+        debitAmount: 0,
+        accountingDescription: 'Tien vao tk',
+        correspondentAccountingAccountId: null,
+        transDate: new Date('2026-07-23'),
+      });
+
+      dataSource.query
+        .mockResolvedValueOnce([{ id: '331-account' }])
+        .mockResolvedValueOnce([{ id: '131-account' }])
+        .mockResolvedValueOnce([{ id: 't0001-account' }])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      await service.refreshJournalEntriesForBankTransaction('txn-1');
+
+      expect(accountingCoreService.createJournalEntry).toHaveBeenCalledTimes(1);
+      expect(accountingCoreService.createJournalEntry).toHaveBeenCalledWith(
+        expect.objectContaining({ branchId: null }),
       );
     });
 

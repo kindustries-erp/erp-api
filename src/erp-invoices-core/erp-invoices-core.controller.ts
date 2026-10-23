@@ -404,8 +404,16 @@ export class ErpInvoicesCoreController {
     action: ErpAction.UPDATE,
   })
   @Patch('bulk-set-branch')
-  bulkSetBranch(@Body() body: { ids: string[]; branchId: string | null }) {
-    return this.service.bulkSetBranch(body.ids, body.branchId);
+  bulkSetBranch(
+    @Body()
+    body: {
+      ids: string[];
+      branchIds?: string[];
+      branchId?: string | null;
+    },
+  ) {
+    const branchIds = body.branchIds ?? (body.branchId ? [body.branchId] : []);
+    return this.service.bulkSetBranch(body.ids, branchIds);
   }
 
   @RequirePermissions({

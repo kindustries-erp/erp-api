@@ -5,6 +5,10 @@ import { ErpBankTransaction } from '../entities/erp_bank_transaction.entity';
 import { BankTransactionFilterDto } from '../dto/bank-transaction-filter.dto';
 import { TransactionAccountingService } from './transaction-accounting.service';
 import { applyMultiKeywordFilter } from '../../common/utils/query-builder.util';
+import {
+  applyBranchIdsFilter,
+  resolveFilterBranchIds,
+} from '../helpers/branch-ids-filter.helper';
 
 @Injectable()
 export class TransactionQueryService {
@@ -91,8 +95,9 @@ export class TransactionQueryService {
         sourceType: filter.sourceType,
       });
     }
-    if (filter.branchId) {
-      qb.andWhere('txn.branchId = :branchId', { branchId: filter.branchId });
+    const filterBranchIds = resolveFilterBranchIds(filter);
+    if (filterBranchIds.length > 0) {
+      applyBranchIdsFilter(qb, filterBranchIds, 'filterBranchIds');
     }
     if (filter.bankAccountId) {
       qb.andWhere('txn.bankAccountId = :bankAccountId', {
@@ -189,6 +194,11 @@ export class TransactionQueryService {
 
             if (conditions.length > 0)
               qb.andWhere(`(${conditions.join(' OR ')})`);
+            continue;
+          }
+
+          if (col === 'branch') {
+            applyBranchIdsFilter(qb, vals, `vals_${col}`);
             continue;
           }
 

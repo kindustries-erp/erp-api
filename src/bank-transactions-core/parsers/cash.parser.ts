@@ -4,7 +4,7 @@ import { parseVNLocalDate } from './date-parser';
 
 export async function parseCashXlsx(
   buffer: Buffer | any,
-  branchId: string,
+  branchId: string | undefined,
   bankAccountId?: string,
   cashBookId?: string,
 ): Promise<CreateBankTransactionDto[]> {

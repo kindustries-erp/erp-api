@@ -9,6 +9,8 @@ import {
   IsString,
   IsUUID,
   IsObject,
+  IsArray,
+  ArrayUnique,
 } from 'class-validator';
 import {
   CASHFLOW_CLASSIFICATIONS,
@@ -30,9 +32,24 @@ export class CreateBankTransactionDto {
   @IsOptional()
   cashBookId?: string;
 
-  @ApiProperty()
+  @ApiProperty({
+    required: false,
+    description: 'Chi nhánh chính (tương thích cũ). Ưu tiên dùng branchIds.',
+  })
   @IsUUID()
-  branchId: string;
+  @IsOptional()
+  branchId?: string;
+
+  @ApiProperty({
+    required: false,
+    type: [String],
+    description: 'Nhiều chi nhánh; mảng rỗng = chưa gán chi nhánh',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsUUID('all', { each: true })
+  branchIds?: string[];
 
   @ApiProperty({ required: false })
   @IsNumber()

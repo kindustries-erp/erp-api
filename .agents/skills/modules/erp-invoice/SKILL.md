@@ -796,3 +796,12 @@ Nguồn duy nhất: `extractStandardItemCode` trong `src/erp-invoices-core/helpe
 Lưu ý: hàm không có ngữ cảnh (gọi từ XML parser, subscriber) vẫn giữ hành vi cũ (cho phép). Tiền tố mã không ảnh hưởng hạch toán tài khoản; ảnh hưởng báo cáo/lọc theo mã và sổ cái phụ tùng VinFast (chỉ mã `VF-`).
 
 Script sửa mã đã gán sai: `src/erp-invoices-core/scripts/fix-vinfast-item-codes.ts` (dry-run mặc định, `--target=<tenant>-<stage>`, ghi cần `--apply --confirm=<tên DB> --expect=<số dòng dry-run>`).
+
+## Đa chi nhánh (branch_ids)
+
+- Cột `erp_invoices.branch_ids uuid[] NOT NULL DEFAULT '{}'` (GIN index). `branch_id` là chi nhánh chính = `branch_ids[1]`, luôn đồng bộ khi ghi. Mảng rỗng = chưa gán chi nhánh (ghi sổ được, bút toán `branch_id` NULL).
+- Lọc: `column_filters.branchId` dùng overlap `branch_ids && ARRAY[...]::uuid[]`; `__BLANK__` = `cardinality(branch_ids) = 0`. Danh sách giá trị lọc liệt kê từ `UNNEST(branch_ids)`.
+- Ghi sổ: `AccountingCoreService.createJournalEntriesForBranches` tạo N bút toán (một chi nhánh một bút toán, số chứng từ có hậu tố a/b/c). Tiền chia bình quân theo cặp chuyển bằng `splitBalancedLinesByBranch` (`src/common/utils/money-split.util.ts`), mỗi bút toán vẫn cân Nợ = Có.
+- Đổi chi nhánh sau khi ghi sổ: `reallocateJournalEntriesBySource` (xóa mềm bút toán cũ, tạo lại theo chi nhánh mới). Dùng cho `PATCH bulk-set-branch` (body `{ids, branchIds}`, `branchIds: []` = bỏ gán) và `update`.
+- Thống kê `byBranch` (`invoice-stats.service.ts`): hóa đơn nhiều chi nhánh được tách `total / N` theo SQL (`unnest`), hóa đơn rỗng vào nhóm NULL.
+- Chưa làm: `invoice-debts*` và `invoice-dashboard*` vẫn dùng `branch_id` đơn (chi nhánh chính).

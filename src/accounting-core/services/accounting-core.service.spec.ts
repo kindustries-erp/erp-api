@@ -132,6 +132,65 @@ describe('AccountingCoreService', () => {
     });
   });
 
+  describe('createJournalEntriesForBranches', () => {
+    it('tạo một bút toán cân cho mỗi chi nhánh, tiền chia bình quân, số chứng từ có hậu tố a/b', async () => {
+      const saved: any[] = [];
+      journalEntryRepo.save = jest.fn().mockImplementation((data) => {
+        saved.push(data);
+        return Promise.resolve(data);
+      });
+      jest.spyOn(service, 'generateEntryNo').mockResolvedValue('HĐB-0001');
+
+      await service.createJournalEntriesForBranches({
+        branchIds: ['b1', 'b2'],
+        date: new Date('2026-07-17'),
+        sourceType: 'INVOICE',
+        sourceId: 'inv-1',
+        entryNoPrefix: 'HĐB',
+        lines: [
+          { accountId: '152', debit: 100, credit: 0 },
+          { accountId: '331', debit: 0, credit: 100 },
+        ],
+      });
+
+      expect(saved).toHaveLength(2);
+      expect(saved.map((e) => e.branchId)).toEqual(['b1', 'b2']);
+      expect(saved.map((e) => e.entryNo)).toEqual(['HĐB-0001a', 'HĐB-0001b']);
+      for (const entry of saved) {
+        const debit = entry.lines.reduce((s, l) => s + l.debit, 0);
+        const credit = entry.lines.reduce((s, l) => s + l.credit, 0);
+        expect(debit).toBe(credit);
+      }
+      expect(
+        saved.flatMap((e) => e.lines).reduce((s, l) => s + l.debit, 0),
+      ).toBe(100);
+    });
+
+    it('branchIds rỗng → một bút toán với branchId = null', async () => {
+      const saved: any[] = [];
+      journalEntryRepo.save = jest.fn().mockImplementation((data) => {
+        saved.push(data);
+        return Promise.resolve(data);
+      });
+      jest.spyOn(service, 'generateEntryNo').mockResolvedValue('HĐM-0002');
+
+      await service.createJournalEntriesForBranches({
+        branchIds: [],
+        date: new Date('2026-07-17'),
+        sourceType: 'INVOICE',
+        sourceId: 'inv-2',
+        lines: [
+          { accountId: '152', debit: 50, credit: 0 },
+          { accountId: '331', debit: 0, credit: 50 },
+        ],
+      });
+
+      expect(saved).toHaveLength(1);
+      expect(saved[0].branchId).toBeNull();
+      expect(saved[0].entryNo).toBe('HĐM-0002');
+    });
+  });
+
   describe('generateEntryNo', () => {
     it('increments sequence atomically using database sequence', async () => {
       journalEntryRepo.manager.query.mockResolvedValueOnce([

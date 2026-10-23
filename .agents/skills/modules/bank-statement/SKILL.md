@@ -461,3 +461,11 @@ src/modules/bank-statements/components/BankStatementsTab/
   - **Adaptive Polling Fallback 2.5s**: `historyQuery` trong `BankStatementExportDrawer.hook.ts` tự động bật polling mỗi `2500ms` khi phát hiện có job `RUNNING` hoặc job vừa trigger chưa tải xong. API truy vấn từ RAM (`Map<string, Job>`), zero tải DB PostgreSQL, phản hồi < 2ms.
   - **Two-Way Store Sync**: `useBankStatementExportSync.ts` đồng bộ ngược trạng thái `COMPLETED` từ lịch sử sang `useBankStatementExportProgressStore` (`current: 100`, `ready: true`) để chuyển Badge thành "Sẵn sàng tải" và tự động kích hoạt download ngay lập tức.
   - **Manual Refresh**: Drawer tích hợp nút Refresh lịch sử tại `DrawerSection.titleExtra` cho phép người dùng chủ động tải lại danh sách bất kỳ lúc nào.
+
+## Đa chi nhánh (branch_ids)
+
+- `erp_bank_transactions.branch_ids uuid[] NOT NULL DEFAULT '{}'` (GIN index); `branch_id` NULLABLE và là chi nhánh chính = `branch_ids[1]`. Mảng rỗng = không chi nhánh (vẫn ghi sổ được).
+- Lọc list/analytics: `branchIds` (mảng, `__BLANK__` = không chi nhánh) qua `applyBranchIdsFilter` (`src/bank-transactions-core/helpers/branch-ids-filter.helper.ts`); `branchId` đơn vẫn chấp nhận (tương thích).
+- Bút toán: mỗi nhóm × chi nhánh chia bình quân bằng `splitEvenly`; nhập tay (`postTransaction`) cũng chia theo `branchIds` qua `createJournalEntriesForBranches`.
+- Export: cột chi nhánh hóa đơn liên kết nối tên bằng `string_agg`.
+- Chưa làm: import file sao kê không có chi nhánh (`erp_bank_statement_file.branch_id` vẫn NOT NULL, `controller:327` vẫn bắt buộc `branchId`).

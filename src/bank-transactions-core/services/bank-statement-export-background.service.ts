@@ -331,7 +331,6 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
       netOffDetails = await this.transactionRepo.manager
         .createQueryBuilder('erp_invoice_voucher_netoff', 'netoff')
         .innerJoin('erp_invoices', 'inv', 'inv.id = netoff.invoice_id')
-        .leftJoin('erp_branches', 'inv_branch', 'inv_branch.id = inv.branch_id')
         .select([
           'netoff.bank_transaction_id as "bankTransactionId"',
           'netoff.net_off_amount as "netOffAmount"',
@@ -346,7 +345,7 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
           'inv.buyer_name as "buyerName"',
           'inv.buyer_tax_code as "buyerTaxCode"',
           'inv.total_amount as "totalAmount"',
-          'inv_branch.name as "invoiceBranchName"',
+          '(SELECT string_agg(ib.name, \', \' ORDER BY ib.name) FROM erp_branches ib WHERE ib.id = ANY(inv.branch_ids)) as "invoiceBranchName"',
         ])
         .where('netoff.bank_transaction_id IN (:...ids)', { ids })
         .orderBy('inv.invoice_date', 'ASC')
@@ -468,6 +467,7 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
     const stable = {
       sourceType: query.sourceType || '',
       branchId: query.branchId || '',
+      branchIds: [...(query.branchIds || [])].sort(),
       bankAccountId: query.bankAccountId || '',
       cashBookId: query.cashBookId || '',
       startDate: query.startDate || '',

@@ -8,6 +8,7 @@ import { DataSource, Repository } from 'typeorm';
 import { ErpBankTransaction } from '../entities/erp_bank_transaction.entity';
 import { PostBankTransactionDto } from '../dto/post-bank-transaction.dto';
 import { AccountingCoreService } from '../../accounting-core/services/accounting-core.service';
+import { splitEvenly } from '../../common/utils/money-split.util';
 import { UpdateBankTransactionDto } from '../dto/update-bank-transaction.dto';
 import { CreateBankTransactionDto } from '../dto/create-bank-transaction.dto';
 import {
@@ -120,6 +121,12 @@ export class TransactionAccountingService {
     };
   }
 
+  /** Danh sách chi nhánh của giao dịch; dữ liệu cũ chỉ có branchId thì coi là 1 phần tử; rỗng = không chi nhánh. */
+  private resolveBranchIds(txn: ErpBankTransaction): string[] {
+    if (txn.branchIds?.length) return txn.branchIds;
+    return txn.branchId ? [txn.branchId] : [];
+  }
+
   async postTransaction(id: string, dto: PostBankTransactionDto) {
     const txn = await this.transactionRepo.findOne({
       where: { id, isDeleted: false },
@@ -127,12 +134,6 @@ export class TransactionAccountingService {
     });
     if (!txn) {
       throw new NotFoundException(`Transaction ${id} not found`);
-    }
-
-    if (!txn.branchId) {
-      throw new BadRequestException(
-        'Giao dịch chưa có chi nhánh. Vui lòng gán chi nhánh trước khi hạch toán.',
-      );
     }
 
     if (!dto.lines || dto.lines.length === 0) {
@@ -205,8 +206,9 @@ export class TransactionAccountingService {
       txn.referenceNumber ||
       '';
 
-    await this.accountingCoreService.createJournalEntry({
-      branchId: txn.branchId,
+    // Bút toán nhập tay cũng chia bình quân theo chi nhánh (cùng quy tắc với bút toán tự động)
+    await this.accountingCoreService.createJournalEntriesForBranches({
+      branchIds: this.resolveBranchIds(txn),
       date: postingDate,
       documentDate: txn.transDate,
       description,
@@ -264,6 +266,14 @@ export class TransactionAccountingService {
     const updateData = { ...dto };
     delete (updateData as any).attributes;
     Object.assign(txn, updateData);
+    // Đồng bộ branch_id (chi nhánh chính) với branch_ids
+    if (dto.branchIds !== undefined) {
+      txn.branchIds = dto.branchIds;
+      txn.branchId = dto.branchIds[0] ?? null;
+    } else if (dto.branchId !== undefined) {
+      txn.branchIds = dto.branchId ? [dto.branchId] : [];
+      txn.branchId = dto.branchId ?? null;
+    }
     const saved = await this.transactionRepo.save(txn);
 
     await this.refreshJournalEntriesForBankTransaction(saved.id);
@@ -344,7 +354,7 @@ export class TransactionAccountingService {
       subject: string | null;
       amount: number;
       counterpartAccountId: string | null;
-      branchId: string;
+      branchId: string | null;
       description: string;
     };
     const groups: Group[] = [];
@@ -418,6 +428,18 @@ export class TransactionAccountingService {
       }
     }
 
+    // Chia bình quân từng nhóm cho các chi nhánh của giao dịch (phần dư đồng/xu dồn vào các phần đầu)
+    const resolvedBranchIds = this.resolveBranchIds(txn);
+    const targetBranchIds: (string | null)[] = resolvedBranchIds.length
+      ? resolvedBranchIds
+      : [null];
+    const expandedGroups = groups.flatMap((group) => {
+      const parts = splitEvenly(group.amount, targetBranchIds.length, 2);
+      return targetBranchIds
+        .map((branchId, i) => ({ ...group, branchId, amount: parts[i] }))
+        .filter((g) => g.amount !== 0);
+    });
+
     const existingEntries = await this.dataSource.query(
       `SELECT date FROM erp_journal_entries WHERE source_id = $1 AND source_type = $2 AND is_deleted = false LIMIT 1`,
       [txn.id, txn.sourceType],
@@ -446,7 +468,7 @@ export class TransactionAccountingService {
       isReceipt,
     );
 
-    const validGroups = groups.filter((g) => g.counterpartAccountId);
+    const validGroups = expandedGroups.filter((g) => g.counterpartAccountId);
     for (let i = 0; i < validGroups.length; i++) {
       const group = validGroups[i];
       const entryNo =

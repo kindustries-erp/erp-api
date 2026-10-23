@@ -23,6 +23,14 @@ export class ErpInvoice {
   @Column({ type: 'uuid', name: 'branch_id', nullable: true })
   branchId: string | null;
 
+  @Column({
+    type: 'uuid',
+    array: true,
+    name: 'branch_ids',
+    default: () => "'{}'",
+  })
+  branchIds: string[];
+
   @Column({ type: 'uuid', name: 'category_id', nullable: true })
   categoryId: string | null;
 
