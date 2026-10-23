@@ -13,6 +13,8 @@ export interface VinfastSyncRunSnapshot {
   current: number;
   total: number;
   message: string | null;
+  /** Hóa đơn / dòng đang xử lý, ví dụ `HĐ 1847 · C26MSP · ABC · 0001-XYZ` */
+  currentItem: string | null;
   lastError: string | null;
 }
 
@@ -23,6 +25,7 @@ export interface VinfastSyncProgressEvent {
   total?: number;
   message?: string;
   completed?: boolean;
+  currentItem?: string;
 }
 
 export class VinfastSyncRunState {
@@ -34,6 +37,7 @@ export class VinfastSyncRunState {
     current: 0,
     total: 0,
     message: null,
+    currentItem: null,
     lastError: null,
   };
 
@@ -50,6 +54,7 @@ export class VinfastSyncRunState {
       current: 0,
       total: 0,
       message: null,
+      currentItem: null,
       lastError: null,
     };
     return true;
@@ -63,6 +68,7 @@ export class VinfastSyncRunState {
       current: event.current ?? this.state.current,
       total: event.total ?? this.state.total,
       message: event.message ?? this.state.message,
+      currentItem: event.currentItem ?? this.state.currentItem,
     };
   }
 
@@ -71,6 +77,7 @@ export class VinfastSyncRunState {
       ...this.state,
       running: false,
       finishedAt: this.now().toISOString(),
+      currentItem: null,
       lastError: error ?? null,
     };
   }

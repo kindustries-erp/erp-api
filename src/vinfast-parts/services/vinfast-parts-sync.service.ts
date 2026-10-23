@@ -4,6 +4,7 @@ import { In, Repository } from 'typeorm';
 import { VinfastPartsCatalog } from '../entities/vinfast-parts-catalog.entity';
 import { VinfastPartsLedger } from '../entities/vinfast-parts-ledger.entity';
 import { ErpInvoiceItem } from '../../erp-invoices-core/entities/erp_invoice_item.entity';
+import { formatInvoiceProgressRef } from '../../erp-invoices-core/helpers/invoice-progress-ref.helper';
 import {
   extractVinfastItemCode,
   GREENWAY_AUTOMOTIVES_TAX_CODE,
@@ -288,6 +289,19 @@ export class VinfastPartsSyncService {
           current: idx + 1,
           message: `Đang xử lý Sổ cái: ${idx + 1}/${total} dòng...`,
           completed: false,
+          currentItem: [
+            formatInvoiceProgressRef({
+              invoiceNo: ii.invoice?.invoiceNo,
+              serialNo: ii.invoice?.serialNo,
+              partnerName:
+                ii.invoice?.direction === 'IN'
+                  ? ii.invoice?.sellerName
+                  : ii.invoice?.buyerName,
+            }),
+            ii.itemCode,
+          ]
+            .filter(Boolean)
+            .join(' · '),
         });
       }
 
