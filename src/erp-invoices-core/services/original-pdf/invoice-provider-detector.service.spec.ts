@@ -151,6 +151,62 @@ describe('InvoiceProviderDetectorService', () => {
     expect(unknownInfo.providerCode).toBe('OTHER');
   });
 
+  it('should detect BKAV from msttcgp 0101360697 and use MCCQT as lookup code', () => {
+    const xml = `
+      <HDon>
+        <DLHDon>
+          <TTChung><MSTTCGP>0101360697</MSTTCGP></TTChung>
+        </DLHDon>
+        <MCCQT>M1-26-2JNWA-00000037338</MCCQT>
+      </HDon>
+    `;
+
+    const info = service.detectFromXml(xml, '0302539983');
+    expect(info.providerCode).toBe('BKAV');
+    expect(info.lookupCode).toBe('M1-26-2JNWA-00000037338');
+    expect(info.lookupUrl).toBe('https://van.ehoadon.vn/TCHD');
+    expect(info.hints).toContainEqual({
+      label: 'Mã CQT (MCCQT)',
+      value: 'M1-26-2JNWA-00000037338',
+    });
+  });
+
+  it('should detect Thai Son from msttcgp 0101300842 and read Mã TC and ĐCTC from TTKhac', () => {
+    const xml = `
+      <HDon>
+        <DLHDon>
+          <TTChung><MSTTCGP>0101300842</MSTTCGP></TTChung>
+          <TTKhac>
+            <TTin><TTruong>Mã TC</TTruong><KDLieu>string</KDLieu><DLieu>LE2549X0I</DLieu></TTin>
+            <TTin><TTruong>ĐCTC</TTruong><KDLieu>string</KDLieu><DLieu>https://tracuutvan.einvoice.com.vn/</DLieu></TTin>
+          </TTKhac>
+        </DLHDon>
+      </HDon>
+    `;
+
+    const info = service.detectFromXml(xml, '0313403198');
+    expect(info.providerCode).toBe('THAISON');
+    expect(info.lookupCode).toBe('LE2549X0I');
+    expect(info.lookupUrl).toBe('https://tracuutvan.einvoice.com.vn/');
+  });
+
+  it('should read TTKhac value when DLieu comes before TTruong', () => {
+    const xml = `
+      <HDon>
+        <DLHDon>
+          <TTChung><MSTTCGP>0100109106</MSTTCGP></TTChung>
+          <TTKhac>
+            <TTin><DLieu>703UVSKLML5EDDO</DLieu><KDLieu>string</KDLieu><TTruong>Mã số bí mật</TTruong></TTin>
+          </TTKhac>
+        </DLHDon>
+      </HDon>
+    `;
+
+    const info = service.detectFromXml(xml, '0104093672');
+    expect(info.providerCode).toBe('VIETTEL');
+    expect(info.lookupCode).toBe('703UVSKLML5EDDO');
+  });
+
   it('should gracefully handle malformed or empty xml', () => {
     const result = service.detectFromXml('');
     expect(result.providerCode).toBe('OTHER');
