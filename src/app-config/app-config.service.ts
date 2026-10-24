@@ -1,9 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { CoreUserPreference } from '../users/entities/core-user-preference.entity';
+import { CoreUserTablePreference } from '../users/entities/core-user-table-preference.entity';
 import { UpdateUserPreferenceDto } from './dto/update-user-preference.dto';
+import { UpdateTablePreferenceDto } from './dto/table-preference.dto';
 import {
   QueryChangelogDto,
   PaginatedChangelogResponse,
@@ -15,6 +17,8 @@ export class AppConfigService {
   constructor(
     @InjectRepository(CoreUserPreference)
     private readonly preferenceRepo: Repository<CoreUserPreference>,
+    @InjectRepository(CoreUserTablePreference)
+    private readonly tablePreferenceRepo: Repository<CoreUserTablePreference>,
     private readonly configService: ConfigService,
   ) {}
 
@@ -101,6 +105,50 @@ export class AppConfigService {
         updatedAt: new Date(),
       } as CoreUserPreference;
     }
+  }
+
+  /** Trả về map `tableId -> { columns, views }` của user */
+  async getTablePreferences(userId: string) {
+    const rows = await this.tablePreferenceRepo.find({ where: { userId } });
+    return rows.reduce<
+      Record<string, Pick<CoreUserTablePreference, 'columns' | 'views'>>
+    >((acc, row) => {
+      acc[row.tableId] = { columns: row.columns, views: row.views };
+      return acc;
+    }, {});
+  }
+
+  /** Ghi đè từng phần (`columns` / `views`) được gửi lên; phần không gửi giữ nguyên */
+  async updateTablePreference(
+    userId: string,
+    tableId: string,
+    dto: UpdateTablePreferenceDto,
+  ) {
+    if (!tableId || tableId.length > 200) {
+      throw new BadRequestException('tableId không hợp lệ');
+    }
+
+    let row = await this.tablePreferenceRepo.findOne({
+      where: { userId, tableId },
+    });
+    if (!row) {
+      row = this.tablePreferenceRepo.create({
+        userId,
+        tableId,
+        columns: {},
+        views: {},
+      });
+    }
+
+    if (dto.columns !== undefined) {
+      row.columns = { ...dto.columns };
+    }
+    if (dto.views !== undefined) {
+      row.views = { ...dto.views };
+    }
+
+    const saved = await this.tablePreferenceRepo.save(row);
+    return { tableId, columns: saved.columns, views: saved.views };
   }
 
   getChangelog(query: QueryChangelogDto): PaginatedChangelogResponse {
