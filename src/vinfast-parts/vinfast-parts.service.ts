@@ -1,6 +1,6 @@
-import * as ExcelJS from 'exceljs';
 import { Injectable, Logger } from '@nestjs/common';
 import { Subject } from 'rxjs';
+import { buildVinfastPartsStockWorkbook } from './services/vinfast-parts-stock-excel.builder';
 import { VinfastPartsSyncService } from './services/vinfast-parts-sync.service';
 import { VinfastPartsStockService } from './services/vinfast-parts-stock.service';
 import { VinfastPartsLedgerService } from './services/vinfast-parts-ledger.service';
@@ -155,10 +155,17 @@ export class VinfastPartsService {
     dateFrom?: string;
     dateTo?: string;
     columnFilters?: string;
+    selectedColumns?: string[];
     onProgress?: (current: number, total: number, message: string) => void;
   }): Promise<Buffer> {
-    const { vehicleType, dateFrom, dateTo, columnFilters, onProgress } =
-      options;
+    const {
+      vehicleType,
+      dateFrom,
+      dateTo,
+      columnFilters,
+      selectedColumns,
+      onProgress,
+    } = options;
     const totalProgress = 100;
 
     onProgress?.(5, totalProgress, 'Đang tải dữ liệu tổng quan tồn kho...');
@@ -360,72 +367,14 @@ export class VinfastPartsService {
 
     onProgress?.(80, totalProgress, 'Đang tạo workbook Excel...');
 
-    const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'ERP';
-
-    // Sheet 1: Tổng hợp tồn kho
-    const summarySheet = workbook.addWorksheet('Tổng Hợp Tồn Kho');
-    summarySheet.columns = [
-      { header: 'STT', key: 'stt', width: 8 },
-      { header: 'Mã Phụ Tùng', key: 'sku', width: 22 },
-      { header: 'Tên Phụ Tùng', key: 'name', width: 35 },
-      { header: 'ĐVT', key: 'uom', width: 12 },
-      { header: 'Tổng Nhập', key: 'qtyIn', width: 16 },
-      { header: 'Tổng Xuất', key: 'qtyOut', width: 16 },
-      { header: 'Tồn Kho', key: 'qtyBalance', width: 16 },
-    ];
-
-    overviewData.items.forEach((item: any, idx: number) => {
-      summarySheet.addRow({
-        stt: idx + 1,
-        sku: item.sku,
-        name: item.name,
-        uom: item.uom,
-        qtyIn: Number(item.qtyIn || 0),
-        qtyOut: Number(item.qtyOut || 0),
-        qtyBalance: Number(item.qtyBalance || 0),
-      });
+    const buffer = await buildVinfastPartsStockWorkbook({
+      overviewItems: overviewData.items,
+      ledgerSections,
+      selectedColumns,
     });
-
-    // Sheet 2: Sổ Cái Chi Tiết FIFO
-    const ledgerSheet = workbook.addWorksheet('Sổ Cái Chi Tiết FIFO');
-    ledgerSheet.columns = [
-      { header: 'Mã Phụ Tùng', key: 'partSku', width: 22 },
-      { header: 'Tên Phụ Tùng', key: 'partName', width: 30 },
-      { header: 'Ngày Giao Dịch', key: 'transactionDate', width: 15 },
-      { header: 'Số Hóa Đơn', key: 'invoiceNo', width: 15 },
-      { header: 'Chiều', key: 'direction', width: 10 },
-      { header: 'Số Lượng', key: 'qty', width: 14 },
-      { header: 'Đơn Giá', key: 'unitCost', width: 16 },
-      { header: 'Thành Tiền', key: 'amount', width: 18 },
-      { header: 'Biển Số Xe', key: 'licensePlate', width: 15 },
-      { header: 'Tồn Lũy Kế', key: 'runningBalanceQty', width: 16 },
-      { header: 'Giá Trị Tồn Lũy Kế', key: 'runningBalanceValue', width: 20 },
-    ];
-
-    for (const section of ledgerSections) {
-      for (const row of section.rows) {
-        ledgerSheet.addRow({
-          partSku: section.sku,
-          partName: section.partName,
-          transactionDate: row.transactionDate,
-          invoiceNo: row.invoiceNo,
-          direction: row.direction,
-          qty: Number(row.qty || 0),
-          unitCost: Number(row.unitCost || 0),
-          amount: Number(row.preVatAmount || 0),
-          licensePlate: row.licensePlate || '',
-          runningBalanceQty: row.runningBalanceQty,
-          runningBalanceValue: row.runningBalanceValue,
-        });
-      }
-    }
 
     onProgress?.(95, totalProgress, 'Đang lưu file...');
 
-    const buffer = await workbook.xlsx.writeBuffer();
-    return Buffer.isBuffer(buffer)
-      ? buffer
-      : Buffer.from(buffer as ArrayBuffer);
+    return buffer;
   }
 }

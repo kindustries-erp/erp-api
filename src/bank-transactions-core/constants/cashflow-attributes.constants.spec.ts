@@ -30,6 +30,18 @@ describe('cashflow-attributes constants', () => {
     expect(isPurposeAllowed('OPERATING', 'LOAN')).toBe(false);
   });
 
+  it('accepts the added purposes under their classification', () => {
+    expect(isPurposeAllowed('OPERATING', 'INSURANCE_CLAIM')).toBe(true);
+    expect(isPurposeAllowed('OPERATING', 'RENT')).toBe(true);
+    expect(isPurposeAllowed('OPERATING', 'BANK_FEE')).toBe(true);
+    expect(isPurposeAllowed('OPERATING', 'ADVANCE')).toBe(true);
+    expect(isPurposeAllowed('OPERATING', 'REFUND')).toBe(true);
+    expect(isPurposeAllowed('OPERATING', 'SOCIAL_INSURANCE')).toBe(true);
+    expect(isPurposeAllowed('INVESTING', 'INTEREST_INCOME')).toBe(true);
+    expect(isPurposeAllowed('FINANCING', 'INSURANCE_CLAIM')).toBe(false);
+    expect(isPurposeAllowed('INVESTING', 'RENT')).toBe(false);
+  });
+
   it('allows empty purpose and rejects purpose without classification', () => {
     expect(isPurposeAllowed(null, null)).toBe(true);
     expect(isPurposeAllowed(undefined, undefined)).toBe(true);
