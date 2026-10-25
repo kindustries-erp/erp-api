@@ -8,6 +8,8 @@ describe('AppConfigController', () => {
     getPublicConfig: jest.Mock;
     getUserPreferences: jest.Mock;
     updateUserPreferences: jest.Mock;
+    getTablePreferences: jest.Mock;
+    updateTablePreference: jest.Mock;
     getChangelog: jest.Mock;
   };
 
@@ -44,6 +46,14 @@ describe('AppConfigController', () => {
         tableConfigs: { 'orders-table': { columnOrder: ['id'] } },
         uiConfigs: {},
       }),
+      getTablePreferences: jest.fn().mockResolvedValue({
+        'business-partners': { columns: {}, views: {} },
+      }),
+      updateTablePreference: jest
+        .fn()
+        .mockImplementation((_u, tableId, dto) =>
+          Promise.resolve({ tableId, columns: dto.columns, views: dto.views }),
+        ),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -86,6 +96,31 @@ describe('AppConfigController', () => {
     const result = await controller.updateUserPreferences(dto, req);
     expect(result.data.theme).toBe('midnight');
     expect(service.updateUserPreferences).toHaveBeenCalledWith('user-1', dto);
+  });
+
+  it('should return table preferences for logged in user', async () => {
+    const req = { user: { sub: 'user-1' } } as any;
+    const result = await controller.getTablePreferences(req);
+    expect(result.data).toEqual({
+      'business-partners': { columns: {}, views: {} },
+    });
+    expect(service.getTablePreferences).toHaveBeenCalledWith('user-1');
+  });
+
+  it('should update one table preference for logged in user', async () => {
+    const req = { user: { sub: 'user-1' } } as any;
+    const dto = { columns: { order: ['code'] } };
+    const result = await controller.updateTablePreference(
+      'business-partners',
+      dto,
+      req,
+    );
+    expect(result.data.tableId).toBe('business-partners');
+    expect(service.updateTablePreference).toHaveBeenCalledWith(
+      'user-1',
+      'business-partners',
+      dto,
+    );
   });
 
   it('should return paginated changelog without auth', () => {

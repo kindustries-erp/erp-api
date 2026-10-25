@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 import { CoreUser } from '../users/entities/core-user.entity';
 import { CoreUserPreference } from '../users/entities/core-user-preference.entity';
+import { CoreUserTablePreference } from '../users/entities/core-user-table-preference.entity';
 import { CoreRefreshToken } from '../auth/entities/core-refresh-token.entity';
 import { CoreRole } from '../rbac-core/entities/core-role.entity';
 import { CorePermission } from '../rbac-core/entities/core-permission.entity';
@@ -89,6 +90,7 @@ import { InvoiceItem } from '@/v2/invoices/entities/invoice-item.entity';
 const entities = [
   CoreUser,
   CoreUserPreference,
+  CoreUserTablePreference,
   CoreRefreshToken,
   CoreRole,
   CorePermission,
