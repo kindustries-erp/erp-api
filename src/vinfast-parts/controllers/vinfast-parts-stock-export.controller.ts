@@ -20,6 +20,7 @@ import { RequirePermissions } from '../../auth/decorators/require-permissions.de
 import { ErpAction, ErpResource } from '@/rbac-core/enums';
 import { VinfastPartsService } from '../vinfast-parts.service';
 import { VinfastPartsStockExportBackgroundService } from '../services/vinfast-parts-stock-export-background.service';
+import { parseSelectedColumns } from '../services/vinfast-parts-stock-excel.builder';
 import {
   applySseHeaders,
   SSE_PING_INTERVAL_MS,
@@ -53,6 +54,7 @@ export class VinfastPartsStockExportController {
           dateFrom: query.dateFrom,
           dateTo: query.dateTo,
           columnFilters: query.columnFilters,
+          selectedColumns: parseSelectedColumns(query.selectedColumns),
           onProgress,
         });
       },

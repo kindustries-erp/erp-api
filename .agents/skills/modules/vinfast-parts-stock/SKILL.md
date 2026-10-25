@@ -155,7 +155,8 @@ Tags: `VinFast Parts`
 ### 5.4. Cơ chế Xuất Báo Cáo Chạy Ngầm (`VinfastPartsStockExportBackgroundService`)
 - Lưu trữ memory map `jobs` với TTL = 24 giờ.
 - Tạo fingerprint băm từ câu query (`buildQueryFingerprint`) để phát hiện và tái sử dụng ngay kết quả xuất trước đó (`findReusableCompletedJob`), giảm tải tối đa cho cơ sở dữ liệu.
-- Định dạng xuất: File `.xlsx` đa sheet (Sheet Tổng hợp + Sheet Chi tiết FIFO từng mã) sử dụng thư viện `exceljs`.
+- Định dạng xuất: File `.xlsx` đa sheet (Sheet Tổng hợp + Sheet Chi tiết FIFO từng mã) dựng bởi `buildVinfastPartsStockWorkbook` (`services/vinfast-parts-stock-excel.builder.ts`, `exceljs`). Style theo chuẩn bank/invoice: dòng 1 `TỔNG` (SUM), dòng 2 `SUBTOTAL(9)`, dòng 4 header nền Slate 700, dữ liệu từ dòng 5, `freeze ySplit:4`, `autoFilter` dòng 4. Sheet Chi tiết chỉ SUM cột `Thành tiền` (cộng số lượng nhập/xuất lẫn nhau không có ý nghĩa).
+- Body `selectedColumns?: string[]` (key thuộc `VINFAST_STOCK_SUMMARY_COLUMNS` / `VINFAST_STOCK_LEDGER_COLUMNS`), validate bằng `parseSelectedColumns` (key lạ → 400). Thiếu/rỗng = xuất đủ cột; sheet không còn cột nào được chọn sẽ bị bỏ (nếu cả hai đều bị bỏ → 400).
 
 ### 5.5. Filter Engine Nâng Cao (`column_search` & `column_filters`)
 - **Multi-keyword (`;`)**: Tách chuỗi từ khóa qua dấu chấm phẩy và tạo điều kiện `OR` an toàn bằng `buildRawMultiKeywordSql`.
