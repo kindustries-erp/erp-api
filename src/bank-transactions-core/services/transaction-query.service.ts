@@ -269,6 +269,7 @@ export class TransactionQueryService {
             filterField = 'txn.cashflowClassification';
           else if (col === 'cashflowPurpose')
             filterField = 'txn.cashflowPurpose';
+          else if (col === 'note') filterField = 'txn.note';
 
           if (filterField) {
             const isAllMatching = vals[0] === '__ALL_MATCHING__';
@@ -437,6 +438,7 @@ export class TransactionQueryService {
             searchField = 'txn.cashflowClassification';
           else if (col === 'cashflowPurpose')
             searchField = 'txn.cashflowPurpose';
+          else if (col === 'note') searchField = 'txn.note';
 
           if (searchField) {
             if (col === 'transDate') {
@@ -532,6 +534,8 @@ export class TransactionQueryService {
         orderExpr = 'txn.cashflowPurpose';
       } else if (rawField === 'description') {
         orderExpr = 'txn.description';
+      } else if (rawField === 'note') {
+        orderExpr = 'txn.note';
       } else if (
         rawField === 'thu' ||
         rawField === 'creditAmount' ||
@@ -796,6 +800,7 @@ export class TransactionQueryService {
     else if (column === 'cashflowClassification')
       selectField = 'txn.cashflowClassification';
     else if (column === 'cashflowPurpose') selectField = 'txn.cashflowPurpose';
+    else if (column === 'note') selectField = 'txn.note';
     else if (column === 'invoiceSubject') {
       qb.innerJoin('txn.invoiceNetOffs', 'netoff');
       qb.innerJoin('netoff.invoice', 'inv');
@@ -859,6 +864,7 @@ export class TransactionQueryService {
             filterField = 'txn.cashflowClassification';
           else if (col === 'cashflowPurpose')
             filterField = 'txn.cashflowPurpose';
+          else if (col === 'note') filterField = 'txn.note';
 
           if (col === 'branch') {
             // Lọc theo mọi chi nhánh của dòng (branch_ids), gồm cả dòng chưa gán

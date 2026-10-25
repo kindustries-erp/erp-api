@@ -120,4 +120,15 @@ describe('TransactionQueryService - Server-side Sorting', () => {
     );
     expect(qbMock.addOrderBy).toHaveBeenCalledWith('txn.createdAt', 'DESC');
   });
+
+  it('sorts by note DESC when requested', async () => {
+    await service.getTransactions({
+      page: 1,
+      pageSize: 20,
+      sorts: ['-note'],
+    });
+
+    expect(qbMock.orderBy).toHaveBeenCalledWith('txn.note', 'DESC');
+    expect(qbMock.addOrderBy).toHaveBeenCalledWith('txn.createdAt', 'DESC');
+  });
 });
