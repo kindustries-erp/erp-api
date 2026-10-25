@@ -116,11 +116,12 @@ erp_bank_transactions (Sổ giao dịch dòng tiền)
 ### 2.x Thuộc tính Phân loại dòng tiền (độc lập module-config)
 - Hai cột cố định trên `erp_bank_transactions` (nullable, không backfill dữ liệu cũ, không FK, không đi qua `erp_module_categories`/EAV):
   - `cashflow_classification` varchar(50) — `OPERATING` | `INVESTING` | `FINANCING` | `OTHER` (không có `INTERNAL_TRANSFER`; mục này nằm ở Mục đích)
-  - `cashflow_purpose` varchar(50) — 12 giá trị, **phụ thuộc Phân loại** (cascading, không có migration riêng; ánh xạ nằm trong code):
-    - `OPERATING`: `CUSTOMER_PAYMENT`, `SUPPLIER_PAYMENT`, `SALARY`, `TAX`, `OPEX`, `OTHER`
-    - `INVESTING`: `ASSET_PURCHASE`, `ASSET_DISPOSAL`, `INVESTMENT`, `OTHER`
+  - `cashflow_purpose` varchar(50) — 19 giá trị, **phụ thuộc Phân loại** (cascading, không có migration riêng; ánh xạ nằm trong code):
+    - `OPERATING`: `CUSTOMER_PAYMENT`, `SUPPLIER_PAYMENT`, `SALARY`, `TAX`, `SOCIAL_INSURANCE`, `BANK_FEE`, `RENT`, `INSURANCE_CLAIM`, `ADVANCE`, `REFUND`, `OPEX`, `OTHER`
+    - `INVESTING`: `ASSET_PURCHASE`, `ASSET_DISPOSAL`, `INVESTMENT`, `INTEREST_INCOME`, `OTHER`
     - `FINANCING`: `LOAN`, `CAPITAL`, `OTHER`
     - `OTHER`: `INTERNAL_TRANSFER`, `OTHER`
+  - Backfill sao kê Q1/2026: `src/bank-transactions-core/scripts/classify-q1-2026.ts` (dry-run mặc định; `--apply --confirm=<tên DB>` mới ghi, chỉ UPDATE dòng đang NULL). Rule thuần nằm ở `utils/cashflow-rule-classifier.ts` (vay theo tên, bảo hiểm chỉ tiền vào, chuyển nội bộ theo "chuyển vốn nội bộ"/số TK, lô "CHUYEN TIEN THEO LO EMB" là khách hàng).
   - Quy tắc: Mục đích không thuộc Phân loại đã lưu (hoặc có Mục đích mà Phân loại rỗng) → `400 Mục đích không thuộc Phân loại đã chọn.` Kiểm tra trên giá trị đã gộp khi PATCH. Phía Web khóa ô Mục đích khi chưa chọn Phân loại và tự xóa Mục đích khi đổi sang nhóm không hợp lệ.
   - Nguồn: `constants/cashflow-attributes.constants.ts` (`CASHFLOW_PURPOSES_BY_CLASSIFICATION`, `isPurposeAllowed`); kiểm tra trong `transaction-accounting.service.ts` (`assertCashflowPair`).
 - Index: `IDX_erp_bank_txn_cashflow_classification`, `IDX_erp_bank_txn_cashflow_purpose`.
