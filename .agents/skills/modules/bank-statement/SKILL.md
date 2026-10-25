@@ -126,7 +126,8 @@ erp_bank_transactions (Sổ giao dịch dòng tiền)
 - Index: `IDX_erp_bank_txn_cashflow_classification`, `IDX_erp_bank_txn_cashflow_purpose`.
 - Migration: `20261022100000-AddCashflowClassificationPurposeToBankTransactions.ts` (up/down, `IF NOT EXISTS`).
 - Nguồn option: hằng số trong `src/bank-transactions-core/constants/cashflow-attributes.constants.ts`; DTO `CreateBankTransactionDto` validate `@IsIn` (cho cả create và update qua `PartialType`).
-- Lọc/tìm/sắp xếp/gợi ý cột: `transaction-query.service.ts` nhận key `cashflowClassification`, `cashflowPurpose`.
+- Lọc/tìm/sắp xếp/gợi ý cột: `transaction-query.service.ts` nhận key `cashflowClassification`, `cashflowPurpose`, `note`.
+- Web (`erp-web`): 3 cột `cashflowClassification`, `cashflowPurpose`, `note` nằm trong preset `overview` và `audit` (`BankStatementsTab/utils.ts`), nhóm cấu hình "Phân loại & Ghi chú".
 - Không liên quan `category_id` / `attributes` (module-config).
 
 ## 3. Cấu trúc Source Code Backend (`erp-api`)
