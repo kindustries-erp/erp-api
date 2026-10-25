@@ -29,7 +29,7 @@ export async function _loadNetOffAmounts(
     .addSelect('bt.reference_number', 'refNo')
     .addSelect('bt.trans_date', 'transDate')
     .addSelect('bt.description', 'description')
-    .addSelect('bt.accounting_description', 'accountingDescription')
+    .addSelect('bt.note', 'note')
     .addSelect('bt.debit_amount', 'debitAmount')
     .addSelect('bt.credit_amount', 'creditAmount')
     .leftJoin(
@@ -59,7 +59,7 @@ export async function _loadNetOffAmounts(
         adj_inv.invoice_no as "refNo",
         adj_inv.invoice_date as "transDate",
         COALESCE(adj.notes, 'Cấn trừ theo HĐ Điều Chỉnh ' || adj_inv.invoice_no) as "description",
-        'Cấn trừ theo HĐ Điều Chỉnh ' || adj_inv.invoice_no as "accountingDescription",
+        'Cấn trừ theo HĐ Điều Chỉnh ' || adj_inv.invoice_no as "note",
         CAST(adj_inv.total_amount AS NUMERIC) as "refAmount"
       FROM erp_invoice_adjustment_netoff adj
       JOIN erp_invoices adj_inv ON adj_inv.id = adj.adjusting_invoice_id
@@ -73,7 +73,7 @@ export async function _loadNetOffAmounts(
         orig_inv.invoice_no as "refNo",
         orig_inv.invoice_date as "transDate",
         COALESCE(adj.notes, 'Cấn trừ vào HĐ Gốc ' || orig_inv.invoice_no) as "description",
-        'Cấn trừ vào HĐ Gốc ' || orig_inv.invoice_no as "accountingDescription",
+        'Cấn trừ vào HĐ Gốc ' || orig_inv.invoice_no as "note",
         CAST(orig_inv.total_amount AS NUMERIC) as "refAmount"
       FROM erp_invoice_adjustment_netoff adj
       JOIN erp_invoices orig_inv ON orig_inv.id = adj.original_invoice_id
@@ -140,9 +140,7 @@ export async function _loadNetOffAmounts(
       }
     }
 
-    const desc = (row.accountingDescription || row.description || '')
-      .toString()
-      .trim();
+    const desc = (row.note || row.description || '').toString().trim();
 
     netOffMap[invId].sum += netOffAmt;
     if (refNo && !netOffMap[invId].refNos.includes(refNo)) {

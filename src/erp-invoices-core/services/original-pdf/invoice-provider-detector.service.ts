@@ -8,7 +8,18 @@ export interface InvoiceProviderLookupInfo {
   lookupCode: string | null;
   lookupUrl: string | null;
   extraInfo?: Record<string, string>;
+  hints?: { label: string; value: string }[];
 }
+
+/** Các trường TTKhac/tag cần hiển thị cho người dùng khi tra cứu thủ công. */
+const HINT_LABELS: Record<string, string> = {
+  searchkey: 'Mã tra cứu (SearchKey)',
+  'mã tc': 'Mã TC',
+  'mã số bí mật': 'Mã số bí mật',
+  'mã số': 'Mã số',
+  đctc: 'Địa chỉ tra cứu (ĐCTC)',
+  matracuu: 'Mã tra cứu',
+};
 
 const KNOWN_MSTTCGP: Record<
   string,
@@ -37,7 +48,7 @@ const KNOWN_MSTTCGP: Record<
   '0101360697': {
     code: 'BKAV',
     name: 'BKAV eHoadon',
-    url: 'https://van.ehoadon.vn/tracuu',
+    url: 'https://van.ehoadon.vn/TCHD',
   },
   '0101300842': {
     code: 'THAISON',
@@ -76,6 +87,16 @@ export class InvoiceProviderDetectorService {
     xmlContent: string,
     sellerTaxCode?: string | null,
   ): InvoiceProviderLookupInfo {
+    return {
+      ...this.resolveFromXml(xmlContent, sellerTaxCode),
+      hints: this.extractHints(xmlContent),
+    };
+  }
+
+  private resolveFromXml(
+    xmlContent: string,
+    sellerTaxCode?: string | null,
+  ): InvoiceProviderLookupInfo {
     if (!xmlContent || typeof xmlContent !== 'string') {
       return this.fallbackUnknown(null, null);
     }
@@ -99,6 +120,7 @@ export class InvoiceProviderDetectorService {
         'reservationCode',
       );
       const maTraCuu = this.extractTag(doc, 'MaTraCuu', 'matracuu');
+      const mccqt = this.extractTag(doc, 'MCCQT', 'mccqt');
 
       const dlhdonEl = doc.getElementsByTagName
         ? doc.getElementsByTagName('DLHDon')?.[0]
@@ -216,16 +238,24 @@ export class InvoiceProviderDetectorService {
             maTraCuu ||
             extraTtins['matracuu'] ||
             null;
+        } else if (known.code === 'BKAV') {
+          lookupCode =
+            mccqt || fkey || maTraCuu || extraTtins['matracuu'] || null;
+        } else if (known.code === 'THAISON') {
+          lookupCode = extraTtins['mã tc'] || fkey || maTraCuu || null;
         } else {
           lookupCode = fkey || maTraCuu || extraTtins['matracuu'] || null;
         }
+
+        const lookupUrl =
+          (known.code === 'THAISON' && extraTtins['đctc']) || known.url;
 
         return {
           providerCode: known.code,
           providerName: known.name,
           msttcgp,
           lookupCode,
-          lookupUrl: known.url,
+          lookupUrl,
           extraInfo: extraTtins,
         };
       }
@@ -331,6 +361,25 @@ export class InvoiceProviderDetectorService {
       }
     }
     return null;
+  }
+
+  private extractHints(xmlContent: string): { label: string; value: string }[] {
+    if (!xmlContent || typeof xmlContent !== 'string') return [];
+    try {
+      const doc: any = new DOMParser().parseFromString(xmlContent, 'text/xml');
+      const hints: { label: string; value: string }[] = [];
+      const mccqt = this.extractTag(doc, 'MCCQT', 'mccqt');
+      if (mccqt) hints.push({ label: 'Mã CQT (MCCQT)', value: mccqt });
+
+      const extraTtins = this.extractTTKhac(doc);
+      for (const [key, label] of Object.entries(HINT_LABELS)) {
+        const value = extraTtins[key];
+        if (value) hints.push({ label, value });
+      }
+      return hints;
+    } catch {
+      return [];
+    }
   }
 
   private extractTTKhac(doc: any): Record<string, string> {

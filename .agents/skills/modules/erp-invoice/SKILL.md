@@ -807,6 +807,17 @@ Phân hệ hỗ trợ toàn diện việc trích xuất thông tin từ XML và 
 
 
 
+## Tra cứu NCC & upload PDF thủ công (hóa đơn mua vào)
+
+- `GET /erp-invoices/original-pdf/:id/lookup-info` (READ INVOICES) trả `providerCode, providerName, msttcgp, lookupCode, lookupUrl, pdfSource, pdfFileKey, pdfError, hasXml, hints[]`. Chỉ đọc, không ghi DB. Khi có `xmlFileKey`, facade đọc XML từ R2 để bổ sung mã còn thiếu và `hints`.
+- `POST /erp-invoices/original-pdf/:id/manual-upload` (UPDATE INVOICES, multipart field `file`): chỉ nhận PDF (magic `%PDF`), tối đa 10MB; lưu `invoices/pdf/{id}.pdf`, đặt `pdf_file_key`, `pdf_source='manual_upload'`, `pdf_error=null`. Worker bỏ qua hóa đơn `manual_upload` để không ghi đè.
+- Detector (`invoice-provider-detector.service.ts`):
+  - BKAV (MSTTCGP `0101360697`): `lookupCode` = tag `MCCQT`, `lookupUrl` = `https://van.ehoadon.vn/TCHD`.
+  - Thái Sơn (MSTTCGP `0101300842`): `lookupCode` = TTKhac "Mã TC", `lookupUrl` = TTKhac "ĐCTC".
+  - `hints`: MCCQT, SearchKey, Mã TC, Mã số bí mật, Mã số, ĐCTC.
+- Adapter `XML_LINK` (`adapters/xml-download-link.adapter.ts`): dự phòng khi NCC không có adapter; tải PDF từ TTKhac `DownloadPdf` (chỉ HTTPS, chặn host nội bộ, chấp nhận PDF thuần hoặc ZIP chứa `.pdf`). Helper đọc XML dùng chung: `invoice-xml-reader.helper.ts`.
+- Đã xác nhận không tải tự động được: BKAV (cổng tra cứu có reCAPTCHA), Viettel (cổng yêu cầu phiên đăng nhập), Thái Sơn (captcha ảnh, chưa có adapter), NCC chưa có trong `KNOWN_MSTTCGP` (ví dụ `0101225306`, `0302712571`).
+
 ## Quy ước tên file PDF/XML khi xuất
 - Helper `src/erp-invoices-core/utils/invoice-file-name.util.ts`: `buildInvoiceFileName(invoice, ext, index?)` → `{YYYYMMDD}_{KyHieu}_{SoHD}_{SoTienVND}[_{index}].{ext}` (vd `20250315_C25TAA_0001234_12500000.pdf`); thiếu dữ liệu: `KhongNgay` / `KhongKyHieu` / số tiền `0`; sanitize ký tự cấm + `..`. `uniqueName` chống trùng trong ZIP (`_2`, `_3`).
 - Áp dụng: ZIP hàng loạt (`bulkDownloadFilesZip`), ZIP đã chọn (`bulkDownloadSelectedZip`) qua `buildDownloadTasks` (giữ thư mục `{MST} - {Tên đối tác}/`) và tải lẻ `getFileDownloadUrl` (không còn MST trong tên). Không đổi: PDF đính kèm (`getPdfDownloadUrl`, `downloadAllPdfsZip`) vẫn dùng tên gốc.

@@ -76,6 +76,7 @@ import { MisaInvoiceAdapter } from './services/adapters/misa-invoice.adapter';
 import { ViettelInvoiceAdapter } from './services/adapters/viettel-invoice.adapter';
 import { HiloInvoiceAdapter } from './services/adapters/hilo-invoice.adapter';
 import { CyberbillInvoiceAdapter } from './services/adapters/cyberbill-invoice.adapter';
+import { XmlDownloadLinkAdapter } from './services/adapters/xml-download-link.adapter';
 
 @Module({
   imports: [
@@ -150,6 +151,7 @@ import { CyberbillInvoiceAdapter } from './services/adapters/cyberbill-invoice.a
     ViettelInvoiceAdapter,
     HiloInvoiceAdapter,
     CyberbillInvoiceAdapter,
+    XmlDownloadLinkAdapter,
     InvoicePdfDownloadWorkerService,
     InvoiceOriginalPdfFacade,
     ErpInvoicesCoreService,

@@ -99,7 +99,7 @@ export class CreateBankTransactionDto {
   @ApiProperty({ required: false })
   @IsString()
   @IsOptional()
-  accountingDescription?: string;
+  note?: string;
 
   @ApiProperty({ required: false })
   @IsString()
