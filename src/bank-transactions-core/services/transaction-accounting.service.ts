@@ -75,7 +75,7 @@ export class TransactionAccountingService {
         postingStatus: 'UNPOSTED',
         journalEntryId: null,
         postingDate: null,
-        description: txn.accountingDescription || txn.description || null,
+        description: txn.note || txn.description || null,
         lines: [],
         totalDebit: 0,
         totalCredit: 0,
@@ -122,7 +122,7 @@ export class TransactionAccountingService {
       postingStatus: 'POSTED',
       journalEntryId: entries.length === 1 ? latest.id : null,
       postingDate: latest.date ? latest.date.toISOString().slice(0, 10) : null,
-      description: latest.description || txn.accountingDescription || null,
+      description: latest.description || txn.note || null,
       lines,
       totalDebit,
       totalCredit,
@@ -210,7 +210,7 @@ export class TransactionAccountingService {
       : txn.transDate;
     const description =
       dto.description?.trim() ||
-      txn.accountingDescription ||
+      txn.note ||
       txn.description ||
       txn.referenceNumber ||
       '';
@@ -232,9 +232,7 @@ export class TransactionAccountingService {
     if (dto.categoryId !== undefined) {
       txn.categoryId = dto.categoryId || null;
     }
-    if (dto.description !== undefined) {
-      txn.accountingDescription = dto.description?.trim() || null;
-    }
+    // Không ghi dto.description vào note: đó là ghi chú ERP, chỉ sửa ở updateTransaction
     await this.transactionRepo.save(txn);
 
     return this.getTransactionPosting(id);
@@ -274,6 +272,8 @@ export class TransactionAccountingService {
     );
     const updateData = { ...dto };
     delete (updateData as any).attributes;
+    // Diễn giải ngân hàng (description) là chỉ đọc, không ghi đè qua update
+    delete (updateData as any).description;
     Object.assign(txn, updateData);
     // Đồng bộ branch_id (chi nhánh chính) với branch_ids
     if (dto.branchIds !== undefined) {
@@ -357,7 +357,7 @@ export class TransactionAccountingService {
         ? Number(txn.creditAmount)
         : Number(txn.debitAmount);
     const isReceipt = Number(txn.creditAmount) > 0;
-    const baseDescription = txn.accountingDescription || txn.description || '';
+    const baseDescription = txn.note || txn.description || '';
 
     type Group = {
       subject: string | null;

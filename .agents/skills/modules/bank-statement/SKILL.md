@@ -97,8 +97,8 @@ erp_bank_transactions (Sổ giao dịch dòng tiền)
 | `credit_amount`| `numeric(18,4)`| `default: 0` | Số tiền Ghi Có (Tiền thu vào tài khoản) |
 | `balance` | `numeric(18,4)`| `NULL` | Số dư lũy kế tại thời điểm giao dịch |
 | `seq_no` | `varchar(255)` | `NULL` | Mã định danh trình tự (Sequence Number) |
-| `description` | `text` | `NULL` | Nội dung chuyển khoản trên sao kê gốc |
-| `accounting_description`| `text` | `NULL` | Diễn giải nghiệp vụ kế toán |
+| `description` | `text` | `NULL` | Diễn giải ngân hàng (nội dung chuyển khoản gốc từ sao kê). **Chỉ đọc** trên ERP: không cho sửa qua `PATCH /transactions/:id`, không bị ghi đè khi hạch toán |
+| `note` | `text` | `NULL` | **Ghi chú ERP** (do người dùng nhập tay, vd. "hoàn ứng"). Sửa qua `PATCH /transactions/:id`; là nguồn diễn giải bút toán (`note \|\| description`) khi refresh bút toán. Thay thế cột `accounting_description` đã bị xóa bởi migration `20261026100000-ReplaceAccountingDescriptionWithNoteOnBankTransactions.ts` |
 | `correspondent_account`| `varchar(255)` | `NULL` | Số tài khoản đối ứng (bên gửi/nhận) |
 | `correspondent_name` | `varchar(255)` | `NULL` | Tên đối tác / Người thụ hưởng đối ứng |
 | `correspondent_bank` | `varchar(255)` | `NULL` | Ngân hàng của đối tác |
@@ -406,11 +406,12 @@ src/modules/bank-statements/components/BankStatementsTab/
     - `__tests__/BankTransactionDetailDrawer.test.tsx`: Co-located unit test suite.
   - Tuân thủ No Blue Mandate (`0% blue-*`) và 100% i18n (`t("...")`).
 - **Quản lý Cập nhật Giao dịch**:
-  - Cho phép chỉnh sửa Chi nhánh (`branchId` qua `Combobox`) và Ghi chú / Diễn giải (`description` qua `BufferedTextarea` debounce 500ms).
-  - Tự động lưu qua `bankStatementApi.updateTransaction(transactionId, { branchId, description, accountingDescription })`.
+  - Cho phép chỉnh sửa Chi nhánh (`branchIds` qua `V2MultiCombobox`) và **Ghi chú ERP** (`note` qua `BufferedTextarea`). "Diễn giải ngân hàng" (`description`) hiển thị chỉ đọc.
+  - Tự động lưu qua `bankStatementApi.updateTransaction(transactionId, { branchIds?, note, cashflowClassification, cashflowPurpose })`. FE không gửi `description`; backend `updateTransaction` xóa `description` khỏi payload và `UpdateBankTransactionDto` đã omit `description`.
+  - Hạch toán (`POST /transactions/:id/post`) không ghi đè Ghi chú ERP: `dto.description` chỉ dùng làm diễn giải bút toán.
 - **Cấu trúc Cột Phải (Right Panel) 2 Tầng Chuẩn Hóa**:
   1. **Tầng 1 — `THÔNG TIN CHUNG` (`BankTransactionGeneralInfoSection`)**:
-     - View mode: Icon `<Building2>` (Đối tác), `<MapPin>` (Chi nhánh kèm tên tường minh), `<CreditCard>` (Tài khoản nguồn), `<Calendar>` (Ngày GD), `<FileText>` (Ghi chú / Diễn giải), `<EntityTagSelector>` (Thẻ nhãn) kèm nút Copy.
+     - View mode: Icon `<Building2>` (Đối tác), `<MapPin>` (Chi nhánh kèm tên tường minh), `<CreditCard>` (Tài khoản nguồn), `<Calendar>` (Ngày GD), `<FileText>` (Diễn giải ngân hàng chỉ đọc + Ghi chú ERP), `<EntityTagSelector>` (Thẻ nhãn) kèm nút Copy.
      - Edit mode: Combobox chọn chi nhánh, BufferedTextarea nhập ghi chú, Thẻ nhãn.
   2. **Tầng 2 — `THUỘC TÍNH TÙY CHỈNH` (`ModuleEntityCustomFieldsSection`)**:
      - Tích hợp `moduleKey="BANK_TXN"` quản lý danh mục và dynamic custom fields.
