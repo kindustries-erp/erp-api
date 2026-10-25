@@ -131,4 +131,60 @@ describe('TransactionQueryService - Server-side Sorting', () => {
     expect(qbMock.orderBy).toHaveBeenCalledWith('txn.note', 'DESC');
     expect(qbMock.addOrderBy).toHaveBeenCalledWith('txn.createdAt', 'DESC');
   });
+
+  it('filters by linked invoice number through netoff join', async () => {
+    await service.getTransactions({
+      page: 1,
+      pageSize: 20,
+      columnFilters: JSON.stringify({ invoiceNo: ['0000123'] }),
+    } as any);
+
+    expect(qbMock.andWhere).toHaveBeenCalledWith(
+      expect.stringContaining('i.invoice_no IN (:...vals_invoiceNo)'),
+      { vals_invoiceNo: ['0000123'] },
+    );
+  });
+});
+
+describe('TransactionQueryService - getTransaction description', () => {
+  it('keeps bank description and exposes posting description separately', async () => {
+    const txn = {
+      id: 'txn-1',
+      description: '(B/O CT BAO HIEM PJICO HA NOI) IBVCB.202602065087004827',
+      note: 'không biết cho xe nào, hóa đơn bao nhiêu',
+      creditAmount: '8038653',
+      debitAmount: '0',
+    };
+    const transactionRepoMock = {
+      findOne: jest.fn().mockResolvedValue(txn),
+      manager: {
+        createQueryBuilder: jest.fn().mockReturnValue({
+          select: jest.fn().mockReturnThis(),
+          addSelect: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          groupBy: jest.fn().mockReturnThis(),
+          getRawMany: jest.fn().mockResolvedValue([]),
+        }),
+      },
+    };
+    const transactionAccountingServiceMock = {
+      getTransactionPosting: jest.fn().mockResolvedValue({
+        postingStatus: 'POSTED',
+        description: 'không biết cho xe nào, hóa đơn bao nhiêu',
+        lines: [],
+      }),
+    };
+    const service = new TransactionQueryService(
+      transactionRepoMock as any,
+      transactionAccountingServiceMock as any,
+    );
+
+    const result = await service.getTransaction('txn-1');
+
+    expect(result.description).toBe(txn.description);
+    expect(result.postingDescription).toBe(
+      'không biết cho xe nào, hóa đơn bao nhiêu',
+    );
+    expect(result.postingStatus).toBe('POSTED');
+  });
 });

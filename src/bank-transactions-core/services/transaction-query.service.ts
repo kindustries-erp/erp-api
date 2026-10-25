@@ -35,9 +35,10 @@ export class TransactionQueryService {
       throw new NotFoundException(`Transaction ${id} not found`);
     }
     const [mappedTxn] = await this.loadNetOffAmounts([txn]);
-    const posting =
+    const { description: postingDescription, ...posting } =
       await this.transactionAccountingService.getTransactionPosting(id);
-    return { ...mappedTxn, ...posting };
+    // description gốc của ngân hàng không bị posting ghi đè; mô tả bút toán đi qua postingDescription
+    return { ...mappedTxn, ...posting, postingDescription };
   }
 
   private async loadNetOffAmounts(
@@ -199,6 +200,31 @@ export class TransactionQueryService {
 
           if (col === 'branch') {
             applyBranchIdsFilter(qb, vals, `vals_${col}`);
+            continue;
+          }
+
+          if (col === 'invoiceNo') {
+            const hasBlank = vals.includes('__BLANK__');
+            const realVals = vals.filter((v) => v !== '__BLANK__');
+            const invoiceNoSubquery = `EXISTS (
+              SELECT 1 FROM erp_invoice_voucher_netoff n
+              JOIN erp_invoices i ON n.invoice_id = i.id
+              WHERE n.bank_transaction_id = txn.id
+              AND i.invoice_no IN (:...vals_${col})
+            )`;
+            const noNetOffSubquery = `NOT EXISTS (
+              SELECT 1 FROM erp_invoice_voucher_netoff WHERE bank_transaction_id = txn.id
+            )`;
+
+            if (hasBlank && realVals.length > 0) {
+              qb.andWhere(`(${invoiceNoSubquery} OR ${noNetOffSubquery})`, {
+                [`vals_${col}`]: realVals,
+              });
+            } else if (hasBlank) {
+              qb.andWhere(noNetOffSubquery);
+            } else {
+              qb.andWhere(invoiceNoSubquery, { [`vals_${col}`]: vals });
+            }
             continue;
           }
 
@@ -801,7 +827,12 @@ export class TransactionQueryService {
       selectField = 'txn.cashflowClassification';
     else if (column === 'cashflowPurpose') selectField = 'txn.cashflowPurpose';
     else if (column === 'note') selectField = 'txn.note';
-    else if (column === 'invoiceSubject') {
+    else if (column === 'invoiceNo') {
+      qb.innerJoin('txn.invoiceNetOffs', 'netoff');
+      qb.innerJoin('netoff.invoice', 'inv');
+      selectField = 'inv.invoice_no';
+      labelField = selectField;
+    } else if (column === 'invoiceSubject') {
       qb.innerJoin('txn.invoiceNetOffs', 'netoff');
       qb.innerJoin('netoff.invoice', 'inv');
       selectField = `CASE WHEN inv.direction = 'IN' THEN CONCAT_WS(' - ', NULLIF(inv.seller_tax_code, ''), inv.seller_name) ELSE CONCAT_WS(' - ', NULLIF(inv.buyer_tax_code, ''), inv.buyer_name) END`;

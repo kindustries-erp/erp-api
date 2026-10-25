@@ -187,7 +187,7 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
 | | `PATCH`| `/cash-books/:id` | `{ resource: 'cash_statements', action: 'update' }` | Cập nhật sổ quỹ |
 | | `DELETE`| `/cash-books/:id` | `{ resource: 'cash_statements', action: 'delete' }` | Xóa mềm sổ quỹ |
 | **Transactions** | `GET` | `/transactions` | `bank_statements` OR `cash_statements` (`read`) | Danh sách giao dịch (hỗ trợ phân trang, lọc đa cột) |
-| | `GET` | `/transactions/:id` | `bank_statements` OR `cash_statements` (`read`) | Chi tiết giao dịch (kèm trạng thái hạch toán & cấn trừ) |
+| | `GET` | `/transactions/:id` | `bank_statements` OR `cash_statements` (`read`) | Chi tiết giao dịch (kèm trạng thái hạch toán & cấn trừ). `description` là diễn giải gốc của ngân hàng (không bị posting ghi đè); mô tả bút toán nằm ở `postingDescription`. |
 | | `GET` | `/transactions/:id/traceability-graph` | `bank_statements` OR `cash_statements` (`read`) | Lấy đồ thị mạng lưới chứng từ liên kết đa tầng kèm Zero-Trust RBAC mask |
 | | `GET` | `/transactions/:id/posting` | `bank_statements` OR `cash_statements` (`read`) | Lấy thông tin bút toán kế toán hiện thời |
 | | `POST` | `/transactions/:id/net-off-invoices` | `bank_statements` OR `cash_statements` (`update`) | Ghép nối cấn trừ hóa đơn vào giao dịch ngân hàng |
@@ -309,9 +309,10 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
 - Đồng bộ URL param `?txnType=IN|OUT` qua `usePageUrlState`.
 
 ### 8.2. Chế độ xem Cột linh hoạt (ViewMode Presets)
-- Hai preset chuẩn (không xóa được, có thể Khôi phục mặc định):
+- Ba preset chuẩn (không xóa được, có thể Khôi phục mặc định):
+  - **`full` — "Đầy đủ"**: Bật toàn bộ cột, gồm 3 cột hóa đơn liên kết `invoiceNo` (Số hóa đơn, có header filter server-side), `invoiceSerial` (Ký hiệu HĐ), `invoiceDate` (Ngày HĐ). Các cột này lấy từ `txn.invoiceNetOffs[].invoice`, khử trùng lặp, nối bằng dấu phẩy.
   - **`overview` — "Tổng quan"**: Cột hiển thị: `index`, `account`, `transDate`, `referenceNumber`, `description`, `thu`, `chi`, `balance`, `branch`.
-  - **`audit` — "Kiểm toán / Đối soát"**: Cột hiển thị: `index`, `account`, `transDate`, `referenceNumber`, `correspondentName`, `invoiceSubject`, `thu`, `chi`, `netOffAmount`, `remainingAmount`, `branch`.
+  - **`audit` — "Kiểm toán / Đối soát"**: Cột hiển thị: `index`, `account`, `transDate`, `referenceNumber`, `correspondentName`, `invoiceSubject`, `invoiceNo`, `invoiceSerial`, `invoiceDate`, `thu`, `chi`, `netOffAmount`, `remainingAmount`, `branch`.
 - Người dùng có thể **tạo Custom View** mới (đặt tên, chọn bật/tắt từng cột theo 4 nhóm), lưu vào `core_user_preferences`.
 
 ### 8.3. Cấu trúc Module Atomic (`src/modules/bank-statements/`)
