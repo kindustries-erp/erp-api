@@ -35,6 +35,57 @@ describe('TransactionAccountingService', () => {
     );
   });
 
+  it('updateTransaction không ghi đè description (diễn giải ngân hàng) nhưng lưu được note', async () => {
+    transactionRepo.findOne.mockResolvedValue({
+      id: 'txn-1',
+      isDeleted: false,
+      sourceType: 'BANK',
+      description: 'BANK TEXT',
+      note: null,
+      branchId: null,
+      branchIds: [],
+      creditAmount: 0,
+      debitAmount: 100,
+      transDate: new Date('2026-07-23'),
+    });
+    dataSource.query.mockResolvedValue([]);
+
+    await service.updateTransaction('txn-1', {
+      description: 'SUA BANK TEXT',
+      note: 'hoàn ứng',
+    } as any);
+
+    const saved = transactionRepo.save.mock.calls[0][0];
+    expect(saved.description).toBe('BANK TEXT');
+    expect(saved.note).toBe('hoàn ứng');
+  });
+
+  it('postTransaction không ghi đè note (ghi chú ERP) bằng diễn giải bút toán', async () => {
+    transactionRepo.findOne.mockResolvedValue({
+      id: 'txn-1',
+      isDeleted: false,
+      sourceType: 'BANK',
+      description: 'BANK TEXT',
+      note: 'hoàn ứng',
+      branchId: null,
+      branchIds: [],
+      creditAmount: 0,
+      debitAmount: 100,
+      transDate: new Date('2026-07-23'),
+    });
+    dataSource.query.mockResolvedValue([{ id: '1121' }, { id: '331' }]);
+
+    await service.postTransaction('txn-1', {
+      description: 'Diễn giải bút toán',
+      lines: [
+        { accountId: '331', debit: 100, credit: 0, description: 'Chi' },
+        { accountId: '1121', debit: 0, credit: 100, description: 'Chi' },
+      ],
+    } as any);
+
+    expect(transactionRepo.save.mock.calls[0][0].note).toBe('hoàn ứng');
+  });
+
   it('postTransaction (nhập tay) tạo bút toán theo danh sách chi nhánh của giao dịch', async () => {
     transactionRepo.findOne.mockResolvedValue({
       id: 'txn-1',
@@ -207,7 +258,7 @@ describe('TransactionAccountingService', () => {
         bankAccount: { accountingAccountId: '1121-account' },
         creditAmount: 500, // Tiền vào (Receipt)
         debitAmount: 0,
-        accountingDescription: 'Tien vao tk',
+        note: 'Tien vao tk',
         correspondentAccountingAccountId: null,
         transDate: new Date('2026-07-23'),
       });
@@ -254,7 +305,7 @@ describe('TransactionAccountingService', () => {
         bankAccount: { accountingAccountId: '1121-account' },
         creditAmount: 100,
         debitAmount: 0,
-        accountingDescription: 'Tien vao tk',
+        note: 'Tien vao tk',
         correspondentAccountingAccountId: null,
         transDate: new Date('2026-07-23'),
       });
@@ -287,7 +338,7 @@ describe('TransactionAccountingService', () => {
         bankAccount: { accountingAccountId: '1121-account' },
         creditAmount: 100,
         debitAmount: 0,
-        accountingDescription: 'Tien vao tk',
+        note: 'Tien vao tk',
         correspondentAccountingAccountId: null,
         transDate: new Date('2026-07-23'),
       });
@@ -318,7 +369,7 @@ describe('TransactionAccountingService', () => {
         bankAccount: { accountingAccountId: '1121-account' },
         creditAmount: 0,
         debitAmount: 300, // Tiền ra (Payment)
-        accountingDescription: 'Thanh toan tien hang',
+        note: 'Thanh toan tien hang',
         correspondentAccountingAccountId: null,
         transDate: new Date('2026-07-23'),
       });
@@ -368,7 +419,7 @@ describe('TransactionAccountingService', () => {
         cashBook: null,
         creditAmount: 100,
         debitAmount: 0,
-        accountingDescription: 'Thu tien',
+        note: 'Thu tien',
         description: 'Thu tien',
         correspondentAccountingAccountId: 'counterpart-account',
         correspondentName: 'Partner A',
