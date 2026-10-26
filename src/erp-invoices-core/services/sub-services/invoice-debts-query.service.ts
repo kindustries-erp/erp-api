@@ -236,7 +236,10 @@ export class InvoiceDebtsQueryService {
 
     // 2. Filter wrapper
     // Tiền đã gắn đối tượng nhưng chưa cấn trừ, cộng theo MST (xem invoice-debts-unallocated.helper)
-    let finalQuery = `SELECT p.*, COALESCE(u.unallocated, 0) AS "unallocatedAmount"
+    // Một MST có thể có nhiều dòng (khác tên): chỉ gắn phần chưa phân bổ vào dòng có tổng HĐ lớn nhất để không cộng trùng
+    let finalQuery = `SELECT p.*,
+        COALESCE(CASE WHEN ROW_NUMBER() OVER (PARTITION BY p."taxCode" ORDER BY p."totalAmount" DESC) = 1
+                      THEN u.unallocated END, 0) AS "unallocatedAmount"
       FROM (${baseQuery}) p
       LEFT JOIN (${buildUnallocatedByTaxSql(direction)}) u ON u.tax_code = p."taxCode"`;
     const whereConditions: string[] = [];
