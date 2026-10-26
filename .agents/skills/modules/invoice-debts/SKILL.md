@@ -21,7 +21,8 @@ Module Công Nợ Theo Đối Tượng (`invoice-debts`, hiển thị trên Side
 5. **Dòng Tổng phụ & Popover Tỷ lệ Hero (Subtotal Summary)**: Tính toán song song tổng lũy kế trên trang hiện tại và tổng toàn bộ hệ thống (`grandTotalAmount`, `grandTotalPaid`, `grandTotalBalance`, `totalPartners`, `totalInvoiceCount`) cho cả 2 cột tài chính.
 6. **Kiến trúc Sub-Services & An toàn Bảo mật**:
    - `InvoiceDebtsService`: Facade mỏng (~140 dòng).
-   - `InvoiceDebtsQueryService`: Phụ trách toàn bộ query tổng hợp công nợ và options phân trang/lọc.
+   - `InvoiceDebtsQueryService`: Phụ trách toàn bộ query tổng hợp công nợ và options phân trang/lọc. Biểu thức MST/tên đối tác lấy từ `buildInvoicePartnerSqlParts` (`src/common/utils/invoice-partner-key.util.ts`, dùng chung với đồng bộ đối tác và sao kê); không đổi số liệu khi refactor.
+   - Chưa có cột "Chưa phân bổ" (phần tiền sao kê gắn đối tượng chưa cấn trừ): đang chờ làm, xem plan đối tượng sao kê.
    - `InvoiceDebtsDetailService`: Phụ trách chi tiết hóa đơn của từng đối tác (`getPartnerInvoices`), sử dụng parameterized SQL ($1, $2, ...) phòng chống triệt để SQL injection.
    - `InvoiceDebtsExportService`: Phụ trách xuất Excel báo cáo công nợ đồng bộ 2 sheet.
 

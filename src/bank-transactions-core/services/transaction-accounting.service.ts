@@ -12,6 +12,7 @@ import { splitEvenly } from '../../common/utils/money-split.util';
 import { UpdateBankTransactionDto } from '../dto/update-bank-transaction.dto';
 import { CreateBankTransactionDto } from '../dto/create-bank-transaction.dto';
 import { normalizeBranchColumns } from '../../common/utils/branch-ids.util';
+import { BusinessPartnersCoreService } from '../../v2/business-partners-core/business-partners-core.service';
 import {
   CashflowClassification,
   CashflowPurpose,
@@ -25,6 +26,7 @@ export class TransactionAccountingService {
     private readonly transactionRepo: Repository<ErpBankTransaction>,
     private readonly dataSource: DataSource,
     private readonly accountingCoreService: AccountingCoreService,
+    private readonly partners: BusinessPartnersCoreService,
   ) {}
 
   private assertCashflowPair(
@@ -270,11 +272,19 @@ export class TransactionAccountingService {
         ? dto.cashflowPurpose
         : txn.cashflowPurpose,
     );
-    const updateData = { ...dto };
+    const { invoicePartner, ...rest } = dto;
+    const updateData = { ...rest };
     delete (updateData as any).attributes;
     // Diễn giải ngân hàng (description) là chỉ đọc, không ghi đè qua update
     delete (updateData as any).description;
     Object.assign(txn, updateData);
+    if (invoicePartner) {
+      txn.partnerId = await this.partners.ensurePartnerForInvoiceKey({
+        taxCode: invoicePartner.taxCode ?? null,
+        name: invoicePartner.name,
+        partnerType: invoicePartner.partnerType,
+      });
+    }
     // Đồng bộ branch_id (chi nhánh chính) với branch_ids
     if (dto.branchIds !== undefined) {
       txn.branchIds = dto.branchIds;
@@ -370,12 +380,19 @@ export class TransactionAccountingService {
 
     const defaultCounterpart =
       txn.correspondentAccountingAccountId || t0001AccountId;
+    // Phần tiền chưa cấn trừ hóa đơn: có đối tượng thì ghi 131 (thu) / 331 (chi), không thì giữ T0001
+    const isIncoming = Number(txn.creditAmount) > 0;
+    const unallocatedCounterpart =
+      txn.correspondentAccountingAccountId ||
+      (txn.partnerId
+        ? (isIncoming ? arAccountId : apAccountId) || t0001AccountId
+        : t0001AccountId);
 
     if (netOffRows.length === 0) {
       groups.push({
         subject: txn.correspondentName || null,
         amount: totalAmount,
-        counterpartAccountId: defaultCounterpart,
+        counterpartAccountId: unallocatedCounterpart,
         branchId: txn.branchId,
         description: baseDescription,
       });
@@ -430,7 +447,7 @@ export class TransactionAccountingService {
         groups.push({
           subject: txn.correspondentName || null,
           amount: remaining,
-          counterpartAccountId: defaultCounterpart,
+          counterpartAccountId: unallocatedCounterpart,
           branchId: txn.branchId,
           description: baseDescription,
         });

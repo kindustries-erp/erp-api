@@ -18,6 +18,7 @@ import {
   branchIdsSqlCondition,
   parseBranchFilter,
 } from '../../helpers/invoice-branch-filter.helper';
+import { buildInvoicePartnerSqlParts } from '../../../common/utils/invoice-partner-key.util';
 
 @Injectable()
 export class InvoiceDebtsQueryService {
@@ -79,15 +80,8 @@ export class InvoiceDebtsQueryService {
       partner_type === InvoicePartnerType.SUPPLIER ? 'IN' : 'OUT';
 
     // 1. Base Aggregation Subquery
-    const partnerTaxExpr =
-      direction === 'IN'
-        ? `COALESCE(NULLIF(TRIM(inv.seller_tax_code), ''), 'KHONG_MST')`
-        : `COALESCE(NULLIF(TRIM(inv.effective_data->'effectiveValues'->>'buyerTaxCode'), ''), NULLIF(TRIM(inv.buyer_tax_code), ''), NULLIF(TRIM(inv.buyer_cccd), ''), 'KHONG_MST')`;
-
-    const rawPartnerNameExpr =
-      direction === 'IN'
-        ? `COALESCE(NULLIF(TRIM(inv.seller_name), ''), 'Nhà cung cấp')`
-        : `COALESCE(NULLIF(TRIM(inv.effective_data->'effectiveValues'->>'buyerName'), ''), NULLIF(TRIM(inv.buyer_name), ''), NULLIF(TRIM(inv.buyer_personal_name), ''), 'Khách hàng lẻ')`;
+    const { taxCodeExpr: partnerTaxExpr, nameExpr: rawPartnerNameExpr } =
+      buildInvoicePartnerSqlParts(direction);
 
     const partnerAddressExpr =
       direction === 'IN'
@@ -584,15 +578,8 @@ export class InvoiceDebtsQueryService {
     const direction =
       partner_type === InvoicePartnerType.SUPPLIER ? 'IN' : 'OUT';
 
-    const partnerTaxExpr =
-      direction === 'IN'
-        ? `COALESCE(NULLIF(TRIM(inv.seller_tax_code), ''), 'KHONG_MST')`
-        : `COALESCE(NULLIF(TRIM(inv.effective_data->'effectiveValues'->>'buyerTaxCode'), ''), NULLIF(TRIM(inv.buyer_tax_code), ''), NULLIF(TRIM(inv.buyer_cccd), ''), 'KHONG_MST')`;
-
-    const rawPartnerNameExpr =
-      direction === 'IN'
-        ? `COALESCE(NULLIF(TRIM(inv.seller_name), ''), 'Nhà cung cấp')`
-        : `COALESCE(NULLIF(TRIM(inv.effective_data->'effectiveValues'->>'buyerName'), ''), NULLIF(TRIM(inv.buyer_name), ''), NULLIF(TRIM(inv.buyer_personal_name), ''), 'Khách hàng lẻ')`;
+    const { taxCodeExpr: partnerTaxExpr, nameExpr: rawPartnerNameExpr } =
+      buildInvoicePartnerSqlParts(direction);
 
     const effBalExpr = `(CASE 
       WHEN inv.tax_invoice_status = 3 OR CAST(inv.total_amount AS NUMERIC) < 0 THEN
