@@ -22,7 +22,7 @@ Module Công Nợ Theo Đối Tượng (`invoice-debts`, hiển thị trên Side
 6. **Kiến trúc Sub-Services & An toàn Bảo mật**:
    - `InvoiceDebtsService`: Facade mỏng (~140 dòng).
    - `InvoiceDebtsQueryService`: Phụ trách toàn bộ query tổng hợp công nợ và options phân trang/lọc. Biểu thức MST/tên đối tác lấy từ `buildInvoicePartnerSqlParts` (`src/common/utils/invoice-partner-key.util.ts`, dùng chung với đồng bộ đối tác và sao kê); không đổi số liệu khi refactor.
-   - Chưa có cột "Chưa phân bổ" (phần tiền sao kê gắn đối tượng chưa cấn trừ): đang chờ làm, xem plan đối tượng sao kê.
+   - **Chưa phân bổ** (`unallocatedAmount`) và **Còn lại sau phân bổ** (`netBalanceAmount` = `balanceAmount − unallocatedAmount`, có thể âm khi trả trước): `invoice-debts-unallocated.helper.ts` cộng phần chưa cấn trừ của các dòng sao kê có `partner_id` theo MST đối tác (`tax_code`), join vào danh sách công nợ theo `taxCode`. Không đổi cách gom nhóm công nợ. Dòng thu (credit) cho khách hàng (OUT), dòng chi (debit) cho NCC (IN). Chưa có endpoint chi tiết các khoản chưa phân bổ và chưa có tổng cộng (grand total) cho cột này.
    - `InvoiceDebtsDetailService`: Phụ trách chi tiết hóa đơn của từng đối tác (`getPartnerInvoices`), sử dụng parameterized SQL ($1, $2, ...) phòng chống triệt để SQL injection.
    - `InvoiceDebtsExportService`: Phụ trách xuất Excel báo cáo công nợ đồng bộ 2 sheet.
 

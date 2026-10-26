@@ -19,6 +19,7 @@ import {
   parseBranchFilter,
 } from '../../helpers/invoice-branch-filter.helper';
 import { buildInvoicePartnerSqlParts } from '../../../common/utils/invoice-partner-key.util';
+import { buildUnallocatedByTaxSql } from './invoice-debts-unallocated.helper';
 
 @Injectable()
 export class InvoiceDebtsQueryService {
@@ -234,7 +235,10 @@ export class InvoiceDebtsQueryService {
     baseQuery += ` GROUP BY ${rawPartnerNameExpr}, ${partnerTaxExpr}`;
 
     // 2. Filter wrapper
-    let finalQuery = `SELECT * FROM (${baseQuery}) p`;
+    // Tiền đã gắn đối tượng nhưng chưa cấn trừ, cộng theo MST (xem invoice-debts-unallocated.helper)
+    let finalQuery = `SELECT p.*, COALESCE(u.unallocated, 0) AS "unallocatedAmount"
+      FROM (${baseQuery}) p
+      LEFT JOIN (${buildUnallocatedByTaxSql(direction)}) u ON u.tax_code = p."taxCode"`;
     const whereConditions: string[] = [];
 
     // Global search
@@ -407,6 +411,9 @@ export class InvoiceDebtsQueryService {
       totalAmount: Number(r.totalAmount) || 0,
       paidAmount: Number(r.paidAmount) || 0,
       balanceAmount: Number(r.balanceAmount) || 0,
+      unallocatedAmount: Number(r.unallocatedAmount) || 0,
+      netBalanceAmount:
+        (Number(r.balanceAmount) || 0) - (Number(r.unallocatedAmount) || 0),
       maxAgingDays: parseInt(r.maxAgingDays || '0', 10),
       weightedAgingDays: Number(r.weightedAgingDays) || 0,
       latestInvoiceDate: r.latestInvoiceDate || null,
