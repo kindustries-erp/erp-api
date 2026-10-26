@@ -1,7 +1,26 @@
 import { Injectable } from '@nestjs/common';
-import { Workbook } from 'exceljs';
+import { Row, Workbook, Worksheet } from 'exceljs';
 import { ErpBankTransaction } from '../entities/erp_bank_transaction.entity';
 import { toVietnamExcelDate } from '../../common/utils/date.util';
+import {
+  CASHFLOW_CLASSIFICATION_EXPORT_LABELS,
+  CASHFLOW_PURPOSE_EXPORT_LABELS,
+  toCashflowExportLabel,
+} from '../constants/cashflow-labels';
+import { buildUniqueSheetName } from '../utils/sheet-name.util';
+import {
+  AQUA_KEYS,
+  ALIGNMENTS,
+  BORDER_THIN,
+  COLOR,
+  DATA_START_ROW,
+  ExportColumn,
+  HEADER_ROW,
+  INVOICE_KEYS,
+  MONEY_FMT,
+  buildExportColumns,
+  solidFill,
+} from './bank-statement-excel.layout';
 
 export interface NetOffInvoiceItem {
   bankTransactionId: string;
@@ -28,47 +47,22 @@ export interface BankStatementExcelBuildOptions {
   onProgress?: (percent: number, message: string) => void;
 }
 
+interface AccountGroup {
+  label: string;
+  items: ErpBankTransaction[];
+}
+
+type SheetEntry = { item: ErpBankTransaction; invList: NetOffInvoiceItem[] };
+
+const NO_ACCOUNT_KEY = '__none__';
+const NO_ACCOUNT_LABEL = 'Khác';
+const DEFAULT_SHEET_NAME: Record<'BANK' | 'CASH', string> = {
+  BANK: 'Sao kê Ngân hàng',
+  CASH: 'Sổ quỹ Tiền mặt',
+};
+
 @Injectable()
 export class BankStatementExcelBuilder {
-  private static readonly INVOICE_START_COL = 15;
-
-  private static readonly INVOICE_KEYS = new Set([
-    'invoiceBranchName',
-    'invoiceDate',
-    'invoiceNo',
-    'invoiceSerial',
-    'invoicePartner',
-    'invoiceDescription',
-    'invoiceTotalAmount',
-  ]);
-
-  private static readonly ALIGNMENTS: Record<
-    string,
-    { horizontal: 'center' | 'left' | 'right'; vertical: 'middle' }
-  > = {
-    stt: { horizontal: 'center', vertical: 'middle' },
-    account: { horizontal: 'left', vertical: 'middle' },
-    transDate: { horizontal: 'center', vertical: 'middle' },
-    referenceNumber: { horizontal: 'center', vertical: 'middle' },
-    description: { horizontal: 'left', vertical: 'middle' },
-    credit: { horizontal: 'right', vertical: 'middle' },
-    debit: { horizontal: 'right', vertical: 'middle' },
-    balance: { horizontal: 'right', vertical: 'middle' },
-    netOffAmount: { horizontal: 'right', vertical: 'middle' },
-    remainingAmount: { horizontal: 'right', vertical: 'middle' },
-    correspondentAccount: { horizontal: 'center', vertical: 'middle' },
-    correspondentName: { horizontal: 'left', vertical: 'middle' },
-    correspondentBank: { horizontal: 'left', vertical: 'middle' },
-    branchName: { horizontal: 'center', vertical: 'middle' },
-    invoiceBranchName: { horizontal: 'center', vertical: 'middle' },
-    invoiceDate: { horizontal: 'center', vertical: 'middle' },
-    invoiceNo: { horizontal: 'center', vertical: 'middle' },
-    invoiceSerial: { horizontal: 'center', vertical: 'middle' },
-    invoicePartner: { horizontal: 'left', vertical: 'middle' },
-    invoiceDescription: { horizontal: 'left', vertical: 'middle' },
-    invoiceTotalAmount: { horizontal: 'right', vertical: 'middle' },
-  };
-
   async build(options: BankStatementExcelBuildOptions): Promise<Buffer> {
     const {
       sourceType,
@@ -80,9 +74,7 @@ export class BankStatementExcelBuilder {
     onProgress?.(65, 'Đang tạo cấu trúc bảng tính Excel...');
 
     const workbook = new Workbook();
-    const sheetName =
-      sourceType === 'CASH' ? 'Sổ quỹ Tiền mặt' : 'Sao kê Ngân hàng';
-    const worksheet = workbook.addWorksheet(sheetName);
+    const columns = buildExportColumns(sourceType, selectedColumns);
 
     // Group net-off invoices by bank transaction ID
     const netOffMap = new Map<string, NetOffInvoiceItem[]>();
@@ -92,260 +84,37 @@ export class BankStatementExcelBuilder {
       netOffMap.set(item.bankTransactionId, list);
     }
 
-    const allColumns: Array<{
-      header: string;
-      key: string;
-      width: number;
-      style?: { numFmt?: string };
-      isSum?: boolean;
-    }> = [
-      { header: 'STT', key: 'stt', width: 8 },
-      {
-        header: sourceType === 'CASH' ? 'Sổ quỹ' : 'Ngân hàng',
-        key: 'account',
-        width: 25,
-      },
-      {
-        header: 'Ngày GD',
-        key: 'transDate',
-        width: 22,
-        style: { numFmt: 'dd/mm/yyyy hh:mm:ss' },
-      },
-      { header: 'Số tham chiếu', key: 'referenceNumber', width: 24 },
-      { header: 'Diễn giải', key: 'description', width: 45 },
-      {
-        header: 'Thu (VND)',
-        key: 'credit',
-        width: 18,
-        style: { numFmt: '#,##0.00' },
-        isSum: true,
-      },
-      {
-        header: 'Chi (VND)',
-        key: 'debit',
-        width: 18,
-        style: { numFmt: '#,##0.00' },
-        isSum: true,
-      },
-      {
-        header: 'Số dư (VND)',
-        key: 'balance',
-        width: 18,
-        style: { numFmt: '#,##0.00' },
-      },
-      {
-        header: 'Đã cấn trừ (VND)',
-        key: 'netOffAmount',
-        width: 18,
-        style: { numFmt: '#,##0.00' },
-        isSum: true,
-      },
-      {
-        header: 'Còn lại (VND)',
-        key: 'remainingAmount',
-        width: 18,
-        style: { numFmt: '#,##0.00' },
-        isSum: true,
-      },
-      { header: 'TK đối ứng', key: 'correspondentAccount', width: 18 },
-      { header: 'Tên đối tác', key: 'correspondentName', width: 30 },
-      { header: 'Ngân hàng đối tác', key: 'correspondentBank', width: 22 },
-      { header: 'Chi nhánh GD', key: 'branchName', width: 22 },
-      // Nhóm cột Hóa đơn cấn trừ (Cột 15-21)
-      { header: '[HĐ] Chi nhánh', key: 'invoiceBranchName', width: 24 },
-      {
-        header: '[HĐ] Ngày HĐ',
-        key: 'invoiceDate',
-        width: 20,
-        style: { numFmt: 'dd/mm/yyyy' },
-      },
-      { header: '[HĐ] Số HĐ', key: 'invoiceNo', width: 20 },
-      { header: '[HĐ] Ký hiệu HĐ', key: 'invoiceSerial', width: 18 },
-      { header: '[HĐ] Đối tác HĐ', key: 'invoicePartner', width: 38 },
-      { header: '[HĐ] Nội dung HĐ', key: 'invoiceDescription', width: 45 },
-      {
-        header: '[HĐ] Tổng tiền HĐ (VND)',
-        key: 'invoiceTotalAmount',
-        width: 22,
-        style: { numFmt: '#,##0.00' },
-        isSum: true,
-      },
-    ];
+    const groups = this.groupByAccount(transactions, sourceType);
+    const usedNames = new Set<string>();
 
-    const columns =
-      selectedColumns && selectedColumns.length > 0
-        ? allColumns.filter((c) => selectedColumns.includes(c.key))
-        : allColumns;
-
-    worksheet.columns = columns.map((c) => ({ key: c.key, width: c.width }));
-    worksheet.addRow([]);
-    worksheet.addRow([]);
-    worksheet.addRow([]);
-    worksheet.addRow([]);
-
-    const borderThin = {
-      top: { style: 'thin' as const, color: { argb: 'FFE2E8F0' } },
-      bottom: { style: 'thin' as const, color: { argb: 'FFE2E8F0' } },
-      left: { style: 'thin' as const, color: { argb: 'FFE2E8F0' } },
-      right: { style: 'thin' as const, color: { argb: 'FFE2E8F0' } },
-    };
-
-    const invoiceFill = {
-      type: 'pattern' as const,
-      pattern: 'solid' as const,
-      fgColor: { argb: 'FFF0FDF4' }, // Emerald 50 pastel
-    };
-
-    let totalCredit = 0;
-    let totalDebit = 0;
-    let totalNetOff = 0;
-    let totalRemaining = 0;
-    let totalInvoiceAmount = 0;
-
-    transactions.forEach((item, index) => {
-      const credit = parseFloat(item.creditAmount as any) || 0;
-      const debit = parseFloat(item.debitAmount as any) || 0;
-      const invList = netOffMap.get(item.id) || [];
-      const netOff = invList.reduce(
-        (sum, curr) => sum + (Number(curr.netOffAmount) || 0),
-        0,
+    if (groups.length === 0) {
+      this.writeSheet(
+        workbook,
+        buildUniqueSheetName(
+          DEFAULT_SHEET_NAME[sourceType ?? 'BANK'],
+          usedNames,
+        ),
+        [],
+        columns,
+        sourceType,
       );
-      const remaining = Math.max(0, Math.max(credit, debit) - netOff);
+    }
 
-      totalCredit += credit;
-      totalDebit += debit;
-      totalNetOff += netOff;
-      totalRemaining += remaining;
-
-      const accountText =
-        sourceType === 'CASH'
-          ? item.cashBook?.name || ''
-          : item.bankAccount
-            ? `${item.bankAccount.bankCode} - ${item.bankAccount.accountNumber}`
-            : '';
-
-      const transDateVal = toVietnamExcelDate(item.transDate);
-
-      // Aggregate invoice net-off fields
-      const invBranchNames = Array.from(
-        new Set(invList.map((i) => i.invoiceBranchName).filter(Boolean)),
-      ).join(', ');
-      const invNos = invList
-        .map((i) => i.invoiceNo)
-        .filter(Boolean)
-        .join(', ');
-      const invSerials = Array.from(
-        new Set(invList.map((i) => i.serialNo).filter(Boolean)),
-      ).join(', ');
-      const invDates = invList
-        .map((i) => this.formatDateString(i.invoiceDate))
-        .filter(Boolean)
-        .join(', ');
-      const invPartners = Array.from(
-        new Set(invList.map((i) => this.formatPartnerInfo(i)).filter(Boolean)),
-      ).join('; ');
-      const invDescriptions = invList
-        .map((i) => i.invoiceDescription)
-        .filter(Boolean)
-        .join('; ');
-      const invTotalAmount = invList.length
-        ? invList.reduce(
-            (sum, curr) => sum + (Number(curr.totalAmount) || 0),
-            0,
-          )
-        : null;
-
-      if (invTotalAmount) {
-        totalInvoiceAmount += invTotalAmount;
-      }
-
-      const row = worksheet.addRow({
-        stt: index + 1,
-        account: accountText,
-        transDate: transDateVal ?? '',
-        referenceNumber: item.referenceNumber || '',
-        description: item.description || '',
-        credit,
-        debit,
-        balance: parseFloat(item.balance as any) || 0,
-        netOffAmount: netOff,
-        remainingAmount: remaining,
-        correspondentAccount: item.correspondentAccount || '',
-        correspondentName: item.correspondentName || '',
-        correspondentBank: item.correspondentBank || '',
-        branchName:
-          (item as { branchNames?: string }).branchNames ??
-          item.branch?.name ??
-          '',
-        invoiceBranchName: invBranchNames,
-        invoiceDate: invDates,
-        invoiceNo: invNos,
-        invoiceSerial: invSerials,
-        invoicePartner: invPartners,
-        invoiceDescription: invDescriptions,
-        invoiceTotalAmount: invTotalAmount ?? '',
-      });
-
-      row.height = 20;
-      row.font = { name: 'Calibri', size: 10 };
-
-      // Base Bank Statement Dynamic Alignments & Formats
-      for (let c = 1; c <= columns.length; c++) {
-        const colDef = columns[c - 1];
-        const cell = row.getCell(c);
-        const isInvoiceCol = BankStatementExcelBuilder.INVOICE_KEYS.has(
-          colDef.key,
-        );
-
-        cell.alignment = BankStatementExcelBuilder.ALIGNMENTS[colDef.key] || {
-          horizontal: 'left',
-          vertical: 'middle',
-        };
-
-        if (colDef.key === 'transDate' && transDateVal) {
-          cell.numFmt = 'dd/mm/yyyy hh:mm:ss';
-        } else if (
-          colDef.key === 'invoiceTotalAmount' &&
-          invTotalAmount !== null
-        ) {
-          cell.numFmt = '#,##0.00';
-        } else if (colDef.style?.numFmt) {
-          cell.numFmt = colDef.style.numFmt;
-        }
-
-        if (isInvoiceCol) {
-          cell.fill = invoiceFill;
-          const isFirstInvCol =
-            c > 1 &&
-            !BankStatementExcelBuilder.INVOICE_KEYS.has(columns[c - 2].key);
-          cell.border = isFirstInvCol
-            ? {
-                ...borderThin,
-                left: {
-                  style: 'double' as const,
-                  color: { argb: 'FF065F46' },
-                },
-              }
-            : borderThin;
-        } else {
-          cell.border = borderThin;
-        }
-      }
-    });
+    for (const group of groups) {
+      const entries: SheetEntry[] = group.items.map((item) => ({
+        item,
+        invList: netOffMap.get(item.id) || [],
+      }));
+      this.writeSheet(
+        workbook,
+        buildUniqueSheetName(group.label, usedNames),
+        entries,
+        columns,
+        sourceType,
+      );
+    }
 
     onProgress?.(85, 'Đang tổng hợp dữ liệu và hoàn tất file...');
-
-    this.applySummaryAndHeaders(
-      worksheet,
-      columns,
-      totalCredit,
-      totalDebit,
-      totalNetOff,
-      totalRemaining,
-      totalInvoiceAmount,
-      borderThin,
-      invoiceFill,
-    );
 
     const buffer = await workbook.xlsx.writeBuffer();
     return Buffer.isBuffer(buffer)
@@ -353,49 +122,191 @@ export class BankStatementExcelBuilder {
       : Buffer.from(buffer as ArrayBuffer);
   }
 
-  private applySummaryAndHeaders(
-    worksheet: any,
-    columns: any[],
-    totalCredit: number,
-    totalDebit: number,
-    totalNetOff: number,
-    totalRemaining: number,
-    totalInvoiceAmount: number,
-    borderThin: any,
-    invoiceFill: any,
+  /** Nhóm giao dịch theo tài khoản (BANK) hoặc sổ quỹ (CASH), giữ thứ tự xuất hiện. */
+  private groupByAccount(
+    transactions: ErpBankTransaction[],
+    sourceType?: 'BANK' | 'CASH',
+  ): AccountGroup[] {
+    const groups = new Map<string, AccountGroup>();
+    for (const item of transactions) {
+      const key =
+        sourceType === 'CASH'
+          ? (item.cashBookId ?? item.cashBook?.id ?? NO_ACCOUNT_KEY)
+          : (item.bankAccountId ?? item.bankAccount?.id ?? NO_ACCOUNT_KEY);
+      let group = groups.get(key);
+      if (!group) {
+        group = {
+          label: this.accountText(item, sourceType) || NO_ACCOUNT_LABEL,
+          items: [],
+        };
+        groups.set(key, group);
+      }
+      group.items.push(item);
+    }
+    return [...groups.values()];
+  }
+
+  private writeSheet(
+    workbook: Workbook,
+    name: string,
+    entries: SheetEntry[],
+    columns: ExportColumn[],
+    sourceType?: 'BANK' | 'CASH',
   ) {
-    const totalCols = columns.length;
-    const startRow = 5;
-    const endRow = Math.max(startRow, worksheet.rowCount);
-    const calculatedSums: Record<string, number> = {
-      credit: totalCredit,
-      debit: totalDebit,
-      netOffAmount: totalNetOff,
-      remainingAmount: totalRemaining,
-      invoiceTotalAmount: totalInvoiceAmount,
-    };
+    const worksheet = workbook.addWorksheet(name);
+    worksheet.columns = columns.map((c) => ({ key: c.key, width: c.width }));
 
-    const sumRow = worksheet.getRow(1);
-    sumRow.height = 22;
-    sumRow.font = {
-      name: 'Calibri',
-      size: 10.5,
-      bold: true,
-      color: { argb: 'FF78350F' }, // Amber 900
-    };
+    // Rows 1-2: TỔNG / SUBTOTAL, row 3: spacer, row 4: header
+    for (let r = 1; r < DATA_START_ROW; r++) worksheet.addRow([]);
 
+    const rowValues = entries.map(({ item, invList }, index) =>
+      this.buildRowValues(item, index + 1, invList, sourceType),
+    );
+    rowValues.forEach((values) => {
+      const row = worksheet.addRow(values);
+      this.styleDataRow(row, columns);
+    });
+
+    const dataEnd = DATA_START_ROW + entries.length - 1;
+    const sums = this.sumColumns(columns, rowValues);
+    this.applySummaryAndHeaders(worksheet, columns, sums, dataEnd);
+  }
+
+  private buildRowValues(
+    item: ErpBankTransaction,
+    stt: number,
+    invList: NetOffInvoiceItem[],
+    sourceType?: 'BANK' | 'CASH',
+  ): Record<string, unknown> {
+    const credit = parseFloat(item.creditAmount as any) || 0;
+    const debit = parseFloat(item.debitAmount as any) || 0;
+    const netOff = invList.reduce(
+      (sum, curr) => sum + (Number(curr.netOffAmount) || 0),
+      0,
+    );
+    const remaining = Math.max(0, Math.max(credit, debit) - netOff);
+    const invoice = this.buildInvoiceValues(invList);
+
+    return {
+      stt,
+      account: this.accountText(item, sourceType),
+      transDate: toVietnamExcelDate(item.transDate) ?? '',
+      referenceNumber: item.referenceNumber || '',
+      description: item.description || '',
+      credit,
+      debit,
+      balance: parseFloat(item.balance as any) || 0,
+      netOffAmount: netOff,
+      remainingAmount: remaining,
+      correspondentAccount: item.correspondentAccount || '',
+      correspondentName: item.correspondentName || '',
+      correspondentBank: item.correspondentBank || '',
+      cashflowClassification: toCashflowExportLabel(
+        CASHFLOW_CLASSIFICATION_EXPORT_LABELS,
+        item.cashflowClassification,
+      ),
+      cashflowPurpose: toCashflowExportLabel(
+        CASHFLOW_PURPOSE_EXPORT_LABELS,
+        item.cashflowPurpose,
+      ),
+      note: item.note || '',
+      branchName:
+        (item as { branchNames?: string }).branchNames ??
+        item.branch?.name ??
+        '',
+      ...invoice,
+    };
+  }
+
+  private buildInvoiceValues(invList: NetOffInvoiceItem[]) {
+    const invTotal = invList.length
+      ? invList.reduce((sum, curr) => sum + (Number(curr.totalAmount) || 0), 0)
+      : '';
+    return {
+      invoiceBranchName: Array.from(
+        new Set(invList.map((i) => i.invoiceBranchName).filter(Boolean)),
+      ).join(', '),
+      invoiceDate: invList
+        .map((i) => this.formatDateString(i.invoiceDate))
+        .filter(Boolean)
+        .join(', '),
+      invoiceNo: invList
+        .map((i) => i.invoiceNo)
+        .filter(Boolean)
+        .join(', '),
+      invoiceSerial: Array.from(
+        new Set(invList.map((i) => i.serialNo).filter(Boolean)),
+      ).join(', '),
+      invoicePartner: Array.from(
+        new Set(invList.map((i) => this.formatPartnerInfo(i)).filter(Boolean)),
+      ).join('; '),
+      invoiceDescription: invList
+        .map((i) => i.invoiceDescription)
+        .filter(Boolean)
+        .join('; '),
+      invoiceTotalAmount: invTotal,
+    };
+  }
+
+  private styleDataRow(row: Row, columns: ExportColumn[]) {
+    row.height = 20;
+    row.font = { name: 'Calibri', size: 10 };
+
+    columns.forEach((colDef, idx) => {
+      const cell = row.getCell(idx + 1);
+      const isInvoiceCol = INVOICE_KEYS.has(colDef.key);
+      const isFirstInvCol =
+        isInvoiceCol && (idx === 0 || !INVOICE_KEYS.has(columns[idx - 1].key));
+
+      cell.alignment = ALIGNMENTS[colDef.key] || {
+        horizontal: 'left',
+        vertical: 'middle',
+      };
+      if (colDef.style?.numFmt) cell.numFmt = colDef.style.numFmt;
+
+      if (AQUA_KEYS.has(colDef.key)) {
+        cell.fill = solidFill(COLOR.aquaFill);
+      } else if (isInvoiceCol) {
+        cell.fill = solidFill(COLOR.invoiceFill);
+      }
+
+      cell.border = isFirstInvCol
+        ? {
+            ...BORDER_THIN,
+            left: { style: 'double', color: { argb: COLOR.invoiceHeader } },
+          }
+        : BORDER_THIN;
+    });
+  }
+
+  private sumColumns(
+    columns: ExportColumn[],
+    rows: Record<string, unknown>[],
+  ): Record<string, number> {
+    const sums: Record<string, number> = {};
+    for (const col of columns.filter((c) => c.isSum)) {
+      sums[col.key] = rows.reduce(
+        (acc, row) => acc + (Number(row[col.key]) || 0),
+        0,
+      );
+    }
+    return sums;
+  }
+
+  private applySummaryAndHeaders(
+    worksheet: Worksheet,
+    columns: ExportColumn[],
+    sums: Record<string, number>,
+    dataEnd: number,
+  ) {
+    const hasRows = dataEnd >= DATA_START_ROW;
+    const totalRow = worksheet.getRow(1);
     const subtotalRow = worksheet.getRow(2);
-    subtotalRow.height = 22;
-    subtotalRow.font = {
-      name: 'Calibri',
-      size: 10.5,
-      bold: true,
-      color: { argb: 'FF0F172A' }, // Slate 900
-    };
-
+    totalRow.height = 20;
+    subtotalRow.height = 20;
     worksheet.getRow(3).height = 10;
 
-    const headerRow = worksheet.getRow(4);
+    const headerRow = worksheet.getRow(HEADER_ROW);
     headerRow.height = 28;
     headerRow.alignment = {
       vertical: 'middle',
@@ -403,98 +314,103 @@ export class BankStatementExcelBuilder {
       wrapText: true,
     };
 
-    // Label column: find description or column before first isSum
-    const firstSumColIdx = columns.findIndex((c) => c.isSum);
-    const descColIdx = columns.findIndex((c) => c.key === 'description');
-    const labelCol =
-      descColIdx >= 0
-        ? descColIdx + 1
-        : Math.max(1, firstSumColIdx >= 0 ? firstSumColIdx : 1);
-
-    for (let c = 1; c <= totalCols; c++) {
-      const colDef = columns[c - 1];
-      const colLetter = this.getColLetter(c);
-      const isInvoiceCol = BankStatementExcelBuilder.INVOICE_KEYS.has(
-        colDef.key,
-      );
+    columns.forEach((colDef, idx) => {
+      const c = idx + 1;
+      const letter = this.getColLetter(c);
+      const isInvoiceCol = INVOICE_KEYS.has(colDef.key);
+      const isAqua = AQUA_KEYS.has(colDef.key);
       const isFirstInvCol =
-        isInvoiceCol &&
-        (c === 1 ||
-          !BankStatementExcelBuilder.INVOICE_KEYS.has(columns[c - 2].key));
+        isInvoiceCol && (c === 1 || !INVOICE_KEYS.has(columns[c - 2].key));
 
-      const cellSum = sumRow.getCell(c);
-      cellSum.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFFFFBEB' }, // Amber 50
-      };
-      cellSum.border = borderThin;
-
-      const cellSub = subtotalRow.getCell(c);
-      cellSub.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFF8FAFC' }, // Slate 50
-      };
-      cellSub.border = {
-        top: { style: 'thin', color: { argb: 'FF94A3B8' } },
-        bottom: { style: 'double', color: { argb: 'FF0F172A' } },
-        left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-        right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-      };
-
-      const cellHdr = headerRow.getCell(c);
-      cellHdr.value = colDef.header;
-      cellHdr.font = {
+      const totalCell = totalRow.getCell(c);
+      totalCell.fill = solidFill(COLOR.totalFill);
+      totalCell.border = BORDER_THIN;
+      totalCell.font = {
         name: 'Calibri',
-        size: 11,
+        size: 10,
         bold: true,
-        color: { argb: 'FFFFFFFF' },
+        color: { argb: COLOR.totalFont },
       };
-      cellHdr.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: {
-          argb: isInvoiceCol ? 'FF065F46' : 'FF334155', // Emerald 800 vs Slate 700
-        },
-      };
-      cellHdr.border = isFirstInvCol
-        ? {
-            ...borderThin,
-            left: { style: 'double', color: { argb: 'FF065F46' } },
-          }
-        : borderThin;
 
-      if (c === labelCol) {
-        cellSum.value = 'TỔNG CỘNG (SUM)';
-        cellSum.alignment = { horizontal: 'left', vertical: 'middle' };
-        cellSub.value = 'TỔNG THEO BỘ LỌC (SUBTOTAL)';
-        cellSub.alignment = { horizontal: 'left', vertical: 'middle' };
+      const subCell = subtotalRow.getCell(c);
+      subCell.fill = solidFill(COLOR.subtotalFill);
+      subCell.border = BORDER_THIN;
+      subCell.font = {
+        name: 'Calibri',
+        size: 10,
+        italic: true,
+        color: { argb: COLOR.subtotalFont },
+      };
+
+      const headerCell = headerRow.getCell(c);
+      headerCell.value = colDef.header;
+      headerCell.font = isAqua
+        ? {
+            name: 'Calibri',
+            size: 11,
+            bold: true,
+            color: { argb: COLOR.darkText },
+          }
+        : {
+            name: 'Calibri',
+            size: 11,
+            bold: true,
+            color: { argb: COLOR.white },
+          };
+      headerCell.fill = solidFill(
+        isAqua
+          ? COLOR.aquaFill
+          : isInvoiceCol
+            ? COLOR.invoiceHeader
+            : COLOR.bankHeader,
+      );
+      headerCell.border = isFirstInvCol
+        ? {
+            ...BORDER_THIN,
+            left: { style: 'double', color: { argb: COLOR.invoiceHeader } },
+          }
+        : BORDER_THIN;
+
+      if (c === 1) {
+        totalCell.value = 'TỔNG';
+        subCell.value = 'SUBTOTAL (theo bộ lọc)';
       }
 
       if (colDef.isSum) {
-        const sumVal = calculatedSums[colDef.key] || 0;
-        cellSum.value = {
-          formula: `SUM(${colLetter}${startRow}:${colLetter}${endRow})`,
-          result: sumVal,
-        };
-        cellSum.alignment = { horizontal: 'right', vertical: 'middle' };
-        cellSum.numFmt = colDef.style?.numFmt || '#,##0.00';
+        const range = `${letter}${DATA_START_ROW}:${letter}${dataEnd}`;
+        const sumVal = sums[colDef.key] ?? 0;
+        const numFmt = colDef.style?.numFmt ?? MONEY_FMT;
 
-        cellSub.value = {
-          formula: `SUBTOTAL(9,${colLetter}${startRow}:${colLetter}${endRow})`,
-          result: sumVal,
-        };
-        cellSub.alignment = { horizontal: 'right', vertical: 'middle' };
-        cellSub.numFmt = colDef.style?.numFmt || '#,##0.00';
+        totalCell.value = hasRows
+          ? { formula: `SUM(${range})`, result: sumVal }
+          : 0;
+        subCell.value = hasRows
+          ? { formula: `SUBTOTAL(9,${range})`, result: sumVal }
+          : 0;
+        totalCell.numFmt = numFmt;
+        subCell.numFmt = numFmt;
+        totalCell.alignment = { horizontal: 'right', vertical: 'middle' };
+        subCell.alignment = { horizontal: 'right', vertical: 'middle' };
       }
-    }
+    });
 
-    worksheet.views = [{ state: 'frozen', ySplit: 4 }];
-    worksheet.autoFilter = {
-      from: { row: 4, column: 1 },
-      to: { row: endRow, column: totalCols },
-    };
+    worksheet.views = [{ state: 'frozen', ySplit: HEADER_ROW }];
+    if (hasRows) {
+      worksheet.autoFilter = {
+        from: { row: HEADER_ROW, column: 1 },
+        to: { row: dataEnd, column: columns.length },
+      };
+    }
+  }
+
+  private accountText(
+    item: ErpBankTransaction,
+    sourceType?: 'BANK' | 'CASH',
+  ): string {
+    if (sourceType === 'CASH') return item.cashBook?.name || '';
+    return item.bankAccount
+      ? `${item.bankAccount.bankCode} - ${item.bankAccount.accountNumber}`
+      : '';
   }
 
   private formatDateString(dateInput?: string): string {
