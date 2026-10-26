@@ -115,6 +115,14 @@ export class InvoiceDebtsService {
   /**
    * Lấy danh sách hóa đơn chi tiết của một đối tác cụ thể
    */
+  /** Khoản sao kê gắn đối tác nhưng chưa cấn trừ hóa đơn nào */
+  async getUnallocatedPayments(
+    taxCode: string,
+    partnerType?: InvoicePartnerType,
+  ) {
+    return this.debtsDetailService.getUnallocatedPayments(taxCode, partnerType);
+  }
+
   async getPartnerInvoices(
     taxCode: string,
     partnerType?: InvoicePartnerType,
