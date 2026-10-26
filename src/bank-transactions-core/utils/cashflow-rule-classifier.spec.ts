@@ -99,6 +99,82 @@ describe('classifyCashflowByRule', () => {
     expect(purposeOf('Cty Greenway NSG tt tien dien nuoc t4')).toBe('OPEX');
   });
 
+  it('flags POS settlements for a check in both directions', () => {
+    expect(
+      classifyCashflowByRule({
+        isIn: true,
+        correspondentName: null,
+        description: 'TT POS 01677113 5 7352 540471 VCV',
+        amount: 5000000,
+      }),
+    ).toEqual({
+      classification: 'OPERATING',
+      purpose: 'CUSTOMER_PAYMENT',
+      reason: 'thu thẻ POS',
+      flagForCheck: true,
+    });
+    expect(
+      classifyCashflowByRule({
+        isIn: false,
+        correspondentName: null,
+        description: 'TT POS 01677113 5 7352 540471 VCV',
+        amount: 66220,
+      }),
+    ).toEqual(
+      expect.objectContaining({ purpose: 'BANK_FEE', flagForCheck: true }),
+    );
+  });
+
+  it('classifies internal BHXH transfers as internal even when they mention BHXH', () => {
+    expect(
+      classifyCashflowByRule({
+        isIn: true,
+        correspondentName: null,
+        description:
+          'Chuyen tien noi bo - BHXH10300TZ545 dong BHXH T07.2026 LVL PQ',
+        amount: 22157860,
+      }),
+    ).toEqual(expect.objectContaining({ purpose: 'INTERNAL_TRANSFER' }));
+  });
+
+  it('classifies union fees only for outflows', () => {
+    expect(
+      classifyCashflowByRule({
+        isIn: false,
+        correspondentName: 'LIEN DOAN LAO DONG TP HO CHI MINH',
+        description: 'Greenway nsg nop KPCD t72026',
+        amount: 2217800,
+      }),
+    ).toEqual(expect.objectContaining({ purpose: 'SOCIAL_INSURANCE' }));
+    expect(
+      classifyCashflowByRule({
+        isIn: false,
+        correspondentName: 'LIEN DOAN LAO DONG TP HO CHI MINH',
+        description: 'Greenway nsg nop tien cong doan t62026',
+        amount: 2646000,
+      }),
+    ).toEqual(expect.objectContaining({ purpose: 'SOCIAL_INSURANCE' }));
+  });
+
+  it('classifies a 110.000 account-number-only outflow as bank fee, but not other amounts', () => {
+    expect(
+      classifyCashflowByRule({
+        isIn: false,
+        correspondentName: null,
+        description: '886111',
+        amount: 110000,
+      }),
+    ).toEqual(expect.objectContaining({ purpose: 'BANK_FEE' }));
+    expect(
+      classifyCashflowByRule({
+        isIn: false,
+        correspondentName: null,
+        description: '886111',
+        amount: 220000,
+      }),
+    ).toBeNull();
+  });
+
   it('returns null when no rule matches so the row stays for manual review', () => {
     expect(
       classifyCashflowByRule({

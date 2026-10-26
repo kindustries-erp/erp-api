@@ -7,6 +7,7 @@
  * Thứ tự quyết định cho mỗi dòng đang NULL cả hai cột:
  *   1. Quy tắc nội dung (`utils/cashflow-rule-classifier.ts`).
  *      Khớp bảo hiểm → OPERATING/CUSTOMER_PAYMENT + ghi chú "Bảo hiểm".
+ *      Khớp thẻ POS (`flagForCheck`) → gán nhưng nối ghi chú "check lại".
  *   2. Không khớp quy tắc → theo hướng hóa đơn cấn trừ liên kết
  *      (`utils/cashflow-invoice-link-classifier.ts`).
  *   3. Vẫn không xác định → giữ NULL, liệt kê trong báo cáo để kế toán duyệt tay.
@@ -91,11 +92,19 @@ const csvCell = (value: string | number | null | undefined): string => {
 const formatMoney = (value: number): string =>
   value.toLocaleString('en-US', { maximumFractionDigits: 0 });
 
+/** Nối "check lại" vào ghi chú hiện có (không ghi đè); đã có thì giữ nguyên. */
+const appendCheckNote = (note: string | null): string | null => {
+  const existing = note?.trim() ?? '';
+  if (existing.includes(CHECK_NOTE)) return note;
+  return existing === '' ? CHECK_NOTE : `${existing}; ${CHECK_NOTE}`;
+};
+
 const decide = (row: TxnRow): Omit<Planned, 'row'> => {
   const rule = classifyCashflowByRule({
     isIn: row.is_in,
     correspondentName: row.correspondent_name,
     description: row.description,
+    amount: Number(row.amount),
   });
 
   let source: Source = 'NONE';
@@ -103,6 +112,7 @@ const decide = (row: TxnRow): Omit<Planned, 'row'> => {
     classification: CashflowClassification;
     purpose: CashflowPurpose;
     reason: string;
+    flagForCheck?: boolean;
   } | null = null;
 
   if (rule) {
@@ -120,17 +130,14 @@ const decide = (row: TxnRow): Omit<Planned, 'row'> => {
   }
 
   if (!decision) {
-    const existing = row.note?.trim() ?? '';
-    const alreadyMarked = existing.includes(CHECK_NOTE);
-    const appended =
-      existing === '' ? CHECK_NOTE : `${existing}; ${CHECK_NOTE}`;
+    const newNote = appendCheckNote(row.note);
     return {
       source,
       classification: null,
       purpose: null,
       reason: 'KHÔNG KHỚP',
-      noteAction: alreadyMarked ? 'skip' : 'mark_check',
-      newNote: alreadyMarked ? row.note : appended,
+      noteAction: newNote === row.note ? 'skip' : 'mark_check',
+      newNote,
     };
   }
 
@@ -152,15 +159,22 @@ const decide = (row: TxnRow): Omit<Planned, 'row'> => {
   }
 
   const trimmedNote = stripThuTienQuestion(row.note);
-  const hasQuestion = trimmedNote !== row.note;
+  const newNote = decision.flagForCheck
+    ? appendCheckNote(trimmedNote)
+    : trimmedNote;
+  const changed = newNote !== row.note;
 
   return {
     source,
     classification: decision.classification,
     purpose: decision.purpose,
     reason: decision.reason,
-    noteAction: hasQuestion ? 'trim_question' : 'skip',
-    newNote: hasQuestion ? trimmedNote : row.note,
+    noteAction: !changed
+      ? 'skip'
+      : decision.flagForCheck
+        ? 'mark_check'
+        : 'trim_question',
+    newNote: changed ? newNote : row.note,
   };
 };
 
