@@ -348,4 +348,45 @@ describe('VinfastPartsService Filter & Search Specs', () => {
       });
     });
   });
+
+  describe('exportPartsStockToExcel fallback for zero invoiceItemTotalAmount', () => {
+    it('should fallback to preVatAmount + vatRate when invoiceItemTotalAmount is 0', async () => {
+      ledgerRepo.query = jest.fn().mockResolvedValue([
+        {
+          partSku: 'VF-EEP73110011AP',
+          id: '1',
+          direction: 'OUT',
+          qty: 1,
+          unitCost: 4288490,
+          preVatAmount: 4288490,
+          transactionDate: new Date('2026-03-01'),
+          isAdjustment: false,
+          adjSign: 1,
+          invoiceId: 'inv-1',
+          invoiceBranchName: 'Bảo Trì',
+          invoiceNo: '291',
+          invoiceSerial: 'C26TGA',
+          invoiceDate: '2026-02-07',
+          buyerName: 'Công ty bảo hiểm PJICO Hà Nội',
+          buyerTaxCode: '0100110768-060',
+          sellerName: 'Greenway',
+          sellerTaxCode: '0312345678',
+          licensePlate: '',
+          partName: 'Kính chắn gió',
+          unit: 'Chiếc',
+          invoiceItemName: 'Kính chắn gió',
+          invoiceItemQty: '1',
+          invoiceItemUnitPrice: '4288490',
+          invoiceItemPreVatAmount: '4288490',
+          invoiceItemVatRate: '8%',
+          invoiceItemVatAmount: '343079.2',
+          invoiceItemTotalAmount: '0',
+        },
+      ]);
+
+      const buffer = await service.exportStockExcel({});
+      expect(buffer).toBeDefined();
+      expect(buffer.length).toBeGreaterThan(0);
+    });
+  });
 });
