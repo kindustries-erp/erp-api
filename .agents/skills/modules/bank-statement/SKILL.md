@@ -120,6 +120,8 @@ erp_bank_transactions (Sổ giao dịch dòng tiền)
 - Cấn trừ không tự gán đối tượng (chỉ backfill mới làm).
 - Backfill (`scripts/backfill-bank-partner-from-netoff.ts [--from --to]`): chỉ gán khi mọi hóa đơn cấn trừ của dòng có cùng MST và đối tác đã tồn tại; bỏ qua HĐ khác MST, HĐ không MST (khách lẻ). Dry-run mặc định, `--apply --confirm=<DB> --backup=<csv>`.
 - Đã chạy 2026-10-26 trên `erp_greenway_production`: đồng bộ tạo 343 đối tác (115 khách, 228 NCC); backfill gán 886 dòng; kiểm tra 985 dòng đã gán: 0 lệch MST.
+- Bảng sao kê (web v1 và drawer xuất v2): cột `businessPartner` (header filter, dùng `bizPartner.name`) nằm sau Ghi chú, trong nhóm Phân loại & Ghi chú của preset overview/audit/full.
+- Excel: cột `Đối tượng` (nhóm Aqua) ngay sau `Ghi chú`, tổng 25 cột. Các cột HĐ cấn trừ dịch sang phải một vị trí: Chi nhánh GD là cột 18, khối HĐ bắt đầu cột 19, cột tổng tiền HĐ là cột 25 (công thức `SUBTOTAL(9, Y…)`). Ô chọn Đối tượng trong drawer nằm trong section Thông tin chung (prop `partnerField`).
 
 ### 2.x Thuộc tính Phân loại dòng tiền (độc lập module-config)
 - **Dọn ghi chú tạm Q1/2026** (`scripts/cleanup-q1-2026-notes.ts`, logic thuần ở `utils/q1-note-cleanup.ts`): dòng "Bồi thường bảo hiểm" đổi thành mục đích "Khách hàng thanh toán" với ghi chú `Bảo hiểm`; dòng khác đã phân loại có ghi chú tạm thì xoá ghi chú. Dòng đã là `Bảo hiểm` được giữ nguyên (chạy lại an toàn). Dry-run mặc định, `--apply --confirm=<DB>` để ghi, `--backup=<csv>` xuất trạng thái cũ trước khi ghi.
