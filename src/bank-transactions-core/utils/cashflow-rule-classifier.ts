@@ -94,7 +94,11 @@ export const classifyCashflowByRule = (
   if (/\b(KBNN|KHO BAC)\b/.test(text)) {
     return result('OPERATING', 'TAX', 'nộp NSNN');
   }
-  if (/\b(PHI QUAN LY TAI KHOAN|BIDV DIRECT|PHI DINH KY)\b/.test(text)) {
+  if (
+    /\b(PHI QUAN LY TAI KHOAN|BIDV DIRECT|PHI DINH KY|HOMEBANKING|PHI QLTK)\b/.test(
+      text,
+    )
+  ) {
     return result('OPERATING', 'BANK_FEE', 'phí ngân hàng');
   }
   if (/\bTHUE KHO\b/.test(text)) {
@@ -110,7 +114,7 @@ export const classifyCashflowByRule = (
     return result('INVESTING', 'ASSET_PURCHASE', 'xây dựng/thiết bị');
   }
   if (
-    /\b(BAO VE|VE SINH|RAC|PHOTOCOPY|VPP|XANG|NUOC UONG|TIEP KHACH|QUA TET|KHACH SAN|TRANG TRI|MOI TRUONG|CUU HO|GIAO TE|VAN HANH|DICH VU)\b/.test(
+    /\b(BAO VE|VE SINH|RAC|PHOTOCOPY|VPP|XANG|NUOC UONG|TIEP KHACH|QUA TET|KHACH SAN|TRANG TRI|MOI TRUONG|CUU HO|GIAO TE|VAN HANH|DICH VU|DIEN NUOC)\b/.test(
       text,
     )
   ) {

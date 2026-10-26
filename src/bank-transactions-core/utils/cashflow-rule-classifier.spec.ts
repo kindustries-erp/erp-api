@@ -92,6 +92,11 @@ describe('classifyCashflowByRule', () => {
     expect(purposeOf('Thanh toan phi ve sinh thang 12')).toBe('OPEX');
     expect(purposeOf('Thanh toan HD 489 vat tu son')).toBe('SUPPLIER_PAYMENT');
     expect(purposeOf('Chuyen khoan tien thi cong PCCC')).toBe('ASSET_PURCHASE');
+    expect(purposeOf('Thu phi Homebanking thang 4/2026 cua thue bao')).toBe(
+      'BANK_FEE',
+    );
+    expect(purposeOf('THU PHI QLTK T06/2026 TK 8680073168')).toBe('BANK_FEE');
+    expect(purposeOf('Cty Greenway NSG tt tien dien nuoc t4')).toBe('OPEX');
   });
 
   it('returns null when no rule matches so the row stays for manual review', () => {
