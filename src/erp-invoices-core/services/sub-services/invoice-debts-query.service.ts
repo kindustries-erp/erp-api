@@ -370,6 +370,7 @@ export class InvoiceDebtsQueryService {
         COALESCE(SUM(p."totalAmount"), 0) as "grandTotalAmount",
         COALESCE(SUM(p."paidAmount"), 0) as "grandTotalPaid",
         COALESCE(SUM(p."balanceAmount"), 0) as "grandTotalBalance",
+        COALESCE(SUM(p."unallocatedAmount"), 0) as "grandTotalUnallocated",
         COALESCE(SUM(p."aging0To30"), 0) as "grandTotalAging0To30",
         COALESCE(SUM(p."aging31To60"), 0) as "grandTotalAging31To60",
         COALESCE(SUM(p."aging61To90"), 0) as "grandTotalAging61To90",
@@ -386,6 +387,10 @@ export class InvoiceDebtsQueryService {
       grandTotalAmount: Number(summaryRow.grandTotalAmount) || 0,
       grandTotalPaid: Number(summaryRow.grandTotalPaid) || 0,
       grandTotalBalance: Number(summaryRow.grandTotalBalance) || 0,
+      grandTotalUnallocated: Number(summaryRow.grandTotalUnallocated) || 0,
+      grandTotalNetBalance:
+        (Number(summaryRow.grandTotalBalance) || 0) -
+        (Number(summaryRow.grandTotalUnallocated) || 0),
       grandTotalAging0To30: Number(summaryRow.grandTotalAging0To30) || 0,
       grandTotalAging31To60: Number(summaryRow.grandTotalAging31To60) || 0,
       grandTotalAging61To90: Number(summaryRow.grandTotalAging61To90) || 0,

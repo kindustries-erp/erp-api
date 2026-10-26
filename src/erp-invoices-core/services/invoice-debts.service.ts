@@ -40,6 +40,10 @@ export interface InvoiceDebtSummary {
   grandTotalAmount: number;
   grandTotalPaid: number;
   grandTotalBalance: number;
+  /** Tổng tiền sao kê gắn đối tượng nhưng chưa cấn trừ (cộng theo các dòng đang lọc) */
+  grandTotalUnallocated?: number;
+  /** Tổng còn lại sau khi trừ phần chưa phân bổ (có thể âm khi trả trước) */
+  grandTotalNetBalance?: number;
   // Grand totals for aging buckets
   grandTotalAging0To30?: number;
   grandTotalAging31To60?: number;
