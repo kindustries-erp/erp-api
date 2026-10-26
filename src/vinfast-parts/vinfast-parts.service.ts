@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { VinfastPartsLedger } from './entities/vinfast-parts-ledger.entity';
 import { VinfastPartsCatalog } from './entities/vinfast-parts-catalog.entity';
+import { isVinfastCarPartCode } from '../reports-core/vinfast-car-part-codes';
 import {
   VinfastSyncRunSnapshot,
   VinfastSyncRunState,
@@ -203,15 +204,28 @@ export class VinfastPartsService {
         l.is_adjustment as "isAdjustment",
         l.adj_sign as "adjSign",
         l.invoice_id as "invoiceId",
+        br.name as "invoiceBranchName",
         i.invoice_no as "invoiceNo",
+        i.serial_no as "invoiceSerial",
         i.invoice_date as "invoiceDate",
         i.buyer_name as "buyerName",
+        i.buyer_tax_code as "buyerTaxCode",
         i.seller_name as "sellerName",
+        i.seller_tax_code as "sellerTaxCode",
         i.license_plate as "licensePlate",
         c.name as "partName",
-        c.uom as "unit"
+        c.uom as "unit",
+        ii.description as "invoiceItemName",
+        ii.quantity::numeric as "invoiceItemQty",
+        ii.unit_price::numeric as "invoiceItemUnitPrice",
+        ii.pre_vat_amount::numeric as "invoiceItemPreVatAmount",
+        ii.vat_rate as "invoiceItemVatRate",
+        ii.vat_amount::numeric as "invoiceItemVatAmount",
+        ii.total_amount::numeric as "invoiceItemTotalAmount"
       FROM vinfast_parts_ledger l
       JOIN erp_invoices i ON i.id = l.invoice_id
+      LEFT JOIN erp_invoice_items ii ON ii.id = l.invoice_item_id
+      LEFT JOIN erp_branches br ON br.id = i.branch_id
       LEFT JOIN vinfast_parts_catalog c ON c.sku = l.part_sku
       WHERE l.part_sku = ANY($1) AND i.tax_invoice_status IN (1, 3)
       ORDER BY l.part_sku ASC, l.transaction_date ASC, l.created_at ASC
@@ -230,16 +244,88 @@ export class VinfastPartsService {
       entriesBySku.get(row.partSku)?.push(row);
     }
 
+    const formatPartnerName = (row: any): string => {
+      const isOut = row.direction === 'OUT' || row.direction === 'Xuất';
+      return (isOut ? row.buyerName : row.sellerName) || '';
+    };
+
+    const formatTaxCode = (row: any): string => {
+      const isOut = row.direction === 'OUT' || row.direction === 'Xuất';
+      return (isOut ? row.buyerTaxCode : row.sellerTaxCode) || '';
+    };
+
+    const formatVatRate = (rate: any): string => {
+      if (rate == null || rate === '') return '';
+      const str = String(rate).trim();
+      if (str.endsWith('%')) return str;
+      const num = Number(str);
+      if (!isNaN(num)) return `${Math.round(num * 100)}%`;
+      return str;
+    };
+
+    const calculateInvoiceItemTotalAmount = (row: any): number | null => {
+      const dbTotal =
+        row.invoiceItemTotalAmount != null
+          ? Number(row.invoiceItemTotalAmount)
+          : 0;
+      if (dbTotal > 0) return dbTotal;
+
+      const preVat =
+        row.invoiceItemPreVatAmount != null
+          ? Number(row.invoiceItemPreVatAmount)
+          : 0;
+      const vatAmt =
+        row.invoiceItemVatAmount != null ? Number(row.invoiceItemVatAmount) : 0;
+      const qty = row.invoiceItemQty != null ? Number(row.invoiceItemQty) : 0;
+      const unitPrice =
+        row.invoiceItemUnitPrice != null ? Number(row.invoiceItemUnitPrice) : 0;
+
+      let vatRateDec = 0;
+      if (row.invoiceItemVatRate != null && row.invoiceItemVatRate !== '') {
+        const str = String(row.invoiceItemVatRate).replace('%', '').trim();
+        const n = Number(str);
+        if (!isNaN(n)) {
+          vatRateDec = n > 1 ? n / 100 : n;
+        }
+      }
+
+      if (preVat > 0) {
+        if (vatAmt > 0) return preVat + vatAmt;
+        if (vatRateDec > 0) return Math.round(preVat * (1 + vatRateDec));
+        return preVat;
+      }
+
+      if (qty > 0 && unitPrice > 0) {
+        const base = qty * unitPrice;
+        if (vatAmt > 0) return base + vatAmt;
+        if (vatRateDec > 0) return Math.round(base * (1 + vatRateDec));
+        return base;
+      }
+
+      return dbTotal > 0 ? dbTotal : null;
+    };
+
     const ledgerSections: {
       sku: string;
       partName: string;
       unit: string;
+      vehicleType?: string;
       openingBalanceQty: number;
       openingBalanceValue: number;
       rows: any[];
       closingBalanceQty: number;
       closingBalanceValue: number;
     }[] = [];
+
+    const skuStats = new Map<
+      string,
+      {
+        openingBalanceQty: number;
+        periodQtyIn: number;
+        periodQtyOut: number;
+        closingBalanceQty: number;
+      }
+    >();
 
     for (const [sku, entries] of entriesBySku.entries()) {
       const inQueue: { id: string; qty: number; unitCost: number }[] = [];
@@ -248,6 +334,8 @@ export class VinfastPartsService {
       let openingBalanceValue = 0;
       let currentRunningQty = 0;
       let currentRunningValue = 0;
+      let periodQtyIn = 0;
+      let periodQtyOut = 0;
       const partName = entries[0]?.partName || '';
       const unit = entries[0]?.unit || '';
 
@@ -347,16 +435,53 @@ export class VinfastPartsService {
 
       for (const row of entries) {
         if (includeInFilter(row)) {
-          ledgerRowsForSku.push(row);
+          let qty = Number(row.qty || 0);
+          if (row.isAdjustment && row.adjSign === -1) {
+            qty = -qty;
+          }
+          if (row.direction === 'IN') {
+            periodQtyIn += qty;
+          } else if (row.direction === 'OUT') {
+            periodQtyOut += qty;
+          }
+
+          ledgerRowsForSku.push({
+            ...row,
+            qty,
+            direction:
+              row.direction === 'IN' || row.direction === 'Nhập'
+                ? 'Nhập'
+                : 'Xuất',
+            vehicleType: isVinfastCarPartCode(row.partSku) ? 'Ô tô' : 'Xe máy',
+            invoicePartner: formatPartnerName(row),
+            invoiceTaxCode: formatTaxCode(row),
+            invoiceItemName: row.invoiceItemName || '',
+            invoiceItemQty:
+              row.invoiceItemQty != null ? Number(row.invoiceItemQty) : null,
+            invoiceItemUnitPrice:
+              row.invoiceItemUnitPrice != null
+                ? Number(row.invoiceItemUnitPrice)
+                : null,
+            invoiceItemVatRate: formatVatRate(row.invoiceItemVatRate),
+            invoiceItemTotalAmount: calculateInvoiceItemTotalAmount(row),
+          });
           periodClosingBalanceQty = row.runningBalanceQty;
           periodClosingBalanceValue = row.runningBalanceValue;
         }
       }
 
+      skuStats.set(sku, {
+        openingBalanceQty,
+        periodQtyIn,
+        periodQtyOut,
+        closingBalanceQty: periodClosingBalanceQty,
+      });
+
       ledgerSections.push({
         sku,
         partName,
         unit,
+        vehicleType: isVinfastCarPartCode(sku) ? 'Ô tô' : 'Xe máy',
         openingBalanceQty,
         openingBalanceValue,
         rows: ledgerRowsForSku,
@@ -367,10 +492,41 @@ export class VinfastPartsService {
 
     onProgress?.(80, totalProgress, 'Đang tạo workbook Excel...');
 
+    const overviewItems = overviewData.items.map((item: any) => {
+      const stats = skuStats.get(item.sku);
+      const vehicleTypeLabel = isVinfastCarPartCode(item.sku)
+        ? 'Ô tô'
+        : 'Xe máy';
+      if (stats) {
+        return {
+          ...item,
+          vehicleType: vehicleTypeLabel,
+          qtyOpening: stats.openingBalanceQty,
+          qtyIn: stats.periodQtyIn,
+          qtyOut: stats.periodQtyOut,
+          qtyBalance: stats.closingBalanceQty,
+        };
+      }
+      return {
+        ...item,
+        vehicleType: vehicleTypeLabel,
+        qtyOpening: 0,
+        qtyIn: Number(item.qtyIn || 0),
+        qtyOut: Number(item.qtyOut || 0),
+        qtyBalance: Number(item.qtyBalance || 0),
+      };
+    });
+
     const buffer = await buildVinfastPartsStockWorkbook({
-      overviewItems: overviewData.items,
+      overviewItems,
       ledgerSections,
       selectedColumns,
+      periodInfo: {
+        dateFrom,
+        dateTo,
+        vehicleType,
+        exportedAt: new Date(),
+      },
     });
 
     onProgress?.(95, totalProgress, 'Đang lưu file...');

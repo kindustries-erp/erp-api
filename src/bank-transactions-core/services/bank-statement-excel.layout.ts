@@ -26,6 +26,7 @@ export const AQUA_KEYS = new Set([
   'cashflowClassification',
   'cashflowPurpose',
   'note',
+  'businessPartner',
   'branchName',
 ]);
 
@@ -72,6 +73,7 @@ export const ALIGNMENTS: Record<
   cashflowClassification: { horizontal: 'left', vertical: 'middle' },
   cashflowPurpose: { horizontal: 'left', vertical: 'middle' },
   note: { horizontal: 'left', vertical: 'middle' },
+  businessPartner: { horizontal: 'left', vertical: 'middle' },
   branchName: { horizontal: 'center', vertical: 'middle' },
   invoiceBranchName: { horizontal: 'center', vertical: 'middle' },
   invoiceDate: { horizontal: 'center', vertical: 'middle' },
@@ -143,6 +145,7 @@ export function buildExportColumns(
     { header: 'Phân loại', key: 'cashflowClassification', width: 24 },
     { header: 'Mục đích', key: 'cashflowPurpose', width: 28 },
     { header: 'Ghi chú', key: 'note', width: 30 },
+    { header: 'Đối tượng', key: 'businessPartner', width: 30 },
     { header: 'Chi nhánh GD', key: 'branchName', width: 22 },
     // Nhóm cột Hóa đơn cấn trừ
     { header: '[HĐ] Chi nhánh', key: 'invoiceBranchName', width: 24 },

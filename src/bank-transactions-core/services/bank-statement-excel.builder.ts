@@ -210,6 +210,7 @@ export class BankStatementExcelBuilder {
         item.cashflowPurpose,
       ),
       note: item.note || '',
+      businessPartner: item.partner?.name || '',
       branchName:
         (item as { branchNames?: string }).branchNames ??
         item.branch?.name ??

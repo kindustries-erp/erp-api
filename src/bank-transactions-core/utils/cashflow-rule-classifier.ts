@@ -17,12 +17,15 @@ export interface CashflowRuleInput {
   isIn: boolean;
   correspondentName: string | null;
   description: string | null;
+  amount?: number;
 }
 
 export interface CashflowRuleResult {
   classification: CashflowClassification;
   purpose: CashflowPurpose;
   reason: string;
+  /** Dòng cần kế toán kiểm tra lại (ví dụ thu/chi POS gộp nhiều khoản). */
+  flagForCheck?: boolean;
 }
 
 /** Tên người/đối tác được xác nhận là vay (cả hai chiều: vào = nhận vay, ra = trả nợ). */
@@ -35,7 +38,10 @@ const INSURANCE_PATTERN =
 
 /** Chuyển khoản giữa các tài khoản của chính công ty. */
 const INTERNAL_PATTERN =
-  /\b(CHUYEN VON NOI BO|CHUYEN KHOAN QUA TAI KHOAN)\b|\b(111886|886111|8680073168)\b.*\bCHUYEN\b/;
+  /\b(CHUYEN VON NOI BO|CHUYEN KHOAN QUA TAI KHOAN|CHUYEN TIEN NOI BO)\b|\b(111886|886111|8680073168)\b.*\bCHUYEN\b/;
+
+/** Giao dịch thẻ POS gộp (thu doanh thu thẻ và chi phí POS nhỏ), cần kiểm tra lại. */
+const POS_PATTERN = /\bTT POS\b/;
 
 /** Thu từ khách hàng (QR, chuyển nhanh, GSM, thanh toán HĐ). */
 const CUSTOMER_IN_PATTERN =
@@ -72,6 +78,16 @@ export const classifyCashflowByRule = (
     return result('OTHER', 'INTERNAL_TRANSFER', 'chuyển nội bộ');
   }
 
+  if (POS_PATTERN.test(text)) {
+    const flagged = { flagForCheck: true };
+    return input.isIn
+      ? {
+          ...result('OPERATING', 'CUSTOMER_PAYMENT', 'thu thẻ POS'),
+          ...flagged,
+        }
+      : { ...result('OPERATING', 'BANK_FEE', 'phí POS'), ...flagged };
+  }
+
   if (input.isIn) {
     if (INSURANCE_PATTERN.test(text)) {
       return result('OPERATING', 'INSURANCE_CLAIM', 'thu bồi thường bảo hiểm');
@@ -85,16 +101,33 @@ export const classifyCashflowByRule = (
     return null;
   }
 
+  if (
+    /^\d+$/.test((input.description ?? '').trim()) &&
+    input.amount === 110000
+  ) {
+    return result(
+      'OPERATING',
+      'BANK_FEE',
+      'phí dịch vụ 110.000 (nội dung là số TK)',
+    );
+  }
   if (/\b(LUONG)\b/.test(text)) {
     return result('OPERATING', 'SALARY', 'lương');
   }
   if (/\b(BHXH|BAO HIEM XA HOI)\b/.test(text)) {
     return result('OPERATING', 'SOCIAL_INSURANCE', 'BHXH');
   }
+  if (/\b(CONG DOAN|KPCD)\b/.test(text)) {
+    return result('OPERATING', 'SOCIAL_INSURANCE', 'kinh phí công đoàn');
+  }
   if (/\b(KBNN|KHO BAC)\b/.test(text)) {
     return result('OPERATING', 'TAX', 'nộp NSNN');
   }
-  if (/\b(PHI QUAN LY TAI KHOAN|BIDV DIRECT|PHI DINH KY)\b/.test(text)) {
+  if (
+    /\b(PHI QUAN LY TAI KHOAN|BIDV DIRECT|PHI DINH KY|HOMEBANKING|PHI QLTK)\b/.test(
+      text,
+    )
+  ) {
     return result('OPERATING', 'BANK_FEE', 'phí ngân hàng');
   }
   if (/\bTHUE KHO\b/.test(text)) {
@@ -110,7 +143,7 @@ export const classifyCashflowByRule = (
     return result('INVESTING', 'ASSET_PURCHASE', 'xây dựng/thiết bị');
   }
   if (
-    /\b(BAO VE|VE SINH|RAC|PHOTOCOPY|VPP|XANG|NUOC UONG|TIEP KHACH|QUA TET|KHACH SAN|TRANG TRI|MOI TRUONG|CUU HO|GIAO TE|VAN HANH|DICH VU)\b/.test(
+    /\b(BAO VE|VE SINH|RAC|PHOTOCOPY|VPP|XANG|NUOC UONG|TIEP KHACH|QUA TET|KHACH SAN|TRANG TRI|MOI TRUONG|CUU HO|GIAO TE|VAN HANH|DICH VU|DIEN NUOC)\b/.test(
       text,
     )
   ) {

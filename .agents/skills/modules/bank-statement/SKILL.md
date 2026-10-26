@@ -113,8 +113,21 @@ erp_bank_transactions (Sổ giao dịch dòng tiền)
 
 ---
 
+### 2.x Đối tượng sao kê (`partner_id`)
+- Cột `erp_bank_transactions.partner_id` (uuid, NULL, FK → `erp_business_partners.id`, `ON DELETE SET NULL`, index `IDX_erp_bank_txn_partner_id`). Migration `20261027100000-AddPartnerIdToBankTransactions` (đã chạy trên `erp_greenway_production` ngày 2026-10-26). Entity: `partnerId` + `partner` (ManyToOne `ErpBusinessPartner`).
+- Ghi qua `PATCH /transactions/:id`: `partnerId` (uuid, `null` để bỏ) hoặc `invoicePartner: { taxCode, name, partnerType }` (backend tìm/tạo đối tác theo MST, không có MST thì theo tên, rồi gán). Lọc/tìm/sắp xếp/column-options khóa `partner` **giữ nguyên là tên đối tác đối ứng** (`correspondentName`); khóa đối tượng mới là `businessPartner` (`bizPartner.name`).
+- Hạch toán (`refreshJournalEntriesForBankTransaction`): phần tiền chưa cấn trừ của dòng **có** đối tượng vào 131 (thu) / 331 (chi); không có đối tượng giữ T0001. `correspondentAccountingAccountId` do người dùng chọn vẫn ưu tiên cao nhất.
+- Cấn trừ không tự gán đối tượng (chỉ backfill mới làm).
+- Backfill (`scripts/backfill-bank-partner-from-netoff.ts [--from --to]`): chỉ gán khi mọi hóa đơn cấn trừ của dòng có cùng MST và đối tác đã tồn tại; bỏ qua HĐ khác MST, HĐ không MST (khách lẻ). Dry-run mặc định, `--apply --confirm=<DB> --backup=<csv>`.
+- Đã chạy 2026-10-26 trên `erp_greenway_production`: đồng bộ tạo 343 đối tác (115 khách, 228 NCC); backfill gán 886 dòng; kiểm tra 985 dòng đã gán: 0 lệch MST.
+- Bảng sao kê (web v1 và drawer xuất v2): cột `businessPartner` (header filter, dùng `bizPartner.name`) nằm sau Ghi chú, trong nhóm Phân loại & Ghi chú của preset overview/audit/full.
+- Excel: cột `Đối tượng` (nhóm Aqua) ngay sau `Ghi chú`, tổng 25 cột. Các cột HĐ cấn trừ dịch sang phải một vị trí: Chi nhánh GD là cột 18, khối HĐ bắt đầu cột 19, cột tổng tiền HĐ là cột 25 (công thức `SUBTOTAL(9, Y…)`). Ô chọn Đối tượng trong drawer nằm trong section Thông tin chung (prop `partnerField`).
+
 ### 2.x Thuộc tính Phân loại dòng tiền (độc lập module-config)
 - **Dọn ghi chú tạm Q1/2026** (`scripts/cleanup-q1-2026-notes.ts`, logic thuần ở `utils/q1-note-cleanup.ts`): dòng "Bồi thường bảo hiểm" đổi thành mục đích "Khách hàng thanh toán" với ghi chú `Bảo hiểm`; dòng khác đã phân loại có ghi chú tạm thì xoá ghi chú. Dòng đã là `Bảo hiểm` được giữ nguyên (chạy lại an toàn). Dry-run mặc định, `--apply --confirm=<DB>` để ghi, `--backup=<csv>` xuất trạng thái cũ trước khi ghi.
+- **Backfill theo kỳ** (`scripts/classify-bank-period.ts --from=YYYY-MM-DD --to=YYYY-MM-DD`, dùng cho Q2/2026 trở đi): chỉ ghi dòng đang NULL cả hai cột. Thứ tự: (1) rule nội dung `utils/cashflow-rule-classifier.ts`; bảo hiểm → `OPERATING/CUSTOMER_PAYMENT` + ghi chú `Bảo hiểm`; (2) nếu rule không khớp thì theo hướng HĐ cấn trừ liên kết (`utils/cashflow-invoice-link-classifier.ts`: HĐ OUT ↔ tiền vào → `CUSTOMER_PAYMENT`, HĐ IN ↔ tiền ra → `SUPPLIER_PAYMENT`, lệch hướng → NULL); (3) còn lại giữ NULL và ghi chú nối thêm `; check lại`. Ghi chú: chỉ bỏ câu hỏi "Thu tiền của đối tượng nào? Hóa đơn số bao nhiêu?" (`utils/temp-note-question.ts`), phần còn lại giữ nguyên. Rule đã thêm: `HOMEBANKING`/`PHI QLTK` → `BANK_FEE`, `DIEN NUOC` → `OPEX`; Q3: `TT POS` (thu → `CUSTOMER_PAYMENT`, chi → `BANK_FEE`, cờ `flagForCheck` nối `check lại`), `CHUYEN TIEN NOI BO` → `INTERNAL_TRANSFER`, `CONG DOAN`/`KPCD` → `SOCIAL_INSURANCE`, chi đúng 110.000 với nội dung chỉ là số TK (886111) → `BANK_FEE`. Dry-run mặc định, `--apply --confirm=erp_greenway_production --backup=<csv>` để ghi.
+  - Kết quả Q2/2026 trên `erp_greenway_production` (đã ghi 2026-10-26): 467 dòng gán (302 thu khách hàng, 41 chi NCC, 28 OPEX, 27 vay, 26 chuyển nội bộ, …), 10 dòng NULL có ghi chú `check lại` chờ kế toán duyệt tay.
+  - Kết quả Q3/2026 (đã ghi): 429 dòng gán, 8 dòng NULL có ghi chú `check lại`, 10 dòng POS có ghi chú `check lại`; không có dòng nào sai hướng.
 - Hai cột cố định trên `erp_bank_transactions` (nullable, không backfill dữ liệu cũ, không FK, không đi qua `erp_module_categories`/EAV):
   - `cashflow_classification` varchar(50) — `OPERATING` | `INVESTING` | `FINANCING` | `OTHER` (không có `INTERNAL_TRANSFER`; mục này nằm ở Mục đích)
   - `cashflow_purpose` varchar(50) — 19 giá trị, **phụ thuộc Phân loại** (cascading, không có migration riêng; ánh xạ nằm trong code):

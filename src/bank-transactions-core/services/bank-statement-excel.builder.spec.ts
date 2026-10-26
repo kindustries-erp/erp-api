@@ -20,7 +20,7 @@ describe('BankStatementExcelBuilder', () => {
     builder = new BankStatementExcelBuilder();
   });
 
-  it('builds a valid Excel workbook with 24 columns and Vinfast-style TỔNG/SUBTOTAL rows', async () => {
+  it('builds a valid Excel workbook with 25 columns and Vinfast-style TỔNG/SUBTOTAL rows', async () => {
     const transactions: Partial<ErpBankTransaction>[] = [
       {
         id: 'txn-1',
@@ -83,13 +83,14 @@ describe('BankStatementExcelBuilder', () => {
     expect(headerRow.getCell(14).value).toBe('Phân loại');
     expect(headerRow.getCell(15).value).toBe('Mục đích');
     expect(headerRow.getCell(16).value).toBe('Ghi chú');
-    expect(headerRow.getCell(17).value).toBe('Chi nhánh GD');
-    expect(headerRow.getCell(18).value).toBe('[HĐ] Chi nhánh');
-    expect(headerRow.getCell(24).value).toBe('[HĐ] Tổng tiền HĐ (VND)');
+    expect(headerRow.getCell(17).value).toBe('Đối tượng');
+    expect(headerRow.getCell(18).value).toBe('Chi nhánh GD');
+    expect(headerRow.getCell(19).value).toBe('[HĐ] Chi nhánh');
+    expect(headerRow.getCell(25).value).toBe('[HĐ] Tổng tiền HĐ (VND)');
 
     // Header fills: bank Slate 700, invoice Emerald 800, aqua for cashflow + branch
     expect((headerRow.getCell(3).fill as any)?.fgColor?.argb).toBe('FF334155');
-    expect((headerRow.getCell(18).fill as any)?.fgColor?.argb).toBe('FF065F46');
+    expect((headerRow.getCell(19).fill as any)?.fgColor?.argb).toBe('FF065F46');
     expect((headerRow.getCell(14).fill as any)?.fgColor?.argb).toBe(AQUA);
 
     // Data row is row 5
@@ -111,25 +112,25 @@ describe('BankStatementExcelBuilder', () => {
     expect(dataRow.getCell(14).value).toBe('Hoạt động kinh doanh');
     expect(dataRow.getCell(15).value).toBe('Khách hàng thanh toán');
     expect(dataRow.getCell(16).value).toBe('Ghi chú test');
-    expect(dataRow.getCell(17).value).toBe('Chi nhánh Nam Sài Gòn');
+    expect(dataRow.getCell(18).value).toBe('Chi nhánh Nam Sài Gòn');
 
     // Invoice net-off fields (18-24)
-    expect(dataRow.getCell(18).value).toBe('Chi nhánh Nam Sài Gòn');
-    expect(dataRow.getCell(19).value).toBe('12/03/2026');
-    expect(dataRow.getCell(20).value).toBe('0001234');
-    expect(dataRow.getCell(21).value).toBe('1C26TBB');
-    expect(dataRow.getCell(22).value).toContain('CONG TY GREENWAY AUTO');
-    expect(dataRow.getCell(23).value).toBe('Dich vu son phu gam');
-    expect(dataRow.getCell(24).value).toBe(1500000);
-    expect(dataRow.getCell(24).numFmt).toBe('#,##0.00');
+    expect(dataRow.getCell(19).value).toBe('Chi nhánh Nam Sài Gòn');
+    expect(dataRow.getCell(20).value).toBe('12/03/2026');
+    expect(dataRow.getCell(21).value).toBe('0001234');
+    expect(dataRow.getCell(22).value).toBe('1C26TBB');
+    expect(dataRow.getCell(23).value).toContain('CONG TY GREENWAY AUTO');
+    expect(dataRow.getCell(24).value).toBe('Dich vu son phu gam');
+    expect(dataRow.getCell(25).value).toBe(1500000);
+    expect(dataRow.getCell(25).numFmt).toBe('#,##0.00');
 
     // Invoice data cell: pastel emerald fill + double left border on first invoice col
-    expect((dataRow.getCell(18).fill as any)?.fgColor?.argb).toBe('FFF0FDF4');
-    expect(dataRow.getCell(18).border?.left?.style).toBe('double');
+    expect((dataRow.getCell(19).fill as any)?.fgColor?.argb).toBe('FFF0FDF4');
+    expect(dataRow.getCell(19).border?.left?.style).toBe('double');
 
     // Aqua fill for cashflow + note + branch data cells, not for others
     expect((dataRow.getCell(14).fill as any)?.fgColor?.argb).toBe(AQUA);
-    expect((dataRow.getCell(17).fill as any)?.fgColor?.argb).toBe(AQUA);
+    expect((dataRow.getCell(18).fill as any)?.fgColor?.argb).toBe(AQUA);
     expect((dataRow.getCell(13).fill as any)?.fgColor?.argb).not.toBe(AQUA);
 
     // Row 1 (TỔNG): label in column 1, amber 50 fill, amber 900 bold font
@@ -141,11 +142,11 @@ describe('BankStatementExcelBuilder', () => {
     expect(totalRow.getCell(6).value).toMatchObject({
       formula: 'SUM(F5:F5)',
     });
-    expect(totalRow.getCell(24).value).toEqual({
-      formula: 'SUM(X5:X5)',
+    expect(totalRow.getCell(25).value).toEqual({
+      formula: 'SUM(Y5:Y5)',
       result: 1500000,
     });
-    expect(totalRow.getCell(24).numFmt).toBe('#,##0.00');
+    expect(totalRow.getCell(25).numFmt).toBe('#,##0.00');
 
     // Row 2 (SUBTOTAL): label in column 1, slate 50 fill, slate 600 italic font
     const subtotalRow = worksheet.getRow(2);
@@ -155,11 +156,11 @@ describe('BankStatementExcelBuilder', () => {
     expect((subtotalRow.getCell(6).fill as any)?.fgColor?.argb).toBe(
       'FFF8FAFC',
     );
-    expect(subtotalRow.getCell(24).value).toEqual({
-      formula: 'SUBTOTAL(9,X5:X5)',
+    expect(subtotalRow.getCell(25).value).toEqual({
+      formula: 'SUBTOTAL(9,Y5:Y5)',
       result: 1500000,
     });
-    expect(subtotalRow.getCell(24).numFmt).toBe('#,##0.00');
+    expect(subtotalRow.getCell(25).numFmt).toBe('#,##0.00');
   });
 
   it('gracefully handles transactions without invoice net-offs and cash books', async () => {
@@ -187,7 +188,7 @@ describe('BankStatementExcelBuilder', () => {
     const dataRow = worksheet.getRow(5);
     expect(dataRow.getCell(2).value).toBe('Quỹ tiền mặt VP');
     expect(dataRow.getCell(3).value).toBe('');
-    expect(dataRow.getCell(18).value).toBe('');
+    expect(dataRow.getCell(19).value).toBe('');
     expect(dataRow.getCell(20).value).toBe('');
   });
 

@@ -87,6 +87,7 @@ export class TransactionQueryService {
       .leftJoinAndSelect('txn.branch', 'branch')
       .leftJoinAndSelect('txn.bankAccount', 'bankAccount')
       .leftJoinAndSelect('txn.cashBook', 'cashBook')
+      .leftJoinAndSelect('txn.partner', 'bizPartner')
       .leftJoinAndSelect('txn.invoiceNetOffs', 'invoiceNetOffs')
       .leftJoinAndSelect('invoiceNetOffs.invoice', 'invoice')
       .where('txn.isDeleted = :isDeleted', { isDeleted: false });
@@ -296,6 +297,7 @@ export class TransactionQueryService {
           else if (col === 'cashflowPurpose')
             filterField = 'txn.cashflowPurpose';
           else if (col === 'note') filterField = 'txn.note';
+          else if (col === 'businessPartner') filterField = 'bizPartner.name';
 
           if (filterField) {
             const isAllMatching = vals[0] === '__ALL_MATCHING__';
@@ -465,6 +467,7 @@ export class TransactionQueryService {
           else if (col === 'cashflowPurpose')
             searchField = 'txn.cashflowPurpose';
           else if (col === 'note') searchField = 'txn.note';
+          else if (col === 'businessPartner') searchField = 'bizPartner.name';
 
           if (searchField) {
             if (col === 'transDate') {
@@ -562,6 +565,8 @@ export class TransactionQueryService {
         orderExpr = 'txn.description';
       } else if (rawField === 'note') {
         orderExpr = 'txn.note';
+      } else if (rawField === 'businessPartner') {
+        orderExpr = 'bizPartner.name';
       } else if (
         rawField === 'thu' ||
         rawField === 'creditAmount' ||
@@ -766,7 +771,9 @@ export class TransactionQueryService {
     filtersStr?: string,
     sourceType?: 'BANK' | 'CASH',
   ) {
-    const qb = this.transactionRepo.createQueryBuilder('txn');
+    const qb = this.transactionRepo
+      .createQueryBuilder('txn')
+      .leftJoin('txn.partner', 'bizPartner');
 
     if (sourceType) {
       qb.where('txn.sourceType = :sourceType', { sourceType });
@@ -792,6 +799,9 @@ export class TransactionQueryService {
         selectField = 'COALESCE(txn.bankAccountId, txn.cashBookId)';
         labelField = `COALESCE(bankAccount.bankName || ' - ' || bankAccount.accountNumber, cashBook.name)`;
       }
+    } else if (column === 'businessPartner') {
+      selectField = 'txn.partnerId';
+      labelField = 'bizPartner.name';
     } else if (column === 'transDate')
       selectField =
         "TO_CHAR((txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh'), 'DD/MM/YYYY')";
@@ -896,6 +906,7 @@ export class TransactionQueryService {
           else if (col === 'cashflowPurpose')
             filterField = 'txn.cashflowPurpose';
           else if (col === 'note') filterField = 'txn.note';
+          else if (col === 'businessPartner') filterField = 'bizPartner.name';
 
           if (col === 'branch') {
             // Lọc theo mọi chi nhánh của dòng (branch_ids), gồm cả dòng chưa gán

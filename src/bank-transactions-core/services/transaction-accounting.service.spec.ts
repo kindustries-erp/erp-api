@@ -6,6 +6,7 @@ describe('TransactionAccountingService', () => {
   let transactionRepo: any;
   let dataSource: any;
   let accountingCoreService: any;
+  let partnersService: { ensurePartnerForInvoiceKey: jest.Mock };
 
   beforeEach(() => {
     transactionRepo = {
@@ -28,10 +29,15 @@ describe('TransactionAccountingService', () => {
       getJournalEntriesBySource: jest.fn().mockResolvedValue([]),
     };
 
+    partnersService = {
+      ensurePartnerForInvoiceKey: jest.fn().mockResolvedValue('partner-new'),
+    };
+
     service = new TransactionAccountingService(
       transactionRepo,
       dataSource,
       accountingCoreService,
+      partnersService as never,
     );
   });
 
@@ -290,6 +296,102 @@ describe('TransactionAccountingService', () => {
             }),
           ],
         }),
+      );
+    });
+
+    it('posts the unallocated part of a receipt with a partner to 131', async () => {
+      process.env.ENABLE_LIVE_AUTO_POSTING = 'true';
+      transactionRepo.findOne.mockResolvedValue({
+        id: 'txn-1',
+        isDeleted: false,
+        sourceType: 'BANK',
+        branchId: 'branch-1',
+        bankAccount: { accountingAccountId: '1121-account' },
+        creditAmount: 500,
+        debitAmount: 0,
+        partnerId: 'partner-1',
+        correspondentAccountingAccountId: null,
+        transDate: new Date('2026-07-23'),
+      });
+      dataSource.query
+        .mockResolvedValueOnce([{ id: '331-account' }])
+        .mockResolvedValueOnce([{ id: '131-account' }])
+        .mockResolvedValueOnce([{ id: 't0001-account' }])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      await service.refreshJournalEntriesForBankTransaction('txn-1');
+
+      expect(accountingCoreService.createJournalEntry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          lines: [
+            expect.objectContaining({ accountId: '1121-account', debit: 500 }),
+            expect.objectContaining({ accountId: '131-account', credit: 500 }),
+          ],
+        }),
+      );
+    });
+
+    it('posts the unallocated part of a payment with a partner to 331', async () => {
+      process.env.ENABLE_LIVE_AUTO_POSTING = 'true';
+      transactionRepo.findOne.mockResolvedValue({
+        id: 'txn-2',
+        isDeleted: false,
+        sourceType: 'BANK',
+        branchId: 'branch-1',
+        bankAccount: { accountingAccountId: '1121-account' },
+        creditAmount: 0,
+        debitAmount: 300,
+        partnerId: 'partner-2',
+        correspondentAccountingAccountId: null,
+        transDate: new Date('2026-07-23'),
+      });
+      dataSource.query
+        .mockResolvedValueOnce([{ id: '331-account' }])
+        .mockResolvedValueOnce([{ id: '131-account' }])
+        .mockResolvedValueOnce([{ id: 't0001-account' }])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      await service.refreshJournalEntriesForBankTransaction('txn-2');
+
+      expect(accountingCoreService.createJournalEntry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          lines: [
+            expect.objectContaining({ accountId: '331-account', debit: 300 }),
+            expect.objectContaining({ accountId: '1121-account', credit: 300 }),
+          ],
+        }),
+      );
+    });
+
+    it('updateTransaction with invoicePartner resolves the partner and stores its id', async () => {
+      transactionRepo.findOne.mockResolvedValue({
+        id: 'txn-3',
+        isDeleted: false,
+        sourceType: 'BANK',
+        description: 'BANK TEXT',
+        note: null,
+        branchId: null,
+        branchIds: [],
+        creditAmount: 0,
+        debitAmount: 100,
+        partnerId: null,
+        transDate: new Date('2026-07-23'),
+      });
+      dataSource.query.mockResolvedValue([]);
+
+      await service.updateTransaction('txn-3', {
+        invoicePartner: { taxCode: '0100', name: 'ABC', partnerType: 'VENDOR' },
+      } as any);
+
+      expect(partnersService.ensurePartnerForInvoiceKey).toHaveBeenCalledWith({
+        taxCode: '0100',
+        name: 'ABC',
+        partnerType: 'VENDOR',
+      });
+      expect(transactionRepo.save.mock.calls[0][0].partnerId).toBe(
+        'partner-new',
       );
     });
 

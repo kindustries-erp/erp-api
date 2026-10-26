@@ -171,4 +171,19 @@ export class InvoiceDebtsController {
       partnerName,
     );
   }
+
+  @RequireAnyPermissions(
+    { resource: ErpResource.INVOICE_DEBTS, action: ErpAction.READ },
+    { resource: ErpResource.INVOICES, action: ErpAction.READ },
+  )
+  @Get(':taxCode/unallocated-payments')
+  @ApiOperation({
+    summary: 'Các khoản sao kê gắn đối tác nhưng chưa cấn trừ hóa đơn',
+  })
+  getUnallocatedPayments(
+    @Param('taxCode') taxCode: string,
+    @Query('partner_type') partnerType?: InvoicePartnerType,
+  ) {
+    return this.service.getUnallocatedPayments(taxCode, partnerType);
+  }
 }

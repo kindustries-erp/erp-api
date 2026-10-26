@@ -16,6 +16,10 @@ export interface InvoiceDebtItem {
   totalAmount: number;
   paidAmount: number;
   balanceAmount: number;
+  /** Tiền sao kê gắn đối tượng nhưng chưa cấn trừ hóa đơn nào (cộng theo MST) */
+  unallocatedAmount?: number;
+  /** Còn phải thu/trả sau khi trừ phần chưa phân bổ; có thể âm khi trả trước */
+  netBalanceAmount?: number;
   maxAgingDays: number;
   weightedAgingDays: number;
   latestInvoiceDate: string | null;
@@ -36,6 +40,10 @@ export interface InvoiceDebtSummary {
   grandTotalAmount: number;
   grandTotalPaid: number;
   grandTotalBalance: number;
+  /** Tổng tiền sao kê gắn đối tượng nhưng chưa cấn trừ (cộng theo các dòng đang lọc) */
+  grandTotalUnallocated?: number;
+  /** Tổng còn lại sau khi trừ phần chưa phân bổ (có thể âm khi trả trước) */
+  grandTotalNetBalance?: number;
   // Grand totals for aging buckets
   grandTotalAging0To30?: number;
   grandTotalAging31To60?: number;
@@ -111,6 +119,14 @@ export class InvoiceDebtsService {
   /**
    * Lấy danh sách hóa đơn chi tiết của một đối tác cụ thể
    */
+  /** Khoản sao kê gắn đối tác nhưng chưa cấn trừ hóa đơn nào */
+  async getUnallocatedPayments(
+    taxCode: string,
+    partnerType?: InvoicePartnerType,
+  ) {
+    return this.debtsDetailService.getUnallocatedPayments(taxCode, partnerType);
+  }
+
   async getPartnerInvoices(
     taxCode: string,
     partnerType?: InvoicePartnerType,

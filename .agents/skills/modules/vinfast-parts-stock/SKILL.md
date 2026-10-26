@@ -165,6 +165,36 @@ Tags: `VinFast Parts`
 
 ---
 
+## 5. Xuất Báo Cáo Excel Phụ Tùng (Chuẩn Hóa Theo Sao Kê Ngân Hàng)
+
+File Excel báo cáo được tạo bởi `vinfast-parts-stock-excel.builder.ts`:
+- **Sheet 1: "Tổng Hợp Tồn Kho"**:
+  - Banner hàng đầu: Row 1 Tiêu đề in hoa (`TỔNG HỢP TỒN KHO`), Row 2 Diễn giải kỳ (`Kỳ báo cáo: Từ ngày... đến ngày...` / `Toàn bộ thời gian`) + Phân loại xe (`Ô tô` / `Xe máy` / `Tất cả`).
+  - Dòng 3 `TỔNG` (SUM), Dòng 4 `SUBTOTAL (theo bộ lọc)`, Dòng 5 khoảng đệm, Dòng 6 Header bảng, Dòng 7+ Dữ liệu. Đóng băng cố định `ySplit: 6`.
+  - Cột: `STT`, `Mã Phụ Tùng`, `Tên Phụ Tùng`, `ĐVT`, `Loại Xe` (`vehicleType` - "Ô tô" / "Xe máy"), `Tồn Đầu Kỳ` (`qtyOpening`), `Tổng Nhập` (`qtyIn`), `Tổng Xuất` (`qtyOut`), `Tồn Cuối Kỳ` (`qtyBalance`).
+  - Tính toán số dư đầu kỳ (`qtyOpening`) và cuối kỳ (`qtyBalance`) theo đúng thời điểm `dateFrom` và `dateTo`.
+  - **Công thức Excel động (Dynamic Formulas)**:
+    - Cột `Tổng Nhập`: `{ formula: "SUMIFS('Sổ Cái Chi Tiết FIFO'!$F$7:$F$N, 'Sổ Cái Chi Tiết FIFO'!$A$7:$A$N, B7, 'Sổ Cái Chi Tiết FIFO'!$E$7:$E$N, \"Nhập\")", result: qtyIn }`
+    - Cột `Tổng Xuất`: `{ formula: "SUMIFS('Sổ Cái Chi Tiết FIFO'!$F$7:$F$N, 'Sổ Cái Chi Tiết FIFO'!$A$7:$A$N, B7, 'Sổ Cái Chi Tiết FIFO'!$E$7:$E$N, \"Xuất\")", result: qtyOut }`
+    - Cột `Tồn Cuối Kỳ`: `{ formula: "${colOpening}${r}+${colIn}${r}-${colOut}${r}", result: qtyBalance }` (vd: `=F7+G7-H7`).
+    - Dùng cấu trúc `{ formula, result }` của ExcelJS giúp file vừa tính toán động khi chỉnh sửa số liệu trong Excel, vừa hiển thị tức thì trên các headless previewers.
+- **Sheet 2: "Sổ Cái Chi Tiết FIFO"**:
+  - Gồm 11 cột sổ cái phụ tùng (bổ sung cột `Loại Xe`, cột `Chiều` ghi "Nhập" / "Xuất") + Khối Hóa đơn chi tiết (`erp_invoice_items`):
+    - `[HĐ] Chi nhánh` (`invoiceBranchName`)
+    - `[HĐ] Ngày HĐ` (`invoiceDate`)
+    - `[HĐ] Số HĐ` (`invoiceNo`)
+    - `[HĐ] Ký hiệu HĐ` (`invoiceSerial`)
+    - `[HĐ] MST HĐ` (`invoiceTaxCode`): Tách riêng MST của đối tác (Seller Tax Code nếu Nhập, Buyer Tax Code nếu Xuất).
+    - `[HĐ] Đối tác HĐ` (`invoicePartner`): Tên đối tác (không kèm MST).
+    - `[HĐ] Tên dòng hàng` (`invoiceItemName` - lấy từ `ii.description`)
+    - `[HĐ] SL HĐ` (`invoiceItemQty` - lấy từ `ii.quantity`)
+    - `[HĐ] Đơn giá HĐ (VND)` (`invoiceItemUnitPrice` - lấy từ `ii.unit_price`)
+    - `[HĐ] Thuế VAT (%)` (`invoiceItemVatRate` - lấy từ `ii.vat_rate`)
+    - `[HĐ] Thành tiền HĐ (VND)` (`invoiceItemTotalAmount` - lấy từ `ii.total_amount`, SUM/SUBTOTAL)
+  - Visual Styling: Khối HĐ sử dụng tông Emerald (Header xanh rêu đậm `FF065F46` chữ trắng, data cell nền xanh nhạt `FFF0FDF4`, viền trái kẻ nét đôi `double border` phân cách rõ ràng).
+
+---
+
 ## 6. Tích hợp Liên Module
 
 - **`erp-invoices-core`**:
