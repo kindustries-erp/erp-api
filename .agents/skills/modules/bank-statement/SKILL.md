@@ -491,6 +491,8 @@ src/modules/bank-statements/components/BankStatementsTab/
 - `erp_bank_transactions.branch_ids uuid[] NOT NULL DEFAULT '{}'` (GIN index); `branch_id` NULLABLE và là chi nhánh chính = `branch_ids[1]`. Mảng rỗng = không chi nhánh (vẫn ghi sổ được).
 - Lọc list/analytics: `branchIds` (mảng, `__BLANK__` = không chi nhánh) qua `applyBranchIdsFilter` (`src/common/utils/branch-ids-filter.util.ts`); `branchId` đơn vẫn chấp nhận (tương thích).
 - Chuẩn hóa cặp cột: `normalizeBranchColumns` / `readBranchIds` (`src/common/utils/branch-ids.util.ts`). Sao kê tạo tay (`createManualTransaction`) đi qua hàm này.
+- Validate tồn tại: `TransactionAccountingService.assertBranchesExist` chạy `SELECT id FROM erp_branches WHERE id = ANY($1)` trước khi ghi ở `createManualTransaction` và `updateTransaction`. Id không tồn tại trả **400** `Chi nhánh không tồn tại: <id>` thay vì lỗi FK 500 (`FK_3eb30f321736f5d2da9ca4f10a3`).
+- Web (`CreateCashTransactionDrawer`) gửi `branchId` = chi nhánh của sổ quỹ đã chọn (`erp_cash_books.branch_id`), không dùng `currentBranchId` từ localStorage. Layout V2 tự đưa `currentBranchId` stale về chi nhánh đầu qua `useEnsureValidCurrentBranch`.
 - Cascading filter và column-options theo chi nhánh liệt kê mọi chi nhánh của dòng (`UNNEST` / join `branch_ids`), không chỉ chi nhánh đầu. Tìm kiếm theo tên gộp mọi chi nhánh.
 - Xuất Excel: cột chi nhánh ghi tên mọi chi nhánh (`branchNames`, gắn trong `bank-statement-export-background.service.ts`).
 - Dashboard ngân sách (`dashboard-core`) lọc theo `branch_ids`.
