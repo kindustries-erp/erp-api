@@ -238,3 +238,7 @@ export function extractPlatesFromText(text: string): string[] {
 - **`DrawerDocumentTraceability`**: Hiển thị đồ thị đa tầng liên kết giữa Hóa đơn $\leftrightarrow$ Sao kê ngân hàng $\leftrightarrow$ Phiếu kho $\leftrightarrow$ Sổ cái kế toán $\leftrightarrow$ Vụ việc Garage.
 - **`DrawerNetOffVoucher`**: Drawer thao tác ghép nối và gỡ liên kết cấn trừ trực quan.
 - **`InvoiceColumns`**: Cột hiển thị trạng thái thanh toán, số tiền đã cấn trừ và số dư nợ còn lại.
+
+## 11. Cấn trừ theo công nợ đối tác
+
+Ngoài cấn trừ theo từng hóa đơn (`POST /erp-invoices/:id/net-off-vouchers`), có luồng phân bổ một khoản chưa phân bổ vào nhiều hóa đơn còn mở của cùng đối tác: `POST /erp-invoices/debts/:taxCode/net-off`. Chi tiết và quy tắc kiểm tra xem skill `invoice-debts` mục 10.

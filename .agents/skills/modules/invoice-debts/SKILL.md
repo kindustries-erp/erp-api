@@ -194,3 +194,15 @@ bunx jest src/erp-invoices-core/services/invoice-debts.service.spec.ts --forceEx
 cd erp/erp-web
 bun run build
 ```
+
+## 10. Cấn trừ khoản sao kê/quỹ vào công nợ (Net-off theo đối tác)
+
+- **Endpoint**: `POST /api/v1/erp-invoices/debts/:taxCode/net-off`, quyền `INVOICES:UPDATE`.
+- **Body**: `{ partnerType: 'CUSTOMER'|'SUPPLIER', bankTransactionId, allocations: [{ invoiceId, amount }] }`.
+- **Service**: `InvoiceDebtsNetOffService` (`services/sub-services/invoice-debts-net-off.service.ts`), facade `InvoiceDebtsService.allocateNetOff`.
+- **Ghi dữ liệu**: cùng bảng `erp_invoice_voucher_netoff` (cộng dồn khi cặp hóa đơn-giao dịch đã có link). Không đổi schema.
+- **Khóa**: trong transaction, `SELECT ... FOR UPDATE` trên giao dịch trước, sau đó hóa đơn theo `id` tăng dần.
+- **Kiểm tra**: giao dịch đúng MST đối tác và đúng chiều (NCC cần giao dịch chi, khách cần giao dịch thu); hóa đơn đúng chiều và đúng MST/CCCD; không phải điều chỉnh giảm (`tax_invoice_status = 3`) hoặc số âm; `status 4` bị loại; số phân bổ ≤ số dư hóa đơn (`total - netoff - adjustment offset`, cùng công thức bảng chi tiết); tổng ≤ số chưa phân bổ của giao dịch. Kiểm tra theo cent.
+- **Sau commit**: gán chi nhánh cho hóa đơn chưa có chi nhánh khi giao dịch có đúng một chi nhánh (`InvoiceBranchService.assign`, `onlyIfUnassigned`), làm mới bút toán sao kê (lỗi chỉ ghi log).
+- **Web**: drawer V2 `DebtNetOffDrawer` (`src/v2/modules/invoice-debts/drawers/`), mở từ nút "Cấn trừ" ở tab "Khoản chưa phân bổ" trong drawer công nợ đối tác (v1).
+- **Spec**: `invoice-debts-net-off.service.spec.ts` (16 case).

@@ -38,6 +38,22 @@ export class TransactionAccountingService {
     }
   }
 
+  /** Chặn id chi nhánh không tồn tại, tránh lỗi FK 500 từ DB. */
+  private async assertBranchesExist(branchIds: string[]): Promise<void> {
+    if (branchIds.length === 0) return;
+    const rows: { id: string }[] = await this.dataSource.query(
+      'SELECT id FROM erp_branches WHERE id = ANY($1)',
+      [branchIds],
+    );
+    const found = new Set(rows.map((row) => row.id));
+    const missing = branchIds.filter((id) => !found.has(id));
+    if (missing.length > 0) {
+      throw new BadRequestException(
+        `Chi nhánh không tồn tại: ${missing.join(', ')}`,
+      );
+    }
+  }
+
   async createManualTransaction(dto: CreateBankTransactionDto) {
     if (!dto.bankAccountId && !dto.cashBookId) {
       throw new BadRequestException(
@@ -48,13 +64,12 @@ export class TransactionAccountingService {
     const createData = { ...dto };
     delete (createData as any).attributes;
     // Chuẩn hóa hai cột chi nhánh để branch_ids luôn là nguồn chuẩn
-    Object.assign(
-      createData,
-      normalizeBranchColumns({
-        branchIds: dto.branchIds,
-        branchId: dto.branchId,
-      }),
-    );
+    const branchColumns = normalizeBranchColumns({
+      branchIds: dto.branchIds,
+      branchId: dto.branchId,
+    });
+    await this.assertBranchesExist(branchColumns.branchIds);
+    Object.assign(createData, branchColumns);
     const txn = this.transactionRepo.create(createData);
     return this.transactionRepo.save(txn);
   }
@@ -287,9 +302,11 @@ export class TransactionAccountingService {
     }
     // Đồng bộ branch_id (chi nhánh chính) với branch_ids
     if (dto.branchIds !== undefined) {
+      await this.assertBranchesExist(dto.branchIds);
       txn.branchIds = dto.branchIds;
       txn.branchId = dto.branchIds[0] ?? null;
     } else if (dto.branchId !== undefined) {
+      await this.assertBranchesExist(dto.branchId ? [dto.branchId] : []);
       txn.branchIds = dto.branchId ? [dto.branchId] : [];
       txn.branchId = dto.branchId ?? null;
     }

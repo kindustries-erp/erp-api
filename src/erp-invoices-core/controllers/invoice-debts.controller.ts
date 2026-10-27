@@ -13,10 +13,14 @@ import { ApiBearerAuth, ApiTags, ApiOperation } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
-import { RequireAnyPermissions } from '../../auth/decorators/require-permissions.decorator';
+import {
+  RequireAnyPermissions,
+  RequirePermissions,
+} from '../../auth/decorators/require-permissions.decorator';
 import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import { InvoiceDebtsService } from '../services/invoice-debts.service';
 import { InvoiceDebtsExportBackgroundService } from '../services/invoice-debts-export-background.service';
+import { DebtNetOffAllocateDto } from '../dto/debt-net-off.dto';
 import {
   GetInvoiceDebtsQueryDto,
   GetInvoiceDebtColumnOptionsQueryDto,
@@ -185,5 +189,21 @@ export class InvoiceDebtsController {
     @Query('partner_type') partnerType?: InvoicePartnerType,
   ) {
     return this.service.getUnallocatedPayments(taxCode, partnerType);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
+  @Post(':taxCode/net-off')
+  @ApiOperation({
+    summary:
+      'Cấn trừ khoản sao kê/quỹ chưa phân bổ vào các hóa đơn còn mở của đối tác',
+  })
+  allocateNetOff(
+    @Param('taxCode') taxCode: string,
+    @Body() dto: DebtNetOffAllocateDto,
+  ) {
+    return this.service.allocateNetOff(taxCode, dto);
   }
 }

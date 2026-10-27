@@ -148,6 +148,8 @@ describe('TransactionAccountingService', () => {
       description: 'Thu tien',
     };
 
+    dataSource.query.mockResolvedValueOnce([{ id: 'branch-1' }]);
+
     const result = await service.createManualTransaction(dto);
 
     expect(transactionRepo.create).toHaveBeenCalledWith(
@@ -161,6 +163,11 @@ describe('TransactionAccountingService', () => {
   });
 
   it('createManualTransaction keeps branch_id in sync with branch_ids', async () => {
+    dataSource.query.mockResolvedValueOnce([
+      { id: 'branch-a' },
+      { id: 'branch-b' },
+    ]);
+
     await service.createManualTransaction({
       sourceType: 'BANK',
       branchIds: ['branch-a', 'branch-b'],
@@ -179,6 +186,43 @@ describe('TransactionAccountingService', () => {
     );
   });
 
+  it('createManualTransaction rejects branch ids not found in erp_branches', async () => {
+    dataSource.query.mockResolvedValueOnce([{ id: 'branch-a' }]);
+
+    await expect(
+      service.createManualTransaction({
+        sourceType: 'CASH',
+        branchIds: ['branch-a', 'branch-missing'],
+        cashBookId: 'cash-1',
+        transDate: new Date('2026-08-09'),
+        debitAmount: 0,
+        creditAmount: 100,
+      } as any),
+    ).rejects.toThrow('Chi nhánh không tồn tại: branch-missing');
+    expect(transactionRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('updateTransaction rejects a branchId not found in erp_branches', async () => {
+    transactionRepo.findOne.mockResolvedValue({
+      id: 'txn-4',
+      isDeleted: false,
+      sourceType: 'CASH',
+      description: 'CASH TEXT',
+      note: null,
+      branchId: null,
+      branchIds: [],
+      creditAmount: 0,
+      debitAmount: 100,
+      transDate: new Date('2026-07-23'),
+    });
+    dataSource.query.mockResolvedValueOnce([]);
+
+    await expect(
+      service.updateTransaction('txn-4', { branchId: 'branch-missing' } as any),
+    ).rejects.toThrow(BadRequestException);
+    expect(transactionRepo.save).not.toHaveBeenCalled();
+  });
+
   describe('cashflow classification / purpose pairing', () => {
     const baseCreateDto = {
       sourceType: 'BANK',
@@ -188,6 +232,10 @@ describe('TransactionAccountingService', () => {
       debitAmount: 0,
       creditAmount: 100,
     };
+
+    beforeEach(() => {
+      dataSource.query.mockResolvedValue([{ id: 'branch-1' }]);
+    });
 
     it('createManualTransaction rejects purpose outside the chosen classification', async () => {
       await expect(

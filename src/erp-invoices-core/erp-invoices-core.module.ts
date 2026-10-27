@@ -42,6 +42,7 @@ import { InvoiceDebtsController } from './controllers/invoice-debts.controller';
 import { InvoiceDebtsQueryService } from './services/sub-services/invoice-debts-query.service';
 import { InvoiceDebtsDetailService } from './services/sub-services/invoice-debts-detail.service';
 import { InvoiceDebtsExportService } from './services/sub-services/invoice-debts-export.service';
+import { InvoiceDebtsNetOffService } from './services/sub-services/invoice-debts-net-off.service';
 import { InvoiceListQueryService } from './services/sub-services/invoice-list-query.service';
 import { InvoiceExportExcelService } from './services/sub-services/invoice-export-excel.service';
 import { InvoiceStatsService } from './services/sub-services/invoice-stats.service';
@@ -132,6 +133,7 @@ import { XmlDownloadLinkAdapter } from './services/adapters/xml-download-link.ad
     InvoiceDebtsQueryService,
     InvoiceDebtsDetailService,
     InvoiceDebtsExportService,
+    InvoiceDebtsNetOffService,
     InvoiceDebtsExportBackgroundService,
     InvoiceDashboardStatsService,
     InvoiceDashboardPartnersService,

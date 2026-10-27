@@ -7,6 +7,8 @@ import {
 import { InvoiceDebtsQueryService } from './sub-services/invoice-debts-query.service';
 import { InvoiceDebtsDetailService } from './sub-services/invoice-debts-detail.service';
 import { InvoiceDebtsExportService } from './sub-services/invoice-debts-export.service';
+import { InvoiceDebtsNetOffService } from './sub-services/invoice-debts-net-off.service';
+import { DebtNetOffAllocateDto } from '../dto/debt-net-off.dto';
 
 export interface InvoiceDebtItem {
   taxCode: string;
@@ -96,7 +98,15 @@ export class InvoiceDebtsService {
     private readonly debtsQueryService: InvoiceDebtsQueryService,
     private readonly debtsDetailService: InvoiceDebtsDetailService,
     private readonly debtsExportService: InvoiceDebtsExportService,
+    private readonly debtsNetOffService: InvoiceDebtsNetOffService,
   ) {}
+
+  /**
+   * Cấn trừ một khoản sao kê/quỹ đã gắn đối tác vào các hóa đơn còn mở của đối tác
+   */
+  async allocateNetOff(taxCode: string, dto: DebtNetOffAllocateDto) {
+    return this.debtsNetOffService.allocate(taxCode, dto);
+  }
 
   /**
    * Truy vấn danh sách tổng hợp công nợ Khách hàng hoặc Nhà cung cấp
