@@ -7,6 +7,7 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { CoreUser } from './users/entities/core-user.entity';
 import { CoreUserPreference } from './users/entities/core-user-preference.entity';
+import { CoreUserTablePreference } from './users/entities/core-user-table-preference.entity';
 import { CoreRole } from './rbac-core/entities/core-role.entity';
 import { CorePermission } from './rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from './rbac-core/entities/core-user-role.entity';
@@ -53,6 +54,7 @@ import { VinfastPartsModule } from './vinfast-parts/vinfast-parts.module';
 import { AppConfigModule } from './app-config/app-config.module';
 import { SystemOperationsCoreModule } from './system-operations-core/system-operations-core.module';
 import { AiHubCoreModule } from './ai-hub-core/ai-hub-core.module';
+import { InvoicesModule } from './v2/invoices/invoices.module'; // api-v2-module:invoices:app-imports
 // plop:api-v2-imports
 
 @Module({
@@ -81,6 +83,7 @@ import { AiHubCoreModule } from './ai-hub-core/ai-hub-core.module';
             entities: [
               CoreUser,
               CoreUserPreference,
+              CoreUserTablePreference,
               CoreRole,
               CorePermission,
               CoreUserRole,
@@ -104,6 +107,7 @@ import { AiHubCoreModule } from './ai-hub-core/ai-hub-core.module';
           entities: [
             CoreUser,
             CoreUserPreference,
+            CoreUserTablePreference,
             CoreRole,
             CorePermission,
             CoreUserRole,
@@ -163,6 +167,7 @@ import { AiHubCoreModule } from './ai-hub-core/ai-hub-core.module';
     VinfastPartsModule,
     AppConfigModule,
     AiHubCoreModule,
+    InvoicesModule, // api-v2-module:invoices:app-modules
     // plop:api-v2-modules
   ],
   controllers: [AppController],

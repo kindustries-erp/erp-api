@@ -128,6 +128,9 @@ function setupFixture() {
     ),
   };
 
+  repository.manager.transaction = jest.fn(async (run: any) =>
+    run(repository.manager),
+  );
   const transactionAccountingService = {
     refreshJournalEntriesForBankTransaction: jest.fn(async () => undefined),
   };
@@ -139,6 +142,7 @@ function setupFixture() {
     bankTransactionsCoreService as any,
     accountingCoreService as any,
     transactionAccountingService as any,
+    { assign: jest.fn(async () => ({ updated: [], skipped: [] })) } as any,
   );
 
   return {

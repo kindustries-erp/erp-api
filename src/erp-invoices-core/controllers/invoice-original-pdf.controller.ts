@@ -1,13 +1,22 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
   Param,
   Post,
   Request,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  ApiBearerAuth,
+  ApiConsumes,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { RequireAnyPermissions } from '../../auth/decorators/require-permissions.decorator';
@@ -15,10 +24,13 @@ import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import { InvoiceOriginalPdfFacade } from '../services/original-pdf/invoice-original-pdf.facade';
 import { SyncAdvancedInvoiceDto } from '../dto/sync-advanced-invoice.dto';
 import {
+  ManualPdfUploadResponseDto,
   OriginalPdfDownloadResponseDto,
   OriginalPdfLookupInfoResponseDto,
   SyncAdvancedResponseDto,
 } from '../dto/original-pdf-response.dto';
+
+const MAX_MANUAL_PDF_BYTES = 10 * 1024 * 1024;
 
 @ApiTags('erp_invoices_original_pdf')
 @ApiBearerAuth()
@@ -55,6 +67,26 @@ export class InvoiceOriginalPdfController {
     @Param('id') id: string,
   ): Promise<OriginalPdfDownloadResponseDto> {
     return this.facade.downloadForInvoice(id);
+  }
+
+  @RequireAnyPermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
+  @Post(':id/manual-upload')
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: MAX_MANUAL_PDF_BYTES } }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary: 'Đưa lên PDF do người dùng tự tải từ cổng nhà cung cấp',
+  })
+  async uploadManualPdf(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ): Promise<ManualPdfUploadResponseDto> {
+    if (!file) throw new BadRequestException('Thiếu tệp PDF (field file)');
+    return this.facade.uploadManualPdf(id, file.buffer);
   }
 
   @RequireAnyPermissions({

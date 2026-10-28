@@ -14,6 +14,12 @@ import {
   ColumnOptionItem,
   ColumnOptionsResponse,
 } from '../invoice-debts.service';
+import {
+  branchIdsSqlCondition,
+  parseBranchFilter,
+} from '../../helpers/invoice-branch-filter.helper';
+import { buildInvoicePartnerSqlParts } from '../../../common/utils/invoice-partner-key.util';
+import { buildUnallocatedByTaxSql } from './invoice-debts-unallocated.helper';
 
 @Injectable()
 export class InvoiceDebtsQueryService {
@@ -75,15 +81,8 @@ export class InvoiceDebtsQueryService {
       partner_type === InvoicePartnerType.SUPPLIER ? 'IN' : 'OUT';
 
     // 1. Base Aggregation Subquery
-    const partnerTaxExpr =
-      direction === 'IN'
-        ? `COALESCE(NULLIF(TRIM(inv.seller_tax_code), ''), 'KHONG_MST')`
-        : `COALESCE(NULLIF(TRIM(inv.effective_data->'effectiveValues'->>'buyerTaxCode'), ''), NULLIF(TRIM(inv.buyer_tax_code), ''), NULLIF(TRIM(inv.buyer_cccd), ''), 'KHONG_MST')`;
-
-    const rawPartnerNameExpr =
-      direction === 'IN'
-        ? `COALESCE(NULLIF(TRIM(inv.seller_name), ''), 'Nhà cung cấp')`
-        : `COALESCE(NULLIF(TRIM(inv.effective_data->'effectiveValues'->>'buyerName'), ''), NULLIF(TRIM(inv.buyer_name), ''), NULLIF(TRIM(inv.buyer_personal_name), ''), 'Khách hàng lẻ')`;
+    const { taxCodeExpr: partnerTaxExpr, nameExpr: rawPartnerNameExpr } =
+      buildInvoicePartnerSqlParts(direction);
 
     const partnerAddressExpr =
       direction === 'IN'
@@ -199,7 +198,7 @@ export class InvoiceDebtsQueryService {
           0
         ) as "weightedAgingDays",
         TO_CHAR(MAX(inv.invoice_date), 'YYYY-MM-DD') as "latestInvoiceDate",
-        MAX(inv.branch_id::text) as "branchId"
+        MAX(inv.branch_ids[1]::text) as "branchId"
       FROM erp_invoices inv
       LEFT JOIN (
         SELECT invoice_id, SUM(net_off_amount) as net_off_amount
@@ -229,18 +228,20 @@ export class InvoiceDebtsQueryService {
         date_to.length === 10 ? `${date_to} 23:59:59.999` : date_to;
       baseQuery += ` AND inv.invoice_date <= '${effDateTo.replace(/'/g, "''")}'`;
     }
-    if (branch_id) {
-      if (branch_id === 'null') {
-        baseQuery += ` AND inv.branch_id IS NULL`;
-      } else {
-        baseQuery += ` AND inv.branch_id = '${branch_id.replace(/'/g, "''")}'`;
-      }
-    }
+    const branchFilter = parseBranchFilter(branch_id);
+    if (branchFilter)
+      baseQuery += ` AND ${branchIdsSqlCondition(branchFilter)}`;
 
     baseQuery += ` GROUP BY ${rawPartnerNameExpr}, ${partnerTaxExpr}`;
 
     // 2. Filter wrapper
-    let finalQuery = `SELECT * FROM (${baseQuery}) p`;
+    // Tiền đã gắn đối tượng nhưng chưa cấn trừ, cộng theo MST (xem invoice-debts-unallocated.helper)
+    // Một MST có thể có nhiều dòng (khác tên): chỉ gắn phần chưa phân bổ vào dòng có tổng HĐ lớn nhất để không cộng trùng
+    let finalQuery = `SELECT p.*,
+        COALESCE(CASE WHEN ROW_NUMBER() OVER (PARTITION BY p."taxCode" ORDER BY p."totalAmount" DESC) = 1
+                      THEN u.unallocated END, 0) AS "unallocatedAmount"
+      FROM (${baseQuery}) p
+      LEFT JOIN (${buildUnallocatedByTaxSql(direction)}) u ON u.tax_code = p."taxCode"`;
     const whereConditions: string[] = [];
 
     // Global search
@@ -369,6 +370,7 @@ export class InvoiceDebtsQueryService {
         COALESCE(SUM(p."totalAmount"), 0) as "grandTotalAmount",
         COALESCE(SUM(p."paidAmount"), 0) as "grandTotalPaid",
         COALESCE(SUM(p."balanceAmount"), 0) as "grandTotalBalance",
+        COALESCE(SUM(p."unallocatedAmount"), 0) as "grandTotalUnallocated",
         COALESCE(SUM(p."aging0To30"), 0) as "grandTotalAging0To30",
         COALESCE(SUM(p."aging31To60"), 0) as "grandTotalAging31To60",
         COALESCE(SUM(p."aging61To90"), 0) as "grandTotalAging61To90",
@@ -385,6 +387,10 @@ export class InvoiceDebtsQueryService {
       grandTotalAmount: Number(summaryRow.grandTotalAmount) || 0,
       grandTotalPaid: Number(summaryRow.grandTotalPaid) || 0,
       grandTotalBalance: Number(summaryRow.grandTotalBalance) || 0,
+      grandTotalUnallocated: Number(summaryRow.grandTotalUnallocated) || 0,
+      grandTotalNetBalance:
+        (Number(summaryRow.grandTotalBalance) || 0) -
+        (Number(summaryRow.grandTotalUnallocated) || 0),
       grandTotalAging0To30: Number(summaryRow.grandTotalAging0To30) || 0,
       grandTotalAging31To60: Number(summaryRow.grandTotalAging31To60) || 0,
       grandTotalAging61To90: Number(summaryRow.grandTotalAging61To90) || 0,
@@ -413,6 +419,9 @@ export class InvoiceDebtsQueryService {
       totalAmount: Number(r.totalAmount) || 0,
       paidAmount: Number(r.paidAmount) || 0,
       balanceAmount: Number(r.balanceAmount) || 0,
+      unallocatedAmount: Number(r.unallocatedAmount) || 0,
+      netBalanceAmount:
+        (Number(r.balanceAmount) || 0) - (Number(r.unallocatedAmount) || 0),
       maxAgingDays: parseInt(r.maxAgingDays || '0', 10),
       weightedAgingDays: Number(r.weightedAgingDays) || 0,
       latestInvoiceDate: r.latestInvoiceDate || null,
@@ -584,15 +593,8 @@ export class InvoiceDebtsQueryService {
     const direction =
       partner_type === InvoicePartnerType.SUPPLIER ? 'IN' : 'OUT';
 
-    const partnerTaxExpr =
-      direction === 'IN'
-        ? `COALESCE(NULLIF(TRIM(inv.seller_tax_code), ''), 'KHONG_MST')`
-        : `COALESCE(NULLIF(TRIM(inv.effective_data->'effectiveValues'->>'buyerTaxCode'), ''), NULLIF(TRIM(inv.buyer_tax_code), ''), NULLIF(TRIM(inv.buyer_cccd), ''), 'KHONG_MST')`;
-
-    const rawPartnerNameExpr =
-      direction === 'IN'
-        ? `COALESCE(NULLIF(TRIM(inv.seller_name), ''), 'Nhà cung cấp')`
-        : `COALESCE(NULLIF(TRIM(inv.effective_data->'effectiveValues'->>'buyerName'), ''), NULLIF(TRIM(inv.buyer_name), ''), NULLIF(TRIM(inv.buyer_personal_name), ''), 'Khách hàng lẻ')`;
+    const { taxCodeExpr: partnerTaxExpr, nameExpr: rawPartnerNameExpr } =
+      buildInvoicePartnerSqlParts(direction);
 
     const effBalExpr = `(CASE 
       WHEN inv.tax_invoice_status = 3 OR CAST(inv.total_amount AS NUMERIC) < 0 THEN
@@ -643,13 +645,9 @@ export class InvoiceDebtsQueryService {
         date_to.length === 10 ? `${date_to} 23:59:59.999` : date_to;
       baseQuery += ` AND inv.invoice_date <= '${effDateTo.replace(/'/g, "''")}'`;
     }
-    if (branch_id) {
-      if (branch_id === 'null') {
-        baseQuery += ` AND inv.branch_id IS NULL`;
-      } else {
-        baseQuery += ` AND inv.branch_id = '${branch_id.replace(/'/g, "''")}'`;
-      }
-    }
+    const branchFilter = parseBranchFilter(branch_id);
+    if (branchFilter)
+      baseQuery += ` AND ${branchIdsSqlCondition(branchFilter)}`;
 
     baseQuery += ` GROUP BY ${rawPartnerNameExpr}, ${partnerTaxExpr}`;
 

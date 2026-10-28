@@ -7,7 +7,7 @@ description: Module tri thức Quản lý Hệ thống Tài khoản Kế toán (
 
 ## 1. Tổng quan Nghiệp vụ
 
-Module `settings-accounts` (thuộc phân hệ `accounting-core`) quản lý toàn bộ Hệ thống Tài khoản Kế toán (Chart of Accounts - COA) của doanh nghiệp trên hệ sinh thái Liouni ERP.
+Module `settings-accounts` (thuộc phân hệ `accounting-core`) quản lý toàn bộ Hệ thống Tài khoản Kế toán (Chart of Accounts - COA) của doanh nghiệp trên hệ sinh thái ERP.
 
 Các chức năng nghiệp vụ trọng tâm:
 - **Cấu trúc Cây Phân cấp Tài khoản (Parent-Child Account Hierarchy)**: Quản lý các tài khoản kế toán cấp 1, cấp 2, cấp 3... thông qua quan hệ tự tham chiếu (`parent_id`). Hỗ trợ hiển thị phân cấp thụt lề trực quan (`↳`) trên giao diện người dùng.

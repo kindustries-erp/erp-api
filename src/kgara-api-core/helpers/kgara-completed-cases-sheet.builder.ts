@@ -6,10 +6,15 @@ import {
   applyStandardExcelReportLayout,
   borderThin,
   styleMarginCell,
+  getExcelColumnLetter,
+  applyColumnGroupStyles,
   COMPLETED_CASES_COLUMNS,
+  COMPLETED_CASES_ALL_COLUMNS,
   CASE_PNL_COLUMNS,
   COMPLETED_CASE_SERVICES_COLUMNS,
+  type ExcelReportColumnDef,
 } from './kgara-excel-style.helper';
+import { resolveCaseVatAmount } from './kgara-case-financial-parser.helper';
 
 export const CLASSIFICATION_LABELS: Record<string, string> = {
   KY_GUI_NOI_BO: 'Ký gửi nội bộ',
@@ -19,18 +24,36 @@ export const CLASSIFICATION_LABELS: Record<string, string> = {
   KHAC: 'Khác',
 };
 
-export function formatDisplayDate(d?: Date | string | null): string {
-  if (!d) return '—';
-  try {
-    const dt = typeof d === 'string' ? new Date(d) : d;
-    if (isNaN(dt.getTime())) return String(d);
-    const day = String(dt.getDate()).padStart(2, '0');
-    const month = String(dt.getMonth() + 1).padStart(2, '0');
-    const year = dt.getFullYear();
-    return `${day}/${month}/${year}`;
-  } catch {
-    return String(d);
-  }
+/**
+ * Ngày làm giá trị ô Excel (kiểu ngày thật, để lọc/nhóm/pivot). Lấy ngày/giờ theo getter
+ * local, cùng cách hiển thị cũ, rồi dựng Date theo thành phần UTC để ExcelJS ghi đúng
+ * ngày giờ đó. `null` khi trống để ô để trống.
+ */
+export function toExcelWallClockDate(
+  value: Date | string | null | undefined,
+  withTime = false,
+): Date | null {
+  if (!value) return null;
+  const dt = typeof value === 'string' ? new Date(value) : value;
+  if (isNaN(dt.getTime())) return null;
+  return new Date(
+    Date.UTC(
+      dt.getFullYear(),
+      dt.getMonth(),
+      dt.getDate(),
+      withTime ? dt.getHours() : 0,
+      withTime ? dt.getMinutes() : 0,
+    ),
+  );
+}
+
+/** Mô tả quy tắc loại trừ; không loại trừ thì trả về `—`. */
+export function formatExclusionRules(item: Record<string, any>): string {
+  const rules = [
+    item.excludeFromReports ? 'Loại khỏi báo cáo' : null,
+    item.excludeFromDebt ? 'Loại khỏi công nợ' : null,
+  ].filter(Boolean);
+  return rules.length ? rules.join('; ') : '—';
 }
 
 export function highlightStatusCell(
@@ -135,6 +158,21 @@ export interface CaseDashboardRow {
 export interface Sheet1Summary {
   sums: Record<string, number>;
   rows: CaseDashboardRow[];
+  /** Cột thực tế của Sheet 1 (sau khi chọn cột); Dashboard dựa vào đây để tham chiếu. */
+  columns: ExcelReportColumnDef[];
+}
+
+/**
+ * Lọc cột Sheet 1 theo `selectedKeys`, giữ thứ tự gốc.
+ * Trống hoặc không khớp key nào → toàn bộ cột mặc định.
+ */
+export function resolveCompletedCasesColumns(
+  selectedKeys?: string[],
+): ExcelReportColumnDef[] {
+  if (!selectedKeys?.length) return COMPLETED_CASES_COLUMNS;
+  const picked = new Set(selectedKeys);
+  const columns = COMPLETED_CASES_ALL_COLUMNS.filter((c) => picked.has(c.key));
+  return columns.length ? columns : COMPLETED_CASES_COLUMNS;
 }
 
 const toDateOrNull = (v: unknown): Date | null => {
@@ -155,10 +193,44 @@ export function buildSheet1CompletedCases(
   settlementsMap: Record<string, { receipts: number; payments: number }>,
   serviceLinesMap?: Map<string, any[]>,
   caseLedgerMap: Record<string, CaseLedgerAmounts> = {},
+  selectedColumns?: string[],
+  linkedInvoiceVatMap: Record<string, number> = {},
 ): Sheet1Summary {
   const sheet = workbook.addWorksheet(SHEET1_NAME);
   const dashboardRows: CaseDashboardRow[] = [];
-  initSheetStructure(sheet, COMPLETED_CASES_COLUMNS);
+  const columns = resolveCompletedCasesColumns(selectedColumns);
+  const hasColumn = (key: string) => columns.some((c) => c.key === key);
+  /** Tham chiếu ô theo vị trí cột đang xuất; null nếu cột không được chọn. */
+  const cellRef = (key: string, rowNo: number): string | null => {
+    const idx = columns.findIndex((c) => c.key === key);
+    return idx < 0 ? null : `${getExcelColumnLetter(idx + 1)}${rowNo}`;
+  };
+  /** Công thức ghép ô; nếu thiếu cột nguồn thì chỉ giữ giá trị. */
+  const formulaOrValue = (
+    keys: string[],
+    rowNo: number,
+    build: (refs: string[]) => string,
+    result: number,
+  ): ExcelJS.CellFormulaValue | number => {
+    const refs = keys.map((k) => cellRef(k, rowNo));
+    if (refs.some((r) => r === null)) return result;
+    return { formula: build(refs as string[]), result };
+  };
+  /** Cộng hai cột: dùng SUM(a:b) khi hai cột liền nhau, ngược lại ghép `a+b`. */
+  const sumBuild =
+    (first: string, second: string) =>
+    (refs: string[]): string => {
+      const i = columns.findIndex((c) => c.key === first);
+      const adjacent = columns[i + 1]?.key === second;
+      return adjacent ? `SUM(${refs[0]}:${refs[1]})` : `${refs[0]}+${refs[1]}`;
+    };
+  const marginFormula = (rowNo: number): string | null => {
+    const rev = cellRef('doanhThu', rowNo);
+    const profit = cellRef('loiNhuan', rowNo);
+    if (!rev || !profit) return null;
+    return `IF(${rev}>0, (${profit}/${rev}), 0)`;
+  };
+  initSheetStructure(sheet, columns);
 
   const sums: Record<string, number> = {
     phaiThuBaoHiem: 0,
@@ -177,6 +249,7 @@ export function buildSheet1CompletedCases(
     margin: 0,
     duThu: 0,
     duChi: 0,
+    vatAmount: 0,
   };
 
   cases.forEach((c: any, idx: number) => {
@@ -237,6 +310,9 @@ export function buildSheet1CompletedCases(
     const lines = c.hdPhieuDichVuId
       ? serviceLinesMap?.get(c.hdPhieuDichVuId) || []
       : [];
+    // Ưu tiên VAT của hóa đơn đầu ra liên kết; không có thì dùng nguồn dự phòng.
+    const vatAmount =
+      linkedInvoiceVatMap[c.id] ?? resolveCaseVatAmount(c, lines);
     let gvPt = 0;
     for (const line of lines) {
       const loaiCode = line.loaiSanPhamCode || line.LoaiSanPhamCode || '';
@@ -281,6 +357,7 @@ export function buildSheet1CompletedCases(
     sums.loiNhuan += profit;
     sums.duThu += duThu;
     sums.duChi += duChi;
+    sums.vatAmount += vatAmount;
 
     const branchName =
       branchNameMap[c.branchExternalId] || c.branchExternalId || '—';
@@ -306,7 +383,7 @@ export function buildSheet1CompletedCases(
       planned: duChi,
     });
 
-    const row = sheet.addRow({
+    const values: Record<string, unknown> = {
       index: idx + 1,
       soChungTu: c.soChungTu || '—',
       bienSoXe: c.bienSoXe || '—',
@@ -314,39 +391,75 @@ export function buildSheet1CompletedCases(
       khachHangName: c.khachHangName || '—',
       tenTinhTrangDichVu: c.tenTinhTrangDichVu || 'Đã kết thúc',
       classification: classLabel,
-      ngayTiepNhan: formatDisplayDate(c.ngayTiepNhan || c.ngayPhatSinh),
-      ngayHoanThanhCongViec: formatDisplayDate(c.ngayHoanThanhCongViec),
+      ngayTiepNhan: toExcelWallClockDate(c.ngayTiepNhan || c.ngayPhatSinh),
+      ngayHoanThanhCongViec: toExcelWallClockDate(c.ngayHoanThanhCongViec),
       phaiThuBaoHiem,
       phaiThuKhachHang,
-      phaiThu: { formula: `SUM(J${rowIdx}:K${rowIdx})`, result: phaiThu },
+      phaiThu: formulaOrValue(
+        ['phaiThuBaoHiem', 'phaiThuKhachHang'],
+        rowIdx,
+        sumBuild('phaiThuBaoHiem', 'phaiThuKhachHang'),
+        phaiThu,
+      ),
       daThu,
-      conPhaiThu: { formula: `L${rowIdx}-M${rowIdx}`, result: conPhaiThu },
+      conPhaiThu: formulaOrValue(
+        ['phaiThu', 'daThu'],
+        rowIdx,
+        ([a, b]) => `${a}-${b}`,
+        conPhaiThu,
+      ),
       ghiChuThu,
       chiPhiNhanCong,
       chiPhiPhuTung,
-      phaiTra: { formula: `SUM(P${rowIdx}:Q${rowIdx})`, result: phaiTra },
+      phaiTra: formulaOrValue(
+        ['chiPhiNhanCong', 'chiPhiPhuTung'],
+        rowIdx,
+        sumBuild('chiPhiNhanCong', 'chiPhiPhuTung'),
+        phaiTra,
+      ),
       daTra,
-      conPhaiTra: { formula: `R${rowIdx}-S${rowIdx}`, result: conPhaiTra },
+      conPhaiTra: formulaOrValue(
+        ['phaiTra', 'daTra'],
+        rowIdx,
+        ([a, b]) => `${a}-${b}`,
+        conPhaiTra,
+      ),
       ghiChuTra,
       doanhThu: rev,
       chiPhi: cost,
-      loiNhuan: { formula: `V${rowIdx}-W${rowIdx}`, result: profit },
-      margin: {
-        formula: `IF(V${rowIdx}>0, X${rowIdx}/V${rowIdx}, 0)`,
-        result: margin / 100,
-      },
+      loiNhuan: formulaOrValue(
+        ['doanhThu', 'chiPhi'],
+        rowIdx,
+        ([a, b]) => `${a}-${b}`,
+        profit,
+      ),
+      margin: formulaOrValue(
+        ['doanhThu', 'loiNhuan'],
+        rowIdx,
+        ([rev, profitRef]) => `IF(${rev}>0, ${profitRef}/${rev}, 0)`,
+        margin / 100,
+      ),
       linkedInvoices: linkedInvoiceSummaryMap[c.id] || '—',
       branchName,
       duThu,
       duChi,
-    });
+      vatAmount,
+      exclusionRules: formatExclusionRules(c),
+      createdAt: toExcelWallClockDate(c.createdAt, true),
+      updatedAt: toExcelWallClockDate(c.updatedAt, true),
+      dataAsOf: toExcelWallClockDate(c.dataAsOf, true),
+    };
+
+    const row = sheet.addRow(
+      Object.fromEntries(columns.map((col) => [col.key, values[col.key]])),
+    );
 
     row.height = 20;
     row.font = { name: 'Calibri', size: 10 };
     row.alignment = { vertical: 'middle' };
 
-    for (let col = 1; col <= COMPLETED_CASES_COLUMNS.length; col++) {
-      const colDef = COMPLETED_CASES_COLUMNS[col - 1];
+    for (let col = 1; col <= columns.length; col++) {
+      const colDef = columns[col - 1];
       const cell = row.getCell(col);
       cell.border = borderThin;
       if (colDef.style?.numFmt) cell.numFmt = colDef.style.numFmt;
@@ -355,53 +468,51 @@ export function buildSheet1CompletedCases(
     }
 
     // Styling background màu kem/pastel dịu mắt cho 2 cột Ghi chú thu & Ghi chú trả
-    const ghiChuThuCell = row.getCell('ghiChuThu');
-    ghiChuThuCell.fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FFFFFBEB' }, // Soft pastel amber/cream
-    };
-    ghiChuThuCell.font = {
-      name: 'Calibri',
-      size: 10,
-      color: { argb: 'FF1E293B' },
-    };
+    for (const noteKey of ['ghiChuThu', 'ghiChuTra']) {
+      if (!hasColumn(noteKey)) continue;
+      const noteCell = row.getCell(noteKey);
+      noteCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFFFFBEB' }, // Soft pastel amber/cream
+      };
+      noteCell.font = {
+        name: 'Calibri',
+        size: 10,
+        color: { argb: 'FF1E293B' },
+      };
+    }
 
-    const ghiChuTraCell = row.getCell('ghiChuTra');
-    ghiChuTraCell.fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FFFFFBEB' }, // Soft pastel amber/cream
-    };
-    ghiChuTraCell.font = {
-      name: 'Calibri',
-      size: 10,
-      color: { argb: 'FF1E293B' },
-    };
-
-    highlightStatusCell(
-      row.getCell('tenTinhTrangDichVu'),
-      String(c.tenTinhTrangDichVu || 'Đã kết thúc'),
-    );
+    if (hasColumn('tenTinhTrangDichVu')) {
+      highlightStatusCell(
+        row.getCell('tenTinhTrangDichVu'),
+        String(c.tenTinhTrangDichVu || 'Đã kết thúc'),
+      );
+    }
 
     // Áp dụng 6 dải màu tương phản cao cho cột Biên LN (%)
-    styleMarginCell(row.getCell('margin'), margin);
+    if (hasColumn('margin')) styleMarginCell(row.getCell('margin'), margin);
   });
 
   sums.margin = sums.doanhThu > 0 ? sums.loiNhuan / sums.doanhThu : 0;
 
-  applyStandardExcelReportLayout(sheet, COMPLETED_CASES_COLUMNS, 5, sums, {
-    sumRow: { margin: 'IF(V1>0, (X1/V1), 0)' },
-    subtotalRow: { margin: 'IF(V2>0, (X2/V2), 0)' },
+  const labelIdx = Math.max(
+    1,
+    columns.findIndex((c) => c.key === 'khachHangName') + 1,
+  );
+  const marginSum = marginFormula(1);
+  const marginSub = marginFormula(2);
+  applyStandardExcelReportLayout(sheet, columns, labelIdx, sums, {
+    sumRow: marginSum && hasColumn('margin') ? { margin: marginSum } : {},
+    subtotalRow: marginSub && hasColumn('margin') ? { margin: marginSub } : {},
   });
+  applyColumnGroupStyles(sheet, columns, SHEET1_FIRST_DATA_ROW);
   for (const key of ['duThu', 'duChi']) {
-    applyForecastColumnStyle(
-      sheet,
-      COMPLETED_CASES_COLUMNS.findIndex((c) => c.key === key) + 1,
-    );
+    const forecastIdx = columns.findIndex((c) => c.key === key);
+    if (forecastIdx >= 0) applyForecastColumnStyle(sheet, forecastIdx + 1);
   }
 
-  return { sums, rows: dashboardRows };
+  return { sums, rows: dashboardRows, columns };
 }
 
 /**
@@ -496,7 +607,7 @@ export function buildSheet2PnlTracking(
       bienSoXe: c.bienSoXe || '—',
       khachHangName: c.khachHangName || '—',
       classification: classLabel,
-      ngayHoanThanhCongViec: formatDisplayDate(c.ngayHoanThanhCongViec),
+      ngayHoanThanhCongViec: toExcelWallClockDate(c.ngayHoanThanhCongViec),
       doanhThuDichVu: dtDv,
       doanhThuPhuTung: dtPt,
       doanhThu: { formula: `G${rowIdx}+H${rowIdx}`, result: rev },

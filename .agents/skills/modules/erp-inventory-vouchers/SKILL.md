@@ -1,13 +1,13 @@
 ---
 name: erp-inventory-vouchers
-description: Module tri thức Trung tâm Tra cứu Chứng từ Kho Tổng hợp (Warehouse Vouchers Hub) trong Liouni ERP. Chứa toàn bộ logic truy vấn hợp nhất (Federated query) qua Phiếu Nhập (NK-), Phiếu Xuất (XK-), Phiếu Điều Chỉnh (DC-), bộ lọc đa chiều và xem chi tiết chứng từ.
+description: Module tri thức Trung tâm Tra cứu Chứng từ Kho Tổng hợp (Warehouse Vouchers Hub) trong ERP. Chứa toàn bộ logic truy vấn hợp nhất (Federated query) qua Phiếu Nhập (NK-), Phiếu Xuất (XK-), Phiếu Điều Chỉnh (DC-), bộ lọc đa chiều và xem chi tiết chứng từ.
 ---
 
 # 📦 Module Tri Thức: Trung Tâm Chứng Từ Kho Tổng Hợp (`erp-inventory-vouchers`)
 
 ## 1. Tổng quan Nghiệp vụ
 
-Module `erp-inventory-vouchers` (thuộc `inventory-core`) là **Trung Tâm Tra Cứu Hợp Nhất Mọi Chứng Từ Kho (Unified Warehouse Vouchers Hub)** trong Liouni ERP. Phân hệ này tập hợp toàn bộ các luồng chứng từ phát sinh nhập, xuất, kiểm kê kho từ nhiều phân hệ nghiệp vụ khác nhau vào một màn hình điều hành duy nhất, giúp thủ kho và kế toán kho dễ dàng kiểm soát, đối soát và tra cứu nhanh.
+Module `erp-inventory-vouchers` (thuộc `inventory-core`) là **Trung Tâm Tra Cứu Hợp Nhất Mọi Chứng Từ Kho (Unified Warehouse Vouchers Hub)** trong ERP. Phân hệ này tập hợp toàn bộ các luồng chứng từ phát sinh nhập, xuất, kiểm kê kho từ nhiều phân hệ nghiệp vụ khác nhau vào một màn hình điều hành duy nhất, giúp thủ kho và kế toán kho dễ dàng kiểm soát, đối soát và tra cứu nhanh.
 
 ### 1.1. Các tính năng cốt lõi:
 - **Truy vấn Hợp nhất Đa nguồn (Federated Multi-Source Query)**:

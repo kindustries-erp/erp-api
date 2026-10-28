@@ -29,7 +29,7 @@ export async function _loadNetOffAmounts(
     .addSelect('bt.reference_number', 'refNo')
     .addSelect('bt.trans_date', 'transDate')
     .addSelect('bt.description', 'description')
-    .addSelect('bt.accounting_description', 'accountingDescription')
+    .addSelect('bt.note', 'note')
     .addSelect('bt.debit_amount', 'debitAmount')
     .addSelect('bt.credit_amount', 'creditAmount')
     .leftJoin(
@@ -59,7 +59,7 @@ export async function _loadNetOffAmounts(
         adj_inv.invoice_no as "refNo",
         adj_inv.invoice_date as "transDate",
         COALESCE(adj.notes, 'Cấn trừ theo HĐ Điều Chỉnh ' || adj_inv.invoice_no) as "description",
-        'Cấn trừ theo HĐ Điều Chỉnh ' || adj_inv.invoice_no as "accountingDescription",
+        'Cấn trừ theo HĐ Điều Chỉnh ' || adj_inv.invoice_no as "note",
         CAST(adj_inv.total_amount AS NUMERIC) as "refAmount"
       FROM erp_invoice_adjustment_netoff adj
       JOIN erp_invoices adj_inv ON adj_inv.id = adj.adjusting_invoice_id
@@ -73,7 +73,7 @@ export async function _loadNetOffAmounts(
         orig_inv.invoice_no as "refNo",
         orig_inv.invoice_date as "transDate",
         COALESCE(adj.notes, 'Cấn trừ vào HĐ Gốc ' || orig_inv.invoice_no) as "description",
-        'Cấn trừ vào HĐ Gốc ' || orig_inv.invoice_no as "accountingDescription",
+        'Cấn trừ vào HĐ Gốc ' || orig_inv.invoice_no as "note",
         CAST(orig_inv.total_amount AS NUMERIC) as "refAmount"
       FROM erp_invoice_adjustment_netoff adj
       JOIN erp_invoices orig_inv ON orig_inv.id = adj.original_invoice_id
@@ -140,9 +140,7 @@ export async function _loadNetOffAmounts(
       }
     }
 
-    const desc = (row.accountingDescription || row.description || '')
-      .toString()
-      .trim();
+    const desc = (row.note || row.description || '').toString().trim();
 
     netOffMap[invId].sum += netOffAmt;
     if (refNo && !netOffMap[invId].refNos.includes(refNo)) {
@@ -344,7 +342,13 @@ export function _applyColumnSearch(
     } else if (key === 'notes') {
       applyMultiKeywordFilter(qb, 'inv.notes', val, 'notesSearch');
     } else if (key === 'branchId' || key === 'branchName') {
-      applyMultiKeywordFilter(qb, 'inv.branch_id', val, 'branchIdSearch');
+      // Tìm theo tên hoặc mã của mọi chi nhánh gán cho hóa đơn (không chỉ chi nhánh đầu)
+      applyMultiKeywordFilter(
+        qb,
+        "(SELECT string_agg(bb.name || ' ' || bb.code, ' ') FROM erp_branches bb WHERE bb.id = ANY(inv.branch_ids))",
+        val,
+        'branchIdSearch',
+      );
     } else if (key === 'status') {
       applyMultiKeywordFilter(qb, 'inv.status', val, 'statusSearch');
     } else if (key === 'postingStatus') {
@@ -415,17 +419,18 @@ export function _applyColumnFilters(
         postingStatusVals: vals,
       });
     else if (key === 'branchId') {
+      // branch_ids là mảng 0..N chi nhánh; '__BLANK__' = không gán chi nhánh nào
       const hasBlank = vals.includes('__BLANK__');
       const realVals = vals.filter((v) => v !== '__BLANK__');
       if (hasBlank && realVals.length > 0) {
         qb.andWhere(
-          '(inv.branch_id IN (:...branchVals) OR inv.branch_id IS NULL)',
+          '(inv.branch_ids && ARRAY[:...branchVals]::uuid[] OR cardinality(inv.branch_ids) = 0)',
           { branchVals: realVals },
         );
       } else if (hasBlank) {
-        qb.andWhere('(inv.branch_id IS NULL)');
+        qb.andWhere('cardinality(inv.branch_ids) = 0');
       } else {
-        qb.andWhere('inv.branch_id IN (:...branchVals)', {
+        qb.andWhere('inv.branch_ids && ARRAY[:...branchVals]::uuid[]', {
           branchVals: vals,
         });
       }

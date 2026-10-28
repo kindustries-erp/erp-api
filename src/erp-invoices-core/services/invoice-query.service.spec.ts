@@ -361,7 +361,7 @@ describe('InvoiceQueryService', () => {
         refNo: 'FT26253089587018',
         transDate: '2026-08-01',
         description: 'Thanh toan tien phu tung',
-        accountingDescription: '',
+        note: '',
         debitAmount: 600000,
         creditAmount: 0,
       },

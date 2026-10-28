@@ -678,4 +678,47 @@ describe('KgaraSyncService', () => {
       );
     });
   });
+
+  describe('syncAllInOne', () => {
+    it('coordinates sequential sync of branches, cases, gross profit, and details', async () => {
+      jest.spyOn(service, 'syncBranches').mockResolvedValue(undefined);
+      jest.spyOn(service, 'syncCasesForBranch').mockResolvedValue({
+        deletedCount: 0,
+        withLinkedInvoices: [],
+      });
+      jest
+        .spyOn(service, 'syncGrossProfitForBranch')
+        .mockResolvedValue(undefined);
+      jest.spyOn(service, 'syncCaseDetailsBatch').mockResolvedValue({
+        totalCasesProcessed: 5,
+        totalLinesSynced: 12,
+        errorsCount: 0,
+      });
+
+      const res = await service.syncAllInOne('br-test', {
+        from: '2026-10-01',
+        to: '2026-10-31',
+        includeDetails: true,
+      });
+
+      expect(service.syncBranches).toHaveBeenCalled();
+      expect(service.syncCasesForBranch).toHaveBeenCalledWith(
+        'br-test',
+        '2026-10-01',
+        '2026-10-31',
+      );
+      expect(service.syncGrossProfitForBranch).toHaveBeenCalledWith(
+        'br-test',
+        '2026-10-01',
+        '2026-10-31',
+      );
+      expect(service.syncCaseDetailsBatch).toHaveBeenCalledWith('br-test', {
+        from: '2026-10-01',
+        to: '2026-10-31',
+        force: undefined,
+      });
+      expect(res.grossProfitSuccess).toBe(true);
+      expect(res.detailsResult?.totalLinesSynced).toBe(12);
+    });
+  });
 });

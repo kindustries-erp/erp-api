@@ -32,35 +32,50 @@ export class InvoiceStatsService {
     }
     const sixMonthsAgoStr = `${smYear}-${String(smMonth + 1).padStart(2, '0')}-01`;
 
-    const qb = this.repository.createQueryBuilder('inv');
-    qb.where('inv.is_deleted = false');
-    if (direction) {
-      qb.andWhere('inv.direction = :direction', { direction });
-    }
-    qb.andWhere(
-      '(inv.tax_invoice_status IS NULL OR inv.tax_invoice_status != 4)',
-    );
     // Use string comparison for exact match based on database Date
     let fetchFrom = sixMonthsAgoStr;
     if (dateFrom && dateFrom < fetchFrom) {
       fetchFrom = dateFrom;
     }
-    qb.andWhere(`TO_CHAR(inv.invoice_date, 'YYYY-MM-DD') >= :fetchFrom`, {
-      fetchFrom,
-    });
 
-    qb.leftJoin('erp_branches', 'b', 'b.id = inv.branch_id');
-    qb.select(`TO_CHAR(inv.invoice_date, 'YYYY-MM-DD')`, 'day_date');
-    qb.addSelect(`inv.branch_id`, 'branch_id');
-    qb.addSelect(`b.name`, 'branch_name');
-    qb.addSelect(`SUM(inv.total_amount)`, 'total_amount');
-    qb.addSelect(`SUM(inv.pre_vat_amount)`, 'pre_vat_amount');
-    qb.groupBy(`TO_CHAR(inv.invoice_date, 'YYYY-MM-DD')`);
-    qb.addGroupBy(`inv.branch_id`);
-    qb.addGroupBy(`b.name`);
-    qb.orderBy(`TO_CHAR(inv.invoice_date, 'YYYY-MM-DD')`, 'ASC');
+    // Hóa đơn nhiều chi nhánh: mỗi chi nhánh nhận phần bằng nhau (total / N); không gán chi nhánh -> nhóm NULL
+    const params: any[] = [fetchFrom];
+    let directionClause = '';
+    if (direction) {
+      params.push(direction);
+      directionClause = ` AND inv.direction = $${params.length}`;
+    }
+    const whereClause = `inv.is_deleted = false
+      AND (inv.tax_invoice_status IS NULL OR inv.tax_invoice_status != 4)
+      AND TO_CHAR(inv.invoice_date, 'YYYY-MM-DD') >= $1${directionClause}`;
 
-    const records = await qb.getRawMany();
+    const records: any[] = await this.repository.manager.query(
+      `
+      SELECT x.day_date, x.branch_id, b.name AS branch_name,
+             SUM(x.total_amount) AS total_amount,
+             SUM(x.pre_vat_amount) AS pre_vat_amount
+      FROM (
+        SELECT TO_CHAR(inv.invoice_date, 'YYYY-MM-DD') AS day_date,
+               NULL::uuid AS branch_id,
+               inv.total_amount::numeric AS total_amount,
+               inv.pre_vat_amount::numeric AS pre_vat_amount
+        FROM erp_invoices inv
+        WHERE ${whereClause} AND cardinality(inv.branch_ids) = 0
+        UNION ALL
+        SELECT TO_CHAR(inv.invoice_date, 'YYYY-MM-DD') AS day_date,
+               bid AS branch_id,
+               inv.total_amount::numeric / cardinality(inv.branch_ids) AS total_amount,
+               inv.pre_vat_amount::numeric / cardinality(inv.branch_ids) AS pre_vat_amount
+        FROM erp_invoices inv
+        CROSS JOIN LATERAL unnest(inv.branch_ids) AS bid
+        WHERE ${whereClause}
+      ) x
+      LEFT JOIN erp_branches b ON b.id = x.branch_id
+      GROUP BY x.day_date, x.branch_id, b.name
+      ORDER BY x.day_date ASC
+      `,
+      params,
+    );
 
     let monthTotal = 0,
       monthPreVat = 0;

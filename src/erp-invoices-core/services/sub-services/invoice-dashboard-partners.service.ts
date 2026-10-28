@@ -3,6 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ErpInvoice } from '../../entities/erp_invoice.entity';
 import { normalizeEffectiveDateTo } from './invoice-dashboard-helpers';
+import {
+  branchIdsSqlCondition,
+  parseBranchFilter,
+} from '../../helpers/invoice-branch-filter.helper';
 
 export interface DashboardPartnerItem {
   taxCode: string;
@@ -76,7 +80,7 @@ export class InvoiceDashboardPartnersService {
       WHERE inv.is_deleted = false AND (inv.tax_invoice_status IS NULL OR inv.tax_invoice_status != 4)
         ${dateFrom ? `AND inv.invoice_date >= '${dateFrom}'` : ''}
         ${effectiveDateTo ? `AND inv.invoice_date <= '${effectiveDateTo}'` : ''}
-        ${branchId ? (branchId === 'null' ? `AND inv.branch_id IS NULL` : `AND inv.branch_id = '${branchId}'`) : ''}
+        ${branchId ? `AND ${branchIdsSqlCondition(parseBranchFilter(branchId) ?? 'null')}` : ''}
       GROUP BY 
         CASE 
           WHEN inv.direction = 'IN' THEN inv.seller_tax_code

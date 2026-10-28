@@ -316,7 +316,7 @@ export class BankTransactionsCoreController {
   })
   importFiles(
     @UploadedFiles() files: Express.Multer.File[],
-    @Body('branchId') branchId: string,
+    @Body('branchId') branchId: string | undefined,
     @Body('bankAccountId') bankAccountId?: string,
     @Body('cashBookId') cashBookId?: string,
   ) {
@@ -324,7 +324,6 @@ export class BankTransactionsCoreController {
       throw new BadRequestException('At least one file is required');
     if (files.length > 5)
       throw new BadRequestException('Cannot upload more than 5 files');
-    if (!branchId) throw new BadRequestException('branchId is required');
     return this.service.importFiles(files, branchId, bankAccountId, cashBookId);
   }
 

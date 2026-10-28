@@ -6,6 +6,7 @@ describe('TransactionAccountingService', () => {
   let transactionRepo: any;
   let dataSource: any;
   let accountingCoreService: any;
+  let partnersService: { ensurePartnerForInvoiceKey: jest.Mock };
 
   beforeEach(() => {
     transactionRepo = {
@@ -22,14 +23,106 @@ describe('TransactionAccountingService', () => {
       deleteJournalEntryBySource: jest.fn().mockResolvedValue(undefined),
       generateEntryNo: jest.fn().mockResolvedValue('BANK-0001'),
       createJournalEntry: jest.fn().mockResolvedValue({ id: 'je-1' }),
+      createJournalEntriesForBranches: jest
+        .fn()
+        .mockResolvedValue({ id: 'je-1' }),
       getJournalEntriesBySource: jest.fn().mockResolvedValue([]),
+    };
+
+    partnersService = {
+      ensurePartnerForInvoiceKey: jest.fn().mockResolvedValue('partner-new'),
     };
 
     service = new TransactionAccountingService(
       transactionRepo,
       dataSource,
       accountingCoreService,
+      partnersService as never,
     );
+  });
+
+  it('updateTransaction không ghi đè description (diễn giải ngân hàng) nhưng lưu được note', async () => {
+    transactionRepo.findOne.mockResolvedValue({
+      id: 'txn-1',
+      isDeleted: false,
+      sourceType: 'BANK',
+      description: 'BANK TEXT',
+      note: null,
+      branchId: null,
+      branchIds: [],
+      creditAmount: 0,
+      debitAmount: 100,
+      transDate: new Date('2026-07-23'),
+    });
+    dataSource.query.mockResolvedValue([]);
+
+    await service.updateTransaction('txn-1', {
+      description: 'SUA BANK TEXT',
+      note: 'hoàn ứng',
+    } as any);
+
+    const saved = transactionRepo.save.mock.calls[0][0];
+    expect(saved.description).toBe('BANK TEXT');
+    expect(saved.note).toBe('hoàn ứng');
+  });
+
+  it('postTransaction không ghi đè note (ghi chú ERP) bằng diễn giải bút toán', async () => {
+    transactionRepo.findOne.mockResolvedValue({
+      id: 'txn-1',
+      isDeleted: false,
+      sourceType: 'BANK',
+      description: 'BANK TEXT',
+      note: 'hoàn ứng',
+      branchId: null,
+      branchIds: [],
+      creditAmount: 0,
+      debitAmount: 100,
+      transDate: new Date('2026-07-23'),
+    });
+    dataSource.query.mockResolvedValue([{ id: '1121' }, { id: '331' }]);
+
+    await service.postTransaction('txn-1', {
+      description: 'Diễn giải bút toán',
+      lines: [
+        { accountId: '331', debit: 100, credit: 0, description: 'Chi' },
+        { accountId: '1121', debit: 0, credit: 100, description: 'Chi' },
+      ],
+    } as any);
+
+    expect(transactionRepo.save.mock.calls[0][0].note).toBe('hoàn ứng');
+  });
+
+  it('postTransaction (nhập tay) tạo bút toán theo danh sách chi nhánh của giao dịch', async () => {
+    transactionRepo.findOne.mockResolvedValue({
+      id: 'txn-1',
+      isDeleted: false,
+      sourceType: 'BANK',
+      branchId: 'branch-1',
+      branchIds: ['branch-1', 'branch-2'],
+      creditAmount: 200,
+      debitAmount: 0,
+      transDate: new Date('2026-07-23'),
+    });
+    dataSource.query.mockResolvedValue([{ id: '1121' }, { id: '331' }]);
+
+    await service
+      .postTransaction('txn-1', {
+        lines: [
+          { accountId: '1121', debit: 200, credit: 0, description: 'Thu' },
+          { accountId: '331', debit: 0, credit: 200, description: 'Thu' },
+        ],
+      } as any)
+      .catch(() => undefined);
+
+    expect(
+      accountingCoreService.createJournalEntriesForBranches,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        branchIds: ['branch-1', 'branch-2'],
+        sourceId: 'txn-1',
+      }),
+    );
+    expect(accountingCoreService.createJournalEntry).not.toHaveBeenCalled();
   });
 
   it('createManualTransaction throws when both bankAccountId and cashBookId are missing', async () => {
@@ -55,11 +148,124 @@ describe('TransactionAccountingService', () => {
       description: 'Thu tien',
     };
 
+    dataSource.query.mockResolvedValueOnce([{ id: 'branch-1' }]);
+
     const result = await service.createManualTransaction(dto);
 
-    expect(transactionRepo.create).toHaveBeenCalledWith(dto);
+    expect(transactionRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        branchId: 'branch-1',
+        branchIds: ['branch-1'],
+      }),
+    );
     expect(transactionRepo.save).toHaveBeenCalled();
     expect(result).toEqual(expect.objectContaining({ id: 'txn-1' }));
+  });
+
+  it('createManualTransaction keeps branch_id in sync with branch_ids', async () => {
+    dataSource.query.mockResolvedValueOnce([
+      { id: 'branch-a' },
+      { id: 'branch-b' },
+    ]);
+
+    await service.createManualTransaction({
+      sourceType: 'BANK',
+      branchIds: ['branch-a', 'branch-b'],
+      bankAccountId: 'bank-1',
+      transDate: new Date('2026-08-09'),
+      debitAmount: 0,
+      creditAmount: 100,
+      description: 'Thu tien',
+    } as any);
+
+    expect(transactionRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        branchIds: ['branch-a', 'branch-b'],
+        branchId: 'branch-a',
+      }),
+    );
+  });
+
+  it('createManualTransaction rejects branch ids not found in erp_branches', async () => {
+    dataSource.query.mockResolvedValueOnce([{ id: 'branch-a' }]);
+
+    await expect(
+      service.createManualTransaction({
+        sourceType: 'CASH',
+        branchIds: ['branch-a', 'branch-missing'],
+        cashBookId: 'cash-1',
+        transDate: new Date('2026-08-09'),
+        debitAmount: 0,
+        creditAmount: 100,
+      } as any),
+    ).rejects.toThrow('Chi nhánh không tồn tại: branch-missing');
+    expect(transactionRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('updateTransaction rejects a branchId not found in erp_branches', async () => {
+    transactionRepo.findOne.mockResolvedValue({
+      id: 'txn-4',
+      isDeleted: false,
+      sourceType: 'CASH',
+      description: 'CASH TEXT',
+      note: null,
+      branchId: null,
+      branchIds: [],
+      creditAmount: 0,
+      debitAmount: 100,
+      transDate: new Date('2026-07-23'),
+    });
+    dataSource.query.mockResolvedValueOnce([]);
+
+    await expect(
+      service.updateTransaction('txn-4', { branchId: 'branch-missing' } as any),
+    ).rejects.toThrow(BadRequestException);
+    expect(transactionRepo.save).not.toHaveBeenCalled();
+  });
+
+  describe('cashflow classification / purpose pairing', () => {
+    const baseCreateDto = {
+      sourceType: 'BANK',
+      branchId: 'branch-1',
+      bankAccountId: 'bank-1',
+      transDate: new Date('2026-08-09'),
+      debitAmount: 0,
+      creditAmount: 100,
+    };
+
+    beforeEach(() => {
+      dataSource.query.mockResolvedValue([{ id: 'branch-1' }]);
+    });
+
+    it('createManualTransaction rejects purpose outside the chosen classification', async () => {
+      await expect(
+        service.createManualTransaction({
+          ...baseCreateDto,
+          cashflowClassification: 'FINANCING',
+          cashflowPurpose: 'SALARY',
+        } as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('createManualTransaction rejects purpose without classification', async () => {
+      await expect(
+        service.createManualTransaction({
+          ...baseCreateDto,
+          cashflowClassification: null,
+          cashflowPurpose: 'LOAN',
+        } as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('createManualTransaction accepts a valid pair', async () => {
+      await expect(
+        service.createManualTransaction({
+          ...baseCreateDto,
+          cashflowClassification: 'FINANCING',
+          cashflowPurpose: 'LOAN',
+        } as any),
+      ).resolves.toBeDefined();
+    });
   });
 
   describe('refreshJournalEntriesForBankTransaction', () => {
@@ -106,7 +312,7 @@ describe('TransactionAccountingService', () => {
         bankAccount: { accountingAccountId: '1121-account' },
         creditAmount: 500, // Tiền vào (Receipt)
         debitAmount: 0,
-        accountingDescription: 'Tien vao tk',
+        note: 'Tien vao tk',
         correspondentAccountingAccountId: null,
         transDate: new Date('2026-07-23'),
       });
@@ -141,6 +347,167 @@ describe('TransactionAccountingService', () => {
       );
     });
 
+    it('posts the unallocated part of a receipt with a partner to 131', async () => {
+      process.env.ENABLE_LIVE_AUTO_POSTING = 'true';
+      transactionRepo.findOne.mockResolvedValue({
+        id: 'txn-1',
+        isDeleted: false,
+        sourceType: 'BANK',
+        branchId: 'branch-1',
+        bankAccount: { accountingAccountId: '1121-account' },
+        creditAmount: 500,
+        debitAmount: 0,
+        partnerId: 'partner-1',
+        correspondentAccountingAccountId: null,
+        transDate: new Date('2026-07-23'),
+      });
+      dataSource.query
+        .mockResolvedValueOnce([{ id: '331-account' }])
+        .mockResolvedValueOnce([{ id: '131-account' }])
+        .mockResolvedValueOnce([{ id: 't0001-account' }])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      await service.refreshJournalEntriesForBankTransaction('txn-1');
+
+      expect(accountingCoreService.createJournalEntry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          lines: [
+            expect.objectContaining({ accountId: '1121-account', debit: 500 }),
+            expect.objectContaining({ accountId: '131-account', credit: 500 }),
+          ],
+        }),
+      );
+    });
+
+    it('posts the unallocated part of a payment with a partner to 331', async () => {
+      process.env.ENABLE_LIVE_AUTO_POSTING = 'true';
+      transactionRepo.findOne.mockResolvedValue({
+        id: 'txn-2',
+        isDeleted: false,
+        sourceType: 'BANK',
+        branchId: 'branch-1',
+        bankAccount: { accountingAccountId: '1121-account' },
+        creditAmount: 0,
+        debitAmount: 300,
+        partnerId: 'partner-2',
+        correspondentAccountingAccountId: null,
+        transDate: new Date('2026-07-23'),
+      });
+      dataSource.query
+        .mockResolvedValueOnce([{ id: '331-account' }])
+        .mockResolvedValueOnce([{ id: '131-account' }])
+        .mockResolvedValueOnce([{ id: 't0001-account' }])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      await service.refreshJournalEntriesForBankTransaction('txn-2');
+
+      expect(accountingCoreService.createJournalEntry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          lines: [
+            expect.objectContaining({ accountId: '331-account', debit: 300 }),
+            expect.objectContaining({ accountId: '1121-account', credit: 300 }),
+          ],
+        }),
+      );
+    });
+
+    it('updateTransaction with invoicePartner resolves the partner and stores its id', async () => {
+      transactionRepo.findOne.mockResolvedValue({
+        id: 'txn-3',
+        isDeleted: false,
+        sourceType: 'BANK',
+        description: 'BANK TEXT',
+        note: null,
+        branchId: null,
+        branchIds: [],
+        creditAmount: 0,
+        debitAmount: 100,
+        partnerId: null,
+        transDate: new Date('2026-07-23'),
+      });
+      dataSource.query.mockResolvedValue([]);
+
+      await service.updateTransaction('txn-3', {
+        invoicePartner: { taxCode: '0100', name: 'ABC', partnerType: 'VENDOR' },
+      } as any);
+
+      expect(partnersService.ensurePartnerForInvoiceKey).toHaveBeenCalledWith({
+        taxCode: '0100',
+        name: 'ABC',
+        partnerType: 'VENDOR',
+      });
+      expect(transactionRepo.save.mock.calls[0][0].partnerId).toBe(
+        'partner-new',
+      );
+    });
+
+    it('splits the journal entry evenly across multiple branchIds', async () => {
+      process.env.ENABLE_LIVE_AUTO_POSTING = 'true';
+
+      transactionRepo.findOne.mockResolvedValue({
+        id: 'txn-1',
+        isDeleted: false,
+        sourceType: 'BANK',
+        branchId: 'branch-1',
+        branchIds: ['branch-1', 'branch-2'],
+        bankAccount: { accountingAccountId: '1121-account' },
+        creditAmount: 100,
+        debitAmount: 0,
+        note: 'Tien vao tk',
+        correspondentAccountingAccountId: null,
+        transDate: new Date('2026-07-23'),
+      });
+
+      dataSource.query
+        .mockResolvedValueOnce([{ id: '331-account' }])
+        .mockResolvedValueOnce([{ id: '131-account' }])
+        .mockResolvedValueOnce([{ id: 't0001-account' }])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      await service.refreshJournalEntriesForBankTransaction('txn-1');
+
+      const calls = (accountingCoreService.createJournalEntry as jest.Mock).mock
+        .calls;
+      expect(calls).toHaveLength(2);
+      expect(calls.map((c) => c[0].branchId)).toEqual(['branch-1', 'branch-2']);
+      expect(calls.map((c) => c[0].lines[0].debit)).toEqual([50, 50]);
+    });
+
+    it('creates a single entry with null branch when branchIds and branchId are empty', async () => {
+      process.env.ENABLE_LIVE_AUTO_POSTING = 'true';
+
+      transactionRepo.findOne.mockResolvedValue({
+        id: 'txn-1',
+        isDeleted: false,
+        sourceType: 'BANK',
+        branchId: null,
+        branchIds: [],
+        bankAccount: { accountingAccountId: '1121-account' },
+        creditAmount: 100,
+        debitAmount: 0,
+        note: 'Tien vao tk',
+        correspondentAccountingAccountId: null,
+        transDate: new Date('2026-07-23'),
+      });
+
+      dataSource.query
+        .mockResolvedValueOnce([{ id: '331-account' }])
+        .mockResolvedValueOnce([{ id: '131-account' }])
+        .mockResolvedValueOnce([{ id: 't0001-account' }])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      await service.refreshJournalEntriesForBankTransaction('txn-1');
+
+      expect(accountingCoreService.createJournalEntry).toHaveBeenCalledTimes(1);
+      expect(accountingCoreService.createJournalEntry).toHaveBeenCalledWith(
+        expect.objectContaining({ branchId: null }),
+      );
+    });
+
     it('shifts counterpart to 331 when net-off with IN invoice', async () => {
       process.env.ENABLE_LIVE_AUTO_POSTING = 'true';
 
@@ -152,7 +519,7 @@ describe('TransactionAccountingService', () => {
         bankAccount: { accountingAccountId: '1121-account' },
         creditAmount: 0,
         debitAmount: 300, // Tiền ra (Payment)
-        accountingDescription: 'Thanh toan tien hang',
+        note: 'Thanh toan tien hang',
         correspondentAccountingAccountId: null,
         transDate: new Date('2026-07-23'),
       });
@@ -202,7 +569,7 @@ describe('TransactionAccountingService', () => {
         cashBook: null,
         creditAmount: 100,
         debitAmount: 0,
-        accountingDescription: 'Thu tien',
+        note: 'Thu tien',
         description: 'Thu tien',
         correspondentAccountingAccountId: 'counterpart-account',
         correspondentName: 'Partner A',

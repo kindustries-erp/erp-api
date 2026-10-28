@@ -7,9 +7,9 @@
 
 # Multi-Family Workspace Router
 
-**ROUTING & RULES ONLY:** This is the single source of truth for this multi-family workspace (Liouni ERP + Klotus). Application-specific implementation rules live in each family or repo router, not here.
+**ROUTING & RULES ONLY:** This is the single source of truth for this multi-family workspace (ERP + Klotus). Application-specific implementation rules live in each family or repo router, not here.
 
-This workspace contains two independent application families: Liouni ERP (multi-module backend) and Klotus (public warranty & landing page).
+This workspace contains two independent application families: ERP (multi-module backend) and Klotus (public warranty & landing page).
 
 ---
 
@@ -192,9 +192,9 @@ Repo-level workflows (e.g. `erp/erp-web/.agents/workflows/standardize-drawer.md`
 
 <!-- Nguồn: erp/AGENTS.md -->
 
-# Liouni ERP Family Agent Entry
+# ERP Family Agent Entry
 
-Entry point for AI agents working in the Liouni ERP family (thư mục `erp/` trong workspace root). Workspace-level rules and the global workflow catalog live in `../AGENTS.md`.
+Entry point for AI agents working in the ERP family (thư mục `erp/` trong workspace root). Workspace-level rules and the global workflow catalog live in `../AGENTS.md`.
 
 ## Child Repositories
 
@@ -203,7 +203,7 @@ Entry point for AI agents working in the Liouni ERP family (thư mục `erp/` tr
 | Backend (NestJS, TypeORM, PostgreSQL) | `./erp-api` (Remote `github-industries`, branch `erp-master`) | [`./erp-api/.agents/AGENTS.md`](./erp-api/.agents/AGENTS.md) |
 | Frontend (React, Vite, React Query) | `./erp-web` (Remote `github-industries`, branch `erp-master`) | [`./erp-web/.agents/AGENTS.md`](./erp-web/.agents/AGENTS.md) |
 
-Skills nằm ở `erp-api/.agents/skills/` và `erp-web/.agents/skills/`, đăng ký trong `./.agents/skills.json`. Đọc `liouni-erp-*-current-truth/SKILL.md` của repo trước khi sửa code.
+Skills nằm ở `erp-api/.agents/skills/` và `erp-web/.agents/skills/`, đăng ký trong `./.agents/skills.json`. Đọc `erp-*-current-truth/SKILL.md` của repo trước khi sửa code.
 
 ## Strict Guardrails
 
@@ -234,13 +234,13 @@ Khi dùng `relations` trong `find`, `findAndCount`, ... phải kiểm tra relati
 
 <!-- Nguồn: erp/erp-api/.agents/AGENTS.md -->
 
-# Liouni ERP API Agent Bootstrap
+# ERP API Agent Bootstrap
 
 Source of truth for this repo (`./erp-api`).
 
 ## Read order
 
-1. `.agents/skills/liouni-erp-api-current-truth/SKILL.md`
+1. `.agents/skills/erp-api-current-truth/SKILL.md`
 
 ## API Specific Agent Mandates
 
@@ -312,7 +312,7 @@ Source of truth for this repo (`./erp-api`).
 
 ---
 
-## Liouni ERP API Rules
+## ERP API Rules
 
 ### Git Workflow Mandates
 
@@ -346,7 +346,7 @@ Source of truth for this repo (`./erp-api`).
 
 ### Required behavior
 
-- load `@.agents/skills/liouni-erp-api-current-truth/SKILL.md`
+- load `@.agents/skills/erp-api-current-truth/SKILL.md`
 - use repo-local context as default guidance
 - MUST use bun/bunx exclusively (do NOT use npm)
 - when debugging and testing API locally, always start dev on port 10010

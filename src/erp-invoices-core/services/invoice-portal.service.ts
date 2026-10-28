@@ -17,8 +17,11 @@ import { PortalFetchDto } from '../dto/portal-invoice.dto';
 import { R2Service } from '../../r2/r2.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { InvoiceLifecycleService } from './invoice-lifecycle.service';
+import { InvoiceBranchService } from './invoice-branch.service';
+import { readBranchIds } from '../../common/utils/branch-ids.util';
 import { VinfastPartsService } from '../../vinfast-parts/vinfast-parts.service';
 import { GdtCronStateHelper } from '../helpers/gdt-cron-state.helper';
+import { formatInvoiceProgressRef } from '../helpers/invoice-progress-ref.helper';
 import {
   fetchWithRetry,
   GdtNonJsonResponseError,
@@ -57,6 +60,8 @@ export type PortalProgressEvent = {
   current: number;
   message: string;
   completed: boolean;
+  /** Hóa đơn đang xử lý, ví dụ `HĐ 1847 · C26MSP · CÔNG TY ABC` */
+  currentItem?: string;
 };
 
 @Injectable()
@@ -78,6 +83,7 @@ export class InvoicePortalService implements OnModuleInit {
     private readonly r2: R2Service,
     private readonly notificationsService: NotificationsService,
     private readonly lifecycleService: InvoiceLifecycleService,
+    private readonly branchService: InvoiceBranchService,
     private readonly vinfastPartsService: VinfastPartsService,
     @Optional()
     private readonly categoryAutopostService?: InvoiceCategoryAutopostService,
@@ -690,7 +696,20 @@ export class InvoicePortalService implements OnModuleInit {
         const errors: string[] = [];
         const backgroundSyncIds: string[] = [];
 
-        for (const raw of rawItems) {
+        for (const [idx, raw] of rawItems.entries()) {
+          this.progress$.next({
+            processId: 'sync-progress',
+            type: 'bulk',
+            total: rawItems.length,
+            current: idx,
+            message: `Đang lưu hóa đơn (${idx + 1}/${rawItems.length})...`,
+            completed: false,
+            currentItem: formatInvoiceProgressRef({
+              invoiceNo: String(raw.shdon ?? ''),
+              serialNo: raw.khhdon ?? null,
+              partnerName: direction === 'IN' ? raw.nbten : raw.nmten,
+            }),
+          });
           try {
             const invoiceNo = String(raw.shdon ?? '');
             const serialNo = raw.khhdon ?? null;
@@ -783,7 +802,9 @@ export class InvoicePortalService implements OnModuleInit {
                 saved.buyerTaxCode,
               );
               if (branchId) {
-                await this.repository.update(saved.id, { branchId });
+                await this.branchService.assign([saved.id], [branchId], {
+                  onlyIfUnassigned: true,
+                });
               }
             }
 
@@ -793,7 +814,9 @@ export class InvoicePortalService implements OnModuleInit {
                 saved.buyerTaxCode,
               );
               if (branchId) {
-                await this.repository.update(saved.id, { branchId });
+                await this.branchService.assign([saved.id], [branchId], {
+                  onlyIfUnassigned: true,
+                });
               }
             }
 
@@ -982,6 +1005,20 @@ export class InvoicePortalService implements OnModuleInit {
 
       let current = 0;
       for (const inv of invoices) {
+        const currentItem = formatInvoiceProgressRef({
+          invoiceNo: inv.invoiceNo,
+          serialNo: inv.serialNo,
+          partnerName: inv.direction === 'IN' ? inv.sellerName : inv.buyerName,
+        });
+        this.progress$.next({
+          processId,
+          type: 'bulk',
+          total,
+          current,
+          message: `Đang tải chi tiết & XML hàng loạt (${current + 1}/${total})...`,
+          completed: false,
+          currentItem,
+        });
         try {
           await this.downloadAndSaveXml(inv as any, activeToken, activeCookies);
           current++;
@@ -992,6 +1029,7 @@ export class InvoicePortalService implements OnModuleInit {
             current,
             message: `Đang tải chi tiết & XML hàng loạt (${current}/${total})...`,
             completed: false,
+            currentItem,
           });
           await new Promise((r) => setTimeout(r, 500));
         } catch (e) {
@@ -1096,7 +1134,7 @@ export class InvoicePortalService implements OnModuleInit {
 
     // Trigger Vinfast ledger sync in the background to update any new data
     this.vinfastPartsService
-      .syncLedger()
+      .syncLedger({ invoiceIds: [invoice.id] })
       .catch((e) =>
         this.logger.error(
           `Failed to sync Vinfast ledger for ${invoice.invoiceNo}: ${e.message}`,
@@ -1151,6 +1189,20 @@ export class InvoicePortalService implements OnModuleInit {
     let current = 0;
     for (let i = 0; i < targets.length; i++) {
       const inv = targets[i];
+      const currentItem = formatInvoiceProgressRef({
+        invoiceNo: inv.invoiceNo,
+        serialNo: inv.serialNo,
+        partnerName: inv.direction === 'IN' ? inv.sellerName : inv.buyerName,
+      });
+      this.progress$.next({
+        processId,
+        type: 'sync',
+        total,
+        current,
+        message: `Đang tải chi tiết & XML (${current + 1}/${total})...`,
+        completed: false,
+        currentItem,
+      });
       await this.downloadAndSaveXml(inv, token, cookies).catch((e) =>
         this.logger.error(`Error downloading XML for ${inv.invoiceNo}:`, e),
       );
@@ -1162,6 +1214,7 @@ export class InvoicePortalService implements OnModuleInit {
         current,
         message: `Đang tải chi tiết & XML (${current}/${total})...`,
         completed: false,
+        currentItem,
       });
       if (i + 1 < targets.length) {
         const delay = (4 + Math.random() * 3) * 1000;
@@ -1190,15 +1243,23 @@ export class InvoicePortalService implements OnModuleInit {
     if (invoice.direction === 'OUT') {
       const updated = await this.repository.findOne({
         where: { id: invoice.id },
-        select: ['id', 'settlementOrder', 'branchId', 'buyerTaxCode'],
+        select: [
+          'id',
+          'settlementOrder',
+          'branchId',
+          'branchIds',
+          'buyerTaxCode',
+        ],
       });
       if (updated) {
         const newBranchId = await this.resolveBranchIdForOut(
           updated.settlementOrder,
           updated.buyerTaxCode,
         );
-        if (newBranchId && updated.branchId !== newBranchId) {
-          await this.repository.update(invoice.id, { branchId: newBranchId });
+        if (newBranchId && readBranchIds(updated).length === 0) {
+          await this.branchService.assign([invoice.id], [newBranchId], {
+            onlyIfUnassigned: true,
+          });
           this.logger.log(
             `Branch updated for invoice ${invoice.invoiceNo}: ${updated.branchId} -> ${newBranchId}`,
           );
@@ -1207,15 +1268,23 @@ export class InvoicePortalService implements OnModuleInit {
     } else if (invoice.direction === 'IN') {
       const updated = await this.repository.findOne({
         where: { id: invoice.id },
-        select: ['id', 'sellerTaxCode', 'buyerTaxCode', 'branchId'],
+        select: [
+          'id',
+          'sellerTaxCode',
+          'buyerTaxCode',
+          'branchId',
+          'branchIds',
+        ],
       });
       if (updated) {
         const newBranchId = await this.resolveBranchIdForIn(
           updated.sellerTaxCode,
           updated.buyerTaxCode,
         );
-        if (newBranchId && updated.branchId !== newBranchId) {
-          await this.repository.update(invoice.id, { branchId: newBranchId });
+        if (newBranchId && readBranchIds(updated).length === 0) {
+          await this.branchService.assign([invoice.id], [newBranchId], {
+            onlyIfUnassigned: true,
+          });
           this.logger.log(
             `Branch updated for IN invoice ${invoice.invoiceNo}: ${updated.branchId} -> ${newBranchId}`,
           );
@@ -1578,6 +1647,7 @@ export class InvoicePortalService implements OnModuleInit {
           discountAmount: disc,
           sellerName: json.nbten,
           sellerTaxCode: invoice.sellerTaxCode,
+          direction: invoice.direction,
         });
         const itemCode = resolved.itemCode || rawCode || undefined;
 

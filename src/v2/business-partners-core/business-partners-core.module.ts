@@ -5,6 +5,8 @@ import { ErpBusinessPartnerController } from './controllers/erp-business-partner
 import { BusinessPartnersCoreService } from './business-partners-core.service';
 import { ErpBusinessPartnerCommandService } from './services/erp-business-partner-command.service';
 import { ErpBusinessPartnerQueryService } from './services/erp-business-partner-query.service';
+import { ErpBusinessPartnerInvoiceSyncService } from './services/erp-business-partner-invoice-sync.service';
+import { ErpBusinessPartnerOptionsService } from './services/erp-business-partner-options.service';
 
 @Module({
   imports: [TypeOrmModule.forFeature([ErpBusinessPartner])],
@@ -13,6 +15,8 @@ import { ErpBusinessPartnerQueryService } from './services/erp-business-partner-
     BusinessPartnersCoreService,
     ErpBusinessPartnerQueryService,
     ErpBusinessPartnerCommandService,
+    ErpBusinessPartnerInvoiceSyncService,
+    ErpBusinessPartnerOptionsService,
   ],
   exports: [BusinessPartnersCoreService],
 })

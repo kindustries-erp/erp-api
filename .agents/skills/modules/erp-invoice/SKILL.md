@@ -278,6 +278,33 @@ src/erp-invoices-core/
 
 ## 4. Danh sách API Endpoints & RBAC Contract
 
+### 4.0. API v2 lõi (`/api/v2/invoices`, module `src/v2/invoices/`)
+
+Chạy song song với v1 trên cùng bảng `erp_invoices`, không đổi schema. URL v2 dùng `api/v2` nhờ `GLOBAL_PREFIX_EXCLUDE` (`src/common/config/global-prefix.config.ts`); các route khác vẫn `/api/v1`. Entity `Invoice`, `InvoiceItem` là bản phản ánh cột thật (`synchronize: false`).
+
+| Method | Endpoint | Resource | Action | Ghi chú |
+| :--- | :--- | :--- | :--- | :--- |
+| `GET` | `/api/v2/invoices` | `invoices` | `read` | Envelope `{ items, total, page, pageSize, totalPages, summaries }`; lọc qua `TableQueryDto`; luôn `is_deleted = false` |
+| `GET` | `/api/v2/invoices/column-options` | `invoices` | `read` | Khai báo trước `:id` |
+| `GET` | `/api/v2/invoices/:id` | `invoices` | `read` | `{ message, data }`, `data.items` có dòng hàng |
+| `POST` | `/api/v2/invoices` | `invoices` | `create` | `createdBy` lấy từ JWT (`req.user.sub`), không nhận từ body |
+| `PATCH` | `/api/v2/invoices/:id` | `invoices` | `update` | Gửi `items` thì thay toàn bộ dòng hàng, giữ mã cũ theo diễn giải |
+| `PATCH` | `/api/v2/invoices/bulk-set-branch` | `invoices` | `update` | Bỏ qua hóa đơn POSTED, trả `{ updated, ids, skipped }` |
+| `PATCH` | `/api/v2/invoices/bulk-set-notes` | `invoices` | `update` | `notes` rỗng lưu thành null |
+| `DELETE` | `/api/v2/invoices/:id` | `invoices` | `delete` | Chỉ xóa nháp (`status = DRAFT`), xóa mềm, sau đó xóa XML trên R2 (lỗi R2 chỉ ghi log) |
+
+Quy tắc:
+- `RequirePermissions` trên mọi endpoint; `:id` dùng `ParseUUIDPipe`; route tĩnh khai báo trước `:id`.
+- Chi nhánh (`branchIds`/`branchId`) phải tồn tại và `is_active = true` trong `erp_branches` (cột `is_active`, không có `is_deleted`). `branch_id` = phần tử đầu của `branch_ids`.
+- Hóa đơn POSTED không đổi được chi nhánh trong v2 (`INVOICE_BRANCH_LOCKED_POSTED`) cho tới khi có accounting-core v2 (UC2 chưa port).
+- `invoice_no_normalized` do v2 tự tính khi ghi (`normalizeInvoiceNo`). v1 không ghi cột này nên một số dòng cũ đang NULL.
+- Metadata: `settlement_order`, `license_plate` được trích từ diễn giải/ghi chú/dòng hàng (ghi đè khi có khớp).
+- v2 không import bất cứ thứ gì từ `erp-invoices-core`. Helper được copy vào `src/v2/invoices/helpers/` (`uom`, `invoice-metadata`, `invoice-item-code`, `invoice-no`, `invoice-branch`, `invoice-items`).
+
+`message` là mã (`src/v2/invoices/invoice-messages.ts`): `INVOICE_FETCHED`, `INVOICE_CREATED`, `INVOICE_UPDATED`, `INVOICE_DELETED`, `INVOICE_NOT_FOUND`, `INVOICE_DELETE_NOT_DRAFT`, `INVOICE_BRANCH_NOT_FOUND`, `INVOICE_BRANCH_LOCKED_POSTED`, `INVOICE_BULK_UPDATED`. Web map mã sang translation key.
+
+Chưa port (còn ở v1): attributes, stats, danh sách/export items, netoff, post/unpost/cancel/validate/category, portal GDT, import XML, files/PDF, dashboard, debts, UC2.
+
 ### 4.1. Nhóm API Quản trị Hóa đơn (`/api/v1/erp-invoices`)
 
 | Method | Endpoint | Resource | Action | Mô tả chi tiết |
@@ -320,6 +347,8 @@ src/erp-invoices-core/
 | `POST` | `/erp-invoices/portal/bulk-download-xml` | `invoices` | `update` | Tải bổ sung tệp XML gốc từ GDT cho các hóa đơn chưa có XML trong DB (tự đọc Token/Cookie từ DB) |
 | `POST` | `/erp-invoices/:id/sync-detail` | — | — | Đồng bộ chi tiết dòng mặt hàng từ XML/GDT cho 1 hóa đơn cụ thể (tự đọc Token/Cookie từ DB) |
 | `GET (SSE)` | `/erp-invoices/portal/progress` | — | — | Stream SSE tiến độ đồng bộ hóa đơn GDT thời gian thực |
+
+Ghi chú payload SSE `portal/progress`: thêm trường tùy chọn `currentItem` (`HĐ 1847 · C26MSP · TÊN ĐỐI TÁC`) cho các bước lưu HĐ và tải XML (cả hàng loạt lẫn nền), dựng bởi `helpers/invoice-progress-ref.helper.ts`. Event trước và sau một HĐ dùng cùng `message` để phía web gộp thành một dòng log.
 
 ### 4.4. Nhóm API Tệp Đính Kèm, File R2 & Import/Export
 
@@ -778,6 +807,44 @@ Phân hệ hỗ trợ toàn diện việc trích xuất thông tin từ XML và 
 
 
 
+## Tra cứu NCC & upload PDF thủ công (hóa đơn mua vào)
+
+- `GET /erp-invoices/original-pdf/:id/lookup-info` (READ INVOICES) trả `providerCode, providerName, msttcgp, lookupCode, lookupUrl, pdfSource, pdfFileKey, pdfError, hasXml, hints[]`. Chỉ đọc, không ghi DB. Khi có `xmlFileKey`, facade đọc XML từ R2 để bổ sung mã còn thiếu và `hints`.
+- `POST /erp-invoices/original-pdf/:id/manual-upload` (UPDATE INVOICES, multipart field `file`): chỉ nhận PDF (magic `%PDF`), tối đa 10MB; lưu `invoices/pdf/{id}.pdf`, đặt `pdf_file_key`, `pdf_source='manual_upload'`, `pdf_error=null`. Worker bỏ qua hóa đơn `manual_upload` để không ghi đè.
+- Detector (`invoice-provider-detector.service.ts`):
+  - BKAV (MSTTCGP `0101360697`): `lookupCode` = tag `MCCQT`, `lookupUrl` = `https://van.ehoadon.vn/TCHD`.
+  - Thái Sơn (MSTTCGP `0101300842`): `lookupCode` = TTKhac "Mã TC", `lookupUrl` = TTKhac "ĐCTC".
+  - `hints`: MCCQT, SearchKey, Mã TC, Mã số bí mật, Mã số, ĐCTC.
+- Adapter `XML_LINK` (`adapters/xml-download-link.adapter.ts`): dự phòng khi NCC không có adapter; tải PDF từ TTKhac `DownloadPdf` (chỉ HTTPS, chặn host nội bộ, chấp nhận PDF thuần hoặc ZIP chứa `.pdf`). Helper đọc XML dùng chung: `invoice-xml-reader.helper.ts`.
+- Đã xác nhận không tải tự động được: BKAV (cổng tra cứu có reCAPTCHA), Viettel (cổng yêu cầu phiên đăng nhập), Thái Sơn (captcha ảnh, chưa có adapter), NCC chưa có trong `KNOWN_MSTTCGP` (ví dụ `0101225306`, `0302712571`).
+
 ## Quy ước tên file PDF/XML khi xuất
 - Helper `src/erp-invoices-core/utils/invoice-file-name.util.ts`: `buildInvoiceFileName(invoice, ext, index?)` → `{YYYYMMDD}_{KyHieu}_{SoHD}_{SoTienVND}[_{index}].{ext}` (vd `20250315_C25TAA_0001234_12500000.pdf`); thiếu dữ liệu: `KhongNgay` / `KhongKyHieu` / số tiền `0`; sanitize ký tự cấm + `..`. `uniqueName` chống trùng trong ZIP (`_2`, `_3`).
 - Áp dụng: ZIP hàng loạt (`bulkDownloadFilesZip`), ZIP đã chọn (`bulkDownloadSelectedZip`) qua `buildDownloadTasks` (giữ thư mục `{MST} - {Tên đối tác}/`) và tải lẻ `getFileDownloadUrl` (không còn MST trong tên). Không đổi: PDF đính kèm (`getPdfDownloadUrl`, `downloadAllPdfsZip`) vẫn dùng tên gốc.
+
+## Quy tắc gán mã hàng hóa/dịch vụ (`item_code`) theo chiều hóa đơn
+
+Nguồn duy nhất: `extractStandardItemCode` trong `src/erp-invoices-core/helpers/vinfast-part-code.helper.ts`, nhận thêm ngữ cảnh `direction`, `unit`, người bán. Thứ tự chính:
+
+1. Dòng đơn vị **công/giờ** mà mã là số thuần hoặc `VF-<số>` -> `DV-SUACHUA` (mã công VinFast, không phải phụ tùng).
+2. Chiết khấu/giảm giá -> `CK-*`, trừ dòng điều chỉnh hoặc dòng có mã phụ tùng ở đầu diễn giải (hàng trả, đổi trả giữ mã phụ tùng).
+3. Lệnh sửa chữa `SỬA XE ... QT ...` -> `DV-SUACHUA`; `Chi phí cứu hộ` -> `DV-CUUHO`.
+4. Mã phụ tùng VinFast (`extractVinfastItemCode`): hóa đơn bán nhận mọi mẫu; hóa đơn mua chỉ khi người bán là ứng viên VinFast (tên có "VinFast" hoặc MST Greenway `0318334886`). Mã số thuần không áp dụng cho dòng công.
+5. Bảo hành động cơ `VF-PVT20030000` chỉ là phương án cuối khi diễn giải không có mã thật.
+6. Số thuần từ người bán khác -> `PT-<số>`.
+
+Lưu ý: hàm không có ngữ cảnh (gọi từ XML parser, subscriber) vẫn giữ hành vi cũ (cho phép). Tiền tố mã không ảnh hưởng hạch toán tài khoản; ảnh hưởng báo cáo/lọc theo mã và sổ cái phụ tùng VinFast (chỉ mã `VF-`).
+
+Script sửa mã đã gán sai: `src/erp-invoices-core/scripts/fix-vinfast-item-codes.ts` (dry-run mặc định, `--target=<tenant>-<stage>`, ghi cần `--apply --confirm=<tên DB> --expect=<số dòng dry-run>`).
+
+## Đa chi nhánh (branch_ids)
+
+- Cột `erp_invoices.branch_ids uuid[] NOT NULL DEFAULT '{}'` (GIN index). `branch_id` là chi nhánh chính = `branch_ids[1]`, luôn đồng bộ khi ghi. Mảng rỗng = chưa gán chi nhánh (ghi sổ được, bút toán `branch_id` NULL).
+- Lọc: `column_filters.branchId` dùng overlap `branch_ids && ARRAY[...]::uuid[]`; `__BLANK__` = `cardinality(branch_ids) = 0`. Danh sách giá trị lọc liệt kê từ `UNNEST(branch_ids)`.
+- Ghi sổ: `AccountingCoreService.createJournalEntriesForBranches` tạo N bút toán (một chi nhánh một bút toán, số chứng từ có hậu tố a/b/c). Tiền chia bình quân theo cặp chuyển bằng `splitBalancedLinesByBranch` (`src/common/utils/money-split.util.ts`), mỗi bút toán vẫn cân Nợ = Có.
+- Đổi chi nhánh sau khi ghi sổ: `reallocateJournalEntriesBySource` (xóa mềm bút toán cũ, tạo lại theo chi nhánh mới). Dùng cho `PATCH bulk-set-branch` (body `{ids, branchIds}`, `branchIds: []` = bỏ gán) và `update`.
+- Thống kê `byBranch` (`invoice-stats.service.ts`): hóa đơn nhiều chi nhánh được tách `total / N` theo SQL (`unnest`), hóa đơn rỗng vào nhóm NULL.
+- Lọc công nợ, dashboard, xuất, dòng hàng và tìm kiếm theo `branch_ids` (`branchIdsSqlCondition` / `parseBranchFilter` ở `src/erp-invoices-core/helpers/invoice-branch-filter.helper.ts`; giá trị chi nhánh phải là UUID hoặc `null`). Phân rã theo chi nhánh chia đều giữa các chi nhánh của hóa đơn.
+- Gán chi nhánh: luôn qua `InvoiceBranchService.assign` (ghi cả hai cột, kiểm tra `erp_branches.is_active`, tái phân bổ bút toán trong cùng transaction). Import/cổng thuế dùng `onlyIfUnassigned`.
+- `erp_branches` không có `is_deleted`; dùng `is_active`.
+- Chưa làm: 12 hóa đơn có `branch_id` khác phần tử đầu của `branch_ids` và ~278 hóa đơn đã ghi sổ có bút toán ở chi nhánh khác (xem audit); migration chuẩn hóa và CHECK constraint chờ quyết định.

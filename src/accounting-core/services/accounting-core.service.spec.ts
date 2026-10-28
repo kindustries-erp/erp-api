@@ -132,6 +132,65 @@ describe('AccountingCoreService', () => {
     });
   });
 
+  describe('createJournalEntriesForBranches', () => {
+    it('tạo một bút toán cân cho mỗi chi nhánh, tiền chia bình quân, số chứng từ có hậu tố a/b', async () => {
+      const saved: any[] = [];
+      journalEntryRepo.save = jest.fn().mockImplementation((data) => {
+        saved.push(data);
+        return Promise.resolve(data);
+      });
+      jest.spyOn(service, 'generateEntryNo').mockResolvedValue('HĐB-0001');
+
+      await service.createJournalEntriesForBranches({
+        branchIds: ['b1', 'b2'],
+        date: new Date('2026-07-17'),
+        sourceType: 'INVOICE',
+        sourceId: 'inv-1',
+        entryNoPrefix: 'HĐB',
+        lines: [
+          { accountId: '152', debit: 100, credit: 0 },
+          { accountId: '331', debit: 0, credit: 100 },
+        ],
+      });
+
+      expect(saved).toHaveLength(2);
+      expect(saved.map((e) => e.branchId)).toEqual(['b1', 'b2']);
+      expect(saved.map((e) => e.entryNo)).toEqual(['HĐB-0001a', 'HĐB-0001b']);
+      for (const entry of saved) {
+        const debit = entry.lines.reduce((s, l) => s + l.debit, 0);
+        const credit = entry.lines.reduce((s, l) => s + l.credit, 0);
+        expect(debit).toBe(credit);
+      }
+      expect(
+        saved.flatMap((e) => e.lines).reduce((s, l) => s + l.debit, 0),
+      ).toBe(100);
+    });
+
+    it('branchIds rỗng → một bút toán với branchId = null', async () => {
+      const saved: any[] = [];
+      journalEntryRepo.save = jest.fn().mockImplementation((data) => {
+        saved.push(data);
+        return Promise.resolve(data);
+      });
+      jest.spyOn(service, 'generateEntryNo').mockResolvedValue('HĐM-0002');
+
+      await service.createJournalEntriesForBranches({
+        branchIds: [],
+        date: new Date('2026-07-17'),
+        sourceType: 'INVOICE',
+        sourceId: 'inv-2',
+        lines: [
+          { accountId: '152', debit: 50, credit: 0 },
+          { accountId: '331', debit: 0, credit: 50 },
+        ],
+      });
+
+      expect(saved).toHaveLength(1);
+      expect(saved[0].branchId).toBeNull();
+      expect(saved[0].entryNo).toBe('HĐM-0002');
+    });
+  });
+
   describe('generateEntryNo', () => {
     it('increments sequence atomically using database sequence', async () => {
       journalEntryRepo.manager.query.mockResolvedValueOnce([
@@ -488,6 +547,93 @@ describe('AccountingCoreService', () => {
         }),
       );
       expect(result).toBeDefined();
+    });
+  });
+  describe('reallocateJournalEntriesBySource', () => {
+    const existing = {
+      date: new Date('2026-07-17'),
+      documentDate: null,
+      description: 'Hóa đơn',
+      subjectName: 'NCC',
+      reference: null,
+      lines: [
+        { accountId: '152', debit: 100, credit: 0, description: 'a' },
+        { accountId: '331', debit: 0, credit: 100, description: 'b' },
+      ],
+    };
+    let txManager: any;
+
+    beforeEach(() => {
+      txManager = {
+        query: jest.fn().mockResolvedValue([{ current_value: 1 }]),
+      };
+      journalEntryRepo.manager.transaction = jest.fn((run) => run(txManager));
+    });
+
+    it('runs read, delete and recreate inside one transaction with the same manager', async () => {
+      jest
+        .spyOn(service, 'getJournalEntriesBySource')
+        .mockResolvedValue([existing] as any);
+      const deleteSpy = jest
+        .spyOn(service, 'deleteJournalEntryBySource')
+        .mockResolvedValue(undefined);
+      const createSpy = jest
+        .spyOn(service, 'createJournalEntriesForBranches')
+        .mockResolvedValue({ id: 'new' } as any);
+
+      const result = await service.reallocateJournalEntriesBySource(
+        'inv-1',
+        'INVOICE',
+        ['b1', 'b2'],
+        'HĐM',
+      );
+
+      expect(journalEntryRepo.manager.transaction).toHaveBeenCalledTimes(1);
+      expect(service.getJournalEntriesBySource).toHaveBeenCalledWith(
+        'inv-1',
+        'INVOICE',
+        txManager,
+      );
+      expect(deleteSpy).toHaveBeenCalledWith('inv-1', 'INVOICE', txManager);
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          branchIds: ['b1', 'b2'],
+          entryNoPrefix: 'HĐM',
+        }),
+        txManager,
+      );
+      expect(result).toEqual({ id: 'new' });
+    });
+
+    it('propagates a failure during recreate so the transaction is rolled back', async () => {
+      jest
+        .spyOn(service, 'getJournalEntriesBySource')
+        .mockResolvedValue([existing] as any);
+      jest
+        .spyOn(service, 'deleteJournalEntryBySource')
+        .mockResolvedValue(undefined);
+      jest
+        .spyOn(service, 'createJournalEntriesForBranches')
+        .mockRejectedValue(new Error('insert failed'));
+
+      await expect(
+        service.reallocateJournalEntriesBySource('inv-1', 'INVOICE', ['b1']),
+      ).rejects.toThrow('insert failed');
+      expect(journalEntryRepo.manager.transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns null without deleting when the source has no entries', async () => {
+      jest
+        .spyOn(service, 'getJournalEntriesBySource')
+        .mockResolvedValue([] as any);
+      const deleteSpy = jest.spyOn(service, 'deleteJournalEntryBySource');
+
+      expect(
+        await service.reallocateJournalEntriesBySource('inv-1', 'INVOICE', [
+          'b1',
+        ]),
+      ).toBeNull();
+      expect(deleteSpy).not.toHaveBeenCalled();
     });
   });
 });

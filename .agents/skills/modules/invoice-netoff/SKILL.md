@@ -1,13 +1,13 @@
 ---
 name: invoice-netoff
-description: Module tri thức Quản lý Cấn trừ Hóa đơn & Chứng từ Thanh toán (Smart Net-Off Engine / Invoice-Voucher Net-Off) trong Liouni ERP (erp-invoices-core & bank-transactions-core). Chứa toàn bộ database schema, entities, topologies đối soát 1-1 / N-1 / 1-N, thuật toán Subset-Sum, xử lý bù trừ HĐ điều chỉnh giảm, xử lý HĐ bị thay thế, bóc tách khấu trừ bảo hiểm 500k, quy tắc an toàn số dư không âm và bộ công cụ scripts cấn trừ cho cả hóa đơn Mua vào (IN) và Bán ra (OUT).
+description: Module tri thức Quản lý Cấn trừ Hóa đơn & Chứng từ Thanh toán (Smart Net-Off Engine / Invoice-Voucher Net-Off) trong ERP (erp-invoices-core & bank-transactions-core). Chứa toàn bộ database schema, entities, topologies đối soát 1-1 / N-1 / 1-N, thuật toán Subset-Sum, xử lý bù trừ HĐ điều chỉnh giảm, xử lý HĐ bị thay thế, bóc tách khấu trừ bảo hiểm 500k, quy tắc an toàn số dư không âm và bộ công cụ scripts cấn trừ cho cả hóa đơn Mua vào (IN) và Bán ra (OUT).
 ---
 
 # 📦 Module Tri Thức: Quản Lý Cấn Trừ Hóa Đơn & Chứng Từ Thanh Toán (Smart Net-Off Engine) - Backend (`erp-api`)
 
 ## 1. Tổng quan Nghiệp vụ
 
-Hệ thống **Cấn Trừ Hóa Đơn & Chứng Từ Thanh Toán (Smart Net-Off Engine)** trong Liouni ERP là hạt nhân quản lý vòng đời thanh toán và quyết toán công nợ giữa:
+Hệ thống **Cấn Trừ Hóa Đơn & Chứng Từ Thanh Toán (Smart Net-Off Engine)** trong ERP là hạt nhân quản lý vòng đời thanh toán và quyết toán công nợ giữa:
 - **Hóa đơn đầu ra (`direction = 'OUT'`)** $\leftrightarrow$ **Giao dịch ngân hàng thu tiền (`credit_amount > 0`)** hoặc **Sổ quỹ tiền mặt thu (`cashflow_vouchers`)**.
 - **Hóa đơn đầu vào (`direction = 'IN'`)** $\leftrightarrow$ **Giao dịch ngân hàng chi tiền (`debit_amount > 0` / Ủy nhiệm chi UNC)** hoặc **Phiếu chi tiền mặt (`payment_vouchers`)**.
 
@@ -162,7 +162,7 @@ graph TD
      GROUP BY id HAVING (credit_amount - SUM(net_off_amount)) < -0.01;
      ```
 4. **Cấu Hình `SET synchronous_commit = off` Khi Chạy Batch Lớn**:
-   - Khi kết nối qua PgBouncer/Neon Pooler hoặc remote server có độ trễ I/O, lệnh `COMMIT` dễ bị kẹt `LWLock: WALWrite`. Khắc phục bằng cách chạy `SET synchronous_commit = off;` ngay trước `BEGIN`.
+   - Khi kết nối qua PgBouncer/pooler hoặc remote server có độ trễ I/O, lệnh `COMMIT` dễ bị kẹt `LWLock: WALWrite`. Khắc phục bằng cách chạy `SET synchronous_commit = off;` ngay trước `BEGIN`.
 5. **Không Tự Động Đổi `posting_status` hoặc Sinh `JournalEntry`**:
    - Chỉ tạo bản ghi cấn trừ trong `erp_invoice_voucher_netoff`. Giữ nguyên trạng thái `posting_status = 'UNPOSTED'` trừ khi có chỉ đạo tường minh từ Kế toán trưởng/User.
 
@@ -225,7 +225,11 @@ export function extractPlatesFromText(text: string): string[] {
 ## 7. Tích Hợp API & Frontend UI
 
 ### 7.1. API Endpoints Backend
-- `POST /api/v1/erp-invoices/smart-net-off-suggestions`: Gợi ý cấn trừ sao kê ngân hàng thông minh (6 cấp độ xếp hạng).
+- `POST /api/v1/erp-invoices/smart-net-off-suggestions`: Gợi ý cấn trừ sao kê ngân hàng thông minh (6 cấp độ `badge` giữ nguyên để tương thích; từ v2 mỗi gợi ý có `score.score` = độ tin cậy 0-100, `reasons[]` = lý do cộng/trừ điểm, và chỉ trả gợi ý đạt `MIN_SUGGESTION_CONFIDENCE` = 40).
+  - Quy tắc v2 (`invoice-smart-netoff.service.ts`): từ khóa đối tác chia `strong`/`weak` (`WEAK_PARTNER_WORDS`: bảo hiểm, ngân hàng, địa danh...). Từ yếu **không** tính là khớp đối tác; khớp dùng ranh giới từ (`matchesWord`) nên `4567` không khớp trong `14567`; số HĐ rút gọn (≤5 chữ số, ví dụ 1821) cần đối tác/MST hoặc số tiền khớp chính xác (đo trên 300 hóa đơn production: 97% gợi ý đúng, trúng top 5 ở 88% hóa đơn).
+  - Bắt buộc có tín hiệu đặc hiệu (số HĐ/ký hiệu, biển số, lệnh, MST hoặc từ khóa đối tác mạnh); chỉ khớp số tiền bị loại.
+  - SQL chỉ lấy ứng viên theo tín hiệu mạnh, sắp theo gần ngày hóa đơn, `LIMIT` 300.
+  - Trừ điểm: giao dịch lệch ngày quá xa (`DATE_FAR`), cùng số tiền với nhiều giao dịch khác không có mã (`AMBIGUOUS_AMOUNT`).
 - `POST /api/v1/erp-invoices/:id/net-off-vouchers`: Gán liên kết cấn trừ giữa HĐ và giao dịch ngân hàng.
 - `DELETE /api/v1/erp-invoices/:id/net-off-vouchers/:voucherId`: Hủy liên kết cấn trừ.
 - `POST /api/v1/erp-invoices/bulk-net-offs`: Lấy thông tin cấn trừ hàng loạt cho danh sách HĐ.
@@ -234,3 +238,7 @@ export function extractPlatesFromText(text: string): string[] {
 - **`DrawerDocumentTraceability`**: Hiển thị đồ thị đa tầng liên kết giữa Hóa đơn $\leftrightarrow$ Sao kê ngân hàng $\leftrightarrow$ Phiếu kho $\leftrightarrow$ Sổ cái kế toán $\leftrightarrow$ Vụ việc Garage.
 - **`DrawerNetOffVoucher`**: Drawer thao tác ghép nối và gỡ liên kết cấn trừ trực quan.
 - **`InvoiceColumns`**: Cột hiển thị trạng thái thanh toán, số tiền đã cấn trừ và số dư nợ còn lại.
+
+## 11. Cấn trừ theo công nợ đối tác
+
+Ngoài cấn trừ theo từng hóa đơn (`POST /erp-invoices/:id/net-off-vouchers`), có luồng phân bổ một khoản chưa phân bổ vào nhiều hóa đơn còn mở của cùng đối tác: `POST /erp-invoices/debts/:taxCode/net-off`. Chi tiết và quy tắc kiểm tra xem skill `invoice-debts` mục 10.

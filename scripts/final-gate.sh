@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=1536}"
+
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
 

@@ -16,6 +16,7 @@ import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
 import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import { BranchId } from '../decorators/branch-id.decorator';
+import { SyncAllDto } from '../dto/sync-all.dto';
 
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
 @Controller('greenway')
@@ -31,55 +32,27 @@ export class KgaraSyncController {
     resource: ErpResource.GARAGE,
     action: ErpAction.CREATE,
   })
-  async syncAll(@BranchId() branchId: string) {
+  async syncAll(
+    @BranchId() headerBranchId: string,
+    @Query('branch_id') queryBranchId?: string,
+    @Body() body?: SyncAllDto,
+  ) {
+    const branchId = body?.branchId || queryBranchId || headerBranchId;
     if (!branchId) {
-      return { success: false, message: 'Missing x-kgara-branch-id header' };
+      return { success: false, message: 'Missing branchId' };
     }
-    // 1. Sync branches
-    await this.syncService.syncBranches();
 
-    // 2. Sync cases (with automatic 2-month lookback window)
-    await this.syncService.syncCasesForBranch(
-      branchId,
-      undefined,
-      undefined,
-      undefined,
-    );
-
-    // 3. Sync gross profit across lookback months
-    await this.syncService.syncGrossProfitForBranch(
-      branchId,
-      undefined,
-      undefined,
-    );
-
-    // 4. Incremental sync receivables
-    const recWatermark = await this.syncService.getIncrementalWatermark(
-      branchId,
-      '/api/v1/gr/exports/receivables',
-    );
-    await this.syncService.syncReceivables(
-      branchId,
-      undefined,
-      undefined,
-      recWatermark,
-    );
-
-    // 5. Incremental sync payables
-    const payWatermark = await this.syncService.getIncrementalWatermark(
-      branchId,
-      '/api/v1/gr/exports/payables',
-    );
-    await this.syncService.syncPayables(
-      branchId,
-      undefined,
-      undefined,
-      payWatermark,
-    );
+    const result = await this.syncService.syncAllInOne(branchId, {
+      from: body?.from,
+      to: body?.to,
+      includeDetails: body?.includeDetails,
+      forceDetails: body?.forceDetails,
+    });
 
     return {
       success: true,
-      message: 'Full sync with multi-month lookback completed successfully.',
+      data: result,
+      message: 'All-In-One sync completed successfully.',
     };
   }
 

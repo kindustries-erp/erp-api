@@ -64,7 +64,7 @@ describe('AuthService', () => {
           useValue: {
             getPublicConfig: jest.fn().mockReturnValue({
               appEnv: 'development',
-              appName: 'Liouni ERP',
+              appName: 'ERP',
               version: '1.0.0',
             }),
             getUserPreferences: jest.fn().mockResolvedValue({

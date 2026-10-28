@@ -10,7 +10,10 @@ import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
 import { KgaraCaseLinkedInvoice } from '../entities/kgara_case_linked_invoice.entity';
 import { GarageHubService } from '../hub/garage-hub.service';
 import { applyCaseListFilters } from '../helpers/kgara-case-filter.helper';
-import { applyCaseListSorts } from '../helpers/kgara-case-sort.helper';
+import {
+  applyCaseListDefaultOrder,
+  applyCaseListSorts,
+} from '../helpers/kgara-case-sort.helper';
 import { createDashboardSheet } from '../../common/xlsx-charts/dashboard-sheet.helper';
 import { injectCharts } from '../../common/xlsx-charts/xlsx-chart-injector';
 import {
@@ -39,6 +42,8 @@ export interface CompletedCasesExportParams {
   mode?: 'by-period' | 'by-current-filter';
   filtersStr?: string;
   sorts?: string | string[];
+  /** Key cột Sheet 1 cần xuất; bỏ trống = toàn bộ cột. */
+  selectedColumns?: string[];
 }
 
 @Injectable()
@@ -75,20 +80,22 @@ export class KgaraCompletedCasesExportService {
     const [
       branchNameMap,
       linkedInvoiceSummaryMap,
+      linkedInvoiceVatMap,
       serviceLinesMap,
       settlementsMap,
       caseLedgerMap,
     ] = await Promise.all([
       this.getBranchNameMap(),
       this.getLinkedInvoiceSummaryMap(caseDbIds),
+      this.getLinkedInvoiceVatMap(caseDbIds),
       this.getServiceLinesMap(hdIds, cases),
       this.getSettlementsMap(caseDbIds),
       this.hub.getCaseLedger(caseDbIds),
     ]);
 
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'Liouni ERP';
-    workbook.lastModifiedBy = 'Liouni ERP';
+    workbook.creator = 'ERP';
+    workbook.lastModifiedBy = 'ERP';
     workbook.created = new Date();
 
     // Dashboard tạo đầu tiên để nằm đầu file; điền sau khi có số liệu Sheet 1.
@@ -102,6 +109,8 @@ export class KgaraCompletedCasesExportService {
       settlementsMap,
       serviceLinesMap,
       caseLedgerMap,
+      params.selectedColumns,
+      linkedInvoiceVatMap,
     );
 
     buildSheet2PnlTracking(workbook, cases, branchNameMap, serviceLinesMap);
@@ -136,6 +145,7 @@ export class KgaraCompletedCasesExportService {
   ): Promise<any[]> {
     const qb = this.caseRepo
       .createQueryBuilder('case')
+      .leftJoinAndSelect('case.category', 'cat')
       .leftJoinAndMapOne(
         'case.grossProfit',
         KgaraGrossProfit,
@@ -221,8 +231,10 @@ export class KgaraCompletedCasesExportService {
       applyCaseListFilters(qb, params.filtersStr);
       if (params.sorts && params.sorts.length > 0) {
         applyCaseListSorts(qb, params.sorts);
-        return qb.getMany();
+      } else {
+        applyCaseListDefaultOrder(qb);
       }
+      return qb.getMany();
     }
 
     qb.orderBy('case.ngayHoanThanhCongViec', 'DESC', 'NULLS LAST')
@@ -274,6 +286,61 @@ export class KgaraCompletedCasesExportService {
       this.logger.warn(`Failed to aggregate linked invoices: ${err}`);
     }
     return map;
+  }
+
+  /**
+   * Thuế GTGT theo phiếu = tổng `vat_amount` các hóa đơn đầu ra liên kết (chưa xóa).
+   * Phiếu có hóa đơn dùng chung với phiếu khác không đưa vào map để không cộng đôi;
+   * builder sẽ dùng nguồn dự phòng cho các phiếu đó.
+   */
+  private async getLinkedInvoiceVatMap(
+    caseDbIds: string[],
+  ): Promise<Record<string, number>> {
+    if (!this.linkedInvoiceRepo || caseDbIds.length === 0) return {};
+    try {
+      const rows: {
+        caseDbId: string;
+        invoiceId: string;
+        vatAmount: string | null;
+        sharedCaseCount: string;
+      }[] = await this.linkedInvoiceRepo
+        .createQueryBuilder('l')
+        .innerJoin('erp_invoices', 'inv', 'inv.id = l.invoiceId')
+        .select('l.caseDbId', 'caseDbId')
+        .addSelect('l.invoiceId', 'invoiceId')
+        .addSelect('inv.vat_amount', 'vatAmount')
+        .addSelect(
+          `(SELECT COUNT(DISTINCT s."caseDbId") FROM kgara_case_linked_invoice s WHERE s."invoiceId" = l."invoiceId" AND s."linkType" = 'OUT')`,
+          'sharedCaseCount',
+        )
+        .where("l.linkType = 'OUT'")
+        .andWhere('inv.is_deleted = false')
+        .andWhere('l.caseDbId IN (:...caseDbIds)', { caseDbIds })
+        .getRawMany();
+
+      const excluded = new Set<string>();
+      const perCase = new Map<string, Map<string, number>>();
+      for (const r of rows) {
+        if (!r.caseDbId || r.vatAmount == null) continue;
+        if (Number(r.sharedCaseCount) > 1) {
+          excluded.add(r.caseDbId);
+          continue;
+        }
+        const invoices = perCase.get(r.caseDbId) ?? new Map<string, number>();
+        invoices.set(r.invoiceId, Number(r.vatAmount ?? 0));
+        perCase.set(r.caseDbId, invoices);
+      }
+
+      const map: Record<string, number> = {};
+      for (const [caseDbId, invoices] of perCase) {
+        if (excluded.has(caseDbId)) continue;
+        map[caseDbId] = [...invoices.values()].reduce((a, b) => a + b, 0);
+      }
+      return map;
+    } catch (err) {
+      this.logger.warn(`Failed to aggregate linked invoice VAT: ${err}`);
+      return {};
+    }
   }
 
   private async getServiceLinesMap(

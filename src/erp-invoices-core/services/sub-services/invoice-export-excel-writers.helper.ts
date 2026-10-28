@@ -18,6 +18,22 @@ import {
 
 export * from './invoice-export-excel-columns.helper';
 
+/** Tên các chi nhánh của hóa đơn, nối bằng ", " (rỗng nếu chưa gán). */
+const branchNamesOf = (
+  inv: { branchId?: string | null; branchIds?: string[] | null },
+  branchMap: Record<string, string>,
+): string => {
+  const ids = inv.branchIds?.length
+    ? inv.branchIds
+    : inv.branchId
+      ? [inv.branchId]
+      : [];
+  return ids
+    .map((id) => branchMap[id])
+    .filter(Boolean)
+    .join(', ');
+};
+
 export const writeSummaryRows = (
   sheet: ExcelJS.Worksheet,
   invoiceList: any[],
@@ -79,7 +95,7 @@ export const writeSummaryRows = (
       wo: inv.settlementOrder || '',
       description: fullDesc,
       statusName: formatTaxInvoiceStatus(inv.taxInvoiceStatus),
-      branchName: branchMap[inv.branchId || ''] || '',
+      branchName: branchNamesOf(inv, branchMap),
       netOffReferences: (inv as any).netOffReferences || '',
       netOffTransDate: (inv as any).netOffTransDate || '',
       netOffTransDesc: (inv as any).netOffTransDesc || '',
@@ -206,7 +222,7 @@ export const writeDetailedRows = (
         wo: inv.settlementOrder || '',
         description: fullDesc,
         statusName: formatTaxInvoiceStatus(inv.taxInvoiceStatus),
-        branchName: branchMap[inv.branchId || ''] || '',
+        branchName: branchNamesOf(inv, branchMap),
         invoiceSubcategory:
           normalizedFallback.invoiceSubcategory === 'DISCOUNT'
             ? 'Chiết khấu'
@@ -368,7 +384,7 @@ export const writeDetailedRows = (
           wo: inv.settlementOrder || '',
           description: fullDesc,
           statusName: formatTaxInvoiceStatus(inv.taxInvoiceStatus),
-          branchName: branchMap[inv.branchId || ''] || '',
+          branchName: branchNamesOf(inv, branchMap),
           invoiceSubcategory:
             normalizedItem.invoiceSubcategory === 'DISCOUNT'
               ? 'Chiết khấu'

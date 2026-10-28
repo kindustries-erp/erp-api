@@ -16,6 +16,7 @@ describe('KgaraCompletedCasesExportService', () => {
 
   const mockCaseRepo = {
     createQueryBuilder: jest.fn().mockReturnValue({
+      leftJoinAndSelect: jest.fn().mockReturnThis(),
       leftJoinAndMapOne: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
@@ -290,6 +291,7 @@ describe('KgaraCompletedCasesExportService', () => {
   it('should correctly evaluate PnL as "Lãi" with formula and 5-range margin highlight in Theo dõi lãi lỗ', async () => {
     // Giả lập case giống dòng 9 trong ảnh của user: Doanh thu 115M, Chi phí 0, loiNhuan trong DB = 0
     mockCaseRepo.createQueryBuilder.mockReturnValueOnce({
+      leftJoinAndSelect: jest.fn().mockReturnThis(),
       leftJoinAndMapOne: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
@@ -383,6 +385,35 @@ describe('KgaraCompletedCasesExportService', () => {
 
     beforeEach(() => {
       jest.clearAllMocks();
+    });
+
+    it('join danh mục (cat) để bộ lọc Phân loại/Danh mục không lỗi SQL', async () => {
+      await service.exportCompletedCasesExcel({
+        mode: 'by-current-filter',
+        filtersStr: JSON.stringify({ classification: ['OJ'] }),
+      });
+
+      const qb = getQb();
+      expect(qb.leftJoinAndSelect).toHaveBeenCalledWith('case.category', 'cat');
+    });
+
+    it('không có sorts thì dùng thứ tự mặc định của bảng (ngày phát sinh trước)', async () => {
+      await service.exportCompletedCasesExcel({
+        mode: 'by-current-filter',
+        filtersStr: '{}',
+      });
+
+      const qb = getQb();
+      expect(qb.orderBy).toHaveBeenCalledWith(
+        'case.ngayPhatSinh',
+        'DESC',
+        'NULLS LAST',
+      );
+      expect(qb.orderBy).not.toHaveBeenCalledWith(
+        'case.ngayHoanThanhCongViec',
+        'DESC',
+        'NULLS LAST',
+      );
     });
 
     it('bỏ điều kiện "phiếu kết thúc" và lọc kỳ theo ngày phát sinh như bảng', async () => {
@@ -576,5 +607,49 @@ describe('KgaraCompletedCasesExportService', () => {
         'Chế độ: Theo filter hiện tại của bảng',
       );
     });
+  });
+  it('getLinkedInvoiceVatMap: cộng VAT hóa đơn riêng, bỏ phiếu có hóa đơn dùng chung và hóa đơn thiếu VAT', async () => {
+    const queryBuilder = {
+      innerJoin: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([
+        {
+          caseDbId: 'case-1',
+          invoiceId: 'inv-1',
+          vatAmount: '156000',
+          sharedCaseCount: '1',
+        },
+        {
+          caseDbId: 'case-1',
+          invoiceId: 'inv-4',
+          vatAmount: '50',
+          sharedCaseCount: '1',
+        },
+        {
+          caseDbId: 'case-2',
+          invoiceId: 'inv-2',
+          vatAmount: '100',
+          sharedCaseCount: '2',
+        },
+        {
+          caseDbId: 'case-3',
+          invoiceId: 'inv-3',
+          vatAmount: null,
+          sharedCaseCount: '1',
+        },
+      ]),
+    };
+    mockLinkedInvoiceRepo.createQueryBuilder.mockReturnValueOnce(queryBuilder);
+
+    const map = await service['getLinkedInvoiceVatMap']([
+      'case-1',
+      'case-2',
+      'case-3',
+    ]);
+
+    expect(map).toEqual({ 'case-1': 156050 });
   });
 });
