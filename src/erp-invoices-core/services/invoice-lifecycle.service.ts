@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { FindOptionsWhere, In, Repository } from 'typeorm';
 
 import { ErpInvoice } from '../entities/erp_invoice.entity';
 import { InvoiceBranchService } from './invoice-branch.service';
@@ -63,6 +63,27 @@ export class InvoiceLifecycleService {
   // Read
   // ---------------------------------------------------------------------------
 
+  /**
+   * Tra cứu theo số hoặc ký hiệu đơn lẻ. Số hóa đơn có thể trùng giữa các ký hiệu/năm/đối tác,
+   * nên khi có nhiều kết quả thì báo lỗi yêu cầu nhập ký hiệu_số, không trả một bản ghi tùy ý.
+   */
+  private async findSingleByNumber(
+    where: FindOptionsWhere<ErpInvoice>,
+    relations: string[],
+  ): Promise<ErpInvoice | null> {
+    const rows = await this.repository.find({ where, relations, take: 6 });
+    if (rows.length > 1) {
+      const options = rows
+        .slice(0, 5)
+        .map((r) => `${r.serialNo ?? '-'}_${r.invoiceNo}`)
+        .join(', ');
+      throw new BadRequestException(
+        `Có ${rows.length} hóa đơn trùng số, vui lòng nhập theo ký hiệu_số (ví dụ: ${options}).`,
+      );
+    }
+    return rows[0] ?? null;
+  }
+
   async findOne(id: string) {
     const isUuid =
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
@@ -116,17 +137,17 @@ export class InvoiceLifecycleService {
     }
 
     if (!data) {
-      data = await this.repository.findOne({
-        where: { invoiceNo: id, isDeleted: false },
+      data = await this.findSingleByNumber(
+        { invoiceNo: id, isDeleted: false },
         relations,
-      });
+      );
     }
 
     if (!data) {
-      data = await this.repository.findOne({
-        where: { serialNo: id, isDeleted: false },
+      data = await this.findSingleByNumber(
+        { serialNo: id, isDeleted: false },
         relations,
-      });
+      );
     }
 
     if (!data && !isUuid) {

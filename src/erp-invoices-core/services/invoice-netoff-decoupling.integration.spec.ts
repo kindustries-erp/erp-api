@@ -28,6 +28,7 @@ function setupFixture() {
   const netOffs: any[] = [];
 
   const repository: any = {
+    find: jest.fn(async () => []),
     findOne: jest.fn(async ({ where }: any) => {
       if (where?.id === invoice.id && where?.isDeleted === false) {
         return invoice;
