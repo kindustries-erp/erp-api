@@ -79,7 +79,7 @@ Chạy theo phạm vi thu hẹp trong lúc làm, rồi một lần duy nhất �
 bun run type:check                                 # tsc --noEmit
 bunx jest src/v2/<module>-core --forceExit            # spec của module
 bunx eslint "src/v2/<module>-core/**/*.ts" --max-warnings=0
-bun run verify:final                               # chỉ một lần, trên commit cuối
+bun run verify:final                               # tùy chọn local; full QC chạy trên CI sau push
 ```
 - Test generator (chỉ khi sửa `plop-helpers/`): `bun test plop-helpers` (jest không chạy các file này vì `rootDir` là `src`).
 - Cập nhật module skill theo Knowledge-Sync: `.agents/skills/modules/<module>/SKILL.md` (hoặc `/scan-module-knowledge`).

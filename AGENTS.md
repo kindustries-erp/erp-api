@@ -54,12 +54,13 @@ Mandatory reading order when working on a specific family:
 - **Verify Runtime**: Read the actual `.env` before making changes (no outdated assumptions).
 
 ### Pre-Commit/Push Checklist
-After committing and rebasing, run the Final Gate once on the final commit:
+- **Commit** (`pre-commit`, lint-staged): eslint --fix + prettier trên file staged, cộng test liên quan (`jest --findRelatedTests` / `vitest related`). Bypass khẩn cấp: `git commit --no-verify`.
+- **Push** (`pre-push`): chỉ `bun run type:check`. Bypass: `SKIP_TESTS=1`.
+- **Full test / build / check:ci**: chạy ở GitHub CI (pipeline từng repo), không chạy tự động ở local. Chạy tay khi cần: `bun run verify:final` (ERP) hoặc `bun run check:ci`.
 ```bash
 git commit
 git pull --rebase github-industries [target-branch]
-bun run verify:final
-git push github-industries [target-branch] --no-verify
+git push github-industries [target-branch]
 ```
 
 ---
@@ -108,8 +109,8 @@ Repo-level workflows (e.g. `erp/erp-web/.agents/workflows/standardize-drawer.md`
 ### Scenario 2: Committing & Pushing Code (ERP)
 1. Load `/erp-git-workflow` workflow.
 2. Ensure you're on `erp-master`.
-3. Commit with the fast pre-commit hook, then `git pull --rebase github-industries erp-master`.
-4. Run `bun run verify:final` once on the clean final commit, then push with `--no-verify`.
+3. Commit (pre-commit lint + test liên quan), then `git pull --rebase github-industries erp-master`.
+4. Push (pre-push type-check). Full test/build chạy trên GitHub CI sau khi push.
 
 ### Scenario 3: Building a Data Table (ERP Web)
 1. Load `/standardize-table` workflow.
@@ -174,7 +175,7 @@ Repo-level workflows (e.g. `erp/erp-web/.agents/workflows/standardize-drawer.md`
 - ❌ Don't leave ad-hoc `.ts` files at repo root (breaks `dist/` output structure)
 - ❌ Don't reference outdated docs (always verify with actual code state)
 - ❌ Don't mix database schemas, `.env`, or domain models between ERP and Klotus
-- ❌ Don't commit/push code without a passing `verify:final` on the final commit
+- ❌ Don't push code that fails `type:check` (pre-push) or whose CI run is red on GitHub
 
 ---
 
@@ -256,8 +257,9 @@ Source of truth for this repo (`./erp-api`).
 
 ### 3. Strict Pre-push Hook
 
-- Before running `git push`, you **MUST** run `bun run check:ci` and `bun run test` (or the equivalent test script for API).
-- Do NOT push if any of these commands fail. Fix the issues first.
+- Commit: pre-commit tự chạy lint-staged (eslint, prettier, `jest --findRelatedTests` trên file staged). Không chạy full test thủ công.
+- Push: pre-push chạy `bun run type:check`. Do NOT push if it fails.
+- Full test / build / check:ci chạy trên GitHub CI (job `check`, `test`, `build`). Không push tiếp khi CI của nhánh đang đỏ.
 
 ### 4. Rebase First Conflict Resolution
 
@@ -320,10 +322,7 @@ Source of truth for this repo (`./erp-api`).
 
 2. When asked to **commit code**, you MUST execute the following in order:
    - Ensure current branch is `erp-master`
-   - `bun run build`
-   - `bun run check:ci`
-   - `bun run test` (or `bunx jest --forceExit`)
-   - `git commit`
+   - `git commit` (pre-commit tự chạy lint-staged và `jest --findRelatedTests` trên file staged; không chạy full test thủ công)
 
 3. When asked to **pull code**, you MUST execute the following in order:
    - If there are uncommitted changes, you MUST execute the full **commit code** sequence first.
@@ -332,10 +331,7 @@ Source of truth for this repo (`./erp-api`).
 4. When asked to **push code**, you MUST execute the following in order:
    - If there are uncommitted changes, you MUST execute the full **commit code** sequence first.
    - `git pull --rebase github-industries erp-master` (and resolve conflicts if any)
-   - `bun run build`
-   - `bun run check:ci`
-   - `bun run test` (or `bunx jest --forceExit`)
-   - `git push github-industries erp-master`
+   - `git push github-industries erp-master` (pre-push chạy `bun run type:check`; full test/build/check:ci chạy trên GitHub CI, theo dõi CI sau khi push)
 
 5. When asked to **sync/deploy to downstream branches** (`erp-greenway-production`, `erp-greenway-staging`, `erp-klotus-*`):
    - First ensure `erp-master` is committed, tested, and pushed to `github-industries erp-master`.

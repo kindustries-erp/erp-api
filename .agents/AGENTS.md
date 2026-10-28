@@ -20,8 +20,9 @@ Source of truth for this repo (`./erp-api`).
 
 ### 3. Strict Pre-push Hook
 
-- Before running `git push`, you **MUST** run `bun run check:ci` and `bun run test` (or the equivalent test script for API).
-- Do NOT push if any of these commands fail. Fix the issues first.
+- Commit: pre-commit tự chạy lint-staged (eslint, prettier, `jest --findRelatedTests` trên file staged). Không chạy full test thủ công.
+- Push: pre-push chạy `bun run type:check`. Do NOT push if it fails.
+- Full test / build / check:ci chạy trên GitHub CI (job `check`, `test`, `build`). Không push tiếp khi CI của nhánh đang đỏ.
 
 ### 4. Rebase First Conflict Resolution
 
@@ -84,10 +85,7 @@ Source of truth for this repo (`./erp-api`).
 
 2. When asked to **commit code**, you MUST execute the following in order:
    - Ensure current branch is `erp-master`
-   - `bun run build`
-   - `bun run check:ci`
-   - `bun run test` (or `bunx jest --forceExit`)
-   - `git commit`
+   - `git commit` (pre-commit tự chạy lint-staged và `jest --findRelatedTests` trên file staged; không chạy full test thủ công)
 
 3. When asked to **pull code**, you MUST execute the following in order:
    - If there are uncommitted changes, you MUST execute the full **commit code** sequence first.
@@ -96,10 +94,7 @@ Source of truth for this repo (`./erp-api`).
 4. When asked to **push code**, you MUST execute the following in order:
    - If there are uncommitted changes, you MUST execute the full **commit code** sequence first.
    - `git pull --rebase github-industries erp-master` (and resolve conflicts if any)
-   - `bun run build`
-   - `bun run check:ci`
-   - `bun run test` (or `bunx jest --forceExit`)
-   - `git push github-industries erp-master`
+   - `git push github-industries erp-master` (pre-push chạy `bun run type:check`; full test/build/check:ci chạy trên GitHub CI, theo dõi CI sau khi push)
 
 5. When asked to **sync/deploy to downstream branches** (`erp-greenway-production`, `erp-greenway-staging`, `erp-klotus-*`):
    - First ensure `erp-master` is committed, tested, and pushed to `github-industries erp-master`.
