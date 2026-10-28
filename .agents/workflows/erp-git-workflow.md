@@ -37,7 +37,7 @@ graph TD
     A["1. cd vào repo con (./erp-api hoặc ./erp-web)"] --> B["2. Xác nhận đang ở nhánh erp-master"]
     B --> C["3. git status -s & Review diff"]
     C --> D["4. 🛡️ Knowledge Sync: Cập nhật SKILL.md nếu sửa DB/API/DTO"]
-    D --> E["5. 🧪 Run Tests: bunx jest --forceExit / bun run test (Pass 100%)"]
+    D --> E["5. 🧪 pre-commit tự chạy lint + test liên quan (không chạy full test)"]
     E --> F["6. git add file code + SKILL.md"]
     F --> G["7. git commit -m 'type(scope): message'"]
 ```
@@ -105,7 +105,7 @@ git pull --rebase $REMOTE_NAME $CURRENT_BRANCH
 
 # Nếu có conflict:
 # 1. Mở file conflict để sửa
-# 2. bun run check:ci (kiểm tra typecheck)
+# 2. bun run type:check (kiểm tra typecheck)
 # 3. git add <resolved-files>
 # 4. git rebase --continue
 ```
@@ -137,6 +137,8 @@ git push $REMOTE_NAME erp-master
 
 # 5. Theo dõi CI GitHub của commit vừa push; phải xanh trước khi sync nhánh khác
 ```
+
+> **Nếu CI đỏ sau khi push**: sửa tiếp trên `erp-master`, commit fix rồi push lại. Không sync sang nhánh downstream và không push thêm thay đổi khác khi CI của `erp-master` còn đỏ.
 
 ---
 
@@ -204,7 +206,7 @@ git checkout erp-master
 - [ ] Đã cập nhật file `SKILL.md` của module bị ảnh hưởng.
 - [ ] `pre-commit` pass khi commit (lint + test liên quan).
 - [ ] `pre-push` pass khi push (`type:check`).
-- [ ] CI GitHub xanh trên commit cuối (check, test, build).
+- [ ] CI GitHub xanh trên commit cuối (check, test, build). Nếu đỏ: fix và push lại trên `erp-master` trước khi làm việc khác.
 - [ ] Đã push thành công lên `github-industries erp-master`.
 - [ ] (Nếu cần deploy các môi trường khác) Đã merge từ `erp-master` sang nhánh đích và push thành công.
 - [ ] Workspace được chuyển trở lại nhánh `erp-master`.
