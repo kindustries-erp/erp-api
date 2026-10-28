@@ -500,3 +500,12 @@ src/modules/bank-statements/components/BankStatementsTab/
 - Export: cột chi nhánh hóa đơn liên kết nối tên bằng `string_agg`.
 - Kiểm tra nhất quán (chỉ đọc): `bun src/erp-invoices-core/scripts/audit-branch-consistency.ts <file.env>`.
 - Chưa làm: import file sao kê không có chi nhánh (`erp_bank_statement_file.branch_id` vẫn NOT NULL, `controller:327` vẫn bắt buộc `branchId`).
+
+## Thu tiền mặt từ sheet Cash-2026 → sổ quỹ & cấn trừ hóa đơn
+
+- Script: `src/bank-transactions-core/scripts/netoff-cash-sheet-invoices.ts` (dry-run mặc định; `--apply --confirm=<DB>` để ghi; `--rollback=<backup.csv>` để gỡ).
+- Util thuần: `utils/cash-sheet-reader.ts` (đọc cột B ngày, C biển số, D tiền thu; bỏ dòng không phải biển như "Số dư đầu kỳ") và `utils/cash-invoice-matcher.ts` (ghép 1-1, cùng biển, hóa đơn xuất từ ngày thu trở đi, |còn lại − tiền thu| < `--tolerance`, mặc định 10.000đ; hạng EXACT / NEAR / WIDE; AMBIGUOUS khi hai ứng viên cùng độ lệch).
+- Giao dịch tạo: `source_type='CASH'`, `credit_amount` = tiền thu, `reference_number = CASH2026-R<dòng sheet>` (idempotent), `cashflow_classification='OPERATING'`, `cashflow_purpose='CUSTOMER_PAYMENT'`, `import_batch_id` riêng cho mỗi lần chạy.
+- Cấn trừ: hóa đơn có MST và đối tác tồn tại → `InvoiceDebtsNetOffService.allocate`; còn lại → `TransactionAccountingService.linkInvoiceToTransaction` sau khi kiểm tra lại số dư.
+- Đã chạy 2026-10-28 trên `erp_greenway_production`: 177 giao dịch CASH, tổng 131.246.000đ; 177 dòng cấn trừ, tổng 131.183.792đ (phần 62.208đ chênh lệch nằm trên giao dịch). Không có giao dịch/hóa đơn nào do lần này gây âm số dư.
+- Quy ước: thu tiền mặt = `credit_amount`. Form tạo phiếu tiền mặt ở web (`CashVoucherFormSections.tsx`) đang gán "Thu" vào `debitAmount` — mâu thuẫn chưa xử lý, không được cấn trừ phiếu tạo từ form đó.
