@@ -4,13 +4,16 @@ const ALGORITHM = 'aes-256-cbc';
 const PREFIX = 'enc:';
 
 /**
- * Derives a deterministic 32-byte key from environment secret or fallback.
+ * Derives a deterministic 32-byte key from an environment secret.
+ * Không có khóa dự phòng cứng trong mã nguồn: thiếu cả hai biến thì báo lỗi rõ ràng.
  */
 function getEncryptionKey(): Buffer {
-  const secret =
-    process.env.GDT_ENCRYPT_SECRET ||
-    process.env.JWT_SECRET ||
-    'liouni-erp-default-secret-key-32b';
+  const secret = process.env.GDT_ENCRYPT_SECRET || process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error(
+      'Thiếu GDT_ENCRYPT_SECRET hoặc JWT_SECRET để mã hóa mật khẩu Cổng Thuế',
+    );
+  }
   return crypto.createHash('sha256').update(secret).digest();
 }
 

@@ -431,7 +431,7 @@ Ghi chú payload SSE `portal/progress`: thêm trường tùy chọn `currentItem
 - **Kiểm tra Hồ sơ Người nộp thuế (`validatePortalTaxpayer`)**:
   - Đối chiếu danh sách mã số thuế trả về từ hồ sơ GDT (`username`, `id`, `groupId`, `tinInfoTT86.mst`,...) với MST doanh nghiệp trong `company_profile` để chặn nguy cơ kéo nhầm dữ liệu đơn vị khác (`GDT_TAXPAYER_MISMATCH`).
 - **Cửa sổ ngày & Phân trang (`helpers/gdt-date-window.helper.ts`)**:
-  - Kéo danh sách theo cửa sổ ngày, mỗi cửa sổ tối đa `GDT_QUERY_WINDOW_DAYS` ngày (mặc định 10, kẹp 1–31), `size=50`, tối đa 50 trang/cửa sổ/endpoint, cursor `state`.
+  - Kéo danh sách theo cửa sổ ngày, mỗi cửa sổ tối đa `GDT_QUERY_WINDOW_DAYS` ngày (mặc định 9, kẹp 1–31), `size=50`, tối đa 50 trang/cửa sổ/endpoint, cursor `state`.
   - Hàng đợi cửa sổ trong `syncFromPortal`: cổng trả 400 hoặc cửa sổ chạm trần 50 trang thì chia đôi và quét lại (đếm `truncatedWindows`). Cửa sổ 1 ngày không chia được nữa thì ghi `failedSegments`.
   - Khoảng trễ ngẫu nhiên 4-7 giây giữa các request để tránh bị chặn IP/tài khoản.
 - **Quét lùi của Cron (`GDT_CRON_LOOKBACK_DAYS`, mặc định 35)**:
