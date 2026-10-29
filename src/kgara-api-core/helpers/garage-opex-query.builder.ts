@@ -27,6 +27,22 @@ export const COMMISSION_GROUP_CATEGORIES = [
   ...SELLING_COMMISSION_CATEGORIES,
 ];
 
+export const FINANCIAL_GROUP_CATEGORIES = [
+  'LAI_VAY',
+  'CHI_PHI_TAI_CHINH',
+  'CHI_PHI_TAI_CHINH_KHAC',
+  'PHI_TAI_CHINH',
+];
+
+export function isFinancialCategory(categoryKey?: string | null): boolean {
+  if (!categoryKey) return false;
+  return (
+    FINANCIAL_GROUP_CATEGORIES.includes(categoryKey) ||
+    categoryKey.includes('TAI_CHINH') ||
+    categoryKey.includes('LAI_VAY')
+  );
+}
+
 function parseMonthYear(
   values: string[],
   prefix: string,
@@ -81,17 +97,20 @@ export function applyOpexListFilters(
     );
   }
 
-  // Filter cost_group (OPEX | COGS | COMMISSION)
+  // Filter cost_group (OPEX | COGS | COMMISSION | FINANCIAL)
   if (query.cost_group && query.cost_group !== 'ALL') {
     if (query.cost_group === 'OPEX') {
-      qb.andWhere('opex.category_key NOT IN (:...cogsAndComm)', {
-        cogsAndComm: [
-          ...COGS_GROUP_CATEGORIES,
-          'HOA_HONG_SALE',
-          'HOA_HONG_DV',
-          'HOA_HONG_KHAC',
-        ],
-      });
+      qb.andWhere(
+        'opex.category_key NOT IN (:...cogsCommFin) AND opex.category_key NOT ILIKE :finPattern',
+        {
+          cogsCommFin: [
+            ...COGS_GROUP_CATEGORIES,
+            ...COMMISSION_GROUP_CATEGORIES,
+            ...FINANCIAL_GROUP_CATEGORIES,
+          ],
+          finPattern: '%TAI_CHINH%',
+        },
+      );
     } else if (query.cost_group === 'COGS') {
       qb.andWhere('opex.category_key IN (:...cogs)', {
         cogs: COGS_GROUP_CATEGORIES,
@@ -100,6 +119,14 @@ export function applyOpexListFilters(
       qb.andWhere('opex.category_key IN (:...comm)', {
         comm: COMMISSION_GROUP_CATEGORIES,
       });
+    } else if (query.cost_group === 'FINANCIAL') {
+      qb.andWhere(
+        '(opex.category_key IN (:...fin) OR opex.category_key ILIKE :finPattern)',
+        {
+          fin: FINANCIAL_GROUP_CATEGORIES,
+          finPattern: '%TAI_CHINH%',
+        },
+      );
     }
   }
 

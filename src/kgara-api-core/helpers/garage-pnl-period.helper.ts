@@ -154,6 +154,8 @@ export function mergePnlMonths(rows: PnlMonthRow[]): PnlMonthRow {
     grossMarginRate: revenue > 0 ? (grossProfit / revenue) * 100 : 0,
     opexTotal: sum((r) => r.opexTotal),
     opexItems: mergeItems(rows.map((r) => r.opexItems)),
+    financialTotal: sum((r) => r.financialTotal || 0),
+    financialItems: mergeItems(rows.map((r) => r.financialItems || [])),
     netBeforeCommission: sum((r) => r.netBeforeCommission),
     hhbhTotal: sum((r) => r.hhbhTotal),
     commissionTotal: sum((r) => r.commissionTotal),
