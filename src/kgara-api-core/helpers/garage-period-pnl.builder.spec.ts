@@ -95,13 +95,14 @@ describe('buildPnlTableRows', () => {
       '5.3 Vật tư tiêu hao',
       '5.4 Bảo trì',
       '5.5 Khấu hao máy móc & thiết bị',
-      '6. Lợi nhuận ròng (trước hoa hồng DV)',
-      '7. Hoa hồng DV',
-      '7.1 Hoa hồng cho DV (10%)',
-      '8. Lợi nhuận ròng (sau hoa hồng DV)',
+      '6. Chi phí tài chính',
+      '7. Lợi nhuận ròng (trước hoa hồng DV)',
+      '8. Hoa hồng DV',
+      '8.1 Hoa hồng cho DV (10%)',
+      '9. Lợi nhuận ròng (sau hoa hồng DV)',
     ]);
     expect(rows.filter((r) => r.level === 1).map((r) => r.value)).toEqual([
-      444218804, 241508218, 202710586, 0, 146500000, 56210586, 5621059,
+      444218804, 241508218, 202710586, 0, 146500000, 0, 56210586, 5621059,
       50589527,
     ]);
   });
@@ -367,9 +368,7 @@ describe('buildPnlTableRows - 3 cấp', () => {
   it('chi phí vận hành: hạng mục cộng dòng cùng khóa, từng dòng nhập ở cấp 3', () => {
     const rows = rowsOf(detailed());
     const a = rows.findIndex((r) => r.label === 'Chi phí vận hành');
-    const b = rows.findIndex((r) =>
-      r.label.startsWith('Lợi nhuận ròng (trước'),
-    );
+    const b = rows.findIndex((r) => r.label === 'Chi phí tài chính');
     expect(rows.slice(a, b).map((r) => [r.level, r.label, r.value])).toEqual([
       [1, 'Chi phí vận hành', 150],
       [2, 'Nhân sự', 130],

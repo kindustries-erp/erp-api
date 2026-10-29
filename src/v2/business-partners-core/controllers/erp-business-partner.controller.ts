@@ -13,13 +13,18 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
-import { RequirePermissions } from '@/auth/decorators/require-permissions.decorator';
+import {
+  RequireAnyPermissions,
+  RequirePermissions,
+} from '@/auth/decorators/require-permissions.decorator';
 import { ErpAction } from '@/rbac-core/enums/erp-action.enum';
 import { ErpResource } from '@/rbac-core/enums/erp-resource.enum';
 import { BusinessPartnersCoreService } from '../business-partners-core.service';
 import { CreateErpBusinessPartnerDto } from '../dto/create-erp-business-partner.dto';
 import { QueryErpBusinessPartnerDto } from '../dto/query-erp-business-partner.dto';
 import { UpdateErpBusinessPartnerDto } from '../dto/update-erp-business-partner.dto';
+import { QueryErpBusinessPartnerOptionsDto } from '../dto/query-erp-business-partner-options.dto';
+import { SyncErpBusinessPartnersFromInvoicesDto } from '../dto/sync-erp-business-partners-from-invoices.dto';
 
 @ApiTags('business-partners')
 @ApiBearerAuth()
@@ -75,6 +80,34 @@ export class ErpBusinessPartnerController {
   @Get('next-code')
   getNextCode(@Query('partnerType') partnerType?: string) {
     return this.service.getNextCode(partnerType);
+  }
+
+  // Dùng chung cho màn sao kê (chọn Đối tượng), nên chỉ cần một trong các quyền này
+  @RequireAnyPermissions(
+    { resource: ErpResource.BUSINESS_PARTNERS, action: ErpAction.READ },
+    { resource: ErpResource.BANK_STATEMENTS, action: ErpAction.READ },
+    { resource: ErpResource.CASH_STATEMENTS, action: ErpAction.READ },
+  )
+  @ApiOperation({
+    summary:
+      'Danh sách chọn đối tượng: đối tác trong danh mục và người mua/bán từ hóa đơn',
+  })
+  @Get('options')
+  listOptions(@Query() query: QueryErpBusinessPartnerOptionsDto) {
+    return this.service.listOptions(query);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.BUSINESS_PARTNERS,
+    action: ErpAction.CREATE,
+  })
+  @ApiOperation({
+    summary:
+      'Đồng bộ đối tác từ hóa đơn (mỗi MST một đối tác, dryRun để xem trước)',
+  })
+  @Post('sync-from-invoices')
+  syncFromInvoices(@Body() dto: SyncErpBusinessPartnersFromInvoicesDto) {
+    return this.service.syncFromInvoices(dto.dryRun ?? false);
   }
 
   @RequirePermissions({

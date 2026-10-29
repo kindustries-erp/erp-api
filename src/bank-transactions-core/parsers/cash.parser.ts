@@ -54,13 +54,13 @@ export async function parseCashXlsx(
             header.includes('thu') ||
             header.includes('ghi nợ')
           )
-            colMap['debit'] = idx;
+            colMap['receipt'] = idx;
           else if (
             header.includes('phát sinh có') ||
             header.includes('chi') ||
             header.includes('ghi có')
           )
-            colMap['credit'] = idx;
+            colMap['payment'] = idx;
           else if (header.includes('số dư')) colMap['balance'] = idx;
           else if (
             header.includes('số ct') ||
@@ -137,8 +137,9 @@ export async function parseCashXlsx(
       transDate: transDate.toISOString(),
       efdDate: parseDate('efdDate')?.toISOString(),
       referenceNumber: parseString('refNum') || undefined,
-      debitAmount: parseNumber('debit'),
-      creditAmount: parseNumber('credit'),
+      // Sổ quỹ: thu = credit_amount, chi = debit_amount (đồng bộ backend và web)
+      creditAmount: parseNumber('receipt'),
+      debitAmount: parseNumber('payment'),
       balance: parseNumber('balance') || undefined,
       seqNo: parseString('seqNo') || undefined,
       description: parseString('description') || undefined,

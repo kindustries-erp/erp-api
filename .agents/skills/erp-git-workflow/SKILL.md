@@ -16,10 +16,10 @@ Skill này định nghĩa quy trình chuẩn chỉnh và an toàn tuyệt đối
    - Luôn `cd` vào repo con tương ứng theo đường dẫn tương đối:
      - Backend API: `./erp-api`
      - Frontend Web: `./erp-web`
-2. **🛡️ Test-First Guard (Bắt buộc chạy Unit Test & Fix trước khi Commit & Push)**:
-   - **Backend (`erp-api`)**: **BẮT BUỘC** chạy `bunx jest --forceExit` và sửa triệt để 100% lỗi test trước khi thực hiện `git commit` và trước khi `git push`.
-   - **Frontend (`erp-web`)**: **BẮT BUỘC** chạy `bun run test` và sửa triệt để 100% lỗi test trước khi thực hiện `git commit` và trước khi `git push`.
-   - Tuyệt đối KHÔNG commit hoặc push code khi test suites còn failing.
+2. **🛡️ Test-First Guard (phân tầng)**:
+   - **Commit**: `pre-commit` (lint-staged) tự chạy eslint, prettier và `jest --findRelatedTests` trên file staged. Không chạy full test thủ công trước commit.
+   - **Push**: `pre-push` chạy `bun run type:check`. Không push khi type-check lỗi.
+   - **Full test / build / check:ci**: chạy trên GitHub CI. Không push tiếp khi CI của nhánh đang đỏ.
 3. **Không bao giờ làm mất / ghi đè code (No Override)**:
    - Khi có local changes (chưa commit), **BẮT BUỘC commit trước khi pull**. Tuyệt đối không pull khi working tree chưa commit để tránh rủi ro override hoặc mất code.
 4. **Không commit file nhạy cảm**:
@@ -199,19 +199,7 @@ git pull --rebase $REMOTE_NAME $CURRENT_BRANCH
 
 # (Nếu có conflict -> tiến hành resolve như Mục 3)
 
-# 4. Kiểm tra QC nghiêm ngặt trước khi push (Typecheck, Lint, Prettier, Unit Test)
-bun run check:ci
-
-# Chạy Unit test tương ứng từng repo:
-# - Trong erp-api: bunx jest --forceExit
-# - Trong erp-web: bun run test
-if [ -f "jest.config.ts" ] || [ -f "jest.config.js" ]; then
-  bunx jest --forceExit
-else
-  bun run test
-fi
-
-# 5. Push lên remote
+# 4. Push lên remote (pre-push chạy type:check; full QC chạy trên GitHub CI)
 git push $REMOTE_NAME $CURRENT_BRANCH
 ```
 
@@ -222,9 +210,7 @@ git push $REMOTE_NAME $CURRENT_BRANCH
 - [ ] Đường dẫn sử dụng là tương đối (`./erp-api` hoặc `./erp-web`), không phụ thuộc workspace root tuyệt đối.
 - [ ] Không có file `.env` hay secret nào bị lọt vào staging/commit.
 - [ ] **Module Knowledge Sync Guard**: Đã rà soát và cập nhật/xóa bớt nội dung trong `SKILL.md` của các module bị ảnh hưởng.
-- [ ] **Unit Tests Guard**:
-  - `erp-api`: Đã chạy `bunx jest --forceExit` và pass 100% tất cả test suites (đã fix toàn bộ lỗi phát sinh) **trước khi commit và trước khi push**.
-  - `erp-web`: Đã chạy `bun run test` và pass 100% tất cả test suites **trước khi commit và trước khi push**.
+- [ ] **Test Guard**: `pre-commit` pass khi commit; `pre-push` (type:check) pass khi push; CI GitHub của commit đã push xanh (test, check, build).
 - [ ] Mọi local changes đều đã được commit an toàn trước khi pull rebase.
 - [ ] `git pull --rebase` đã thành công, không còn trạng thái conflict dở dang.
 - [ ] `bun run check:ci` đã pass sạch lỗi (TypeScript + ESLint + Prettier).

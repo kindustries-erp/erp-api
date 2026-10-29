@@ -69,6 +69,102 @@ describe('ErpInvoicesCronService', () => {
     });
   });
 
+  describe('autoSyncCurrentMonth - lookback & partial failures', () => {
+    beforeEach(() => {
+      jest.spyOn(cronUtil, 'isGdtInvoiceCronEnabled').mockReturnValue(true);
+      jest.spyOn(cronUtil, 'isWithinInvoiceSyncWindow').mockReturnValue(true);
+      erpInvoicesCoreService.getPortalConfig.mockResolvedValue({
+        token: 'valid-token',
+        cookies: 'c',
+      });
+      erpInvoicesCoreService.checkTokenValid.mockResolvedValue(true);
+      jest.spyOn(global, 'setTimeout').mockImplementation((cb: any) => {
+        cb();
+        return {} as any;
+      });
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+      jest.restoreAllMocks();
+    });
+
+    it('looks back 35 days from today in Vietnam time, so a run at 01/10 09:15 covers 30/09', async () => {
+      // 2026-10-01 09:15 Việt Nam = 2026-10-01 02:15 UTC
+      jest.useFakeTimers({ doNotFake: ['setTimeout'] });
+      jest.setSystemTime(new Date('2026-10-01T02:15:00Z'));
+
+      await cronService.autoSyncCurrentMonth();
+
+      expect(erpInvoicesCoreService.syncFromPortal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'purchase',
+          dateFrom: '2026-08-27',
+          dateTo: '2026-10-01',
+        }),
+        undefined,
+        true,
+      );
+      expect(erpInvoicesCoreService.syncFromPortal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'sold',
+          dateFrom: '2026-08-27',
+          dateTo: '2026-10-01',
+        }),
+        undefined,
+        true,
+      );
+    });
+
+    it('still syncs sold invoices when purchase sync throws', async () => {
+      erpInvoicesCoreService.syncFromPortal
+        .mockRejectedValueOnce(new Error('GDT 500'))
+        .mockResolvedValueOnce({ failedSegments: [] });
+
+      await cronService.autoSyncCurrentMonth();
+
+      expect(erpInvoicesCoreService.syncFromPortal).toHaveBeenCalledTimes(2);
+      expect(erpInvoicesCoreService.syncFromPortal).toHaveBeenLastCalledWith(
+        expect.objectContaining({ type: 'sold' }),
+        undefined,
+        true,
+      );
+      expect(notificationsService.createForUser).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({
+          type: 'WARNING',
+          message: expect.stringContaining('lỗi: GDT 500'),
+        }),
+      );
+    });
+
+    it('notifies users when a sync reports failed segments or amount conflicts', async () => {
+      erpInvoicesCoreService.syncFromPortal
+        .mockResolvedValueOnce({
+          failedSegments: ['/query/invoices/purchase ngày 01/10/2026'],
+          identityConflicts: [
+            {
+              invoiceNo: '1',
+              serialNo: 'K26',
+              existingTotal: '1',
+              newTotal: '2',
+            },
+          ],
+        })
+        .mockResolvedValueOnce({ failedSegments: [] });
+
+      await cronService.autoSyncCurrentMonth();
+
+      expect(notificationsService.createForUser).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({
+          type: 'WARNING',
+          message: expect.stringContaining('mua vào: 1 phần lỗi'),
+        }),
+      );
+    });
+  });
+
   describe('autoSyncCurrentMonth', () => {
     beforeEach(() => {
       jest.spyOn(cronUtil, 'isGdtInvoiceCronEnabled').mockReturnValue(true);

@@ -25,7 +25,7 @@ graph LR
    - *Quy tắc Lập Plan (Zero Execution)*: Mã lệnh trong mục `Verification` chỉ là **ĐẶC TẢ VĂN BẢN (Text Specification)** để cam kết tiêu chí hoàn thành, **TUYỆT ĐỐI KHÔNG ĐƯỢC CHẠY** trong lúc lập Plan. Lệnh này CHỈ ĐƯỢC CHẠY ở Phase 5 sau khi User đã duyệt Plan.
    - *Test Runner Duy Nhất*: Trong `erp-api`, test runner duy nhất là **`jest`** (`bunx jest <spec>`, `bunx jest --findRelatedTests <file>`) hoặc `bunx tsc --noEmit`. **TUYỆT ĐỐI CẤM GÕ LỆNH `vitest` TRONG `erp-api`**.
    - *Atomic Task (`Z`)*: BẮT BUỘC dùng Scoped Test nhanh (< 5–10s). **TUYỆT ĐỐI CẤM** chạy full test suite (`bunx jest`, `bun run test`, `bun run check:ci`) ở từng task nhỏ để tránh nghẽn CPU.
-   - *Final Gate (Phase 3)*: Chỉ chạy `bun run verify:final` DUY NHẤT một lần ở Task 3.1.1, **sau khi đã commit và `git pull --rebase`** (script yêu cầu working tree sạch), rồi mới push `--no-verify`.
+   - *Final Gate (Phase 3)*: Commit (pre-commit chạy lint + `jest --findRelatedTests`) → `git pull --rebase` → `git push` (pre-push chạy `type:check`). Full test/build/check:ci chạy trên GitHub CI; xác nhận CI xanh ở Task 3.1.1. `bun run verify:final` là lệnh local tùy chọn.
 4. **Real-time Tracking & Test-First Tick**: Tại mỗi thời điểm **chỉ có duy nhất 1 task** ở trạng thái `[/] In Progress`. Tuyệt đối không tick `[x]` nếu lệnh kiểm thử chưa PASS 100%. Cập nhật tiến độ vào file `implementation_plan.md` ngay sau mỗi task.
 5. **Session Checkpoint Protocol (Pause & Resume)**: Hỗ trợ tạm dừng và tiếp tục mượt mà. Khi tạm dừng, bắt buộc ghi log vào mục `## ⏸️ Session Checkpoint`. Khi tiếp tục, Agent đọc lại Checkpoint để xác định chính xác task đang dang dở và bắt đầu làm tiếp ngay mà không phải hỏi lại từ đầu.
 6. **Knowledge-Sync Guard (Cập nhật Tri thức / Skill Liền Tay)**: Ngay sau khi hoàn thành task hoặc feature có thay đổi về Database schema, API contracts hoặc business logic cốt lõi, Agent **BẮT BUỘC cập nhật lại Module Skill** tương ứng (tại `erp/erp-api/.agents/skills/modules/<module>/SKILL.md`) hoặc chạy skill `/scan-module-knowledge` để tạo mới/đồng bộ tri thức. Tuyệt đối không để tri thức trong skill bị lỗi thời.
@@ -78,7 +78,7 @@ Phân chia toàn bộ công việc theo hệ thống đánh số 3 cấp **`X.Y.
 | **Service Logic / Spec** | `bunx jest src/modules/<path>/<file>.spec.ts` | **CẤM gõ `vitest`** |
 | **File mã nguồn thay đổi** | `bunx jest --findRelatedTests src/modules/<path>/<file>.ts` | **CẤM gõ `vitest`** |
 | **Controller & RBAC** | `bunx jest src/modules/<path>/<file>.controller.spec.ts` | **CẤM gõ `vitest`** |
-| **Final Gate (Task 3.1.1)** | `bun run verify:final` | Chạy DUY NHẤT ở Phase 3 trên commit cuối |
+| **Final Gate (Task 3.1.1)** | CI GitHub xanh: job check, test, build | Xác nhận sau khi push trên commit cuối; `verify:final` local là tùy chọn |
 
 #### Cấu trúc một Task chuẩn:
 ```markdown
@@ -128,7 +128,7 @@ Khi bắt đầu lại phiên làm việc (User gõ `tiếp tục`, `continue`, 
 4. **Thực thi liền mạch**: Bắt tay làm tiếp ngay từ đúng bước trong checkpoint mà không làm lại từ đầu.
 
 #### 4. Nghiệm thu, Cập nhật Tri thức & Báo cáo (Walkthrough & Knowledge Sync)
-- **Nghiệm thu cuối cùng (Final Gate)**: Chạy `bun run verify:final` DUY NHẤT một lần ở cuối toàn bộ kế hoạch, sau khi commit và `git pull --rebase`; sau đó push bằng `--no-verify`.
+- **Nghiệm thu cuối cùng (Final Gate)**: Sau khi commit và `git pull --rebase`, push (pre-push chạy `type:check`) rồi xác nhận CI GitHub xanh trên commit cuối.
 - **Knowledge & Skill Sync (Bắt buộc kiểm tra & cập nhật liền sau khi xong task)**:
   - Nếu có thay đổi Schema, DTOs, endpoints, relations: cập nhật vào Module Skill (`erp/erp-api/.agents/skills/modules/<module-name>/SKILL.md`) hoặc chạy `/scan-module-knowledge`.
   - Nếu là module hoàn toàn mới: tạo file skill mới tại `erp/erp-api/.agents/skills/modules/<module-name>/SKILL.md` và gắn link vào `erp-api-current-truth`.
@@ -212,10 +212,10 @@ Tóm tắt mục tiêu bài toán và giá trị mang lại.
 
 ### Phase 3: QC & Knowledge Sync
 #### 3.1 Automated Tests & CI Check
-- [ ] **Task 3.1.1: Chạy Full Unit Test Suite & Pre-commit Check**
+- [ ] **Task 3.1.1: Xác nhận CI GitHub xanh trên commit cuối**
   - **Phân hệ**: `QC` | **Ưu tiên**: `P0`
-  - **DoD**: 100% test suites pass, không có lỗi ESLint, Prettier và TypeScript.
-  - **Verification**: `bun run verify:final`
+  - **DoD**: CI xanh (job check, test, build): 100% test pass, không lỗi ESLint, Prettier và TypeScript.
+  - **Verification**: CI GitHub của nhánh đích xanh; tùy chọn `bun run verify:final` local.
 
 #### 3.2 Knowledge & Skill Sync
 - [ ] **Task 3.2.1: Cập nhật Module Skill & Current-Truth**

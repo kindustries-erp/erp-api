@@ -29,6 +29,25 @@ export class ErpBusinessPartnerCommandService {
     }
   }
 
+  /** MST là khóa gom đối tác từ hóa đơn: một MST chỉ thuộc một đối tác chưa xóa mềm. */
+  async assertTaxCodeAvailable(
+    taxCode: string,
+    excludeId?: string,
+  ): Promise<void> {
+    const qb = this.repo
+      .createQueryBuilder('e')
+      .where('e.taxCode = :taxCode', { taxCode })
+      .andWhere('e.isDeleted = :isDeleted', { isDeleted: false });
+    if (excludeId) qb.andWhere('e.id != :excludeId', { excludeId });
+
+    const owner = await qb.getOne();
+    if (owner) {
+      throw new BadRequestException(
+        `MST "${taxCode}" đã thuộc đối tác "${owner.code}"`,
+      );
+    }
+  }
+
   create(dto: CreateErpBusinessPartnerDto): Promise<ErpBusinessPartner> {
     const entity = this.repo.create({
       ...toErpBusinessPartnerEntityFields(dto),

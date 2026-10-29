@@ -12,6 +12,7 @@ import { splitEvenly } from '../../common/utils/money-split.util';
 import { UpdateBankTransactionDto } from '../dto/update-bank-transaction.dto';
 import { CreateBankTransactionDto } from '../dto/create-bank-transaction.dto';
 import { normalizeBranchColumns } from '../../common/utils/branch-ids.util';
+import { BusinessPartnersCoreService } from '../../v2/business-partners-core/business-partners-core.service';
 import {
   CashflowClassification,
   CashflowPurpose,
@@ -25,6 +26,7 @@ export class TransactionAccountingService {
     private readonly transactionRepo: Repository<ErpBankTransaction>,
     private readonly dataSource: DataSource,
     private readonly accountingCoreService: AccountingCoreService,
+    private readonly partners: BusinessPartnersCoreService,
   ) {}
 
   private assertCashflowPair(
@@ -33,6 +35,22 @@ export class TransactionAccountingService {
   ): void {
     if (!isPurposeAllowed(classification, purpose)) {
       throw new BadRequestException('Mục đích không thuộc Phân loại đã chọn.');
+    }
+  }
+
+  /** Chặn id chi nhánh không tồn tại, tránh lỗi FK 500 từ DB. */
+  private async assertBranchesExist(branchIds: string[]): Promise<void> {
+    if (branchIds.length === 0) return;
+    const rows: { id: string }[] = await this.dataSource.query(
+      'SELECT id FROM erp_branches WHERE id = ANY($1)',
+      [branchIds],
+    );
+    const found = new Set(rows.map((row) => row.id));
+    const missing = branchIds.filter((id) => !found.has(id));
+    if (missing.length > 0) {
+      throw new BadRequestException(
+        `Chi nhánh không tồn tại: ${missing.join(', ')}`,
+      );
     }
   }
 
@@ -46,13 +64,12 @@ export class TransactionAccountingService {
     const createData = { ...dto };
     delete (createData as any).attributes;
     // Chuẩn hóa hai cột chi nhánh để branch_ids luôn là nguồn chuẩn
-    Object.assign(
-      createData,
-      normalizeBranchColumns({
-        branchIds: dto.branchIds,
-        branchId: dto.branchId,
-      }),
-    );
+    const branchColumns = normalizeBranchColumns({
+      branchIds: dto.branchIds,
+      branchId: dto.branchId,
+    });
+    await this.assertBranchesExist(branchColumns.branchIds);
+    Object.assign(createData, branchColumns);
     const txn = this.transactionRepo.create(createData);
     return this.transactionRepo.save(txn);
   }
@@ -270,16 +287,26 @@ export class TransactionAccountingService {
         ? dto.cashflowPurpose
         : txn.cashflowPurpose,
     );
-    const updateData = { ...dto };
+    const { invoicePartner, ...rest } = dto;
+    const updateData = { ...rest };
     delete (updateData as any).attributes;
     // Diễn giải ngân hàng (description) là chỉ đọc, không ghi đè qua update
     delete (updateData as any).description;
     Object.assign(txn, updateData);
+    if (invoicePartner) {
+      txn.partnerId = await this.partners.ensurePartnerForInvoiceKey({
+        taxCode: invoicePartner.taxCode ?? null,
+        name: invoicePartner.name,
+        partnerType: invoicePartner.partnerType,
+      });
+    }
     // Đồng bộ branch_id (chi nhánh chính) với branch_ids
     if (dto.branchIds !== undefined) {
+      await this.assertBranchesExist(dto.branchIds);
       txn.branchIds = dto.branchIds;
       txn.branchId = dto.branchIds[0] ?? null;
     } else if (dto.branchId !== undefined) {
+      await this.assertBranchesExist(dto.branchId ? [dto.branchId] : []);
       txn.branchIds = dto.branchId ? [dto.branchId] : [];
       txn.branchId = dto.branchId ?? null;
     }
@@ -370,12 +397,19 @@ export class TransactionAccountingService {
 
     const defaultCounterpart =
       txn.correspondentAccountingAccountId || t0001AccountId;
+    // Phần tiền chưa cấn trừ hóa đơn: có đối tượng thì ghi 131 (thu) / 331 (chi), không thì giữ T0001
+    const isIncoming = Number(txn.creditAmount) > 0;
+    const unallocatedCounterpart =
+      txn.correspondentAccountingAccountId ||
+      (txn.partnerId
+        ? (isIncoming ? arAccountId : apAccountId) || t0001AccountId
+        : t0001AccountId);
 
     if (netOffRows.length === 0) {
       groups.push({
         subject: txn.correspondentName || null,
         amount: totalAmount,
-        counterpartAccountId: defaultCounterpart,
+        counterpartAccountId: unallocatedCounterpart,
         branchId: txn.branchId,
         description: baseDescription,
       });
@@ -430,7 +464,7 @@ export class TransactionAccountingService {
         groups.push({
           subject: txn.correspondentName || null,
           amount: remaining,
-          counterpartAccountId: defaultCounterpart,
+          counterpartAccountId: unallocatedCounterpart,
           branchId: txn.branchId,
           description: baseDescription,
         });

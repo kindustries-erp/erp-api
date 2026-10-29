@@ -7,6 +7,8 @@ import {
 import { InvoiceDebtsQueryService } from './sub-services/invoice-debts-query.service';
 import { InvoiceDebtsDetailService } from './sub-services/invoice-debts-detail.service';
 import { InvoiceDebtsExportService } from './sub-services/invoice-debts-export.service';
+import { InvoiceDebtsNetOffService } from './sub-services/invoice-debts-net-off.service';
+import { DebtNetOffAllocateDto } from '../dto/debt-net-off.dto';
 
 export interface InvoiceDebtItem {
   taxCode: string;
@@ -16,6 +18,10 @@ export interface InvoiceDebtItem {
   totalAmount: number;
   paidAmount: number;
   balanceAmount: number;
+  /** Tiền sao kê gắn đối tượng nhưng chưa cấn trừ hóa đơn nào (cộng theo MST) */
+  unallocatedAmount?: number;
+  /** Còn phải thu/trả sau khi trừ phần chưa phân bổ; có thể âm khi trả trước */
+  netBalanceAmount?: number;
   maxAgingDays: number;
   weightedAgingDays: number;
   latestInvoiceDate: string | null;
@@ -36,6 +42,10 @@ export interface InvoiceDebtSummary {
   grandTotalAmount: number;
   grandTotalPaid: number;
   grandTotalBalance: number;
+  /** Tổng tiền sao kê gắn đối tượng nhưng chưa cấn trừ (cộng theo các dòng đang lọc) */
+  grandTotalUnallocated?: number;
+  /** Tổng còn lại sau khi trừ phần chưa phân bổ (có thể âm khi trả trước) */
+  grandTotalNetBalance?: number;
   // Grand totals for aging buckets
   grandTotalAging0To30?: number;
   grandTotalAging31To60?: number;
@@ -88,7 +98,15 @@ export class InvoiceDebtsService {
     private readonly debtsQueryService: InvoiceDebtsQueryService,
     private readonly debtsDetailService: InvoiceDebtsDetailService,
     private readonly debtsExportService: InvoiceDebtsExportService,
+    private readonly debtsNetOffService: InvoiceDebtsNetOffService,
   ) {}
+
+  /**
+   * Cấn trừ một khoản sao kê/quỹ đã gắn đối tác vào các hóa đơn còn mở của đối tác
+   */
+  async allocateNetOff(taxCode: string, dto: DebtNetOffAllocateDto) {
+    return this.debtsNetOffService.allocate(taxCode, dto);
+  }
 
   /**
    * Truy vấn danh sách tổng hợp công nợ Khách hàng hoặc Nhà cung cấp
@@ -111,6 +129,14 @@ export class InvoiceDebtsService {
   /**
    * Lấy danh sách hóa đơn chi tiết của một đối tác cụ thể
    */
+  /** Khoản sao kê gắn đối tác nhưng chưa cấn trừ hóa đơn nào */
+  async getUnallocatedPayments(
+    taxCode: string,
+    partnerType?: InvoicePartnerType,
+  ) {
+    return this.debtsDetailService.getUnallocatedPayments(taxCode, partnerType);
+  }
+
   async getPartnerInvoices(
     taxCode: string,
     partnerType?: InvoicePartnerType,

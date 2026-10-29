@@ -78,7 +78,7 @@ Các nghiệp vụ trọng tâm:
 | `invoice_date` | `date` | NO | — | Ngày lập hóa đơn |
 | `direction` | `varchar(16)` | NO | `'IN'` | Chiều hóa đơn: `IN` (Đầu vào) hoặc `OUT` (Đầu ra) (Index) |
 | `status` | `varchar(32)` | NO | `'DRAFT'` | Trạng thái: `DRAFT`, `ACTIVE`, `CANCELLED` |
-| `source` | `varchar(64)` | YES | `NULL` | Nguồn: `GDT_PORTAL`, `XML_IMPORT`, `MANUAL`, `SINVOICE` |
+| `source` | `varchar(64)` | YES | `NULL` | Nguồn: `PORTAL` (đồng bộ Cổng Thuế GDT, code ghi đúng giá trị này), `XML_IMPORT`, `MANUAL`, `SINVOICE` |
 | `external_id` | `varchar(255)` | YES | `NULL` | ID định danh từ hệ thống ngoài/GDT |
 | `tax_invoice_status` | `int` | YES | `NULL` | Mã trạng thái HĐĐT từ GDT (1: Gốc, 4: Bị thay thế, 5: Bị điều chỉnh,...) |
 | `tax_process_status` | `int` | YES | `NULL` | Mã trạng thái xử lý thuế từ GDT |
@@ -345,7 +345,7 @@ Chưa port (còn ở v1): attributes, stats, danh sách/export items, netoff, po
 | `POST` | `/erp-invoices/portal/token` | `invoices` | `update` | Lưu cấu hình Token/Cookie/Tài khoản Cổng thuế vào Company Profile |
 | `POST` | `/erp-invoices/portal/sync` | `invoices` | `update` | Kích hoạt đồng bộ hóa đơn từ GDT theo khoảng ngày (tự đọc Token/Cookie từ DB), tự tải XML ngầm |
 | `POST` | `/erp-invoices/portal/bulk-download-xml` | `invoices` | `update` | Tải bổ sung tệp XML gốc từ GDT cho các hóa đơn chưa có XML trong DB (tự đọc Token/Cookie từ DB) |
-| `POST` | `/erp-invoices/:id/sync-detail` | — | — | Đồng bộ chi tiết dòng mặt hàng từ XML/GDT cho 1 hóa đơn cụ thể (tự đọc Token/Cookie từ DB) |
+| `POST` | `/erp-invoices/:id/sync-detail` | — | — | Đồng bộ chi tiết dòng mặt hàng từ GDT cho 1 hóa đơn cụ thể (tự đọc Token/Cookie từ DB). Chỉ ghi field GDT-owned, xem mục 5.y |
 | `GET (SSE)` | `/erp-invoices/portal/progress` | — | — | Stream SSE tiến độ đồng bộ hóa đơn GDT thời gian thực |
 
 Ghi chú payload SSE `portal/progress`: thêm trường tùy chọn `currentItem` (`HĐ 1847 · C26MSP · TÊN ĐỐI TÁC`) cho các bước lưu HĐ và tải XML (cả hàng loạt lẫn nền), dựng bởi `helpers/invoice-progress-ref.helper.ts`. Event trước và sau một HĐ dùng cùng `message` để phía web gộp thành một dòng log.
@@ -430,8 +430,20 @@ Ghi chú payload SSE `portal/progress`: thêm trường tùy chọn `currentItem
   - Chỉ khi cả 3 lần tự đăng nhập lại đều thất bại, hệ thống mới gửi thông báo lỗi `Token GDT hóa đơn hết hạn` tới người dùng qua `NotificationsService`.
 - **Kiểm tra Hồ sơ Người nộp thuế (`validatePortalTaxpayer`)**:
   - Đối chiếu danh sách mã số thuế trả về từ hồ sơ GDT (`username`, `id`, `groupId`, `tinInfoTT86.mst`,...) với MST doanh nghiệp trong `company_profile` để chặn nguy cơ kéo nhầm dữ liệu đơn vị khác (`GDT_TAXPAYER_MISMATCH`).
-- **Phân trang & Giới hạn Tốc độ (Rate-Limit)**:
-  - Kéo danh sách hóa đơn theo từng trang từ GDT (size tối đa 50 theo ngày), có khoảng trễ ngẫu nhiên 4-7 giây giữa các request tải XML để tránh bị chặn IP/tài khoản.
+- **Cửa sổ ngày & Phân trang (`helpers/gdt-date-window.helper.ts`)**:
+  - Kéo danh sách theo cửa sổ ngày, mỗi cửa sổ tối đa `GDT_QUERY_WINDOW_DAYS` ngày (mặc định 10, kẹp 1–31), `size=50`, tối đa 50 trang/cửa sổ/endpoint, cursor `state`.
+  - Hàng đợi cửa sổ trong `syncFromPortal`: cổng trả 400 hoặc cửa sổ chạm trần 50 trang thì chia đôi và quét lại (đếm `truncatedWindows`). Cửa sổ 1 ngày không chia được nữa thì ghi `failedSegments`.
+  - Khoảng trễ ngẫu nhiên 4-7 giây giữa các request để tránh bị chặn IP/tài khoản.
+- **Quét lùi của Cron (`GDT_CRON_LOOKBACK_DAYS`, mặc định 35)**:
+  - Mỗi lượt quét từ `hôm nay − 35 ngày` đến hôm nay theo giờ Việt Nam (không dùng `getMonth()` của server). Hóa đơn lập muộn qua ranh giới tháng được bắt ở lượt sau.
+  - Mua vào lỗi không chặn bán ra. Có `failedSegments`, `truncatedWindows`, `identityConflicts` hoặc lỗi thì gửi notification `WARNING` "Đồng bộ hóa đơn chưa đầy đủ" (không cần `userId`).
+- **Định danh hóa đơn (`helpers/invoice-identity.helper.ts`, `buildInvoiceIdentityWhere`)**:
+  - Cùng hóa đơn khi trùng: chiều, số hóa đơn, ký hiệu, năm lập, MST đối tác (người bán với IN, người mua với OUT), tổng tiền.
+  - Cùng khóa nhưng khác năm hoặc khác đối tác: lưu riêng. Cùng năm, cùng đối tác, cùng tiền, khác ngày: cùng hóa đơn, không chèn thêm.
+  - Cùng khóa nhưng khác tổng tiền: lưu riêng và ghi `identityConflicts` (số, ký hiệu, tiền cũ/mới) để kiểm tra.
+  - Ký hiệu và MST null khớp bằng `IS NULL`, không để TypeORM bỏ qua điều kiện.
+  - Hóa đơn gốc khi điều chỉnh/thay thế (`syncRelatedInvoiceStatus`): nếu có nhiều bản ghi cùng số/ký hiệu/đối tác khác năm, chọn bản ghi có ngày lập gần nhất không muộn hơn hóa đơn thay thế (`pickOriginalInvoiceCandidate`); không chọn được thì bỏ qua và log.
+- **Tra cứu bằng số hóa đơn đơn lẻ (`invoice-lifecycle.service.ts`, `findSingleByNumber`)**: nếu số hoặc ký hiệu trùng nhiều bản ghi, trả `BadRequestException` yêu cầu nhập theo `ký hiệu_số`, không trả bản ghi tùy ý.
 - **Cập nhật Trạng thái Hóa đơn Gốc Liên quan**:
   - Khi gặp hóa đơn thay thế hoặc điều chỉnh (mã trạng thái 4 hoặc 5), tự động tìm và cập nhật trạng thái của hóa đơn gốc trong DB (`tax_invoice_status`).
 
@@ -585,9 +597,17 @@ Ghi chú payload SSE `portal/progress`: thêm trường tùy chọn `currentItem
       2. Gọi `qb.orderBy('inv_invoice_no_num', orderDirection, 'NULLS LAST')`.
       3. Gọi `addOrderBy('inv.invoiceNo', orderDirection)` làm tiêu chí thứ cấp ổn định thứ tự các số hóa đơn có cùng phần số hoặc chuỗi ký tự thuần.
 
+### 5.y Quy tắc sở hữu field khi đồng bộ chi tiết GDT (`syncInvoiceDetailFromJson`)
+- Luồng ghi: `syncInvoiceDetailFromJson` → `InvoicePortalDetailApplier.applyPortalDetail` (`services/sub-services/invoice-portal-detail-applier.service.ts`), một transaction. Helper thuần: `helpers/portal-detail-merge.helper.ts`. Không còn gọi `lifecycleService.update` từ luồng này.
+- **Field GDT-owned (ghi đè khi khác)**: header `sellerName`, `sellerAddress`, `buyerName`, `buyerAddress`, `buyerPersonalName`, `buyerCccd`, `buyerTaxCode`, `description`, `preVatAmount`, `vatAmount`, `discountAmount`, `totalAmount`, `taxInvoiceStatus`, `taxProcessStatus`; dòng hàng `description`, `unit`, `quantity`, `unitPrice`, `preVatAmount`, `vatRate`, `vatAmount`, `discountAmount`, `totalAmount`.
+- **Field ERP tự quản (không bao giờ ghi)**: `categoryId`, `invoiceCategory`, `branchId`/`branchIds`, `notes`, `paymentDocumentNos`, `purchaseOrderId`, `salesOrderId`, `status`, `postingStatus`/`journalEntryId`, `isValid`, `attributes`, file PDF/XML; dòng hàng `itemCode`, `invoiceSubcategory`.
+- **Suy ra (chỉ điền khi đang rỗng)**: `settlementOrder`, `licensePlate` (từ `buildMetadataFillPatch`).
+- Ghép dòng hàng theo mô tả đã chuẩn hóa (`matchPortalItems`): dòng khớp giữ nguyên `id` (nên `vinfast_parts_ledger` không bị cascade xóa); dòng GDT không khớp thành insert; dòng cũ không còn trên GDT thành delete.
+- Giới hạn đã chấp nhận: field GDT-owned do người dùng sửa tay vẫn bị ghi đè ở lần đồng bộ chi tiết kế tiếp; chưa có cờ theo dõi từng field.
+
 ### 5.x Xử lý lỗi 5xx của Cổng thuế khi `syncFromPortal`
-- `fetchWithRetry` retry 5xx tối đa 3 lần với backoff `2s·n² + jitter` (429: `5s·n`).
-- Nếu một segment (endpoint × ngày × trang) vẫn trả non-OK: ghi vào `failedSegments` (`<endpoint> (ttxly=N) ngày dd/mm/yyyy trang N: HTTP <status>`), bỏ qua segment đó, tiếp tục segment còn lại.
+- `fetchWithRetry` retry 5xx tối đa 3 lần với backoff `2s·n² + jitter` (429: `5s·n`). 401/403 không retry: ném `GdtTokenExpiredError`, `syncFromPortal` relogin một lần rồi thử lại đúng request; nếu relogin thất bại thì dừng quét nhưng vẫn lưu phần đã tải.
+- Nếu một segment (endpoint × cửa sổ ngày × trang) vẫn trả non-OK: ghi vào `failedSegments` (`<endpoint> (ttxly=N) ngày dd/mm/yyyy trang N: HTTP <status>`), bỏ qua segment đó, tiếp tục segment còn lại.
 - Cuối tiến trình, nếu có `failedSegments`: trả về trong kết quả + gửi notification `WARNING` "Đồng bộ hóa đơn chưa đầy đủ". Nếu mọi request đều lỗi (không request nào OK): throw `BadRequestException` kèm segment lỗi đầu tiên → notification `ERROR`.
 
 ---

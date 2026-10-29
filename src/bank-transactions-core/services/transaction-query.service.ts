@@ -35,9 +35,10 @@ export class TransactionQueryService {
       throw new NotFoundException(`Transaction ${id} not found`);
     }
     const [mappedTxn] = await this.loadNetOffAmounts([txn]);
-    const posting =
+    const { description: postingDescription, ...posting } =
       await this.transactionAccountingService.getTransactionPosting(id);
-    return { ...mappedTxn, ...posting };
+    // description gốc của ngân hàng không bị posting ghi đè; mô tả bút toán đi qua postingDescription
+    return { ...mappedTxn, ...posting, postingDescription };
   }
 
   private async loadNetOffAmounts(
@@ -86,6 +87,7 @@ export class TransactionQueryService {
       .leftJoinAndSelect('txn.branch', 'branch')
       .leftJoinAndSelect('txn.bankAccount', 'bankAccount')
       .leftJoinAndSelect('txn.cashBook', 'cashBook')
+      .leftJoinAndSelect('txn.partner', 'bizPartner')
       .leftJoinAndSelect('txn.invoiceNetOffs', 'invoiceNetOffs')
       .leftJoinAndSelect('invoiceNetOffs.invoice', 'invoice')
       .where('txn.isDeleted = :isDeleted', { isDeleted: false });
@@ -202,6 +204,31 @@ export class TransactionQueryService {
             continue;
           }
 
+          if (col === 'invoiceNo') {
+            const hasBlank = vals.includes('__BLANK__');
+            const realVals = vals.filter((v) => v !== '__BLANK__');
+            const invoiceNoSubquery = `EXISTS (
+              SELECT 1 FROM erp_invoice_voucher_netoff n
+              JOIN erp_invoices i ON n.invoice_id = i.id
+              WHERE n.bank_transaction_id = txn.id
+              AND i.invoice_no IN (:...vals_${col})
+            )`;
+            const noNetOffSubquery = `NOT EXISTS (
+              SELECT 1 FROM erp_invoice_voucher_netoff WHERE bank_transaction_id = txn.id
+            )`;
+
+            if (hasBlank && realVals.length > 0) {
+              qb.andWhere(`(${invoiceNoSubquery} OR ${noNetOffSubquery})`, {
+                [`vals_${col}`]: realVals,
+              });
+            } else if (hasBlank) {
+              qb.andWhere(noNetOffSubquery);
+            } else {
+              qb.andWhere(invoiceNoSubquery, { [`vals_${col}`]: vals });
+            }
+            continue;
+          }
+
           if (col === 'invoiceSubject') {
             const hasBlank = vals.includes('__BLANK__');
             const realVals = vals.filter((v) => v !== '__BLANK__');
@@ -269,6 +296,8 @@ export class TransactionQueryService {
             filterField = 'txn.cashflowClassification';
           else if (col === 'cashflowPurpose')
             filterField = 'txn.cashflowPurpose';
+          else if (col === 'note') filterField = 'txn.note';
+          else if (col === 'businessPartner') filterField = 'bizPartner.name';
 
           if (filterField) {
             const isAllMatching = vals[0] === '__ALL_MATCHING__';
@@ -437,6 +466,8 @@ export class TransactionQueryService {
             searchField = 'txn.cashflowClassification';
           else if (col === 'cashflowPurpose')
             searchField = 'txn.cashflowPurpose';
+          else if (col === 'note') searchField = 'txn.note';
+          else if (col === 'businessPartner') searchField = 'bizPartner.name';
 
           if (searchField) {
             if (col === 'transDate') {
@@ -532,6 +563,10 @@ export class TransactionQueryService {
         orderExpr = 'txn.cashflowPurpose';
       } else if (rawField === 'description') {
         orderExpr = 'txn.description';
+      } else if (rawField === 'note') {
+        orderExpr = 'txn.note';
+      } else if (rawField === 'businessPartner') {
+        orderExpr = 'bizPartner.name';
       } else if (
         rawField === 'thu' ||
         rawField === 'creditAmount' ||
@@ -736,7 +771,9 @@ export class TransactionQueryService {
     filtersStr?: string,
     sourceType?: 'BANK' | 'CASH',
   ) {
-    const qb = this.transactionRepo.createQueryBuilder('txn');
+    const qb = this.transactionRepo
+      .createQueryBuilder('txn')
+      .leftJoin('txn.partner', 'bizPartner');
 
     if (sourceType) {
       qb.where('txn.sourceType = :sourceType', { sourceType });
@@ -762,6 +799,9 @@ export class TransactionQueryService {
         selectField = 'COALESCE(txn.bankAccountId, txn.cashBookId)';
         labelField = `COALESCE(bankAccount.bankName || ' - ' || bankAccount.accountNumber, cashBook.name)`;
       }
+    } else if (column === 'businessPartner') {
+      selectField = 'txn.partnerId';
+      labelField = 'bizPartner.name';
     } else if (column === 'transDate')
       selectField =
         "TO_CHAR((txn.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh'), 'DD/MM/YYYY')";
@@ -796,7 +836,13 @@ export class TransactionQueryService {
     else if (column === 'cashflowClassification')
       selectField = 'txn.cashflowClassification';
     else if (column === 'cashflowPurpose') selectField = 'txn.cashflowPurpose';
-    else if (column === 'invoiceSubject') {
+    else if (column === 'note') selectField = 'txn.note';
+    else if (column === 'invoiceNo') {
+      qb.innerJoin('txn.invoiceNetOffs', 'netoff');
+      qb.innerJoin('netoff.invoice', 'inv');
+      selectField = 'inv.invoice_no';
+      labelField = selectField;
+    } else if (column === 'invoiceSubject') {
       qb.innerJoin('txn.invoiceNetOffs', 'netoff');
       qb.innerJoin('netoff.invoice', 'inv');
       selectField = `CASE WHEN inv.direction = 'IN' THEN CONCAT_WS(' - ', NULLIF(inv.seller_tax_code, ''), inv.seller_name) ELSE CONCAT_WS(' - ', NULLIF(inv.buyer_tax_code, ''), inv.buyer_name) END`;
@@ -859,6 +905,8 @@ export class TransactionQueryService {
             filterField = 'txn.cashflowClassification';
           else if (col === 'cashflowPurpose')
             filterField = 'txn.cashflowPurpose';
+          else if (col === 'note') filterField = 'txn.note';
+          else if (col === 'businessPartner') filterField = 'bizPartner.name';
 
           if (col === 'branch') {
             // Lọc theo mọi chi nhánh của dòng (branch_ids), gồm cả dòng chưa gán

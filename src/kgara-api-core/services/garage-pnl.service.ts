@@ -188,12 +188,22 @@ export class GaragePnlService {
       items: sellingItems,
     };
 
-    // 5. Lợi nhuận ròng từ hoạt động kinh doanh (Chuẩn kế toán):
-    // Lợi nhuận ròng = Lợi nhuận gộp - Chi phí bán hàng - Chi phí vận hành (OPEX)
-    const netProfit =
-      grossProfit - sellingExpenses.total - opexSummary.opex.total;
+    // 5. Chi phí tài chính (lãi vay, phí tài chính từ Garage Opex)
+    const financialExpenses = {
+      total: opexSummary.financialExpense?.total || 0,
+      ojTotal: opexSummary.financialExpense?.ojTotal || 0,
+      items: opexSummary.financialExpense?.items || [],
+    };
 
-    // 6. Thưởng & Hoa hồng Dịch vụ (Trích lập sau Lợi nhuận ròng):
+    // 6. Lợi nhuận ròng từ hoạt động kinh doanh (Chuẩn kế toán):
+    // Lợi nhuận ròng = Lợi nhuận gộp - Chi phí bán hàng - Chi phí vận hành (OPEX) - Chi phí tài chính
+    const netProfit =
+      grossProfit -
+      sellingExpenses.total -
+      opexSummary.opex.total -
+      financialExpenses.total;
+
+    // 7. Thưởng & Hoa hồng Dịch vụ (Trích lập sau Lợi nhuận ròng):
     // Hoa hồng cho DV (10%): Tính trên 10% của Lợi nhuận ròng
     const dvCommissionRate = 0.1;
     const dvCommission =
@@ -249,7 +259,12 @@ export class GaragePnlService {
     const ojGrossProfit = ojRevenue - ojCogs;
     const ojSellingExpensesTotal = opexSummary.selling.ojTotal || 0;
     const ojOpexTotal = opexSummary.opex.ojTotal || 0;
-    const ojNetProfit = ojGrossProfit - ojSellingExpensesTotal - ojOpexTotal;
+    const ojFinancialExpensesTotal = financialExpenses.ojTotal || 0;
+    const ojNetProfit =
+      ojGrossProfit -
+      ojSellingExpensesTotal -
+      ojOpexTotal -
+      ojFinancialExpensesTotal;
     const ojSaleCommission = 0; // OJ không tính hoa hồng ký gửi sale
     const ojDvCommission =
       ojNetProfit > 0 ? Math.round(ojNetProfit * dvCommissionRate) : 0;
@@ -322,6 +337,7 @@ export class GaragePnlService {
 
       sellingExpenses,
       opex: opexSummary.opex,
+      financialExpenses,
       netProfit,
       netProfitBeforeCommission: netProfitBeforeSellingAndOpex, // Giữ tương thích
       serviceCommission,
@@ -389,6 +405,7 @@ export class GaragePnlService {
         grossMarginRate: ojRevenue > 0 ? (ojGrossProfit / ojRevenue) * 100 : 0,
         sellingExpensesTotal: ojSellingExpensesTotal,
         opexTotal: ojOpexTotal,
+        financialExpensesTotal: ojFinancialExpensesTotal,
         netProfit: ojNetProfit,
         netProfitBeforeCommission: ojGrossProfit - ojOpexTotal,
         serviceCommissionTotal: ojDvCommission + manualCommissionOjTotal,

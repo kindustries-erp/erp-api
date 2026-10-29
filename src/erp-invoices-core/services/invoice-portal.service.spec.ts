@@ -16,6 +16,7 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
   let mockNotificationsService: any;
   let mockLifecycleService: any;
   let mockVinfastPartsService: any;
+  let mockDetailApplier: any;
 
   let storedProfile: Partial<CompanyProfile> | null = null;
 
@@ -71,6 +72,10 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
       syncLedger: jest.fn(),
     };
 
+    mockDetailApplier = {
+      applyPortalDetail: jest.fn().mockResolvedValue({ changed: true }),
+    };
+
     service = new InvoicePortalService(
       mockInvoiceRepo,
       mockCompanyProfileRepo,
@@ -82,6 +87,7 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
         assign: jest.fn().mockResolvedValue({ updated: [], skipped: [] }),
       } as any,
       mockVinfastPartsService,
+      mockDetailApplier,
     );
   });
 
@@ -409,7 +415,7 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
           taxInvoiceStatus: 1, // original active
         };
 
-        mockInvoiceRepo.findOne.mockResolvedValueOnce(originalInvoice);
+        mockInvoiceRepo.find.mockResolvedValueOnce([originalInvoice]);
 
         await service.syncRelatedInvoiceStatus(
           {
@@ -420,7 +426,7 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
           currentInvoice,
         );
 
-        expect(mockInvoiceRepo.findOne).toHaveBeenCalledWith({
+        expect(mockInvoiceRepo.find).toHaveBeenCalledWith({
           where: {
             invoiceNo: '1231',
             serialNo: 'C26TGA',
@@ -428,6 +434,7 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
             direction: 'IN',
             isDeleted: false,
           },
+          order: { invoiceDate: 'DESC' },
         });
         expect(mockInvoiceRepo.update).toHaveBeenCalledWith('orig-uuid-1', {
           taxInvoiceStatus: 4,
@@ -450,7 +457,7 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
           taxInvoiceStatus: 1,
         };
 
-        mockInvoiceRepo.findOne.mockResolvedValueOnce(originalInvoice);
+        mockInvoiceRepo.find.mockResolvedValueOnce([originalInvoice]);
 
         await service.syncRelatedInvoiceStatus(
           {
@@ -462,13 +469,14 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
         );
 
         // For OUT, sellerTaxCode is not included in query
-        expect(mockInvoiceRepo.findOne).toHaveBeenCalledWith({
+        expect(mockInvoiceRepo.find).toHaveBeenCalledWith({
           where: {
             invoiceNo: '888',
             serialNo: 'C26TGA',
             direction: 'OUT',
             isDeleted: false,
           },
+          order: { invoiceDate: 'DESC' },
         });
         expect(mockInvoiceRepo.update).toHaveBeenCalledWith('orig-out-uuid-2', {
           taxInvoiceStatus: 5,
@@ -492,7 +500,7 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
           taxInvoiceStatus: 1,
         };
 
-        mockInvoiceRepo.findOne.mockResolvedValueOnce(originalInvoice);
+        mockInvoiceRepo.find.mockResolvedValueOnce([originalInvoice]);
         const downloadXmlOnlySpy = jest
           .spyOn(service, 'downloadXmlOnly')
           .mockResolvedValueOnce();
@@ -556,6 +564,116 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
           }),
         );
       });
+    });
+  });
+
+  describe('syncFromPortal - date windows & token recovery', () => {
+    beforeEach(() => {
+      process.env.GDT_QUERY_WINDOW_DAYS = '10';
+      jest
+        .spyOn(service as any, 'validatePortalTaxpayer')
+        .mockResolvedValue(undefined);
+      jest
+        .spyOn(service as any, 'preloadBranchCache')
+        .mockResolvedValue(undefined);
+    });
+
+    afterEach(() => {
+      delete process.env.GDT_QUERY_WINDOW_DAYS;
+      jest.restoreAllMocks();
+    });
+
+    const emptyPage = () =>
+      new Response(JSON.stringify({ datas: [], total: 0 }), { status: 200 });
+
+    it('queries each 10-day window instead of each single day', async () => {
+      const fetchSpy = jest
+        .spyOn(global, 'fetch')
+        .mockImplementation(() => Promise.resolve(emptyPage()));
+
+      await service.syncFromPortal(
+        {
+          token: 'tok',
+          dateFrom: '2026-10-01',
+          dateTo: '2026-10-25',
+          type: 'sold',
+        } as any,
+        'user-1',
+        true,
+      );
+
+      const urls = fetchSpy.mock.calls.map((c) =>
+        decodeURIComponent((c[0] as URL).toString()),
+      );
+      expect(urls).toHaveLength(3);
+      expect(urls[0]).toContain('ge=01/10/2026');
+      expect(urls[0]).toContain('le=10/10/2026');
+      expect(urls[1]).toContain('ge=11/10/2026');
+      expect(urls[2]).toContain('ge=21/10/2026');
+      expect(urls[2]).toContain('le=25/10/2026');
+    });
+
+    it('splits a window in half when GDT rejects the range with 400', async () => {
+      const fetchSpy = jest
+        .spyOn(global, 'fetch')
+        .mockImplementation((url: any) => {
+          const s = decodeURIComponent(url.toString());
+          return Promise.resolve(
+            s.includes('ge=01/10/2026') && s.includes('le=10/10/2026')
+              ? new Response('bad range', { status: 400 })
+              : emptyPage(),
+          );
+        });
+
+      const result: any = await service.syncFromPortal(
+        {
+          token: 'tok',
+          dateFrom: '2026-10-01',
+          dateTo: '2026-10-10',
+          type: 'sold',
+        } as any,
+        'user-1',
+        true,
+      );
+
+      const urls = fetchSpy.mock.calls.map((c) =>
+        decodeURIComponent((c[0] as URL).toString()),
+      );
+      expect(urls).toHaveLength(3);
+      expect(urls[1]).toContain('le=05/10/2026');
+      expect(urls[2]).toContain('ge=06/10/2026');
+      expect(result.truncatedWindows).toBe(1);
+      expect(result.failedSegments).toEqual([]);
+    });
+
+    it('relogs in and retries the same request once when the token expires', async () => {
+      const reAuthSpy = jest
+        .spyOn(service as any, 'autoReloginWithRetry')
+        .mockResolvedValue({ token: 'new-tok', cookies: undefined });
+      const fetchSpy = jest
+        .spyOn(global, 'fetch')
+        .mockImplementation((_url: any, init: any) =>
+          Promise.resolve(
+            init?.headers?.Authorization === 'Bearer tok'
+              ? new Response('', { status: 401 })
+              : emptyPage(),
+          ),
+        );
+
+      const result: any = await service.syncFromPortal(
+        {
+          token: 'tok',
+          dateFrom: '2026-10-01',
+          dateTo: '2026-10-01',
+          type: 'sold',
+        } as any,
+        'user-1',
+        true,
+      );
+
+      expect(reAuthSpy).toHaveBeenCalledTimes(1);
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      expect(result.failedSegments).toEqual([]);
     });
   });
 
@@ -672,6 +790,70 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
       expect(mockNotificationsService.createForUser).toHaveBeenCalledWith(
         'user-1',
         expect.objectContaining({ type: 'ERROR' }),
+      );
+    });
+  });
+
+  describe('syncInvoiceDetailFromJson - không ghi đè field ERP tự quản', () => {
+    afterEach(() => jest.restoreAllMocks());
+
+    it('applies GDT detail through the applier and never calls lifecycle.update', async () => {
+      const gdtDetail = {
+        nbten: 'Nhà cung cấp',
+        nmten: 'Cty mua',
+        nmmst: '0101234567',
+        mst: '0101234567',
+        tgtcthue: 1350000,
+        tgtthue: 150000,
+        tgtttbso: 1500000,
+        tthai: 1,
+        ttxly: 5,
+        hdhhdvu: [
+          {
+            ten: 'Lọc dầu',
+            dvtinh: 'cái',
+            sluong: 2,
+            dgia: 675000,
+            thtien: 1350000,
+            tsuat: 10,
+            tthue: 135000,
+            stckhau: 0,
+          },
+        ],
+      };
+      jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValue(
+          new Response(JSON.stringify(gdtDetail), { status: 200 }),
+        );
+
+      const invoice: any = {
+        id: 'inv-1',
+        invoiceNo: '0000123',
+        serialNo: 'C25TAA',
+        direction: 'IN',
+        taxInvoiceType: 'STANDARD',
+        sellerTaxCode: '0101234567',
+      };
+
+      await service.syncInvoiceDetailFromJson(invoice, 'token');
+
+      expect(mockLifecycleService.update).not.toHaveBeenCalled();
+      expect(mockDetailApplier.applyPortalDetail).toHaveBeenCalledWith(
+        'inv-1',
+        expect.objectContaining({
+          header: expect.objectContaining({
+            buyerName: 'Cty mua',
+            totalAmount: 1500000,
+            taxInvoiceStatus: 1,
+          }),
+          items: [
+            expect.objectContaining({
+              description: 'Lọc dầu',
+              quantity: 2,
+            }),
+          ],
+        }),
       );
     });
   });
