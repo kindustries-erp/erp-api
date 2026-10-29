@@ -580,7 +580,13 @@ export class ErpInvoicesCoreController {
   })
   @Post('portal/login')
   async loginPortal(@Body() dto: PortalLoginDto) {
-    return await this.service.loginPortalWithCaptcha(dto);
+    // Token đã được lưu vào cấu hình phía server; không trả ra client
+    const result = await this.service.loginPortalWithCaptcha(dto);
+    return {
+      success: result.success,
+      hasToken: Boolean(result.token),
+      message: result.message,
+    };
   }
 
   @RequirePermissions({

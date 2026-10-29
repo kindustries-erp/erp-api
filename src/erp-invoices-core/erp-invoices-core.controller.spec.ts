@@ -32,6 +32,24 @@ describe('ErpInvoicesCoreController', () => {
     );
   });
 
+  it('login GDT không trả token ra client, chỉ trả hasToken', async () => {
+    service.loginPortalWithCaptcha = jest.fn(async () => ({
+      success: true,
+      token: 'secret-token',
+      message: 'ok',
+    }));
+
+    const result = await controller.loginPortal({
+      username: '0318334886',
+      password: 'p',
+      cvalue: 'ABC',
+      ckey: 'k',
+    } as any);
+
+    expect(result).toEqual({ success: true, hasToken: true, message: 'ok' });
+    expect(JSON.stringify(result)).not.toContain('secret-token');
+  });
+
   it('sends notification when taxpayer mismatch happens', async () => {
     service.syncFromPortal.mockRejectedValue(
       new BadRequestException('GDT_TAXPAYER_MISMATCH'),

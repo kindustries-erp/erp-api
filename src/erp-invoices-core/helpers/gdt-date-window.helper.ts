@@ -6,6 +6,10 @@ export interface GdtDateWindow {
 
 export const GDT_WINDOW_MIN_DAYS = 1;
 export const GDT_WINDOW_MAX_DAYS = 31;
+/** Số ngày mỗi cửa sổ khi không đặt GDT_QUERY_WINDOW_DAYS (khớp ước tính phía web). */
+export const GDT_WINDOW_DEFAULT_DAYS = 9;
+/** Số ngày quét lùi của cron khi không đặt GDT_CRON_LOOKBACK_DAYS. */
+export const GDT_CRON_LOOKBACK_DEFAULT_DAYS = 35;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

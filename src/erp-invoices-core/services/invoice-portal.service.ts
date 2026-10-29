@@ -34,6 +34,7 @@ import {
 } from '../helpers/invoice-gdt.helper';
 import {
   buildDateWindows,
+  GDT_WINDOW_DEFAULT_DAYS,
   clampWindowDays,
   formatDateWindowLabel,
   splitDateWindow,
@@ -578,7 +579,7 @@ export class InvoicePortalService implements OnModuleInit {
           ];
 
     const windowDays = clampWindowDays(
-      Number(process.env.GDT_QUERY_WINDOW_DAYS ?? 9),
+      Number(process.env.GDT_QUERY_WINDOW_DAYS ?? GDT_WINDOW_DEFAULT_DAYS),
     );
 
     const task = async () => {
@@ -598,6 +599,20 @@ export class InvoicePortalService implements OnModuleInit {
         windowLoop: while (windows.length > 0) {
           const win = windows.shift()!;
           const windowMark = rawItems.length;
+          // Mốc thống kê đầu cửa sổ: khi chia lại cửa sổ phải khôi phục đúng số liệu này
+          const statsMark = {
+            pages: pagesFetched,
+            total: totalFromPortal,
+            succeeded: succeededRequests,
+            failed: failedSegments.length,
+          };
+          const rollbackWindow = () => {
+            rawItems.length = windowMark;
+            pagesFetched = statsMark.pages;
+            totalFromPortal = statsMark.total;
+            succeededRequests = statsMark.succeeded;
+            failedSegments.length = statsMark.failed;
+          };
           const formattedDate = formatDateWindowLabel(win);
 
           for (const cfg of queryConfigs) {
@@ -679,7 +694,7 @@ export class InvoicePortalService implements OnModuleInit {
                   const parts =
                     response?.status === 400 ? splitDateWindow(win) : null;
                   if (parts) {
-                    rawItems.length = windowMark;
+                    rollbackWindow();
                     windows.unshift(...parts);
                     truncatedWindows++;
                     continue windowLoop;
@@ -750,7 +765,7 @@ export class InvoicePortalService implements OnModuleInit {
                 truncatedWindows++;
                 const parts = splitDateWindow(win);
                 if (parts) {
-                  rawItems.length = windowMark;
+                  rollbackWindow();
                   windows.unshift(...parts);
                   continue windowLoop;
                 }
@@ -1154,7 +1169,7 @@ export class InvoicePortalService implements OnModuleInit {
             completed: false,
             currentItem,
           });
-          await new Promise((r) => setTimeout(r, 500));
+          await sleep(500);
         } catch (e) {
           this.logger.warn(
             `Lỗi tải XML cho ${inv.invoiceNo}: ${(e as Error).message}`,

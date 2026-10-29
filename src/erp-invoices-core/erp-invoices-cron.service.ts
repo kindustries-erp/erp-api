@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
+import { sleep } from '../common/utils/delay.util';
 import { ErpInvoicesCoreService } from './erp-invoices-core.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CorePermission } from '../rbac-core/entities/core-permission.entity';
@@ -20,6 +21,7 @@ import {
 } from '../common/utils/cron.util';
 import { GdtCronStateHelper } from './helpers/gdt-cron-state.helper';
 import {
+  GDT_CRON_LOOKBACK_DEFAULT_DAYS,
   getVietnamTodayIso,
   shiftIsoDate,
 } from './helpers/gdt-date-window.helper';
@@ -184,7 +186,7 @@ export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
           }
 
           // Wait 5 seconds to avoid rate limits
-          await new Promise((resolve) => setTimeout(resolve, 5000));
+          await sleep(5000);
 
           this.logger.log(
             `Syncing OUT invoices from ${dateFrom} to ${dateTo}...`,
@@ -224,16 +226,7 @@ export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
 
   private async notifyPasswordError(details?: string) {
     try {
-      const perms = await this.permissionRepo.find({
-        where: [{ resource: 'invoices' }, { resource: '*' }],
-      });
-      const roleIds = [...new Set(perms.map((p) => p.roleId))];
-      if (roleIds.length === 0) return;
-
-      const userRoles = await this.userRoleRepo.find({
-        where: { roleId: In(roleIds) },
-      });
-      const userIds = [...new Set(userRoles.map((ur) => ur.userId))];
+      const userIds = await this.findInvoiceNotifyUserIds();
 
       for (const userId of userIds) {
         await this.notificationsService.createForUser(userId, {
@@ -249,16 +242,7 @@ export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
 
   private async notifyTokenExpired() {
     try {
-      const perms = await this.permissionRepo.find({
-        where: [{ resource: 'invoices' }, { resource: '*' }],
-      });
-      const roleIds = [...new Set(perms.map((p) => p.roleId))];
-      if (roleIds.length === 0) return;
-
-      const userRoles = await this.userRoleRepo.find({
-        where: { roleId: In(roleIds) },
-      });
-      const userIds = [...new Set(userRoles.map((ur) => ur.userId))];
+      const userIds = await this.findInvoiceNotifyUserIds();
 
       for (const userId of userIds) {
         await this.notificationsService.createForUser(userId, {
@@ -283,16 +267,7 @@ export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
       (soldStats?.totalItemsFetched || 0);
 
     try {
-      const perms = await this.permissionRepo.find({
-        where: [{ resource: 'invoices' }, { resource: '*' }],
-      });
-      const roleIds = [...new Set(perms.map((p) => p.roleId))];
-      if (roleIds.length === 0) return;
-
-      const userRoles = await this.userRoleRepo.find({
-        where: { roleId: In(roleIds) },
-      });
-      const userIds = [...new Set(userRoles.map((ur) => ur.userId))];
+      const userIds = await this.findInvoiceNotifyUserIds();
 
       for (const userId of userIds) {
         await this.notificationsService.createForUser(userId, {
@@ -308,8 +283,12 @@ export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
 
   /** Số ngày quét lùi mỗi lượt, cấu hình qua GDT_CRON_LOOKBACK_DAYS (mặc định 35). */
   private getLookbackDays(): number {
-    const days = Number(process.env.GDT_CRON_LOOKBACK_DAYS ?? 35);
-    return Number.isFinite(days) && days >= 1 ? Math.floor(days) : 35;
+    const days = Number(
+      process.env.GDT_CRON_LOOKBACK_DAYS ?? GDT_CRON_LOOKBACK_DEFAULT_DAYS,
+    );
+    return Number.isFinite(days) && days >= 1
+      ? Math.floor(days)
+      : GDT_CRON_LOOKBACK_DEFAULT_DAYS;
   }
 
   /** Thông báo khi một lượt đồng bộ có phần lỗi, cửa sổ phải chia nhỏ, xung đột số tiền hoặc lỗi chiều. */
