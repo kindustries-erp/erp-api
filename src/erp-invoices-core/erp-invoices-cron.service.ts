@@ -121,7 +121,8 @@ export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
           this.logger.error('Error during GDT auto-sync', err);
         },
         execute: async () => {
-          const config = await this.erpInvoicesCoreService.getPortalConfig();
+          const config =
+            await this.erpInvoicesCoreService.getInternalPortalConfig();
           let token = config.token;
           let cookies: string | undefined = config.cookies;
 

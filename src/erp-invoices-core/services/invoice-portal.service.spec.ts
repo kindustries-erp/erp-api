@@ -2,12 +2,18 @@ import { UnauthorizedException } from '@nestjs/common';
 import { InvoicePortalService } from './invoice-portal.service';
 import { CompanyProfile } from '../../company-profile/entities/company-profile.entity';
 import { safeDecrypt } from '../../common/utils/encrypt.util';
+import { GdtCronStateHelper } from '../helpers/gdt-cron-state.helper';
 
 jest.mock('../../common/utils/delay.util', () => ({
   sleep: jest.fn().mockResolvedValue(undefined),
 }));
 
 describe('InvoicePortalService - Auth & Auto Re-login', () => {
+  beforeAll(() => {
+    process.env.GDT_ENCRYPT_SECRET =
+      process.env.GDT_ENCRYPT_SECRET || 'unit-test-gdt-secret';
+  });
+
   let service: InvoicePortalService;
   let mockInvoiceRepo: any;
   let mockCompanyProfileRepo: any;
@@ -122,7 +128,9 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
       expect((publicConfig as any).password).toBeUndefined();
       expect(publicConfig.hasPassword).toBe(true);
       expect(publicConfig.username).toEqual('0318334886');
-      expect(publicConfig.token).toEqual('token_abc');
+      expect((publicConfig as any).token).toBeUndefined();
+      expect(publicConfig.hasToken).toBe(true);
+      expect(publicConfig.hasCookies).toBe(true);
     });
 
     it('getInternalPortalConfig should decrypt stored password for internal backend use', async () => {
@@ -228,6 +236,52 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
       const result = await service.autoReloginWithRetry(3, 10);
       expect(loginSpy).toHaveBeenCalledTimes(3);
       expect(result).toBeNull();
+    });
+
+    it('does not try to log in while paused for wrong password (zero-lockout)', async () => {
+      await service.savePortalConfig(
+        'old_token',
+        'old_cookies',
+        '0318334886',
+        'wrong_pass',
+      );
+      GdtCronStateHelper.pauseDueToAuthError();
+      try {
+        const loginSpy = jest.spyOn(service, 'loginWithCaptcha');
+
+        const result = await service.autoReloginWithRetry(3, 10);
+
+        expect(result).toBeNull();
+        expect(loginSpy).not.toHaveBeenCalled();
+      } finally {
+        GdtCronStateHelper.resume();
+      }
+    });
+
+    it('shares one login between concurrent relogin calls (single-flight)', async () => {
+      await service.savePortalConfig(
+        'old_token',
+        'old_cookies',
+        '0318334886',
+        'pass',
+      );
+      jest.spyOn(service, 'getCaptcha').mockResolvedValue({
+        content: '<svg>...</svg>',
+        key: 'captcha_key_123',
+        text: 'ABC123',
+      } as any);
+      const loginSpy = jest
+        .spyOn(service, 'loginWithCaptcha')
+        .mockResolvedValue({ success: true, token: 'new_tok' } as any);
+
+      const [first, second] = await Promise.all([
+        service.autoReloginWithRetry(3, 10),
+        service.autoReloginWithRetry(3, 10),
+      ]);
+
+      expect(loginSpy).toHaveBeenCalledTimes(1);
+      expect(first?.token).toBe('new_tok');
+      expect(second?.token).toBe('new_tok');
     });
 
     it('should NOT retry if login fails with 401 Unauthorized to prevent account lockout', async () => {
