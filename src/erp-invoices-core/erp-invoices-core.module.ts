@@ -61,6 +61,7 @@ import { ErpJournalEntry } from '../accounting-core/entities/erp_journal_entry.e
 import { ErpJournalEntryLine } from '../accounting-core/entities/erp_journal_entry_line.entity';
 import { AiHubCoreModule } from '../ai-hub-core/ai-hub-core.module';
 import { InvoiceCategoryAutopostService } from './services/sub-services/invoice-category-autopost.service';
+import { InvoicePortalDetailApplier } from './services/sub-services/invoice-portal-detail-applier.service';
 import { InvoiceCategoryMemoryService } from './services/sub-services/invoice-category-memory.service';
 import { InvoiceItemCodeResolverService } from './services/sub-services/invoice-item-code-resolver.service';
 import { InvoiceAdjustmentService } from './services/sub-services/invoice-adjustment.service';
@@ -118,6 +119,7 @@ import { XmlDownloadLinkAdapter } from './services/adapters/xml-download-link.ad
     InvoiceLifecycleService,
     InvoiceBranchService,
     InvoicePortalService,
+    InvoicePortalDetailApplier,
     InvoiceImportService,
     InvoiceFilesService,
     InvoiceBulkDownloadService,

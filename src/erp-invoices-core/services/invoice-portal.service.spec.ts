@@ -16,6 +16,7 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
   let mockNotificationsService: any;
   let mockLifecycleService: any;
   let mockVinfastPartsService: any;
+  let mockDetailApplier: any;
 
   let storedProfile: Partial<CompanyProfile> | null = null;
 
@@ -71,6 +72,10 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
       syncLedger: jest.fn(),
     };
 
+    mockDetailApplier = {
+      applyPortalDetail: jest.fn().mockResolvedValue({ changed: true }),
+    };
+
     service = new InvoicePortalService(
       mockInvoiceRepo,
       mockCompanyProfileRepo,
@@ -82,6 +87,7 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
         assign: jest.fn().mockResolvedValue({ updated: [], skipped: [] }),
       } as any,
       mockVinfastPartsService,
+      mockDetailApplier,
     );
   });
 
@@ -784,6 +790,70 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
       expect(mockNotificationsService.createForUser).toHaveBeenCalledWith(
         'user-1',
         expect.objectContaining({ type: 'ERROR' }),
+      );
+    });
+  });
+
+  describe('syncInvoiceDetailFromJson - không ghi đè field ERP tự quản', () => {
+    afterEach(() => jest.restoreAllMocks());
+
+    it('applies GDT detail through the applier and never calls lifecycle.update', async () => {
+      const gdtDetail = {
+        nbten: 'Nhà cung cấp',
+        nmten: 'Cty mua',
+        nmmst: '0101234567',
+        mst: '0101234567',
+        tgtcthue: 1350000,
+        tgtthue: 150000,
+        tgtttbso: 1500000,
+        tthai: 1,
+        ttxly: 5,
+        hdhhdvu: [
+          {
+            ten: 'Lọc dầu',
+            dvtinh: 'cái',
+            sluong: 2,
+            dgia: 675000,
+            thtien: 1350000,
+            tsuat: 10,
+            tthue: 135000,
+            stckhau: 0,
+          },
+        ],
+      };
+      jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValue(
+          new Response(JSON.stringify(gdtDetail), { status: 200 }),
+        );
+
+      const invoice: any = {
+        id: 'inv-1',
+        invoiceNo: '0000123',
+        serialNo: 'C25TAA',
+        direction: 'IN',
+        taxInvoiceType: 'STANDARD',
+        sellerTaxCode: '0101234567',
+      };
+
+      await service.syncInvoiceDetailFromJson(invoice, 'token');
+
+      expect(mockLifecycleService.update).not.toHaveBeenCalled();
+      expect(mockDetailApplier.applyPortalDetail).toHaveBeenCalledWith(
+        'inv-1',
+        expect.objectContaining({
+          header: expect.objectContaining({
+            buyerName: 'Cty mua',
+            totalAmount: 1500000,
+            taxInvoiceStatus: 1,
+          }),
+          items: [
+            expect.objectContaining({
+              description: 'Lọc dầu',
+              quantity: 2,
+            }),
+          ],
+        }),
       );
     });
   });
