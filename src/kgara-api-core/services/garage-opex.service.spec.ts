@@ -41,6 +41,17 @@ describe('GarageOpexService', () => {
       note: 'Hoa hồng tính vào giá vốn',
       createdAt: new Date(),
     },
+    {
+      id: 'uuid-4',
+      periodYear: 2026,
+      periodMonth: 8,
+      categoryKey: 'LAI_VAY',
+      categoryName: 'Chi phí lãi vay ngân hàng',
+      amount: 4500000,
+      ojAmount: 1000000,
+      note: 'Lãi vay kỳ tháng 8',
+      createdAt: new Date(),
+    },
   ];
 
   beforeEach(async () => {
@@ -52,7 +63,9 @@ describe('GarageOpexService', () => {
         skip: jest.fn().mockReturnThis(),
         take: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
-        getManyAndCount: jest.fn().mockResolvedValue([mockOpexItems, 3]),
+        getManyAndCount: jest
+          .fn()
+          .mockResolvedValue([mockOpexItems, mockOpexItems.length]),
         getRawMany: jest.fn().mockResolvedValue([{ value: 'Nhân sự xưởng' }]),
       })),
       find: jest.fn().mockResolvedValue(mockOpexItems),
@@ -85,17 +98,20 @@ describe('GarageOpexService', () => {
 
   it('should get list of opex with pagination and formatted period', async () => {
     const res = await service.getList({ year: 2026, month: 8 });
-    expect(res.data).toHaveLength(3);
+    expect(res.data).toHaveLength(4);
     expect(res.data[0].period).toBe('08/2026');
     expect(res.data[0].ojAmount).toBe(10000000);
-    expect(res.total).toBe(3);
+    expect(res.total).toBe(4);
   });
 
-  it('should separate OPEX, DirectCost and Commission in getSummaryByPeriod with oj totals', async () => {
+  it('should separate OPEX, DirectCost, FinancialExpense and Commission in getSummaryByPeriod with oj totals', async () => {
     const summary = await service.getSummaryByPeriod(2026, 8);
     expect(summary.opex.total).toBe(76500000);
     expect(summary.opex.ojTotal).toBe(10000000);
     expect(summary.opex.items).toHaveLength(1);
+    expect(summary.financialExpense.total).toBe(4500000);
+    expect(summary.financialExpense.ojTotal).toBe(1000000);
+    expect(summary.financialExpense.items).toHaveLength(1);
     expect(summary.commission.total).toBe(5621059);
     expect(summary.commission.ojTotal).toBe(1200000);
     expect(summary.commission.items).toHaveLength(1);

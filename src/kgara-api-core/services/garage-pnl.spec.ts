@@ -444,6 +444,67 @@ describe('GarageDashboardService & GaragePnlService - PnL Commission Calculation
     expect(dvItem.amount).toBe(4800000);
   });
 
+  it('Scenario 7: When financial expenses exist, they are deducted from Net Profit', async () => {
+    const mockQb = {
+      leftJoin: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getRawOne: jest.fn().mockResolvedValue({
+        revenue: '200000000',
+        cogs: '100000000',
+        caseCount: '10',
+        kyGuiRevenue: '0',
+        kyGuiCogs: '0',
+        kyGuiCaseCount: '0',
+        suaChuaChungRevenue: '200000000',
+        suaChuaChungCogs: '100000000',
+        suaChuaChungCaseCount: '10',
+        ojRevenue: '50000000',
+        ojCogs: '20000000',
+        ojCaseCount: '2',
+      }),
+    };
+    mockCaseRepo.createQueryBuilder.mockReturnValue(mockQb);
+
+    mockOpexService.getSummaryByPeriod.mockResolvedValue({
+      directCost: { total: 0, ojTotal: 0, items: [] },
+      selling: { total: 0, ojTotal: 0, items: [] },
+      opex: {
+        total: 40000000,
+        ojTotal: 10000000,
+        items: [
+          { categoryKey: 'NHAN_SU', amount: 40000000, ojAmount: 10000000 },
+        ],
+      },
+      financialExpense: {
+        total: 10000000,
+        ojTotal: 2000000,
+        items: [
+          { categoryKey: 'LAI_VAY', amount: 10000000, ojAmount: 2000000 },
+        ],
+      },
+      commission: { total: 0, ojTotal: 0, items: [] },
+    });
+
+    const report = await service.getPnlReport(2026, 8);
+
+    // Revenue = 200M, COGS = 100M -> GP = 100M
+    // Selling = 0
+    // Opex = 40M
+    // Financial = 10M
+    // Net Profit = 100M - 0 - 40M - 10M = 50M
+    expect(report.grossProfit).toBe(100000000);
+    expect(report.financialExpenses.total).toBe(10000000);
+    expect(report.financialExpenses.ojTotal).toBe(2000000);
+    expect(report.netProfit).toBe(50000000);
+
+    // OJ: GP = 30M, Selling = 0, Opex = 10M, Financial = 2M -> Net = 18M
+    expect(report.oj.financialExpensesTotal).toBe(2000000);
+    expect(report.oj.netProfit).toBe(18000000);
+  });
+
   describe('syncCommissionVouchers()', () => {
     const mockPnlReport = {
       commission: {

@@ -64,6 +64,10 @@ import {
 } from '../helpers/vinfast-part-code.helper';
 
 import { InvoiceCategoryAutopostService } from './sub-services/invoice-category-autopost.service';
+import {
+  InvoicePortalDetailApplier,
+  PortalDetailItem,
+} from './sub-services/invoice-portal-detail-applier.service';
 
 export type PortalProgressEvent = {
   processId: string;
@@ -97,6 +101,7 @@ export class InvoicePortalService implements OnModuleInit {
     private readonly lifecycleService: InvoiceLifecycleService,
     private readonly branchService: InvoiceBranchService,
     private readonly vinfastPartsService: VinfastPartsService,
+    private readonly detailApplier: InvoicePortalDetailApplier,
     @Optional()
     private readonly categoryAutopostService?: InvoiceCategoryAutopostService,
   ) {}
@@ -1771,29 +1776,34 @@ export class InvoicePortalService implements OnModuleInit {
         };
       });
 
-      await this.lifecycleService.update(invoice.id, {
-        preVatAmount: json.tgtcthue != null ? Number(json.tgtcthue) : undefined,
-        vatAmount: json.tgtthue != null ? Number(json.tgtthue) : undefined,
-        discountAmount:
-          json.ttcktmai != null ? Number(json.ttcktmai) : undefined,
-        totalAmount: json.tgtttbso != null ? Number(json.tgtttbso) : undefined,
-        sellerName: json.nbten,
-        sellerAddress: json.nbdchi,
-        buyerName: json.nmten,
-        buyerAddress: json.nmdchi,
-        buyerPersonalName: json.nmtnmua,
-        buyerCccd: json.nmcmnd,
-        buyerTaxCode: json.mst,
-        description: items.length > 0 ? items[0].description : undefined,
-        items: normalizedItems,
-        taxInvoiceStatus:
-          json.tthai !== undefined && json.tthai !== null
-            ? Number(json.tthai)
-            : undefined,
-        taxProcessStatus:
-          json.ttxly !== undefined && json.ttxly !== null
-            ? Number(json.ttxly)
-            : undefined,
+      // Chỉ áp field GDT-owned; dòng hàng khớp giữ id, field ERP tự quản (ghi chú, danh mục, chi nhánh, mã hàng) giữ nguyên.
+      await this.detailApplier.applyPortalDetail(invoice.id, {
+        header: {
+          preVatAmount:
+            json.tgtcthue != null ? Number(json.tgtcthue) : undefined,
+          vatAmount: json.tgtthue != null ? Number(json.tgtthue) : undefined,
+          discountAmount:
+            json.ttcktmai != null ? Number(json.ttcktmai) : undefined,
+          totalAmount:
+            json.tgtttbso != null ? Number(json.tgtttbso) : undefined,
+          sellerName: json.nbten,
+          sellerAddress: json.nbdchi,
+          buyerName: json.nmten,
+          buyerAddress: json.nmdchi,
+          buyerPersonalName: json.nmtnmua,
+          buyerCccd: json.nmcmnd,
+          buyerTaxCode: json.mst,
+          description: items.length > 0 ? items[0].description : undefined,
+          taxInvoiceStatus:
+            json.tthai !== undefined && json.tthai !== null
+              ? Number(json.tthai)
+              : undefined,
+          taxProcessStatus:
+            json.ttxly !== undefined && json.ttxly !== null
+              ? Number(json.ttxly)
+              : undefined,
+        },
+        items: normalizedItems as PortalDetailItem[],
       });
 
       this.logger.log(

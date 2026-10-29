@@ -345,7 +345,7 @@ Chưa port (còn ở v1): attributes, stats, danh sách/export items, netoff, po
 | `POST` | `/erp-invoices/portal/token` | `invoices` | `update` | Lưu cấu hình Token/Cookie/Tài khoản Cổng thuế vào Company Profile |
 | `POST` | `/erp-invoices/portal/sync` | `invoices` | `update` | Kích hoạt đồng bộ hóa đơn từ GDT theo khoảng ngày (tự đọc Token/Cookie từ DB), tự tải XML ngầm |
 | `POST` | `/erp-invoices/portal/bulk-download-xml` | `invoices` | `update` | Tải bổ sung tệp XML gốc từ GDT cho các hóa đơn chưa có XML trong DB (tự đọc Token/Cookie từ DB) |
-| `POST` | `/erp-invoices/:id/sync-detail` | — | — | Đồng bộ chi tiết dòng mặt hàng từ XML/GDT cho 1 hóa đơn cụ thể (tự đọc Token/Cookie từ DB) |
+| `POST` | `/erp-invoices/:id/sync-detail` | — | — | Đồng bộ chi tiết dòng mặt hàng từ GDT cho 1 hóa đơn cụ thể (tự đọc Token/Cookie từ DB). Chỉ ghi field GDT-owned, xem mục 5.y |
 | `GET (SSE)` | `/erp-invoices/portal/progress` | — | — | Stream SSE tiến độ đồng bộ hóa đơn GDT thời gian thực |
 
 Ghi chú payload SSE `portal/progress`: thêm trường tùy chọn `currentItem` (`HĐ 1847 · C26MSP · TÊN ĐỐI TÁC`) cho các bước lưu HĐ và tải XML (cả hàng loạt lẫn nền), dựng bởi `helpers/invoice-progress-ref.helper.ts`. Event trước và sau một HĐ dùng cùng `message` để phía web gộp thành một dòng log.
@@ -596,6 +596,14 @@ Ghi chú payload SSE `portal/progress`: thêm trường tùy chọn `currentItem
       1. Đăng ký alias tường minh qua `qb.addSelect("NULLIF(regexp_replace(inv.invoice_no, '\\D', '', 'g'), '')::numeric", 'inv_invoice_no_num')`.
       2. Gọi `qb.orderBy('inv_invoice_no_num', orderDirection, 'NULLS LAST')`.
       3. Gọi `addOrderBy('inv.invoiceNo', orderDirection)` làm tiêu chí thứ cấp ổn định thứ tự các số hóa đơn có cùng phần số hoặc chuỗi ký tự thuần.
+
+### 5.y Quy tắc sở hữu field khi đồng bộ chi tiết GDT (`syncInvoiceDetailFromJson`)
+- Luồng ghi: `syncInvoiceDetailFromJson` → `InvoicePortalDetailApplier.applyPortalDetail` (`services/sub-services/invoice-portal-detail-applier.service.ts`), một transaction. Helper thuần: `helpers/portal-detail-merge.helper.ts`. Không còn gọi `lifecycleService.update` từ luồng này.
+- **Field GDT-owned (ghi đè khi khác)**: header `sellerName`, `sellerAddress`, `buyerName`, `buyerAddress`, `buyerPersonalName`, `buyerCccd`, `buyerTaxCode`, `description`, `preVatAmount`, `vatAmount`, `discountAmount`, `totalAmount`, `taxInvoiceStatus`, `taxProcessStatus`; dòng hàng `description`, `unit`, `quantity`, `unitPrice`, `preVatAmount`, `vatRate`, `vatAmount`, `discountAmount`, `totalAmount`.
+- **Field ERP tự quản (không bao giờ ghi)**: `categoryId`, `invoiceCategory`, `branchId`/`branchIds`, `notes`, `paymentDocumentNos`, `purchaseOrderId`, `salesOrderId`, `status`, `postingStatus`/`journalEntryId`, `isValid`, `attributes`, file PDF/XML; dòng hàng `itemCode`, `invoiceSubcategory`.
+- **Suy ra (chỉ điền khi đang rỗng)**: `settlementOrder`, `licensePlate` (từ `buildMetadataFillPatch`).
+- Ghép dòng hàng theo mô tả đã chuẩn hóa (`matchPortalItems`): dòng khớp giữ nguyên `id` (nên `vinfast_parts_ledger` không bị cascade xóa); dòng GDT không khớp thành insert; dòng cũ không còn trên GDT thành delete.
+- Giới hạn đã chấp nhận: field GDT-owned do người dùng sửa tay vẫn bị ghi đè ở lần đồng bộ chi tiết kế tiếp; chưa có cờ theo dõi từng field.
 
 ### 5.x Xử lý lỗi 5xx của Cổng thuế khi `syncFromPortal`
 - `fetchWithRetry` retry 5xx tối đa 3 lần với backoff `2s·n² + jitter` (429: `5s·n`). 401/403 không retry: ném `GdtTokenExpiredError`, `syncFromPortal` relogin một lần rồi thử lại đúng request; nếu relogin thất bại thì dừng quét nhưng vẫn lưu phần đã tải.

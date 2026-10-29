@@ -99,6 +99,37 @@ function opexRows(items: PnlLineItem[]): Draft[] {
   });
 }
 
+/** Chi phí tài chính: hạng mục (cấp 2, cộng các dòng cùng khóa) và từng dòng nhập (cấp 3). */
+function financialRows(items: PnlLineItem[]): Draft[] {
+  const groups = new Map<string, PnlLineItem[]>();
+  for (const item of items) {
+    const key = item.categoryKey || item.categoryName;
+    groups.set(key, [...(groups.get(key) ?? []), item]);
+  }
+  return [...groups.entries()].flatMap(([groupKey, entries]) => {
+    const total = entries.reduce((sum, e) => sum + e.amount, 0);
+    const showEntries = entries.length > 1 || entries.some((e) => e.note);
+    const seen = new Map<string, number>();
+    return [
+      l2(`fin:${groupKey}`, entries[0].categoryName, total),
+      ...(showEntries
+        ? entries.map((e) => {
+            const base = `fin:${groupKey}:${e.note ?? ''}`;
+            const n = (seen.get(base) ?? 0) + 1;
+            seen.set(base, n);
+            return l3(
+              `${base}#${n}`,
+              e.note || 'Khoản chi',
+              e.amount,
+              MONEY,
+              false,
+            );
+          })
+        : []),
+    ];
+  });
+}
+
 /** Doanh thu theo phân loại (cấp 2) kèm số phiếu (cấp 3); thiếu phân loại thì một dòng như cũ. */
 function revenueRows(m: PnlMonthRow): Draft[] {
   const segments = m.revenueSegments.filter((s) => s.revenue || s.caseCount);
@@ -158,6 +189,7 @@ export function buildPnlTableRows(m: PnlMonthRow): PnlTableRow[] {
   const dvItems = m.commissionItems.filter(
     (i) => i.categoryKey !== RATE_KEY && i.categoryKey !== SALE_KEY,
   );
+  const financialTotal = m.financialTotal || 0;
   return numberRows([
     l1('rev', 'Doanh thu', m.revenue),
     ...revenueRows(m),
@@ -177,10 +209,12 @@ export function buildPnlTableRows(m: PnlMonthRow): PnlTableRow[] {
     ...(m.hhbhTotal ? [l2('sell:hhbh', 'HHBH', m.hhbhTotal)] : []),
     l1('opex', 'Chi phí vận hành', m.opexTotal),
     ...opexRows(m.opexItems),
+    l1('fin', 'Chi phí tài chính', financialTotal),
+    ...financialRows(m.financialItems || []),
     l1(
       'net1',
       'Lợi nhuận ròng (trước hoa hồng DV)',
-      m.grossProfit - sellingTotal - m.opexTotal,
+      m.grossProfit - sellingTotal - m.opexTotal - financialTotal,
     ),
     l1('comm', 'Hoa hồng DV', round(m.commissionTotal - saleAmount)),
     ...dvItems.map((i) =>

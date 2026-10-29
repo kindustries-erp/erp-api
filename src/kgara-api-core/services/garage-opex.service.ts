@@ -17,6 +17,7 @@ import {
   buildOpexColumnOptionsQuery,
   COGS_GROUP_CATEGORIES,
   SELLING_COMMISSION_CATEGORIES,
+  isFinancialCategory,
 } from '../helpers/garage-opex-query.builder';
 
 @Injectable()
@@ -452,6 +453,15 @@ export class GarageOpexService {
       note?: string | null;
     }> = [];
 
+    const financialItems: Array<{
+      id: string;
+      categoryKey: string;
+      categoryName: string;
+      amount: number;
+      ojAmount: number;
+      note?: string | null;
+    }> = [];
+
     let totalOpex = 0;
     let ojTotalOpex = 0;
     let totalCommission = 0;
@@ -460,6 +470,8 @@ export class GarageOpexService {
     let ojTotalDirectCost = 0;
     let totalSelling = 0;
     let ojTotalSelling = 0;
+    let totalFinancial = 0;
+    let ojTotalFinancial = 0;
 
     for (const item of items) {
       const amt = Number(item.amount) || 0;
@@ -489,6 +501,10 @@ export class GarageOpexService {
         sellingItems.push(row);
         totalSelling += amt;
         ojTotalSelling += ojAmt;
+      } else if (isFinancialCategory(item.categoryKey)) {
+        financialItems.push(row);
+        totalFinancial += amt;
+        ojTotalFinancial += ojAmt;
       } else if (item.categoryKey.startsWith('HOA_HONG_')) {
         commissionItems.push(row);
         totalCommission += amt;
@@ -515,6 +531,11 @@ export class GarageOpexService {
         total: totalOpex,
         ojTotal: ojTotalOpex,
         items: opexItems,
+      },
+      financialExpense: {
+        total: totalFinancial,
+        ojTotal: ojTotalFinancial,
+        items: financialItems,
       },
       commission: {
         total: totalCommission,
