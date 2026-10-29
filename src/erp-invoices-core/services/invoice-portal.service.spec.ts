@@ -569,7 +569,7 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
 
   describe('syncFromPortal - date windows & token recovery', () => {
     beforeEach(() => {
-      process.env.GDT_QUERY_WINDOW_DAYS = '10';
+      process.env.GDT_QUERY_WINDOW_DAYS = '9';
       jest
         .spyOn(service as any, 'validatePortalTaxpayer')
         .mockResolvedValue(undefined);
@@ -586,7 +586,7 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
     const emptyPage = () =>
       new Response(JSON.stringify({ datas: [], total: 0 }), { status: 200 });
 
-    it('queries each 10-day window instead of each single day', async () => {
+    it('queries each 9-day window instead of each single day', async () => {
       const fetchSpy = jest
         .spyOn(global, 'fetch')
         .mockImplementation(() => Promise.resolve(emptyPage()));
@@ -607,10 +607,35 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
       );
       expect(urls).toHaveLength(3);
       expect(urls[0]).toContain('ge=01/10/2026');
-      expect(urls[0]).toContain('le=10/10/2026');
-      expect(urls[1]).toContain('ge=11/10/2026');
-      expect(urls[2]).toContain('ge=21/10/2026');
+      expect(urls[0]).toContain('le=09/10/2026');
+      expect(urls[1]).toContain('ge=10/10/2026');
+      expect(urls[1]).toContain('le=18/10/2026');
+      expect(urls[2]).toContain('ge=19/10/2026');
       expect(urls[2]).toContain('le=25/10/2026');
+    });
+
+    it('uses 9-day windows by default when GDT_QUERY_WINDOW_DAYS is unset', async () => {
+      delete process.env.GDT_QUERY_WINDOW_DAYS;
+      const fetchSpy = jest
+        .spyOn(global, 'fetch')
+        .mockImplementation(() => Promise.resolve(emptyPage()));
+
+      await service.syncFromPortal(
+        {
+          token: 'tok',
+          dateFrom: '2026-10-01',
+          dateTo: '2026-10-25',
+          type: 'sold',
+        } as any,
+        'user-1',
+        true,
+      );
+
+      const urls = fetchSpy.mock.calls.map((c) =>
+        decodeURIComponent((c[0] as URL).toString()),
+      );
+      expect(urls).toHaveLength(3);
+      expect(urls[0]).toContain('le=09/10/2026');
     });
 
     it('splits a window in half when GDT rejects the range with 400', async () => {
@@ -619,7 +644,7 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
         .mockImplementation((url: any) => {
           const s = decodeURIComponent(url.toString());
           return Promise.resolve(
-            s.includes('ge=01/10/2026') && s.includes('le=10/10/2026')
+            s.includes('ge=01/10/2026') && s.includes('le=09/10/2026')
               ? new Response('bad range', { status: 400 })
               : emptyPage(),
           );
@@ -629,7 +654,7 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
         {
           token: 'tok',
           dateFrom: '2026-10-01',
-          dateTo: '2026-10-10',
+          dateTo: '2026-10-09',
           type: 'sold',
         } as any,
         'user-1',

@@ -540,7 +540,7 @@ export class InvoicePortalService implements OnModuleInit {
           ];
 
     const windowDays = clampWindowDays(
-      Number(process.env.GDT_QUERY_WINDOW_DAYS ?? 10),
+      Number(process.env.GDT_QUERY_WINDOW_DAYS ?? 9),
     );
 
     const task = async () => {

@@ -163,7 +163,7 @@ async function run(): Promise<void> {
   const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
   if (cookies) headers.Cookie = cookies;
 
-  const windowDays = Number(scriptEnv.config.GDT_QUERY_WINDOW_DAYS ?? 10);
+  const windowDays = Number(scriptEnv.config.GDT_QUERY_WINDOW_DAYS ?? 9);
   const windows = buildDateWindows(from, to, windowDays);
 
   const client = new Client({
