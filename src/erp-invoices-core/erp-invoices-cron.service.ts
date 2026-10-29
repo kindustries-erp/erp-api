@@ -11,6 +11,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { CorePermission } from '../rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
 import {
+  isAuthError,
   isGdtInvoiceCronEnabled,
   isWithinInvoiceSyncWindow,
   getNextInvoiceSyncSlot,
@@ -18,6 +19,10 @@ import {
   runSafeCronJob,
 } from '../common/utils/cron.util';
 import { GdtCronStateHelper } from './helpers/gdt-cron-state.helper';
+import {
+  getVietnamTodayIso,
+  shiftIsoDate,
+} from './helpers/gdt-date-window.helper';
 
 @Injectable()
 export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
@@ -146,17 +151,17 @@ export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
             }
           }
 
-          const now = new Date();
-          const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-
-          const dateFrom = this.formatDate(firstDay);
-          const dateTo = this.formatDate(now);
+          // Quét lùi nhiều ngày (theo giờ VN) để bắt hóa đơn lập muộn, kể cả qua ranh giới tháng.
+          const dateTo = getVietnamTodayIso();
+          const dateFrom = shiftIsoDate(dateTo, -this.getLookbackDays());
 
           this.logger.log(
             `Syncing IN invoices from ${dateFrom} to ${dateTo}...`,
           );
-          const purchaseResult: any =
-            await this.erpInvoicesCoreService.syncFromPortal(
+          let purchaseResult: any = null;
+          let purchaseError: unknown = null;
+          try {
+            purchaseResult = await this.erpInvoicesCoreService.syncFromPortal(
               {
                 type: 'purchase',
                 dateFrom,
@@ -167,6 +172,15 @@ export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
               undefined,
               true,
             );
+          } catch (err) {
+            // Lỗi xác thực phải được xử lý ở onAuthError (tạm dừng cron).
+            if (isAuthError(err)) throw err;
+            purchaseError = err;
+            this.logger.error(
+              'IN invoice sync failed, continuing with OUT',
+              err,
+            );
+          }
 
           // Wait 5 seconds to avoid rate limits
           await new Promise((resolve) => setTimeout(resolve, 5000));
@@ -174,8 +188,10 @@ export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
           this.logger.log(
             `Syncing OUT invoices from ${dateFrom} to ${dateTo}...`,
           );
-          const soldResult: any =
-            await this.erpInvoicesCoreService.syncFromPortal(
+          let soldResult: any = null;
+          let soldError: unknown = null;
+          try {
+            soldResult = await this.erpInvoicesCoreService.syncFromPortal(
               {
                 type: 'sold',
                 dateFrom,
@@ -186,8 +202,17 @@ export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
               undefined,
               true,
             );
+          } catch (err) {
+            if (isAuthError(err)) throw err;
+            soldError = err;
+            this.logger.error('OUT invoice sync failed', err);
+          }
 
-          this.logger.log('Auto-sync finished successfully.');
+          await this.notifySyncIncomplete(purchaseResult, soldResult, [
+            purchaseError,
+            soldError,
+          ]);
+          this.logger.log('Auto-sync finished.');
           await this.notifySyncSuccess(purchaseResult, soldResult);
         },
       });
@@ -280,10 +305,68 @@ export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private formatDate(d: Date): string {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const date = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${date}`;
+  /** Số ngày quét lùi mỗi lượt, cấu hình qua GDT_CRON_LOOKBACK_DAYS (mặc định 35). */
+  private getLookbackDays(): number {
+    const days = Number(process.env.GDT_CRON_LOOKBACK_DAYS ?? 35);
+    return Number.isFinite(days) && days >= 1 ? Math.floor(days) : 35;
+  }
+
+  /** Thông báo khi một lượt đồng bộ có phần lỗi, cửa sổ phải chia nhỏ, xung đột số tiền hoặc lỗi chiều. */
+  private async notifySyncIncomplete(
+    purchaseStats: any,
+    soldStats: any,
+    errors: unknown[],
+  ) {
+    const problems: string[] = [];
+    const sides: [string, any][] = [
+      ['mua vào', purchaseStats],
+      ['bán ra', soldStats],
+    ];
+    for (const [label, stats] of sides) {
+      const failed = stats?.failedSegments?.length ?? 0;
+      const truncated = stats?.truncatedWindows ?? 0;
+      const conflicts = stats?.identityConflicts?.length ?? 0;
+      if (failed) problems.push(`${label}: ${failed} phần lỗi`);
+      if (truncated)
+        problems.push(`${label}: ${truncated} cửa sổ phải chia nhỏ`);
+      if (conflicts)
+        problems.push(`${label}: ${conflicts} hóa đơn cùng số nhưng khác tiền`);
+    }
+    for (const err of errors) {
+      if (err)
+        problems.push(
+          `lỗi: ${err instanceof Error ? err.message : 'không xác định'}`,
+        );
+    }
+    if (problems.length === 0) return;
+
+    this.logger.warn(`Đồng bộ hóa đơn chưa đầy đủ: ${problems.join('; ')}`);
+
+    try {
+      const userIds = await this.findInvoiceNotifyUserIds();
+      for (const userId of userIds) {
+        await this.notificationsService.createForUser(userId, {
+          type: 'WARNING',
+          title: 'Đồng bộ hóa đơn chưa đầy đủ',
+          message: `Lượt đồng bộ Cổng Thuế có vấn đề: ${problems.join('; ')}. Các hóa đơn còn thiếu sẽ được quét lại ở lượt sau.`,
+        });
+      }
+    } catch (e) {
+      this.logger.error('Failed to send incomplete sync notifications', e);
+    }
+  }
+
+  /** Người dùng có quyền xem hóa đơn (resource `invoices` hoặc `*`). */
+  private async findInvoiceNotifyUserIds(): Promise<string[]> {
+    const perms = await this.permissionRepo.find({
+      where: [{ resource: 'invoices' }, { resource: '*' }],
+    });
+    const roleIds = [...new Set(perms.map((p) => p.roleId))];
+    if (roleIds.length === 0) return [];
+
+    const userRoles = await this.userRoleRepo.find({
+      where: { roleId: In(roleIds) },
+    });
+    return [...new Set(userRoles.map((ur) => ur.userId))];
   }
 }

@@ -508,4 +508,7 @@ src/modules/bank-statements/components/BankStatementsTab/
 - Giao dịch tạo: `source_type='CASH'`, `credit_amount` = tiền thu, `reference_number = CASH2026-R<dòng sheet>` (idempotent), `cashflow_classification='OPERATING'`, `cashflow_purpose='CUSTOMER_PAYMENT'`, `import_batch_id` riêng cho mỗi lần chạy.
 - Cấn trừ: hóa đơn có MST và đối tác tồn tại → `InvoiceDebtsNetOffService.allocate`; còn lại → `TransactionAccountingService.linkInvoiceToTransaction` sau khi kiểm tra lại số dư.
 - Đã chạy 2026-10-28 trên `erp_greenway_production`: 177 giao dịch CASH, tổng 131.246.000đ; 177 dòng cấn trừ, tổng 131.183.792đ (phần 62.208đ chênh lệch nằm trên giao dịch). Không có giao dịch/hóa đơn nào do lần này gây âm số dư.
-- Quy ước: thu tiền mặt = `credit_amount`. Form tạo phiếu tiền mặt ở web (`CashVoucherFormSections.tsx`) đang gán "Thu" vào `debitAmount` — mâu thuẫn chưa xử lý, không được cấn trừ phiếu tạo từ form đó.
+- Quy ước thống nhất: **thu tiền mặt = `credit_amount`, chi = `debit_amount`** (cho mọi nguồn, kể cả import Excel và form web).
+- Parser sổ quỹ `parsers/cash.parser.ts`: header chứa "thu", "phát sinh nợ", "ghi nợ" → `creditAmount`; header chứa "chi", "phát sinh có", "ghi có" → `debitAmount`. Khóa nội bộ `receipt`/`payment`.
+- Hạn chế đã biết: so khớp header theo chuỗi con nên tiêu đề có chứa "chi" (ví dụ "Chi nhánh") có thể bị nhận nhầm là cột Chi. Chưa siết (ngoài phạm vi).
+- Form web đã sửa cùng quy ước (`receiptAmount` → `creditAmount`, `paymentAmount` → `debitAmount`).
