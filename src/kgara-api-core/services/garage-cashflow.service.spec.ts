@@ -113,6 +113,7 @@ describe('GarageCashflowService (Facade)', () => {
       1,
       10,
       '{}',
+      'forecast',
     );
 
     expect(mockQueryEngine.getColumnOptions).toHaveBeenCalledWith(
@@ -121,6 +122,7 @@ describe('GarageCashflowService (Facade)', () => {
       1,
       10,
       '{}',
+      'forecast',
     );
     expect(res).toEqual({ data: ['option1'], total: 1 });
   });

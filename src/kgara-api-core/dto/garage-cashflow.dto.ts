@@ -6,8 +6,35 @@ import {
   IsIn,
   IsUUID,
   IsPositive,
+  IsEnum,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+
+export enum GarageCashflowTab {
+  DASHBOARD = 'dashboard',
+  VOUCHERS = 'vouchers',
+  FORECAST = 'forecast',
+  ALL = 'all',
+}
+
+export enum GarageCashflowLedgerType {
+  ACTUAL = 'ACTUAL',
+  FORECAST = 'FORECAST',
+  ALL = 'ALL',
+}
+
+export enum GarageCashflowVoucherType {
+  RECEIPT = 'RECEIPT',
+  PAYMENT = 'PAYMENT',
+}
+
+export enum GarageCashflowPaymentStatus {
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  PAID = 'PAID',
+  EXPECTED = 'EXPECTED',
+  CANCELLED = 'CANCELLED',
+}
 
 export class CreateKgaraCashflowVoucherDto {
   @IsString()
@@ -17,7 +44,7 @@ export class CreateKgaraCashflowVoucherDto {
   @IsString()
   @IsNotEmpty()
   @IsIn(['RECEIPT', 'PAYMENT'])
-  voucherType: 'RECEIPT' | 'PAYMENT';
+  voucherType: GarageCashflowVoucherType | 'RECEIPT' | 'PAYMENT';
 
   @IsNumber()
   @IsNotEmpty()
@@ -39,7 +66,13 @@ export class CreateKgaraCashflowVoucherDto {
   @IsString()
   @IsOptional()
   @IsIn(['PENDING', 'APPROVED', 'PAID', 'EXPECTED', 'CANCELLED'])
-  paymentStatus?: 'PENDING' | 'APPROVED' | 'PAID' | 'EXPECTED' | 'CANCELLED';
+  paymentStatus?:
+    | GarageCashflowPaymentStatus
+    | 'PENDING'
+    | 'APPROVED'
+    | 'PAID'
+    | 'EXPECTED'
+    | 'CANCELLED';
 
   @IsString()
   @IsOptional()
@@ -147,7 +180,7 @@ export class ListKgaraCashflowVoucherQueryDto {
   @IsOptional()
   @IsString()
   @IsIn(['RECEIPT', 'PAYMENT'])
-  voucher_type?: 'RECEIPT' | 'PAYMENT';
+  voucher_type?: GarageCashflowVoucherType | 'RECEIPT' | 'PAYMENT';
 
   @IsOptional()
   @IsString()
@@ -174,6 +207,16 @@ export class ListKgaraCashflowVoucherQueryDto {
   @IsOptional()
   @IsString()
   column_search?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['vouchers', 'forecast', 'all'])
+  tab?: GarageCashflowTab | 'vouchers' | 'forecast' | 'all';
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['ACTUAL', 'FORECAST', 'ALL'])
+  ledger_type?: GarageCashflowLedgerType | 'ACTUAL' | 'FORECAST' | 'ALL';
 }
 
 export class KgaraCashflowCaseResponseDto {
@@ -187,7 +230,7 @@ export class KgaraCashflowCaseResponseDto {
 export class KgaraCashflowVoucherResponseDto {
   id: string;
   voucherCode: string;
-  voucherType: 'RECEIPT' | 'PAYMENT';
+  voucherType: GarageCashflowVoucherType | 'RECEIPT' | 'PAYMENT';
   amount: number;
   transDate: string;
   partnerName?: string | null;
@@ -197,6 +240,7 @@ export class KgaraCashflowVoucherResponseDto {
   paymentMethod?: string | null;
   paymentContent?: string | null;
   paymentStatus?:
+    | GarageCashflowPaymentStatus
     | 'PENDING'
     | 'APPROVED'
     | 'PAID'
