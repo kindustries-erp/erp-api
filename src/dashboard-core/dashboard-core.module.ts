@@ -19,5 +19,6 @@ import { OperatingExpensesCoreModule } from '../operating-expenses-core/operatin
   ],
   controllers: [DashboardCoreController],
   providers: [DashboardCoreService],
+  exports: [DashboardCoreService],
 })
 export class DashboardCoreModule {}
