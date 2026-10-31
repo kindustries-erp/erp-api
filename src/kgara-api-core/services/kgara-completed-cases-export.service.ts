@@ -113,7 +113,13 @@ export class KgaraCompletedCasesExportService {
       linkedInvoiceVatMap,
     );
 
-    buildSheet2PnlTracking(workbook, cases, branchNameMap, serviceLinesMap);
+    buildSheet2PnlTracking(
+      workbook,
+      cases,
+      branchNameMap,
+      serviceLinesMap,
+      linkedInvoiceVatMap,
+    );
 
     buildSheet3ItemizedServices(workbook, cases, serviceLinesMap);
 
