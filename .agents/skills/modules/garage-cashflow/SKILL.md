@@ -241,6 +241,15 @@ Khi có thay đổi logic trong module này, bắt buộc phải:
 
 ## Frontend Architecture & Routing (`/garage-cashflow`)
 - Trang **Thu chi garage** (`GarageCashflowPage`) là một trang độc lập (`/garage-cashflow`), được bảo vệ bằng RBAC `useHasPermission(ErpResource.GARAGE_CASHFLOW, ErpAction.READ)` (nếu không có quyền sẽ hiển thị `<Forbidden />`).
+- Gồm **3 Tab Điều Hướng Độc Lập** (đồng bộ qua URL query `?tab=...`):
+  1. `tab=dashboard`: **Tổng quan** (`GarageCashflowDashboard`) - Thống kê KPI thu chi, biểu đồ và phân tích dòng tiền thực tế.
+  2. `tab=vouchers`: **Phiếu thu chi** (`GarageCashflowList` với `tabKey="vouchers"`) - Quản lý các phiếu thu chi thực tế:
+     - `ACTUAL_IN`: Phiếu thu thực tế (`voucher_type = 'RECEIPT'` và `payment_status` KHÔNG PHẢI `EXPECTED` hay `CANCELLED`).
+     - `ACTUAL_OUT`: Phiếu chi thực tế (`voucher_type = 'PAYMENT'` và `payment_status = 'PAID'` hoặc `NULL`).
+  3. `tab=forecast`: **Dự thu chi** (`GarageCashflowList` với `tabKey="forecast"`) - Quản lý các phiếu dự kiến:
+     - `EXPECTED_IN`: Dự thu (`voucher_type = 'RECEIPT'` và `payment_status = 'EXPECTED'`).
+     - `PLANNED_OUT`: Dự chi (`voucher_type = 'PAYMENT'` và `payment_status IN ('PENDING', 'APPROVED')`).
+  - Cả 2 tab danh sách đều sử dụng chung `GarageCashflowList` và `GarageCashflowTable` với `tableId` động (`garage-cashflow-list` vs `garage-cashflow-forecast-list`), cột và tóm tắt tổng (Subtotal / Grand Total) được gắn nhãn tương ứng (Thu thực tế / Chi thực tế vs Dự thu / Dự chi).
 - Trong thanh menu điều hướng (Sidebar Nav & `useNavItems`), menu **"Thu chi garage"** (icon `Wallet`) được đặt **nằm phía trên "Phiếu dịch vụ"** (`garage-cases`).
 - Tab "Thu chi xưởng" trong `GarageDebts` (`/garage-debts`) đã được gỡ bỏ hoàn toàn; `GarageDebts` chỉ còn 3 tab: `Tổng quan`, `Phải thu`, `Phải trả`.
 

@@ -265,7 +265,26 @@ export const COMPLETED_CASES_COLUMN_GROUPS: Record<
   },
   profit: {
     palette: { header: 'FF6D28D9', summary: 'FFEDE9FE', body: 'FFF5F3FF' },
-    keys: ['doanhThu', 'chiPhi', 'loiNhuan', 'margin'],
+    keys: ['vatAmount', 'doanhThu', 'chiPhi', 'loiNhuan', 'margin'],
+  },
+};
+
+/** Nhóm cột Sheet 2 (Theo dõi lãi lỗ): dùng lại palette của Sheet 1 để hai sheet nhất quán. */
+export const CASE_PNL_COLUMN_GROUPS: Record<
+  'revenue' | 'cost' | 'profit',
+  { palette: ColumnGroupPalette; keys: string[] }
+> = {
+  revenue: {
+    palette: COMPLETED_CASES_COLUMN_GROUPS.receivable.palette,
+    keys: ['vatAmount', 'doanhThuDichVu', 'doanhThuPhuTung', 'doanhThu'],
+  },
+  cost: {
+    palette: COMPLETED_CASES_COLUMN_GROUPS.payable.palette,
+    keys: ['giaVonPhuTung', 'chiPhiKhac', 'chiPhi'],
+  },
+  profit: {
+    palette: COMPLETED_CASES_COLUMN_GROUPS.profit.palette,
+    keys: ['loiNhuan', 'margin'],
   },
 };
 
@@ -278,6 +297,10 @@ export function applyColumnGroupStyles(
   sheet: ExcelJS.Worksheet,
   columns: ExcelReportColumnDef[],
   firstDataRow = 5,
+  groups: Record<
+    string,
+    { palette: ColumnGroupPalette; keys: string[] }
+  > = COMPLETED_CASES_COLUMN_GROUPS,
 ): void {
   const solid = (argb: string): ExcelJS.Fill => ({
     type: 'pattern',
@@ -288,7 +311,7 @@ export function applyColumnGroupStyles(
   const hasFill = (cell: ExcelJS.Cell) =>
     Boolean(cell.fill) && (cell.fill as ExcelJS.FillPattern).pattern !== 'none';
 
-  for (const group of Object.values(COMPLETED_CASES_COLUMN_GROUPS)) {
+  for (const group of Object.values(groups)) {
     for (const key of group.keys) {
       const idx = columns.findIndex((c) => c.key === key);
       if (idx < 0) continue;
@@ -465,6 +488,14 @@ export const COMPLETED_CASES_COLUMNS: ExcelReportColumnDef[] = [
     align: 'left',
   },
   {
+    header: 'Thuế GTGT (VNĐ)',
+    key: 'vatAmount',
+    width: 20,
+    isSum: true,
+    align: 'right',
+    style: { numFmt: '#,##0.00' },
+  },
+  {
     header: 'Doanh thu (VNĐ)',
     key: 'doanhThu',
     width: 20,
@@ -522,18 +553,10 @@ export const COMPLETED_CASES_COLUMNS: ExcelReportColumnDef[] = [
 ];
 
 /**
- * Cột tùy chọn, chỉ xuất khi người dùng chọn (không nằm trong mặc định 29 cột).
+ * Cột tùy chọn, chỉ xuất khi người dùng chọn (không nằm trong mặc định 30 cột).
  * Khớp các cột "Tất cả cột" của bảng garage-cases.
  */
 export const COMPLETED_CASES_OPTIONAL_COLUMNS: ExcelReportColumnDef[] = [
-  {
-    header: 'Thuế GTGT (VNĐ)',
-    key: 'vatAmount',
-    width: 20,
-    isSum: true,
-    align: 'right',
-    style: { numFmt: '#,##0.00' },
-  },
   {
     header: 'Quy tắc loại trừ',
     key: 'exclusionRules',
@@ -563,7 +586,7 @@ export const COMPLETED_CASES_OPTIONAL_COLUMNS: ExcelReportColumnDef[] = [
   },
 ];
 
-/** Toàn bộ cột có thể xuất: mặc định 29 cột + cột tùy chọn. */
+/** Toàn bộ cột có thể xuất: mặc định 30 cột + cột tùy chọn. */
 export const COMPLETED_CASES_ALL_COLUMNS: ExcelReportColumnDef[] = [
   ...COMPLETED_CASES_COLUMNS,
   ...COMPLETED_CASES_OPTIONAL_COLUMNS,
@@ -574,7 +597,7 @@ export const COMPLETED_CASES_EXPORT_COLUMN_KEYS: string[] =
   COMPLETED_CASES_ALL_COLUMNS.map((column) => column.key);
 
 /**
- * Định nghĩa cột chuẩn cho Sheet 2: Theo dõi lãi lỗ (15 cột)
+ * Định nghĩa cột chuẩn cho Sheet 2: Theo dõi lãi lỗ (16 cột)
  */
 export const CASE_PNL_COLUMNS: ExcelReportColumnDef[] = [
   { header: 'STT', key: 'index', width: 8, align: 'center' },
@@ -601,6 +624,14 @@ export const CASE_PNL_COLUMNS: ExcelReportColumnDef[] = [
     header: 'Doanh thu Phụ tùng (VNĐ)',
     key: 'doanhThuPhuTung',
     width: 24,
+    isSum: true,
+    align: 'right',
+    style: { numFmt: '#,##0.00' },
+  },
+  {
+    header: 'Thuế GTGT (VNĐ)',
+    key: 'vatAmount',
+    width: 20,
     isSum: true,
     align: 'right',
     style: { numFmt: '#,##0.00' },

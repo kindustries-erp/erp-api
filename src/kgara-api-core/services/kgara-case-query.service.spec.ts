@@ -249,12 +249,13 @@ describe('KgaraCaseQueryService', () => {
         expect.objectContaining({ formula: 'R5-S5', result: 9000000 }),
       ); // conPhaiTra formula
       expect((row5?.getCell(21).fill as any)?.fgColor?.argb).toBe('FFFFFBEB'); // Ghi chú trả pastel fill
-      expect(row5?.getCell(22).value).toBe(15000000); // doanhThu
-      expect(row5?.getCell(23).value).toBe(9000000); // chiPhi
-      expect(row5?.getCell(24).value).toEqual(
-        expect.objectContaining({ formula: 'V5-W5', result: 6000000 }),
+      // Cột 22 là Thuế GTGT (mặc định), đứng ngay trái doanhThu
+      expect(row5?.getCell(23).value).toBe(15000000); // doanhThu
+      expect(row5?.getCell(24).value).toBe(9000000); // chiPhi
+      expect(row5?.getCell(25).value).toEqual(
+        expect.objectContaining({ formula: 'W5-X5', result: 6000000 }),
       ); // loiNhuan formula
-      expect(row5?.getCell(27).value).toBe('Chi nhánh Quận 7'); // branchName
+      expect(row5?.getCell(28).value).toBe('Chi nhánh Quận 7'); // branchName
 
       // Sheet 2: Theo dõi lãi lỗ
       const sheet2 = workbook.getWorksheet('Theo dõi lãi lỗ');
@@ -265,26 +266,27 @@ describe('KgaraCaseQueryService', () => {
       );
       const sheet2Row5 = sheet2?.getRow(5);
       expect(sheet2Row5?.getCell(2).value).toBe('PDV-2026-001');
-      expect(sheet2Row5?.getCell(9).value).toEqual(
+      // Sheet 2 có thêm cột Thuế GTGT (cột 9) nên các cột sau dịch +1
+      expect(sheet2Row5?.getCell(10).value).toEqual(
         expect.objectContaining({ formula: 'G5+H5', result: 15000000 }),
       );
-      expect(sheet2Row5?.getCell(12).value).toEqual(
-        expect.objectContaining({ formula: 'J5+K5', result: 9000000 }),
-      );
       expect(sheet2Row5?.getCell(13).value).toEqual(
-        expect.objectContaining({ formula: 'I5-L5', result: 6000000 }),
+        expect.objectContaining({ formula: 'K5+L5', result: 9000000 }),
       );
       expect(sheet2Row5?.getCell(14).value).toEqual(
+        expect.objectContaining({ formula: 'J5-M5', result: 6000000 }),
+      );
+      expect(sheet2Row5?.getCell(15).value).toEqual(
         expect.objectContaining({
-          formula: 'IF(I5>0, M5/I5, 0)',
+          formula: 'IF(J5>0, N5/J5, 0)',
           result: 0.4,
         }),
       );
       // Dải 4 (40% - 60%): Green-200 FFBBF7D0
-      expect((sheet2Row5?.getCell(14).fill as any)?.fgColor?.argb).toBe(
+      expect((sheet2Row5?.getCell(15).fill as any)?.fgColor?.argb).toBe(
         'FFBBF7D0',
       );
-      expect(sheet2Row5?.getCell(15).value).toBe('Chi nhánh Quận 7');
+      expect(sheet2Row5?.getCell(16).value).toBe('Chi nhánh Quận 7');
 
       // Sheet 3: Chi tiết DV & Phụ tùng
       const sheet3 = workbook.getWorksheet('Chi tiết DV & Phụ tùng');
