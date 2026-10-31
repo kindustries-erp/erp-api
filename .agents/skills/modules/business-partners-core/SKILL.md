@@ -7,7 +7,7 @@ description: Module tri thức Đối tác (Khách hàng & Nhà cung cấp) phí
 
 ## 1. Phạm vi
 
-- Route: `/api/v1/business-partners`. Quyền: `ErpResource.BUSINESS_PARTNERS` (`business_partners`) với READ, CREATE, UPDATE, DELETE.
+- Route chính: `/api/v2/business-partners`; alias `/api/v1/business-partners` giữ cho web V1 (một `@Controller` hai path, spec `erp-business-partner.routes.spec.ts`). Quyền: `ErpResource.BUSINESS_PARTNERS` (`business_partners`) với READ, CREATE, UPDATE, DELETE.
 - Phân loại bằng `partnerType`: `CUSTOMER` (khách hàng) hoặc `VENDOR` (nhà cung cấp). Loại khác được chấp nhận và sinh mã tiền tố `DT-`.
 - Xóa là xóa mềm (`isDeleted`). Không có audit log, không có khóa bi quan (không có số dư).
 - Web tiêu thụ: V1 `src/modules/business-partners-core`, `src/modules/partners`, PO drawers; V2 `src/v2/modules/business-partners` (xem skill `business-partners` của erp-web).
