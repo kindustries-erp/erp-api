@@ -28,6 +28,7 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
   private intervalId?: NodeJS.Timeout;
   private isRunning = false;
   private lastExecutedSlotKey: string | null = null;
+  private lastBranchSyncAlertKey: string | null = null;
 
   constructor(
     @InjectRepository(KgaraBranch)
@@ -134,11 +135,17 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
             await this.syncService.syncBranchesForAccounts(configuredAccounts);
           const failedBranchSync = branchSync.accounts.filter((a) => !a.ok);
           if (failedBranchSync.length > 0) {
-            await this.notifyAdminsOnError(
-              failedBranchSync
-                .map((a) => `${a.accountKey}: ${a.error}`)
-                .join('; '),
-            );
+            const alertDetail = failedBranchSync
+              .map((a) => `${a.accountKey}: ${a.error}`)
+              .join('; ');
+            // Cùng một lỗi trong cùng một ngày chỉ báo admin một lần
+            const alertKey = `${to}|${alertDetail}`;
+            if (alertKey !== this.lastBranchSyncAlertKey) {
+              this.lastBranchSyncAlertKey = alertKey;
+              await this.notifyAdminsOnError(alertDetail);
+            }
+          } else {
+            this.lastBranchSyncAlertKey = null;
           }
 
           const branches = await this.branchRepo.find();

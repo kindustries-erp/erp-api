@@ -197,6 +197,28 @@ describe('KgaraSyncScheduler', () => {
     );
   });
 
+  it('should not re-notify admins for the same branch-sync failure within a day', async () => {
+    const failure = {
+      success: false,
+      accounts: [
+        {
+          accountKey: KgaraAccountKey.OJ,
+          ok: false,
+          error: 'Login failed: HTTP 500',
+        },
+      ],
+    };
+    syncService.syncBranchesForAccounts.mockResolvedValue(failure);
+
+    await scheduler.runScheduledSyncCheck();
+    await scheduler.runScheduledSyncCheck();
+
+    const errorAlerts = notificationsService.createForUser.mock.calls.filter(
+      ([, payload]: [string, { type: string }]) => payload.type === 'ERROR',
+    );
+    expect(errorAlerts).toHaveLength(1);
+  });
+
   it('should skip execution when cron is disabled', async () => {
     jest.spyOn(cronUtil, 'isCronEnabled').mockReturnValue(false);
 
