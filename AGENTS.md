@@ -99,12 +99,13 @@ Repo-level workflows (e.g. `erp/erp-web/.agents/workflows/standardize-drawer.md`
 ## 🚀 Quick Reference: Common Scenarios
 
 ### Scenario 1: Starting a New Feature / Refactor / Bugfix
-1. Load `/plan-and-task` workflow.
+1. Trình plan trong hội thoại (Antigravity: `/plan-and-task`).
 2. Execute **5 phases**: Discovery → Tech Plan → Task Breakdown (X.Y.Z) → Approval → Execution.
-3. Create `implementation_plan.md` with clear DoD and verification commands.
-4. Use Antigravity Brain (`walkthrough.md` for execution tracking).
-5. Update the task checklist in realtime as you progress.
-6. When done: update the Module Skill (`erp/erp-api/.agents/skills/modules/<module>/SKILL.md` or `erp/erp-web/.agents/skills/modules/<module>/SKILL.md`).
+3. Plan (DoD, lệnh verify) trình trong hội thoại; chỉ làm sau khi người dùng trả lời `OK`.
+4. Tạo Epic/Story/Task trên Plane (project KINDU) bằng skill `plane-work-items`.
+5. Cập nhật trạng thái task trên Plane theo thời gian thực.
+6. (Tùy chọn, khi chạy trong Antigravity) giữ `implementation_plan.md` / `walkthrough.md` trong Brain làm bản phụ.
+7. When done: update the Module Skill (`erp/erp-api/.agents/skills/modules/<module>/SKILL.md` or `erp/erp-web/.agents/skills/modules/<module>/SKILL.md`).
 
 ### Scenario 2: Committing & Pushing Code (ERP)
 1. Load `/erp-git-workflow` workflow.
@@ -145,12 +146,11 @@ Repo-level workflows (e.g. `erp/erp-web/.agents/workflows/standardize-drawer.md`
 
 ---
 
-## 🧠 Brain & Planning
+## 📋 Planning & Tracking (Plane)
 
-- Create `implementation_plan.md` for every feature/refactor/bugfix.
-- Use `walkthrough.md` for real-time execution tracking.
-- Save progress in `.agents/` ➔ Antigravity Brain (Claude Code internal storage).
-- Use `/clean-brain` periodically to clean old sessions.
+- Plan trình trong hội thoại; chỉ làm sau khi người dùng trả lời `OK`.
+- Task, story, epic theo dõi trên Plane (project KINDU) bằng skill `plane-work-items`. Không lưu plan/task trong Trilium.
+- Antigravity Brain (`implementation_plan.md` / `walkthrough.md`, `/clean-brain`) là bản phụ, chỉ dùng khi chạy trong Antigravity.
 - **Pause**: document current state in `## ⏸️ Session Checkpoint`.
 - **Resume**: read the checkpoint to identify exactly where you left off.
 
@@ -171,7 +171,7 @@ Repo-level workflows (e.g. `erp/erp-web/.agents/workflows/standardize-drawer.md`
 - ❌ Don't mix ERP (`erp-master`) and Klotus (`master`) branches
 - ❌ Don't use `npm` or `yarn` (use `bun`/`bunx` only)
 - ❌ Don't hardcode strings in UI (use i18n translation keys)
-- ❌ Don't start with code before creating an `implementation_plan.md`
+- ❌ Don't start with code before the plan is approved (`OK`) in chat
 - ❌ Don't leave ad-hoc `.ts` files at repo root (breaks `dist/` output structure)
 - ❌ Don't reference outdated docs (always verify with actual code state)
 - ❌ Don't mix database schemas, `.env`, or domain models between ERP and Klotus
@@ -225,7 +225,7 @@ Workflow ERP nằm ở `./.agents/workflows/`:
 
 Workflow global (`plan-and-task.md`, `erp-git-workflow.md`, `standardize-table.md`, `api-service-refactor.md`, `ui-atomic-refactor.md`, ...) xem catalog ở `../AGENTS.md`.
 
-Kế hoạch và verify theo Antigravity Brain: `implementation_plan.md` -> `walkthrough.md`, cập nhật checklist realtime.
+Kế hoạch trình trong hội thoại và được `OK` trước khi làm; task theo dõi trên Plane (project KINDU) bằng skill `plane-work-items`. Antigravity Brain (`implementation_plan.md` -> `walkthrough.md`) là bản phụ khi chạy trong Antigravity.
 
 ## TypeORM Query Relations
 
@@ -300,7 +300,7 @@ Source of truth for this repo (`./erp-api`).
 - MUST use bun/bunx exclusively (do NOT use npm)
 - evidence-first
 - before commit/push, `cd` into the repo root (`./erp-api`)
-- **Strict Git Workflow**: You MUST follow the exact commit/push sequence defined below (pull -> build -> check:ci -> test -> commit -> push).
+- **Strict Git Workflow**: You MUST follow the exact commit/push sequence defined below (test -> commit -> pull --rebase -> check:ci -> push, theo `erp-git-workflow`).
 - push this repo with `github-industries`
 - when debugging localhost, remember to run `bun start:dev` on port 10010 and use the admin account `admin@liouni.com` (mật khẩu lấy từ kênh bảo mật của team, không ghi vào repo)
 - by default, work on the `DATABASE_URL` in `.env` (master; luôn đọc `.env` để xác nhận DB thực tế); use the matching `.env.<tenant>-<stage>` file (greenway/klotus) only when explicitly indicated; scripts must take the env file explicitly (a bare `.env` may point at a production DB)
@@ -358,7 +358,7 @@ Source of truth for this repo (`./erp-api`).
 - always check branch 1st when push. All modifications must be developed and pushed on `erp-master` 1st, then merged/synced downstream to other branches.
 - reuse existing components/modules/services/DTOs/helpers/utils/functions first
 - extend/adapt before duplicating
-- manage all task execution, planning, and verification in Antigravity Brain (`implementation_plan.md` -> `walkthrough.md`)
+- plan trình trong hội thoại và chờ `OK`; theo dõi task trên Plane (project KINDU) bằng skill `plane-work-items`. Antigravity Brain chỉ là bản phụ.
 - keep task checklist updated in realtime
 - if task status in docs drifts from code reality, verify by code + build/test + git state before correcting the artifact
 
