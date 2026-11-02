@@ -3,10 +3,10 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 /** Một dòng hàng hóa trả ra API. */
 export class InvoiceItemResponseDto {
   @ApiProperty()
-  id: string;
+  id!: string;
 
   @ApiProperty()
-  invoiceSubcategory: string;
+  invoiceSubcategory!: string;
 
   @ApiPropertyOptional()
   description?: string;
@@ -24,28 +24,28 @@ export class InvoiceItemResponseDto {
   unitPrice?: number;
 
   @ApiProperty()
-  preVatAmount: number;
+  preVatAmount!: number;
 
   @ApiPropertyOptional()
   vatRate?: number;
 
   @ApiProperty()
-  vatAmount: number;
+  vatAmount!: number;
 
   @ApiProperty()
-  discountAmount: number;
+  discountAmount!: number;
 
   @ApiProperty()
-  totalAmount: number;
+  totalAmount!: number;
 }
 
 /** Hình dạng dữ liệu trả ra API. Không trả entity trực tiếp. */
 export class InvoiceResponseDto {
   @ApiProperty()
-  id: string;
+  id!: string;
 
   @ApiProperty()
-  invoiceNo: string;
+  invoiceNo!: string;
 
   @ApiPropertyOptional()
   invoiceNoNormalized?: string;
@@ -54,10 +54,10 @@ export class InvoiceResponseDto {
   serialNo?: string;
 
   @ApiProperty()
-  invoiceDate: string;
+  invoiceDate!: string;
 
   @ApiProperty()
-  direction: string;
+  direction!: string;
 
   @ApiPropertyOptional()
   status?: string;
@@ -152,16 +152,16 @@ export class InvoiceResponseDto {
   relatedSerialNo?: string;
 
   @ApiProperty({ type: [String] })
-  branchIds: string[];
+  branchIds!: string[];
 
   @ApiPropertyOptional()
   categoryId?: string;
 
   @ApiProperty()
-  isValid: boolean;
+  isValid!: boolean;
 
   @ApiProperty()
-  postingStatus: string;
+  postingStatus!: string;
 
   @ApiPropertyOptional()
   createdBy?: string;
@@ -180,8 +180,8 @@ export class InvoiceResponseDto {
   items?: InvoiceItemResponseDto[];
 
   @ApiProperty()
-  createdAt: Date;
+  createdAt!: Date;
 
   @ApiProperty()
-  updatedAt: Date;
+  updatedAt!: Date;
 }
