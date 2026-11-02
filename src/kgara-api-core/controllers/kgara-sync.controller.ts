@@ -12,6 +12,7 @@ import { Repository } from 'typeorm';
 import { GwSyncRun } from '../entities/kgara_sync_run.entity';
 import { KgaraBranch } from '../entities/kgara_branch.entity';
 import { KgaraSyncService } from '../kgara-sync.service';
+import { KgaraAuthService } from '../kgara-auth.service';
 import { KgaraAccountKey } from '../enums/kgara-account.enum';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
@@ -29,6 +30,7 @@ export class KgaraSyncController {
     @InjectRepository(KgaraBranch)
     private readonly branchRepo: Repository<KgaraBranch>,
     private readonly syncService: KgaraSyncService,
+    private readonly authService: KgaraAuthService,
   ) {}
 
   @Post('sync/all')
@@ -42,6 +44,33 @@ export class KgaraSyncController {
     @Query('account') queryAccount?: string,
     @Body() body?: SyncAllDto,
   ) {
+    if (body?.allBranches) {
+      const result = await this.syncService.syncAllBranches(
+        this.authService.getConfiguredAccounts(),
+        {
+          from: body.from,
+          to: body.to,
+          includeDetails: body.includeDetails,
+          forceDetails: body.forceDetails,
+        },
+      );
+      const failedAccounts = result.accounts
+        .filter((a) => !a.ok)
+        .map((a) => `${a.accountKey} (${a.error})`);
+      const failedBranches = result.branches
+        .filter((b) => !b.ok)
+        .map((b) => `${b.accountKey}/${b.branchExternalId}: ${b.error}`);
+      const problems = [...failedAccounts, ...failedBranches];
+
+      return {
+        success: result.success,
+        data: result,
+        message: result.success
+          ? 'Đồng bộ tất cả chi nhánh thành công.'
+          : `Đồng bộ có lỗi: ${problems.join('; ')}`,
+      };
+    }
+
     const branchId = body?.branchId || queryBranchId || headerBranchId;
     if (!branchId) {
       return { success: false, message: 'Missing branchId' };
@@ -77,20 +106,22 @@ export class KgaraSyncController {
     action: ErpAction.CREATE,
   })
   async syncBranches(@Query('account') queryAccount?: string) {
-    if (queryAccount === 'OJ') {
-      await this.syncService.syncBranches(KgaraAccountKey.OJ);
-    } else if (queryAccount === 'MAIN') {
-      await this.syncService.syncBranches(KgaraAccountKey.MAIN);
-    } else {
-      for (const acc of [KgaraAccountKey.MAIN, KgaraAccountKey.OJ]) {
-        try {
-          await this.syncService.syncBranches(acc);
-        } catch (e: any) {
-          // continue
-        }
-      }
-    }
-    return { success: true, message: 'Branches synced successfully.' };
+    const accountKeys =
+      queryAccount === KgaraAccountKey.OJ ||
+      queryAccount === KgaraAccountKey.MAIN
+        ? [queryAccount as KgaraAccountKey]
+        : this.authService.getConfiguredAccounts();
+
+    const result = await this.syncService.syncBranchesForAccounts(accountKeys);
+    const failed = result.accounts.filter((a) => !a.ok);
+
+    return {
+      success: result.success,
+      accounts: result.accounts,
+      message: result.success
+        ? 'Branches synced successfully.'
+        : `Đồng bộ chi nhánh lỗi cho: ${failed.map((a) => `${a.accountKey} (${a.error})`).join('; ')}`,
+    };
   }
 
   @Post('sync/cases/incremental')

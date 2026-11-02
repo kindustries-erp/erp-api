@@ -47,7 +47,10 @@ describe('KgaraSyncScheduler', () => {
     };
 
     syncService = {
-      syncBranches: jest.fn().mockResolvedValue(undefined),
+      syncBranchesForAccounts: jest.fn().mockImplementation(async (keys) => ({
+        success: true,
+        accounts: keys.map((accountKey: string) => ({ accountKey, ok: true })),
+      })),
       getIncrementalWatermark: jest
         .fn()
         .mockResolvedValue('2026-08-01T00:00:00Z'),
@@ -152,8 +155,9 @@ describe('KgaraSyncScheduler', () => {
 
     await scheduler.runScheduledSyncCheck();
 
-    expect(syncService.syncBranches).toHaveBeenCalledTimes(1);
-    expect(syncService.syncBranches).toHaveBeenCalledWith(KgaraAccountKey.MAIN);
+    expect(syncService.syncBranchesForAccounts).toHaveBeenCalledWith([
+      KgaraAccountKey.MAIN,
+    ]);
     expect(syncService.syncCasesForBranch).toHaveBeenCalledTimes(1);
     expect(syncService.syncCasesForBranch).toHaveBeenCalledWith(
       'BRANCH-HN',
@@ -161,6 +165,35 @@ describe('KgaraSyncScheduler', () => {
       expect.anything(),
       expect.anything(),
       KgaraAccountKey.MAIN,
+    );
+  });
+
+  it('should notify admins with ERROR when an account fails branch sync', async () => {
+    authService.getConfiguredAccounts.mockReturnValue([
+      KgaraAccountKey.MAIN,
+      KgaraAccountKey.OJ,
+    ]);
+    syncService.syncBranchesForAccounts.mockResolvedValueOnce({
+      success: false,
+      accounts: [
+        { accountKey: KgaraAccountKey.MAIN, ok: true },
+        {
+          accountKey: KgaraAccountKey.OJ,
+          ok: false,
+          error: 'Login failed: HTTP 401 Unauthorized',
+        },
+      ],
+    });
+
+    await scheduler.runScheduledSyncCheck();
+
+    expect(notificationsService.createForUser).toHaveBeenCalledWith(
+      'admin-1',
+      expect.objectContaining({
+        title: 'Kgara Sync Error',
+        type: 'ERROR',
+        message: expect.stringContaining('OJ: Login failed: HTTP 401'),
+      }),
     );
   });
 

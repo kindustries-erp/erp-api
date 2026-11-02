@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConflictException } from '@nestjs/common';
 import { KgaraSyncService, parseSafeDate } from './kgara-sync.service';
 import { KgaraClientService } from './kgara-client.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -17,6 +18,7 @@ import { SyncDeletionService } from './services/sync-deletion.service';
 import { SyncGrossProfitService } from './services/sync-gross-profit.service';
 import { SyncDebtService } from './services/sync-debt.service';
 import { SyncCaseService } from './services/sync-case.service';
+import { KgaraAccountKey } from './enums/kgara-account.enum';
 
 describe('KgaraSyncService', () => {
   let service: KgaraSyncService;
@@ -164,6 +166,45 @@ describe('KgaraSyncService', () => {
 
       await expect(service.syncBranches()).rejects.toThrow('Network error');
       expect(syncRunRepo.save).toHaveBeenCalled();
+    });
+  });
+
+  describe('syncBranchesForAccounts', () => {
+    it('keeps syncing other accounts when one account fails', async () => {
+      clientService.getBranches.mockImplementation(async (acc: string) => {
+        if (acc === 'OJ') throw new Error('Login failed: HTTP 401');
+        return [{ DonViID: 'b1', MaSo: 'BR01', TenDonVi: 'Branch 1' }];
+      });
+      branchRepo.findOne.mockResolvedValue(null);
+
+      const result = await service.syncBranchesForAccounts([
+        KgaraAccountKey.MAIN,
+        KgaraAccountKey.OJ,
+      ]);
+
+      expect(result.success).toBe(false);
+      expect(result.accounts).toEqual([
+        { accountKey: KgaraAccountKey.MAIN, ok: true },
+        {
+          accountKey: KgaraAccountKey.OJ,
+          ok: false,
+          error: 'Login failed: HTTP 401',
+        },
+      ]);
+      expect(branchRepo.save).toHaveBeenCalled();
+    });
+
+    it('reports success when every account syncs', async () => {
+      clientService.getBranches.mockResolvedValue([]);
+
+      const result = await service.syncBranchesForAccounts([
+        KgaraAccountKey.MAIN,
+      ]);
+
+      expect(result).toEqual({
+        success: true,
+        accounts: [{ accountKey: KgaraAccountKey.MAIN, ok: true }],
+      });
     });
   });
 
@@ -714,6 +755,84 @@ describe('KgaraSyncService', () => {
           classification: 'SUA_CHUA_CHUNG', // Still SUA_CHUA_CHUNG, NOT overwritten by OJ!
         }),
       );
+    });
+  });
+
+  describe('syncAllBranches', () => {
+    beforeEach(() => {
+      branchRepo.find.mockResolvedValue([
+        { externalId: 'b-main', accountKey: KgaraAccountKey.MAIN },
+        { externalId: 'b-oj', accountKey: KgaraAccountKey.OJ },
+      ]);
+      jest.spyOn(service, 'syncBranchesForAccounts').mockResolvedValue({
+        success: true,
+        accounts: [],
+      });
+    });
+
+    it('syncs each branch with its own account and skips branch re-sync', async () => {
+      const syncOne = jest
+        .spyOn(service, 'syncAllInOne')
+        .mockResolvedValue({} as any);
+
+      const result = await service.syncAllBranches([
+        KgaraAccountKey.MAIN,
+        KgaraAccountKey.OJ,
+      ]);
+
+      expect(syncOne).toHaveBeenCalledWith(
+        'b-main',
+        expect.objectContaining({
+          accountKey: KgaraAccountKey.MAIN,
+          skipBranchSync: true,
+        }),
+      );
+      expect(syncOne).toHaveBeenCalledWith(
+        'b-oj',
+        expect.objectContaining({
+          accountKey: KgaraAccountKey.OJ,
+          skipBranchSync: true,
+        }),
+      );
+      expect(result.success).toBe(true);
+    });
+
+    it('keeps processing other branches when one branch fails', async () => {
+      jest
+        .spyOn(service, 'syncAllInOne')
+        .mockRejectedValueOnce(new Error('Kgara API Error: 500'))
+        .mockResolvedValueOnce({} as any);
+
+      const result = await service.syncAllBranches([
+        KgaraAccountKey.MAIN,
+        KgaraAccountKey.OJ,
+      ]);
+
+      expect(result.success).toBe(false);
+      expect(result.branches).toEqual([
+        {
+          branchExternalId: 'b-main',
+          accountKey: KgaraAccountKey.MAIN,
+          ok: false,
+          error: 'Kgara API Error: 500',
+        },
+        expect.objectContaining({ branchExternalId: 'b-oj', ok: true }),
+      ]);
+    });
+
+    it('rejects a second run while one is in progress', async () => {
+      jest
+        .spyOn(service, 'syncAllInOne')
+        .mockImplementation(
+          () =>
+            new Promise((resolve) => setTimeout(() => resolve({} as any), 10)),
+        );
+
+      const first = service.syncAllBranches([KgaraAccountKey.MAIN]);
+      await expect(
+        service.syncAllBranches([KgaraAccountKey.MAIN]),
+      ).rejects.toThrow(ConflictException);
+      await first;
     });
   });
 

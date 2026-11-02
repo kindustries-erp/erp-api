@@ -98,6 +98,23 @@ describe('KgaraAuthService (Multi-Account)', () => {
     });
   });
 
+  describe('getLastError', () => {
+    it('records HTTP status when OJ login is rejected', async () => {
+      authRepo.findOne.mockResolvedValue(undefined);
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+      } as any);
+
+      const token = await service.getValidToken(KgaraAccountKey.OJ);
+
+      expect(token).toBeNull();
+      expect(service.getLastError(KgaraAccountKey.OJ)).toContain('HTTP 401');
+      expect(service.getLastError(KgaraAccountKey.MAIN)).toBeNull();
+    });
+  });
+
   describe('getValidToken', () => {
     it('returns valid cached token when not expired for MAIN', async () => {
       const futureDate = new Date(Date.now() + 60 * 60 * 1000);

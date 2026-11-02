@@ -130,14 +130,15 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
           const configuredAccounts = this.authService.getConfiguredAccounts();
 
           // Sync branches for all configured accounts before scanning
-          for (const acc of configuredAccounts) {
-            try {
-              await this.syncService.syncBranches(acc);
-            } catch (bErr: any) {
-              this.logger.warn(
-                `Scheduled branch sync for account ${acc} skipped: ${bErr?.message}`,
-              );
-            }
+          const branchSync =
+            await this.syncService.syncBranchesForAccounts(configuredAccounts);
+          const failedBranchSync = branchSync.accounts.filter((a) => !a.ok);
+          if (failedBranchSync.length > 0) {
+            await this.notifyAdminsOnError(
+              failedBranchSync
+                .map((a) => `${a.accountKey}: ${a.error}`)
+                .join('; '),
+            );
           }
 
           const branches = await this.branchRepo.find();
