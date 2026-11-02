@@ -119,6 +119,14 @@ export class InvoiceResponseDto {
   @ApiPropertyOptional()
   totalAmount?: number;
 
+  /** Chỉ có trong danh sách (`GET /`), tổng số đã cấn trừ của hóa đơn. */
+  @ApiPropertyOptional()
+  netOffAmount?: number;
+
+  /** Chỉ có trong danh sách (`GET /`), số tiền còn lại sau cấn trừ. */
+  @ApiPropertyOptional()
+  remainingAmount?: number;
+
   @ApiPropertyOptional()
   purchaseOrderId?: string;
 
