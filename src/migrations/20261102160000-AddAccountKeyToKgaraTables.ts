@@ -8,6 +8,15 @@ export class AddAccountKeyToKgaraTables20261102160000 implements MigrationInterf
     await queryRunner.query(
       `ALTER TABLE "kgara_auth" ADD COLUMN IF NOT EXISTS "account_key" varchar(50) NOT NULL DEFAULT 'MAIN'`,
     );
+    // Deduplicate: chỉ giữ lại 1 bản ghi auth mới nhất cho mỗi account_key trước khi tạo unique index
+    await queryRunner.query(
+      `DELETE FROM "kgara_auth"
+       WHERE id NOT IN (
+         SELECT DISTINCT ON ("account_key") id
+         FROM "kgara_auth"
+         ORDER BY "account_key", "updated_at" DESC, "created_at" DESC
+       )`,
+    );
     await queryRunner.query(
       `CREATE UNIQUE INDEX IF NOT EXISTS "UQ_kgara_auth_account_key" ON "kgara_auth" ("account_key")`,
     );
