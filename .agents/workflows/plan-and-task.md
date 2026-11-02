@@ -84,6 +84,7 @@ Phân chia toàn bộ công việc theo hệ thống đánh số 3 cấp **`X.Y.
 ```markdown
 - [ ] **Task X.Y.Z: [Tên Task súc tích, rõ hành động]**
   - **Phân hệ**: `Backend API` | **Ưu tiên**: `[P0 / P1 / P2]`
+  - **Runner**: `[Main Agent]` *(Mặc định là Main Agent cho mọi CLI đơn luồng như Codex/Claude. Chỉ ghi `Sub-agent (self)` khi Agent có hỗ trợ Sub-agent và task độc lập hoàn toàn)*
   - **Files**: `[NEW]` / `[MODIFY]` / `[DELETE]` [path/to/file](erp/erp-api/path/to/file)
   - **DoD**: Tiêu chí hoàn thành cụ thể (TypeScript pass, validation chặt chẽ, spec pass 100%).
   - **Verification**: `[Lệnh kiểm thử scoped cụ thể: bunx jest <spec> hoặc bunx tsc --noEmit]`
@@ -106,6 +107,19 @@ Phân chia toàn bộ công việc theo hệ thống đánh số 3 cấp **`X.Y.
   - Chỉ được đổi `[/]` thành `[x]` khi và chỉ khi lệnh trong mục `Verification` trả về kết quả **PASS 100%**.
   - Nếu test fail hoặc type error: giữ nguyên `[/]`, tiếp tục sửa code cho đến khi test pass.
 - **Live Sync**: Ngay khi hoàn tất một task, ghi nhận trạng thái vào `implementation_plan.md` ngay lập tức, không để dồn đến cuối mới tick.
+
+#### 1.1 Cơ chế Thực thi Thống nhất (Single-Agent vs Sub-agent Delegation)
+Để đảm bảo **bất kỳ AI Agent nào (Codex CLI, Claude Code, Gemini CLI, Antigravity) cũng đều thực thi và có hành động giống hệt nhau**, toàn bộ hệ thống tuân theo các nguyên tắc chuẩn hóa:
+- **Chuẩn Mặc Định Cho Mọi Agent (Single-Agent Baseline)**:
+  - Mọi Agent (dù đơn luồng hay đa nhiệm) đều có thể tự mình thực thi tuần tự từ trên xuống dưới (`[/]` ➔ sửa file ➔ chạy verification ➔ PASS ➔ tick `[x]`).
+  - Khi chạy trên các công cụ không có Sub-agent (Codex CLI, Claude Code), Agent chính tự làm 100% các task mà không yêu cầu thêm công cụ nào khác.
+- **Cơ Chế Ủy Quyền Sub-agent (Khi môi trường hỗ trợ, ví dụ Antigravity)**:
+  - **Điều kiện ủy quyền**: Chỉ kích hoạt khi Agent có công cụ `invoke_subagent` VÀ task thỏa mãn tính độc lập (ví dụ service độc lập, hoặc khi User chỉ định / dùng `/teamwork`).
+  - **Quy tắc Giao việc**: Agent chính gọi Sub-agent (`self`) bằng cách trích xuất chính xác: `Task X.Y.Z`, `Files được phép sửa`, `DoD`, và `Lệnh Verification`.
+  - **Quy tắc Thực thi của Sub-agent**: Sub-agent khi nhận task **BẮT BUỘC tuân thủ đúng DoD và Verification của task đó**, tuyệt đối không sửa lan man ngoài scope.
+  - **Nguyên tắc Gatekeeper (Trách nhiệm Người Giữ Cổng)**: Sub-agent **TUYỆT ĐỐI KHÔNG** tự ý tick `[x]` vào `implementation_plan.md`. Sub-agent chỉ thực thi, chạy verification, và báo cáo kết quả kèm bằng chứng test pass về cho Agent chính.
+  - **Nghiệm thu & Cập nhật**: Agent chính nhận kết quả, xác minh lại lệnh Scoped Verification thực sự PASS 100%, sau đó Agent chính mới chuyển task sang `[x]` trên `implementation_plan.md`.
+  - **Tính Nhất Quán**: Dù do Main Agent tự làm hay Sub-agent thực hiện, mã nguồn, commit log, test passing và tài liệu nghiệm thu (`walkthrough.md`) là **100% ĐỒNG NHẤT**.
 
 #### 2. Giao thức Tạm dừng (Pause Protocol)
 Khi người dùng yêu cầu tạm dừng, đổi context hoặc phiên làm việc bị ngắt quãng:
