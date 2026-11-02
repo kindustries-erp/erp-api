@@ -12,6 +12,23 @@ export interface KgaraAccountCredentials {
   makhachhang: string;
 }
 
+/** Tên biến env theo từng tài khoản (host dùng chung KGARA_API_HOST). */
+const KGARA_ENV_KEYS: Record<
+  KgaraAccountKey,
+  { username: string; password: string; makhachhang: string }
+> = {
+  [KgaraAccountKey.MAIN]: {
+    username: 'KGARA_USERNAME',
+    password: 'KGARA_PASSWORD',
+    makhachhang: 'KGARA_MA_KHACH_HANG',
+  },
+  [KgaraAccountKey.OJ]: {
+    username: 'KGARA_USERNAME_2',
+    password: 'KGARA_PASSWORD_2',
+    makhachhang: 'KGARA_MA_KHACH_HANG_2',
+  },
+};
+
 @Injectable()
 export class KgaraAuthService {
   private readonly logger = new Logger(KgaraAuthService.name);
@@ -26,35 +43,32 @@ export class KgaraAuthService {
   getCredentials(
     accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
   ): KgaraAccountCredentials | null {
-    if (accountKey === KgaraAccountKey.OJ) {
-      const host =
-        this.configService.get<string>('KGARA_OJ_API_HOST') ||
-        this.configService.get<string>('KGARA_API_HOST');
-      const username =
-        this.configService.get<string>('KGARA_OJ_USERNAME') ||
-        this.configService.get<string>('KGARA_USERNAME_2');
-      const password =
-        this.configService.get<string>('KGARA_OJ_PASSWORD') ||
-        this.configService.get<string>('KGARA_PASSWORD_2');
-      const makhachhang =
-        this.configService.get<string>('KGARA_OJ_MA_KHACH_HANG') ||
-        this.configService.get<string>('KGARA_MA_KHACH_HANG_2');
-
-      if (!host || !username || !password || !makhachhang) {
-        this.logger.error('Kgara OJ credentials not fully configured.');
-        return null;
-      }
-      return { host, username, password, makhachhang };
+    const creds = this.readCredentials(accountKey);
+    if (!creds) {
+      this.logger.error(
+        `Kgara ${accountKey} credentials not fully configured.`,
+      );
     }
+    return creds;
+  }
 
-    // Default: MAIN account
+  /** Các tài khoản có đủ credentials trong env (không log lỗi khi thiếu). */
+  getConfiguredAccounts(): KgaraAccountKey[] {
+    return Object.values(KgaraAccountKey).filter(
+      (accountKey) => this.readCredentials(accountKey) !== null,
+    );
+  }
+
+  private readCredentials(
+    accountKey: KgaraAccountKey,
+  ): KgaraAccountCredentials | null {
+    const keys = KGARA_ENV_KEYS[accountKey];
     const host = this.configService.get<string>('KGARA_API_HOST');
-    const username = this.configService.get<string>('KGARA_USERNAME');
-    const password = this.configService.get<string>('KGARA_PASSWORD');
-    const makhachhang = this.configService.get<string>('KGARA_MA_KHACH_HANG');
+    const username = this.configService.get<string>(keys.username);
+    const password = this.configService.get<string>(keys.password);
+    const makhachhang = this.configService.get<string>(keys.makhachhang);
 
     if (!host || !username || !password || !makhachhang) {
-      this.logger.error('Kgara MAIN credentials not fully configured.');
       return null;
     }
     return { host, username, password, makhachhang };

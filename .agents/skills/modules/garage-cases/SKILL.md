@@ -946,10 +946,10 @@ Nhằm tinh gọn tối đa thanh công cụ (Toolbar) và đồng bộ trải n
   4. `kgara_sync_runs`: Ghi log watermark và lịch sử đồng bộ riêng biệt.
 
 - **Cấu hình & Biến Môi trường**:
+  - Host dùng chung: `KGARA_API_HOST`.
   - `MAIN`: `KGARA_MA_KHACH_HANG`, `KGARA_USERNAME`, `KGARA_PASSWORD`.
-  - `OJ`: Hỗ trợ cả 2 dạng định danh cấu hình:
-    - Chuẩn mới: `KGARA_OJ_MA_KHACH_HANG`, `KGARA_OJ_USERNAME`, `KGARA_OJ_PASSWORD`.
-    - Tương thích file `.env` hiện hữu: `KGARA_MA_KHACH_HANG_2`, `KGARA_USERNAME_2`, `KGARA_PASSWORD_2`.
+  - `OJ`: `KGARA_MA_KHACH_HANG_2`, `KGARA_USERNAME_2`, `KGARA_PASSWORD_2`. Chỉ có một bộ tên biến, không còn `KGARA_OJ_*`.
+  - Map tên biến nằm ở `KGARA_ENV_KEYS` trong `kgara-auth.service.ts`. `getConfiguredAccounts()` trả về các tài khoản đủ credentials; scheduler chỉ sync tài khoản đó, nên thiếu bộ `*_2` (ví dụ staging) thì OJ bị bỏ qua êm, không báo lỗi.
 
 - **Cơ chế Phân loại Tự động & Quản lý Công nợ Phân khúc OJ**:
   - Khi đồng bộ vụ việc từ tài khoản `OJ`:

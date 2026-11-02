@@ -5,6 +5,8 @@ import { KgaraBranch } from './entities/kgara_branch.entity';
 import { CorePermission } from '../rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
 import { KgaraSyncService } from './kgara-sync.service';
+import { KgaraAuthService } from './kgara-auth.service';
+import { KgaraAccountKey } from './enums/kgara-account.enum';
 import { NotificationsService } from '../notifications/notifications.service';
 import * as cronUtil from '../common/utils/cron.util';
 
@@ -14,6 +16,7 @@ describe('KgaraSyncScheduler', () => {
   let permissionRepo: any;
   let userRoleRepo: any;
   let syncService: any;
+  let authService: any;
   let notificationsService: any;
 
   beforeEach(async () => {
@@ -44,6 +47,7 @@ describe('KgaraSyncScheduler', () => {
     };
 
     syncService = {
+      syncBranches: jest.fn().mockResolvedValue(undefined),
       getIncrementalWatermark: jest
         .fn()
         .mockResolvedValue('2026-08-01T00:00:00Z'),
@@ -57,6 +61,12 @@ describe('KgaraSyncScheduler', () => {
         totalLinesSynced: 4,
         errorsCount: 0,
       }),
+    };
+
+    authService = {
+      getConfiguredAccounts: jest
+        .fn()
+        .mockReturnValue([KgaraAccountKey.MAIN, KgaraAccountKey.OJ]),
     };
 
     notificationsService = {
@@ -81,6 +91,10 @@ describe('KgaraSyncScheduler', () => {
         {
           provide: KgaraSyncService,
           useValue: syncService,
+        },
+        {
+          provide: KgaraAuthService,
+          useValue: authService,
         },
         {
           provide: NotificationsService,
@@ -127,6 +141,27 @@ describe('KgaraSyncScheduler', () => {
       expect.objectContaining({ force: false }),
     );
     expect(notificationsService.createForUser).not.toHaveBeenCalled();
+  });
+
+  it('should skip branches of accounts that are not configured (OJ without *_2 env)', async () => {
+    authService.getConfiguredAccounts.mockReturnValue([KgaraAccountKey.MAIN]);
+    branchRepo.find.mockResolvedValue([
+      { id: 'b1', externalId: 'BRANCH-HN', accountKey: KgaraAccountKey.MAIN },
+      { id: 'b2', externalId: 'BRANCH-OJ', accountKey: KgaraAccountKey.OJ },
+    ]);
+
+    await scheduler.runScheduledSyncCheck();
+
+    expect(syncService.syncBranches).toHaveBeenCalledTimes(1);
+    expect(syncService.syncBranches).toHaveBeenCalledWith(KgaraAccountKey.MAIN);
+    expect(syncService.syncCasesForBranch).toHaveBeenCalledTimes(1);
+    expect(syncService.syncCasesForBranch).toHaveBeenCalledWith(
+      'BRANCH-HN',
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      KgaraAccountKey.MAIN,
+    );
   });
 
   it('should skip execution when cron is disabled', async () => {

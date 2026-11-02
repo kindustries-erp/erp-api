@@ -20,12 +20,12 @@ describe('KgaraAuthService (Multi-Account)', () => {
       get: jest.fn((key: string) => {
         const configMap: Record<string, string> = {
           KGARA_API_HOST: 'greenwayapi.kgara.com',
-          KGARA_MA_KHACH_HANG: 'greenwayauto',
-          KGARA_USERNAME: 'apidongbo',
-          KGARA_PASSWORD: 'D19101CC07C7',
-          KGARA_MA_KHACH_HANG_2: 'greenwaycn2',
-          KGARA_USERNAME_2: 'apidongbo',
-          KGARA_PASSWORD_2: 'D8425A3F0849F',
+          KGARA_MA_KHACH_HANG: 'test-main-customer',
+          KGARA_USERNAME: 'test-main-user',
+          KGARA_PASSWORD: 'test-main-password',
+          KGARA_MA_KHACH_HANG_2: 'test-oj-customer',
+          KGARA_USERNAME_2: 'test-oj-user',
+          KGARA_PASSWORD_2: 'test-oj-password',
         };
         return configMap[key];
       }),
@@ -53,24 +53,48 @@ describe('KgaraAuthService (Multi-Account)', () => {
   });
 
   describe('getCredentials', () => {
-    it('resolves MAIN credentials from default env vars', () => {
+    it('resolves MAIN credentials from KGARA_USERNAME / KGARA_PASSWORD / KGARA_MA_KHACH_HANG', () => {
       const creds = service.getCredentials(KgaraAccountKey.MAIN);
       expect(creds).toEqual({
         host: 'greenwayapi.kgara.com',
-        username: 'apidongbo',
-        password: 'D19101CC07C7',
-        makhachhang: 'greenwayauto',
+        username: 'test-main-user',
+        password: 'test-main-password',
+        makhachhang: 'test-main-customer',
       });
     });
 
-    it('resolves OJ credentials from _2 / OJ env vars', () => {
+    it('resolves OJ credentials from *_2 env vars', () => {
       const creds = service.getCredentials(KgaraAccountKey.OJ);
       expect(creds).toEqual({
         host: 'greenwayapi.kgara.com',
-        username: 'apidongbo',
-        password: 'D8425A3F0849F',
-        makhachhang: 'greenwaycn2',
+        username: 'test-oj-user',
+        password: 'test-oj-password',
+        makhachhang: 'test-oj-customer',
       });
+    });
+
+    it('returns null for OJ when *_2 env vars are missing', () => {
+      configService.get.mockImplementation((key: string) =>
+        key.endsWith('_2') ? undefined : 'x',
+      );
+      expect(service.getCredentials(KgaraAccountKey.OJ)).toBeNull();
+    });
+  });
+
+  describe('getConfiguredAccounts', () => {
+    it('returns both accounts when both credential sets are configured', () => {
+      expect(service.getConfiguredAccounts()).toEqual([
+        KgaraAccountKey.MAIN,
+        KgaraAccountKey.OJ,
+      ]);
+    });
+
+    it('omits OJ when *_2 env vars are missing', () => {
+      configService.get.mockImplementation((key: string) => {
+        if (key.endsWith('_2')) return undefined;
+        return key === 'KGARA_API_HOST' ? 'greenwayapi.kgara.com' : 'x';
+      });
+      expect(service.getConfiguredAccounts()).toEqual([KgaraAccountKey.MAIN]);
     });
   });
 
