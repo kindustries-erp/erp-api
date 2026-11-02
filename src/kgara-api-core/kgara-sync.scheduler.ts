@@ -10,6 +10,7 @@ import { Repository, In } from 'typeorm';
 import { KgaraBranch } from './entities/kgara_branch.entity';
 import { KgaraSyncService } from './kgara-sync.service';
 import { KgaraAuthService } from './kgara-auth.service';
+import { KgaraBulkSyncService } from './services/kgara-bulk-sync.service';
 import { KgaraAccountKey } from './enums/kgara-account.enum';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CorePermission } from '../rbac-core/entities/core-permission.entity';
@@ -28,6 +29,7 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
   private intervalId?: NodeJS.Timeout;
   private isRunning = false;
   private lastExecutedSlotKey: string | null = null;
+  private lastBranchSyncAlertKey: string | null = null;
 
   constructor(
     @InjectRepository(KgaraBranch)
@@ -38,6 +40,7 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
     private readonly userRoleRepo: Repository<CoreUserRole>,
     private readonly syncService: KgaraSyncService,
     private readonly authService: KgaraAuthService,
+    private readonly bulkSyncService: KgaraBulkSyncService,
     private readonly notificationsService: NotificationsService,
   ) {}
 
@@ -96,6 +99,13 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
   @Cron('0 15 9,15,16,17,21 * * *', { timeZone: 'Asia/Ho_Chi_Minh' })
   async runScheduledSyncCheck() {
     if (this.isRunning) return;
+    // Không chạy chồng lên job đồng bộ thủ công (drawer) đang chạy
+    if (!this.bulkSyncService.tryLock()) {
+      this.logger.warn(
+        'Bỏ qua lượt đồng bộ tự động: đang có lượt đồng bộ khác chạy.',
+      );
+      return;
+    }
     this.isRunning = true;
 
     // Đánh dấu slot nếu chạy qua Cron trigger
@@ -134,11 +144,17 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
             await this.syncService.syncBranchesForAccounts(configuredAccounts);
           const failedBranchSync = branchSync.accounts.filter((a) => !a.ok);
           if (failedBranchSync.length > 0) {
-            await this.notifyAdminsOnError(
-              failedBranchSync
-                .map((a) => `${a.accountKey}: ${a.error}`)
-                .join('; '),
-            );
+            const alertDetail = failedBranchSync
+              .map((a) => `${a.accountKey}: ${a.error}`)
+              .join('; ');
+            // Cùng một lỗi trong cùng một ngày chỉ báo admin một lần
+            const alertKey = `${to}|${alertDetail}`;
+            if (alertKey !== this.lastBranchSyncAlertKey) {
+              this.lastBranchSyncAlertKey = alertKey;
+              await this.notifyAdminsOnError(alertDetail);
+            }
+          } else {
+            this.lastBranchSyncAlertKey = null;
           }
 
           const branches = await this.branchRepo.find();
@@ -215,6 +231,7 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
       });
     } finally {
       this.isRunning = false;
+      this.bulkSyncService.unlock();
     }
   }
 

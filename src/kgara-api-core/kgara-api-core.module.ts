@@ -28,6 +28,7 @@ import { KgaraAuthService } from './kgara-auth.service';
 import { KgaraClientService } from './kgara-client.service';
 import { KgaraSyncService } from './kgara-sync.service';
 import { KgaraSyncScheduler } from './kgara-sync.scheduler';
+import { KgaraBulkSyncService } from './services/kgara-bulk-sync.service';
 import { GarageSmartSettlementService } from './services/garage-smart-settlement.service';
 import { GarageOpexService } from './services/garage-opex.service';
 import { GarageCashflowService } from './services/garage-cashflow.service';
@@ -124,6 +125,7 @@ import { GarageOpexExportController } from './controllers/garage-opex-export.con
     KgaraClientService,
     KgaraSyncService,
     KgaraSyncScheduler,
+    KgaraBulkSyncService,
     GarageSmartSettlementService,
     GarageOpexService,
     GarageCashflowService,

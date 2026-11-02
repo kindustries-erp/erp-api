@@ -11,7 +11,7 @@ Use this skill only inside this repository.
 
 1. `@.agents/AGENTS.md`
 2. `@README.md`
-3. Antigravity Brain (`implementation_plan.md` & `walkthrough.md`)
+3. Plan và task hiện hành: trên Plane (project KINDU, xem Trilium `11-plan-first-protocol`). Nếu chạy trong Antigravity, có thể xem thêm Antigravity Brain (`implementation_plan.md` & `walkthrough.md`) như bản phụ.
 
 ## Current truth
 
@@ -36,9 +36,9 @@ Use this skill only inside this repository.
 - Inspect current state before edits
 - Use Bun/Bunx first
 - Be evidence-first
-- Manage all task execution, planning, and verification in Antigravity Brain (`implementation_plan.md` -> `walkthrough.md`)
-- Keep task checklist updated in realtime
-- **Strict Git Workflow**: Follow the exact sequence: pull -> build -> check:ci -> test -> commit -> push (see rules for exact trigger definitions).
+- Plan trình trong hội thoại; chỉ làm sau khi người dùng xác nhận `OK`. Theo dõi task trên Plane (project KINDU) bằng skill `plane-work-items`. Antigravity Brain chỉ là bản phụ, không phải nguồn chính.
+- Keep task status on Plane updated in realtime
+- **Git Workflow**: theo skill `erp-git-workflow`: test -> commit -> `pull --rebase` -> check:ci -> push.
 - If backend source changed, run `bunx jest --forceExit` or a narrower affected test scope and report the scope used
 - When task docs are stale, verify with code + build/test + git state before correcting status/checklist
 - Query Postgres directly through the active `DATABASE_URL` before changing DTOs, filters, persistence, or business rules

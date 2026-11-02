@@ -954,8 +954,9 @@ Nhằm tinh gọn tối đa thanh công cụ (Toolbar) và đồng bộ trải n
 
 - **Hợp đồng đồng bộ (cập nhật)**:
   - `POST /greenway/sync/branches[?account=MAIN|OJ]` trả `{ success, accounts: [{ accountKey, ok, error? }], message }`. `success=false` khi có tài khoản lỗi; scheduler gom lỗi này và gửi thông báo ERROR cho admin.
-  - `POST /greenway/sync/all` với `allBranches: true` (không cần `branchId`): sync chi nhánh của mọi tài khoản đã cấu hình, rồi sync tuần tự từng chi nhánh (`syncAllInOne` với `skipBranchSync`). Lỗi một chi nhánh không dừng các chi nhánh còn lại. Trả `{ success, data: { success, accounts, branches: [{ branchExternalId, accountKey, ok, error?, result? }] }, message }`.
-  - Chỉ một lượt `allBranches` chạy tại một thời điểm; lượt thứ hai bị `409 Conflict`.
+  - `POST /greenway/sync/all-branches` `{ scope: all|cases|gross-profit|case-details, from?, to?, includeDetails?, forceDetails? }` (GARAGE CREATE): khởi động job nền trên mọi chi nhánh của tài khoản đã cấu hình, trả ngay trạng thái. Job làm mới chi nhánh trước (`syncBranchesForAccounts`), rồi chạy tuần tự từng chi nhánh theo `scope`; lỗi một chi nhánh không dừng các chi nhánh còn lại.
+  - `GET /greenway/sync/all-branches/status` (GARAGE READ): `{ status: idle|running|completed|failed, scope, startedAt, finishedAt, totalBranches, completedBranches, currentBranch, accounts, results[], message }`.
+  - Khóa `KgaraBulkSyncService.tryLock()` dùng chung với cron: đang có job thì `start` trả 409 `Conflict`, cron bỏ qua lượt. Trạng thái nằm trong bộ nhớ (một instance).
 
 - **Cơ chế Phân loại Tự động & Quản lý Công nợ Phân khúc OJ**:
   - Khi đồng bộ vụ việc từ tài khoản `OJ`:
