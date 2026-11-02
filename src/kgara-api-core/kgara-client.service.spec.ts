@@ -32,6 +32,7 @@ describe('KgaraClientService (Multi-Account Routing)', () => {
         };
       }),
       forceRefreshToken: jest.fn().mockResolvedValue('token-refreshed'),
+      getLastError: jest.fn().mockReturnValue(null),
     };
 
     configService = {

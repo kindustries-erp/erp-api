@@ -24,4 +24,8 @@ export class SyncAllDto {
   @IsOptional()
   @IsString()
   account?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  allBranches?: boolean;
 }

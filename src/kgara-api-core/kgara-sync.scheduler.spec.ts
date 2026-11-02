@@ -5,6 +5,8 @@ import { KgaraBranch } from './entities/kgara_branch.entity';
 import { CorePermission } from '../rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
 import { KgaraSyncService } from './kgara-sync.service';
+import { KgaraAuthService } from './kgara-auth.service';
+import { KgaraAccountKey } from './enums/kgara-account.enum';
 import { NotificationsService } from '../notifications/notifications.service';
 import * as cronUtil from '../common/utils/cron.util';
 
@@ -14,6 +16,7 @@ describe('KgaraSyncScheduler', () => {
   let permissionRepo: any;
   let userRoleRepo: any;
   let syncService: any;
+  let authService: any;
   let notificationsService: any;
 
   beforeEach(async () => {
@@ -44,6 +47,10 @@ describe('KgaraSyncScheduler', () => {
     };
 
     syncService = {
+      syncBranchesForAccounts: jest.fn().mockImplementation(async (keys) => ({
+        success: true,
+        accounts: keys.map((accountKey: string) => ({ accountKey, ok: true })),
+      })),
       getIncrementalWatermark: jest
         .fn()
         .mockResolvedValue('2026-08-01T00:00:00Z'),
@@ -57,6 +64,12 @@ describe('KgaraSyncScheduler', () => {
         totalLinesSynced: 4,
         errorsCount: 0,
       }),
+    };
+
+    authService = {
+      getConfiguredAccounts: jest
+        .fn()
+        .mockReturnValue([KgaraAccountKey.MAIN, KgaraAccountKey.OJ]),
     };
 
     notificationsService = {
@@ -81,6 +94,10 @@ describe('KgaraSyncScheduler', () => {
         {
           provide: KgaraSyncService,
           useValue: syncService,
+        },
+        {
+          provide: KgaraAuthService,
+          useValue: authService,
         },
         {
           provide: NotificationsService,
@@ -127,6 +144,57 @@ describe('KgaraSyncScheduler', () => {
       expect.objectContaining({ force: false }),
     );
     expect(notificationsService.createForUser).not.toHaveBeenCalled();
+  });
+
+  it('should skip branches of accounts that are not configured (OJ without *_2 env)', async () => {
+    authService.getConfiguredAccounts.mockReturnValue([KgaraAccountKey.MAIN]);
+    branchRepo.find.mockResolvedValue([
+      { id: 'b1', externalId: 'BRANCH-HN', accountKey: KgaraAccountKey.MAIN },
+      { id: 'b2', externalId: 'BRANCH-OJ', accountKey: KgaraAccountKey.OJ },
+    ]);
+
+    await scheduler.runScheduledSyncCheck();
+
+    expect(syncService.syncBranchesForAccounts).toHaveBeenCalledWith([
+      KgaraAccountKey.MAIN,
+    ]);
+    expect(syncService.syncCasesForBranch).toHaveBeenCalledTimes(1);
+    expect(syncService.syncCasesForBranch).toHaveBeenCalledWith(
+      'BRANCH-HN',
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      KgaraAccountKey.MAIN,
+    );
+  });
+
+  it('should notify admins with ERROR when an account fails branch sync', async () => {
+    authService.getConfiguredAccounts.mockReturnValue([
+      KgaraAccountKey.MAIN,
+      KgaraAccountKey.OJ,
+    ]);
+    syncService.syncBranchesForAccounts.mockResolvedValueOnce({
+      success: false,
+      accounts: [
+        { accountKey: KgaraAccountKey.MAIN, ok: true },
+        {
+          accountKey: KgaraAccountKey.OJ,
+          ok: false,
+          error: 'Login failed: HTTP 401 Unauthorized',
+        },
+      ],
+    });
+
+    await scheduler.runScheduledSyncCheck();
+
+    expect(notificationsService.createForUser).toHaveBeenCalledWith(
+      'admin-1',
+      expect.objectContaining({
+        title: 'Kgara Sync Error',
+        type: 'ERROR',
+        message: expect.stringContaining('OJ: Login failed: HTTP 401'),
+      }),
+    );
   });
 
   it('should skip execution when cron is disabled', async () => {

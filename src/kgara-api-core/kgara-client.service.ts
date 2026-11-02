@@ -21,7 +21,10 @@ export class KgaraClientService {
   ): Promise<any> {
     const token = await this.authService.getValidToken(accountKey);
     if (!token) {
-      throw new Error(`Could not obtain Kgara token for account ${accountKey}`);
+      const reason = this.authService.getLastError(accountKey);
+      throw new Error(
+        `Could not obtain Kgara token for account ${accountKey}${reason ? `: ${reason}` : ''}`,
+      );
     }
 
     const creds = this.authService.getCredentials(accountKey);

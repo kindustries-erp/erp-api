@@ -9,6 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { KgaraBranch } from './entities/kgara_branch.entity';
 import { KgaraSyncService } from './kgara-sync.service';
+import { KgaraAuthService } from './kgara-auth.service';
 import { KgaraAccountKey } from './enums/kgara-account.enum';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CorePermission } from '../rbac-core/entities/core-permission.entity';
@@ -36,6 +37,7 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
     @InjectRepository(CoreUserRole)
     private readonly userRoleRepo: Repository<CoreUserRole>,
     private readonly syncService: KgaraSyncService,
+    private readonly authService: KgaraAuthService,
     private readonly notificationsService: NotificationsService,
   ) {}
 
@@ -124,15 +126,19 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
           const from = firstDayTwoMonthsAgo.toLocaleDateString('en-CA');
           const to = now.toLocaleDateString('en-CA');
 
+          // Chỉ xử lý các tài khoản có credentials trong env (MAIN, OJ nếu có *_2)
+          const configuredAccounts = this.authService.getConfiguredAccounts();
+
           // Sync branches for all configured accounts before scanning
-          for (const acc of [KgaraAccountKey.MAIN, KgaraAccountKey.OJ]) {
-            try {
-              await this.syncService.syncBranches(acc);
-            } catch (bErr: any) {
-              this.logger.warn(
-                `Scheduled branch sync for account ${acc} skipped: ${bErr?.message}`,
-              );
-            }
+          const branchSync =
+            await this.syncService.syncBranchesForAccounts(configuredAccounts);
+          const failedBranchSync = branchSync.accounts.filter((a) => !a.ok);
+          if (failedBranchSync.length > 0) {
+            await this.notifyAdminsOnError(
+              failedBranchSync
+                .map((a) => `${a.accountKey}: ${a.error}`)
+                .join('; '),
+            );
           }
 
           const branches = await this.branchRepo.find();
@@ -141,6 +147,7 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
             if (!branch.externalId) continue;
             const accountKey =
               (branch.accountKey as KgaraAccountKey) || KgaraAccountKey.MAIN;
+            if (!configuredAccounts.includes(accountKey)) continue;
             this.logger.log(
               `Syncing cases and deletion check for branch ${branch.externalId} (account: ${accountKey}, ${from} to ${to})`,
             );

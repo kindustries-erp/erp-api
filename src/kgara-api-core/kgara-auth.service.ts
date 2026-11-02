@@ -12,10 +12,28 @@ export interface KgaraAccountCredentials {
   makhachhang: string;
 }
 
+/** Tên biến env theo từng tài khoản (host dùng chung KGARA_API_HOST). */
+const KGARA_ENV_KEYS: Record<
+  KgaraAccountKey,
+  { username: string; password: string; makhachhang: string }
+> = {
+  [KgaraAccountKey.MAIN]: {
+    username: 'KGARA_USERNAME',
+    password: 'KGARA_PASSWORD',
+    makhachhang: 'KGARA_MA_KHACH_HANG',
+  },
+  [KgaraAccountKey.OJ]: {
+    username: 'KGARA_USERNAME_2',
+    password: 'KGARA_PASSWORD_2',
+    makhachhang: 'KGARA_MA_KHACH_HANG_2',
+  },
+};
+
 @Injectable()
 export class KgaraAuthService {
   private readonly logger = new Logger(KgaraAuthService.name);
   private refreshPromises = new Map<string, Promise<string | null>>();
+  private lastErrors = new Map<string, string>();
 
   constructor(
     @InjectRepository(KgaraAuth)
@@ -26,35 +44,37 @@ export class KgaraAuthService {
   getCredentials(
     accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
   ): KgaraAccountCredentials | null {
-    if (accountKey === KgaraAccountKey.OJ) {
-      const host =
-        this.configService.get<string>('KGARA_OJ_API_HOST') ||
-        this.configService.get<string>('KGARA_API_HOST');
-      const username =
-        this.configService.get<string>('KGARA_OJ_USERNAME') ||
-        this.configService.get<string>('KGARA_USERNAME_2');
-      const password =
-        this.configService.get<string>('KGARA_OJ_PASSWORD') ||
-        this.configService.get<string>('KGARA_PASSWORD_2');
-      const makhachhang =
-        this.configService.get<string>('KGARA_OJ_MA_KHACH_HANG') ||
-        this.configService.get<string>('KGARA_MA_KHACH_HANG_2');
-
-      if (!host || !username || !password || !makhachhang) {
-        this.logger.error('Kgara OJ credentials not fully configured.');
-        return null;
-      }
-      return { host, username, password, makhachhang };
+    const creds = this.readCredentials(accountKey);
+    if (!creds) {
+      const message = `Kgara ${accountKey} credentials not fully configured.`;
+      this.lastErrors.set(accountKey, message);
+      this.logger.error(message);
     }
+    return creds;
+  }
 
-    // Default: MAIN account
+  /** Lý do lỗi gần nhất của tài khoản (đăng nhập/refresh/cấu hình), null nếu lần gần nhất thành công. */
+  getLastError(accountKey: KgaraAccountKey): string | null {
+    return this.lastErrors.get(accountKey) ?? null;
+  }
+
+  /** Các tài khoản có đủ credentials trong env (không log lỗi khi thiếu). */
+  getConfiguredAccounts(): KgaraAccountKey[] {
+    return Object.values(KgaraAccountKey).filter(
+      (accountKey) => this.readCredentials(accountKey) !== null,
+    );
+  }
+
+  private readCredentials(
+    accountKey: KgaraAccountKey,
+  ): KgaraAccountCredentials | null {
+    const keys = KGARA_ENV_KEYS[accountKey];
     const host = this.configService.get<string>('KGARA_API_HOST');
-    const username = this.configService.get<string>('KGARA_USERNAME');
-    const password = this.configService.get<string>('KGARA_PASSWORD');
-    const makhachhang = this.configService.get<string>('KGARA_MA_KHACH_HANG');
+    const username = this.configService.get<string>(keys.username);
+    const password = this.configService.get<string>(keys.password);
+    const makhachhang = this.configService.get<string>(keys.makhachhang);
 
     if (!host || !username || !password || !makhachhang) {
-      this.logger.error('Kgara MAIN credentials not fully configured.');
       return null;
     }
     return { host, username, password, makhachhang };
@@ -139,12 +159,15 @@ export class KgaraAuthService {
       });
 
       if (!response.ok) {
-        throw new Error(`Login failed: ${response.statusText}`);
+        throw new Error(
+          `Login failed: HTTP ${response.status} ${response.statusText}`,
+        );
       }
 
       const data = await response.json();
       return this.saveTokens(data, accountKey);
     } catch (error: any) {
+      this.lastErrors.set(accountKey, error?.message || 'Login failed');
       this.logger.error(
         `Failed to login for account ${accountKey}: ${error?.message}`,
       );
@@ -208,6 +231,7 @@ export class KgaraAuthService {
     auth.ssClientId = data.SS_ClientID || '';
 
     await this.authRepo.save(auth);
+    this.lastErrors.delete(accountKey);
     return auth.accessToken as string;
   }
 }

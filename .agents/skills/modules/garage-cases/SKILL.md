@@ -946,10 +946,16 @@ Nhằm tinh gọn tối đa thanh công cụ (Toolbar) và đồng bộ trải n
   4. `kgara_sync_runs`: Ghi log watermark và lịch sử đồng bộ riêng biệt.
 
 - **Cấu hình & Biến Môi trường**:
+  - Host dùng chung: `KGARA_API_HOST`.
   - `MAIN`: `KGARA_MA_KHACH_HANG`, `KGARA_USERNAME`, `KGARA_PASSWORD`.
-  - `OJ`: Hỗ trợ cả 2 dạng định danh cấu hình:
-    - Chuẩn mới: `KGARA_OJ_MA_KHACH_HANG`, `KGARA_OJ_USERNAME`, `KGARA_OJ_PASSWORD`.
-    - Tương thích file `.env` hiện hữu: `KGARA_MA_KHACH_HANG_2`, `KGARA_USERNAME_2`, `KGARA_PASSWORD_2`.
+  - `OJ`: `KGARA_MA_KHACH_HANG_2`, `KGARA_USERNAME_2`, `KGARA_PASSWORD_2`. Chỉ có một bộ tên biến, không còn `KGARA_OJ_*`.
+  - Map tên biến nằm ở `KGARA_ENV_KEYS` trong `kgara-auth.service.ts`. `getConfiguredAccounts()` trả về các tài khoản đủ credentials; scheduler chỉ sync tài khoản đó, nên thiếu bộ `*_2` (ví dụ staging) thì OJ bị bỏ qua êm, không báo lỗi.
+  - `KgaraAuthService.getLastError(accountKey)` giữ lý do lỗi đăng nhập/refresh gần nhất (kèm HTTP status); bị xóa khi đăng nhập thành công.
+
+- **Hợp đồng đồng bộ (cập nhật)**:
+  - `POST /greenway/sync/branches[?account=MAIN|OJ]` trả `{ success, accounts: [{ accountKey, ok, error? }], message }`. `success=false` khi có tài khoản lỗi; scheduler gom lỗi này và gửi thông báo ERROR cho admin.
+  - `POST /greenway/sync/all` với `allBranches: true` (không cần `branchId`): sync chi nhánh của mọi tài khoản đã cấu hình, rồi sync tuần tự từng chi nhánh (`syncAllInOne` với `skipBranchSync`). Lỗi một chi nhánh không dừng các chi nhánh còn lại. Trả `{ success, data: { success, accounts, branches: [{ branchExternalId, accountKey, ok, error?, result? }] }, message }`.
+  - Chỉ một lượt `allBranches` chạy tại một thời điểm; lượt thứ hai bị `409 Conflict`.
 
 - **Cơ chế Phân loại Tự động & Quản lý Công nợ Phân khúc OJ**:
   - Khi đồng bộ vụ việc từ tài khoản `OJ`:
