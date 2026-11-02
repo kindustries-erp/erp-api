@@ -16,6 +16,16 @@ export class KgaraBranch {
   @Column({ type: 'varchar', length: 100, name: 'external_id' })
   externalId: string;
 
+  /** Account identifier ('MAIN', 'OJ', etc.) */
+  @Index()
+  @Column({
+    type: 'varchar',
+    length: 50,
+    name: 'account_key',
+    default: 'MAIN',
+  })
+  accountKey: string;
+
   @Column({ type: 'varchar', length: 100, name: 'code', nullable: true })
   code: string | null;
 

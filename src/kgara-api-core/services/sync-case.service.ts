@@ -17,6 +17,7 @@ import { GarageHubService } from '../hub/garage-hub.service';
 import { resolveCompletionDate } from '../helpers/kgara-completion-date.helper';
 import { ErpModuleCategory } from '../../module-config/entities/erp_module_category.entity';
 import { GARAGE_CASE_SEMANTIC } from '../../module-config/registry/module-field-registry';
+import { KgaraAccountKey } from '../enums/kgara-account.enum';
 import {
   parseSafeDate,
   extractNetPayableAmount,
@@ -51,16 +52,19 @@ export class SyncCaseService {
     private readonly garageHub?: GarageHubService,
   ) {}
 
-  async syncBranches(): Promise<void> {
-    this.logger.log('Syncing Kgara branches...');
+  async syncBranches(
+    accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
+  ): Promise<void> {
+    this.logger.log(`Syncing Kgara branches for account: ${accountKey}...`);
     const run = await this.syncRunLogger.createSyncRun(
       null,
       '/api/v1/donvi/list',
       {},
       0,
+      accountKey,
     );
     try {
-      const branches = await this.client.getBranches();
+      const branches = await this.client.getBranches(accountKey);
       for (const b of branches) {
         let branch = await this.branchRepo.findOne({
           where: { externalId: b.DonViID },
@@ -69,6 +73,7 @@ export class SyncCaseService {
           branch = new KgaraBranch();
           branch.externalId = b.DonViID;
         }
+        branch.accountKey = accountKey;
         branch.code = b.MaSo;
         branch.name = b.TenDonVi;
         branch.parentId = b.ParentID || null;
@@ -81,7 +86,7 @@ export class SyncCaseService {
         undefined,
         200,
       );
-      this.logger.log('Finished syncing branches.');
+      this.logger.log(`Finished syncing branches for account: ${accountKey}.`);
     } catch (error: any) {
       await this.syncRunLogger.closeSyncRun(
         run,
@@ -98,8 +103,11 @@ export class SyncCaseService {
     from?: string,
     to?: string,
     updatedSince?: string,
+    accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
   ): Promise<{ deletedCount: number; withLinkedInvoices: string[] }> {
-    this.logger.log(`Syncing cases for branch ${branchExternalId}...`);
+    this.logger.log(
+      `Syncing cases for branch ${branchExternalId} (account: ${accountKey})...`,
+    );
     let page = 1;
     let totalPages = 1;
     let totalRows = 0;
@@ -142,6 +150,7 @@ export class SyncCaseService {
       '/api/v1/gr/cases/list',
       { from: effectiveFrom, to: effectiveTo, updatedSince },
       200,
+      accountKey,
     );
 
     try {
@@ -174,6 +183,7 @@ export class SyncCaseService {
           updatedSince,
           page,
           200,
+          accountKey,
         );
         const cases = response?.data || [];
         totalPages = response?.pagination?.totalPages || 1;
@@ -289,42 +299,52 @@ export class SyncCaseService {
           }
 
           gwCase.branchExternalId = branchExternalId;
+          gwCase.accountKey = accountKey;
           gwCase.rawData = c;
 
-          // KGara Classification extraction & Zero-Overwrite auto-mapping
-          const { kgaraClassification, kgaraClassificationCode } =
-            extractKgaraClassification(c);
-          if (
-            kgaraClassification !== null ||
-            kgaraClassificationCode !== null
-          ) {
-            gwCase.kgaraClassification = kgaraClassification;
-            gwCase.kgaraClassificationCode = kgaraClassificationCode;
-            if (
-              (gwCase.classification === null ||
-                gwCase.classification === undefined) &&
-              !gwCase.classificationManuallyCleared
-            ) {
-              gwCase.classification = mapKgaraClassificationToErp(
-                kgaraClassificationCode,
-                kgaraClassification,
-              );
-              if (!gwCase.categoryId && gwCase.classification) {
-                gwCase.categoryId =
-                  categoryMap.get(gwCase.classification) || null;
-              }
-            }
-          }
-
-          if (
-            gwCase.classification === 'OJ' ||
-            gwCase.classification === 'OJ_NGOAI'
-          ) {
+          if (accountKey === KgaraAccountKey.OJ) {
             gwCase.classification = 'OJ';
             gwCase.excludeFromDebt = true;
             if (!gwCase.categoryId) {
               gwCase.categoryId =
                 categoryMap.get('OJ') || categoryMap.get('OJ_NGOAI') || null;
+            }
+          } else {
+            // KGara Classification extraction & Zero-Overwrite auto-mapping
+            const { kgaraClassification, kgaraClassificationCode } =
+              extractKgaraClassification(c);
+            if (
+              kgaraClassification !== null ||
+              kgaraClassificationCode !== null
+            ) {
+              gwCase.kgaraClassification = kgaraClassification;
+              gwCase.kgaraClassificationCode = kgaraClassificationCode;
+              if (
+                (gwCase.classification === null ||
+                  gwCase.classification === undefined) &&
+                !gwCase.classificationManuallyCleared
+              ) {
+                gwCase.classification = mapKgaraClassificationToErp(
+                  kgaraClassificationCode,
+                  kgaraClassification,
+                );
+                if (!gwCase.categoryId && gwCase.classification) {
+                  gwCase.categoryId =
+                    categoryMap.get(gwCase.classification) || null;
+                }
+              }
+            }
+
+            if (
+              gwCase.classification === 'OJ' ||
+              gwCase.classification === 'OJ_NGOAI'
+            ) {
+              gwCase.classification = 'OJ';
+              gwCase.excludeFromDebt = true;
+              if (!gwCase.categoryId) {
+                gwCase.categoryId =
+                  categoryMap.get('OJ') || categoryMap.get('OJ_NGOAI') || null;
+              }
             }
           }
 
@@ -423,6 +443,7 @@ export class SyncCaseService {
             branchExternalId,
             range.from,
             range.to,
+            accountKey,
           );
 
           const groups =
@@ -484,6 +505,7 @@ export class SyncCaseService {
           from,
           to,
           syncedIds,
+          accountKey,
         );
       }
 
@@ -499,7 +521,11 @@ export class SyncCaseService {
     }
   }
 
-  async syncCaseDetail(branchExternalId: string, caseId: string): Promise<any> {
+  async syncCaseDetail(
+    branchExternalId: string,
+    caseId: string,
+    accountKey?: KgaraAccountKey,
+  ): Promise<any> {
     this.logger.log(`Syncing detail for case ${caseId}...`);
 
     // Resolve targetCaseId and effectiveBranchId if an ERP internal UUID or soChungTu was passed
@@ -518,18 +544,24 @@ export class SyncCaseService {
     const targetCaseId = gwCase?.hdPhieuDichVuId || caseId;
     const effectiveBranchId =
       branchExternalId || gwCase?.branchExternalId || '';
+    const effectiveAccountKey =
+      accountKey ||
+      (gwCase?.accountKey as KgaraAccountKey) ||
+      KgaraAccountKey.MAIN;
 
     const run = await this.syncRunLogger.createSyncRun(
       effectiveBranchId,
       `/api/v1/gr/cases/detail/${targetCaseId}`,
       {},
       1,
+      effectiveAccountKey,
     );
 
     try {
       const response = await this.client.getCaseDetail(
         targetCaseId,
         effectiveBranchId,
+        effectiveAccountKey,
       );
       const caseData = response?.data;
       if (!caseData) {
@@ -634,6 +666,12 @@ export class SyncCaseService {
       gwCase.soKhung = caseData.SoKhung;
       gwCase.dataAsOf = parseSafeDate(response.dataAsOf);
       gwCase.rawData = caseData;
+      gwCase.accountKey = effectiveAccountKey;
+
+      if (effectiveAccountKey === KgaraAccountKey.OJ) {
+        gwCase.classification = 'OJ';
+        gwCase.excludeFromDebt = true;
+      }
 
       // KGara Classification extraction & Zero-Overwrite auto-mapping
       const {
@@ -838,6 +876,7 @@ export class SyncCaseService {
       to?: string;
       force?: boolean;
       concurrency?: number;
+      accountKey?: KgaraAccountKey;
     },
   ): Promise<{
     totalCasesProcessed: number;
@@ -845,7 +884,7 @@ export class SyncCaseService {
     errorsCount: number;
   }> {
     this.logger.log(
-      `Starting batch sync case details for branch: ${branchExternalId}, from: ${options?.from}, to: ${options?.to}, force: ${options?.force}`,
+      `Starting batch sync case details for branch: ${branchExternalId}, from: ${options?.from}, to: ${options?.to}, force: ${options?.force}, account: ${options?.accountKey || 'ALL'}`,
     );
 
     const qb = this.caseRepo
@@ -860,6 +899,12 @@ export class SyncCaseService {
     ) {
       qb.andWhere('c.branchExternalId = :branchId', {
         branchId: branchExternalId.trim(),
+      });
+    }
+
+    if (options?.accountKey) {
+      qb.andWhere('c.accountKey = :accountKey', {
+        accountKey: options.accountKey,
       });
     }
 
@@ -916,9 +961,12 @@ export class SyncCaseService {
           if (!c.hdPhieuDichVuId) return;
           const effBranchId = c.branchExternalId || branchExternalId || '';
           try {
+            const effAccountKey =
+              (c.accountKey as KgaraAccountKey) || options?.accountKey;
             const caseData = await this.syncCaseDetail(
               effBranchId,
               c.hdPhieuDichVuId,
+              effAccountKey,
             );
             totalCasesProcessed++;
             const rawList =

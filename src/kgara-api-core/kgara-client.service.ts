@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { KgaraAuthService } from './kgara-auth.service';
+import { KgaraAccountKey } from './enums/kgara-account.enum';
 
 @Injectable()
 export class KgaraClientService {
@@ -16,13 +17,16 @@ export class KgaraClientService {
     options: RequestInit = {},
     branchId?: string,
     isRetry = false,
+    accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
   ): Promise<any> {
-    const token = await this.authService.getValidToken();
+    const token = await this.authService.getValidToken(accountKey);
     if (!token) {
-      throw new Error('Could not obtain Kgara token');
+      throw new Error(`Could not obtain Kgara token for account ${accountKey}`);
     }
 
-    const host = this.configService.get<string>('KGARA_API_HOST');
+    const creds = this.authService.getCredentials(accountKey);
+    const host =
+      creds?.host || this.configService.get<string>('KGARA_API_HOST');
     const url = `https://${host}${endpoint}`;
 
     const headers: Record<string, string> = {
@@ -47,10 +51,10 @@ export class KgaraClientService {
     if (!response.ok) {
       if (response.status === 401 && !isRetry) {
         this.logger.warn(
-          'Received 401 Unauthorized, refreshing token and retrying...',
+          `Received 401 Unauthorized for account ${accountKey}, refreshing token and retrying...`,
         );
-        await this.authService.forceRefreshToken();
-        return this.request(endpoint, options, branchId, true); // Retry once
+        await this.authService.forceRefreshToken(accountKey);
+        return this.request(endpoint, options, branchId, true, accountKey); // Retry once
       }
 
       // Parse business error from JSON if available
@@ -67,8 +71,10 @@ export class KgaraClientService {
     return response.json();
   }
 
-  async getBranches(): Promise<any[]> {
-    return this.request('/api/v1/donvi/list');
+  async getBranches(
+    accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
+  ): Promise<any[]> {
+    return this.request('/api/v1/donvi/list', {}, undefined, false, accountKey);
   }
 
   async getCases(
@@ -78,6 +84,7 @@ export class KgaraClientService {
     updatedSince?: string,
     page = 1,
     pageSize = 200,
+    accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
   ): Promise<any> {
     let url = `/api/v1/gr/cases/list?page=${page}&pageSize=${pageSize}&sortDir=asc`;
     if (from && to) {
@@ -87,7 +94,7 @@ export class KgaraClientService {
     }
 
     try {
-      return await this.request(url, {}, branchId);
+      return await this.request(url, {}, branchId, false, accountKey);
     } catch (error: any) {
       if (error.message && error.message.includes('404')) {
         return { data: [], pagination: { total: 0, totalPages: 1 } };
@@ -96,21 +103,32 @@ export class KgaraClientService {
     }
   }
 
-  async getCaseDetail(caseId: string, branchId: string): Promise<any> {
-    return this.request(`/api/v1/gr/cases/detail?id=${caseId}`, {}, branchId);
+  async getCaseDetail(
+    caseId: string,
+    branchId: string,
+    accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
+  ): Promise<any> {
+    return this.request(
+      `/api/v1/gr/cases/detail?id=${caseId}`,
+      {},
+      branchId,
+      false,
+      accountKey,
+    );
   }
 
   async getDashboard(
     branchId: string,
     from?: string,
     to?: string,
+    accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
   ): Promise<any> {
     let url = '/api/v1/gr/dashboard/overview';
     if (from && to) {
       url += `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
     }
     try {
-      return await this.request(url, {}, branchId);
+      return await this.request(url, {}, branchId, false, accountKey);
     } catch (error: any) {
       if (error.message && error.message.includes('404')) {
         return {
@@ -130,9 +148,10 @@ export class KgaraClientService {
     branchId: string,
     from: string,
     to: string,
+    accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
   ): Promise<any> {
     const url = `/api/v1/gr/reports/gross-profit-detail?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
-    return this.request(url, {}, branchId);
+    return this.request(url, {}, branchId, false, accountKey);
   }
 
   async getGrossProfitJournal(
@@ -140,12 +159,13 @@ export class KgaraClientService {
     from: string,
     to: string,
     vuViecID?: string,
+    accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
   ): Promise<any> {
     let url = `/api/v1/gr/reports/gross-profit-detail/journal?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
     if (vuViecID) {
       url += `&vuViecID=${encodeURIComponent(vuViecID)}`;
     }
-    return this.request(url, {}, branchId);
+    return this.request(url, {}, branchId, false, accountKey);
   }
 
   async getReceivables(
@@ -155,6 +175,7 @@ export class KgaraClientService {
     updatedSince?: string,
     page = 1,
     pageSize = 200,
+    accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
   ): Promise<any> {
     let url = `/api/v1/gr/exports/receivables?page=${page}&pageSize=${pageSize}&sortDir=asc`;
     if (from && to) {
@@ -164,7 +185,7 @@ export class KgaraClientService {
     }
 
     try {
-      return await this.request(url, {}, branchId);
+      return await this.request(url, {}, branchId, false, accountKey);
     } catch (error: any) {
       if (error.message && error.message.includes('404')) {
         return { data: [], pagination: { total: 0, totalPages: 1 } };
@@ -180,6 +201,7 @@ export class KgaraClientService {
     updatedSince?: string,
     page = 1,
     pageSize = 200,
+    accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
   ): Promise<any> {
     let url = `/api/v1/gr/exports/payables?page=${page}&pageSize=${pageSize}&sortDir=asc`;
     if (from && to) {
@@ -189,7 +211,7 @@ export class KgaraClientService {
     }
 
     try {
-      return await this.request(url, {}, branchId);
+      return await this.request(url, {}, branchId, false, accountKey);
     } catch (error: any) {
       if (error.message && error.message.includes('404')) {
         return {

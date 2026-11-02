@@ -4,12 +4,14 @@ import { SyncGrossProfitService } from './services/sync-gross-profit.service';
 import { SyncDebtService } from './services/sync-debt.service';
 import { SyncDeletionService } from './services/sync-deletion.service';
 import { SyncRunLoggerService } from './services/sync-run-logger.service';
+import { KgaraAccountKey } from './enums/kgara-account.enum';
 
 // Re-export utility functions for full backward compatibility
 export {
   parseSafeDate,
   extractNetPayableAmount,
 } from './utils/kgara-parser.util';
+export { KgaraAccountKey } from './enums/kgara-account.enum';
 
 @Injectable()
 export class KgaraSyncService {
@@ -23,8 +25,10 @@ export class KgaraSyncService {
     private readonly syncRunLogger: SyncRunLoggerService,
   ) {}
 
-  async syncBranches(): Promise<void> {
-    return this.syncCaseService.syncBranches();
+  async syncBranches(
+    accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
+  ): Promise<void> {
+    return this.syncCaseService.syncBranches(accountKey);
   }
 
   async syncCasesForBranch(
@@ -32,12 +36,14 @@ export class KgaraSyncService {
     from?: string,
     to?: string,
     updatedSince?: string,
+    accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
   ): Promise<{ deletedCount: number; withLinkedInvoices: string[] }> {
     return this.syncCaseService.syncCasesForBranch(
       branchExternalId,
       from,
       to,
       updatedSince,
+      accountKey,
     );
   }
 
@@ -45,11 +51,13 @@ export class KgaraSyncService {
     branchExternalId: string,
     from?: string,
     to?: string,
+    accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
   ): Promise<void> {
     return this.syncGrossProfitService.syncGrossProfitForBranch(
       branchExternalId,
       from,
       to,
+      accountKey,
     );
   }
 
@@ -81,8 +89,16 @@ export class KgaraSyncService {
     );
   }
 
-  async syncCaseDetail(branchExternalId: string, caseId: string): Promise<any> {
-    return this.syncCaseService.syncCaseDetail(branchExternalId, caseId);
+  async syncCaseDetail(
+    branchExternalId: string,
+    caseId: string,
+    accountKey?: KgaraAccountKey,
+  ): Promise<any> {
+    return this.syncCaseService.syncCaseDetail(
+      branchExternalId,
+      caseId,
+      accountKey,
+    );
   }
 
   async syncCaseDetailsBatch(
@@ -92,6 +108,7 @@ export class KgaraSyncService {
       to?: string;
       force?: boolean;
       concurrency?: number;
+      accountKey?: KgaraAccountKey;
     },
   ): Promise<{
     totalCasesProcessed: number;
@@ -104,10 +121,12 @@ export class KgaraSyncService {
   async getIncrementalWatermark(
     branchExternalId: string,
     endpoint: string,
+    accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
   ): Promise<string | undefined> {
     return this.syncRunLogger.getIncrementalWatermark(
       branchExternalId,
       endpoint,
+      accountKey,
     );
   }
 
@@ -116,12 +135,14 @@ export class KgaraSyncService {
     from: string,
     to: string,
     syncedIds: Set<string>,
+    accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
   ): Promise<{ deletedCount: number; withLinkedInvoices: string[] }> {
     return this.syncDeletionService.detectAndMarkDeletedCases(
       branchExternalId,
       from,
       to,
       syncedIds,
+      accountKey,
     );
   }
 
@@ -132,6 +153,7 @@ export class KgaraSyncService {
       to?: string;
       includeDetails?: boolean;
       forceDetails?: boolean;
+      accountKey?: KgaraAccountKey;
     },
   ): Promise<{
     casesResult: { deletedCount: number; withLinkedInvoices: string[] };
@@ -142,12 +164,13 @@ export class KgaraSyncService {
       errorsCount: number;
     };
   }> {
+    const accountKey = options?.accountKey || KgaraAccountKey.MAIN;
     this.logger.log(
-      `Starting All-In-One sync for branch: ${branchExternalId}, from: ${options?.from}, to: ${options?.to}, includeDetails: ${options?.includeDetails}`,
+      `Starting All-In-One sync for branch: ${branchExternalId} (account: ${accountKey}), from: ${options?.from}, to: ${options?.to}, includeDetails: ${options?.includeDetails}`,
     );
 
     try {
-      await this.syncBranches();
+      await this.syncBranches(accountKey);
     } catch (e: any) {
       this.logger.warn(`Sync branches warning: ${e?.message}`);
     }
@@ -156,6 +179,8 @@ export class KgaraSyncService {
       branchExternalId,
       options?.from,
       options?.to,
+      undefined,
+      accountKey,
     );
 
     let grossProfitSuccess = false;
@@ -164,6 +189,7 @@ export class KgaraSyncService {
         branchExternalId,
         options?.from,
         options?.to,
+        accountKey,
       );
       grossProfitSuccess = true;
     } catch (gpErr: any) {
@@ -184,6 +210,7 @@ export class KgaraSyncService {
           from: options?.from,
           to: options?.to,
           force: options?.forceDetails,
+          accountKey,
         });
       } catch (detErr: any) {
         this.logger.warn(`Sync case details warning: ${detErr?.message}`);

@@ -10,7 +10,9 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { GwSyncRun } from '../entities/kgara_sync_run.entity';
+import { KgaraBranch } from '../entities/kgara_branch.entity';
 import { KgaraSyncService } from '../kgara-sync.service';
+import { KgaraAccountKey } from '../enums/kgara-account.enum';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
@@ -24,6 +26,8 @@ export class KgaraSyncController {
   constructor(
     @InjectRepository(GwSyncRun)
     private readonly syncRunRepo: Repository<GwSyncRun>,
+    @InjectRepository(KgaraBranch)
+    private readonly branchRepo: Repository<KgaraBranch>,
     private readonly syncService: KgaraSyncService,
   ) {}
 
@@ -35,6 +39,7 @@ export class KgaraSyncController {
   async syncAll(
     @BranchId() headerBranchId: string,
     @Query('branch_id') queryBranchId?: string,
+    @Query('account') queryAccount?: string,
     @Body() body?: SyncAllDto,
   ) {
     const branchId = body?.branchId || queryBranchId || headerBranchId;
@@ -42,11 +47,21 @@ export class KgaraSyncController {
       return { success: false, message: 'Missing branchId' };
     }
 
+    const branch = await this.branchRepo.findOne({
+      where: { externalId: branchId },
+    });
+    const accountKey =
+      (branch?.accountKey as KgaraAccountKey) ||
+      (body?.account as KgaraAccountKey) ||
+      (queryAccount as KgaraAccountKey) ||
+      KgaraAccountKey.MAIN;
+
     const result = await this.syncService.syncAllInOne(branchId, {
       from: body?.from,
       to: body?.to,
       includeDetails: body?.includeDetails,
       forceDetails: body?.forceDetails,
+      accountKey,
     });
 
     return {
@@ -61,8 +76,20 @@ export class KgaraSyncController {
     resource: ErpResource.GARAGE,
     action: ErpAction.CREATE,
   })
-  async syncBranches() {
-    await this.syncService.syncBranches();
+  async syncBranches(@Query('account') queryAccount?: string) {
+    if (queryAccount === 'OJ') {
+      await this.syncService.syncBranches(KgaraAccountKey.OJ);
+    } else if (queryAccount === 'MAIN') {
+      await this.syncService.syncBranches(KgaraAccountKey.MAIN);
+    } else {
+      for (const acc of [KgaraAccountKey.MAIN, KgaraAccountKey.OJ]) {
+        try {
+          await this.syncService.syncBranches(acc);
+        } catch (e: any) {
+          // continue
+        }
+      }
+    }
     return { success: true, message: 'Branches synced successfully.' };
   }
 
@@ -75,15 +102,23 @@ export class KgaraSyncController {
     if (!branchId) {
       return { success: false, message: 'Missing x-kgara-branch-id header' };
     }
+    const branch = await this.branchRepo.findOne({
+      where: { externalId: branchId },
+    });
+    const accountKey =
+      (branch?.accountKey as KgaraAccountKey) || KgaraAccountKey.MAIN;
+
     const watermark = await this.syncService.getIncrementalWatermark(
       branchId,
       '/api/v1/gr/cases/list',
+      accountKey,
     );
     await this.syncService.syncCasesForBranch(
       branchId,
       undefined,
       undefined,
       watermark,
+      accountKey,
     );
     return {
       success: true,
@@ -99,16 +134,32 @@ export class KgaraSyncController {
   })
   async syncCases(
     @BranchId() branchId: string,
-    @Body() body?: { from?: string; to?: string },
+    @Body() body?: { from?: string; to?: string; account?: string },
     @Query('from') queryFrom?: string,
     @Query('to') queryTo?: string,
+    @Query('account') queryAccount?: string,
   ) {
     if (!branchId) {
       return { success: false, message: 'Missing x-kgara-branch-id header' };
     }
     const from = body?.from || queryFrom;
     const to = body?.to || queryTo;
-    return this.syncService.syncCasesForBranch(branchId, from, to);
+    const branch = await this.branchRepo.findOne({
+      where: { externalId: branchId },
+    });
+    const accountKey =
+      (branch?.accountKey as KgaraAccountKey) ||
+      (body?.account as KgaraAccountKey) ||
+      (queryAccount as KgaraAccountKey) ||
+      KgaraAccountKey.MAIN;
+
+    return this.syncService.syncCasesForBranch(
+      branchId,
+      from,
+      to,
+      undefined,
+      accountKey,
+    );
   }
 
   @Post('sync/gross-profit')
@@ -118,16 +169,31 @@ export class KgaraSyncController {
   })
   async syncGrossProfit(
     @BranchId() branchId: string,
-    @Body() body?: { from?: string; to?: string },
+    @Body() body?: { from?: string; to?: string; account?: string },
     @Query('from') queryFrom?: string,
     @Query('to') queryTo?: string,
+    @Query('account') queryAccount?: string,
   ) {
     if (!branchId) {
       return { success: false, message: 'Missing x-kgara-branch-id header' };
     }
     const from = body?.from || queryFrom;
     const to = body?.to || queryTo;
-    return this.syncService.syncGrossProfitForBranch(branchId, from, to);
+    const branch = await this.branchRepo.findOne({
+      where: { externalId: branchId },
+    });
+    const accountKey =
+      (branch?.accountKey as KgaraAccountKey) ||
+      (body?.account as KgaraAccountKey) ||
+      (queryAccount as KgaraAccountKey) ||
+      KgaraAccountKey.MAIN;
+
+    return this.syncService.syncGrossProfitForBranch(
+      branchId,
+      from,
+      to,
+      accountKey,
+    );
   }
 
   @Post('sync/cases/:id/detail')

@@ -118,6 +118,7 @@ describe('KgaraSyncScheduler', () => {
     expect(syncService.getIncrementalWatermark).toHaveBeenCalledWith(
       'BRANCH-HN',
       '/api/v1/gr/cases/list',
+      expect.anything(),
     );
     expect(syncService.syncCasesForBranch).toHaveBeenCalled();
     expect(syncService.syncGrossProfitForBranch).toHaveBeenCalled();

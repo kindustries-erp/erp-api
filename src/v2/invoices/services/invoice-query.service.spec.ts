@@ -18,6 +18,7 @@ describe('InvoiceQueryService', () => {
       where: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
       orWhere: jest.fn().mockReturnThis(),
+      leftJoin: jest.fn().mockReturnThis(),
       orderBy: jest.fn().mockReturnThis(),
       addOrderBy: jest.fn().mockReturnThis(),
       select: jest.fn().mockReturnThis(),
@@ -25,9 +26,8 @@ describe('InvoiceQueryService', () => {
       groupBy: jest.fn().mockReturnThis(),
       offset: jest.fn().mockReturnThis(),
       limit: jest.fn().mockReturnThis(),
-      skip: jest.fn().mockReturnThis(),
-      take: jest.fn().mockReturnThis(),
-      getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+      getCount: jest.fn().mockResolvedValue(0),
+      getRawAndEntities: jest.fn().mockResolvedValue({ entities: [], raw: [] }),
       getRawOne: jest.fn().mockResolvedValue({}),
       getRawMany: jest.fn().mockResolvedValue([]),
     };
@@ -43,17 +43,27 @@ describe('InvoiceQueryService', () => {
     );
   });
 
-  it('excludes soft-deleted rows and paginates', async () => {
+  it('excludes soft-deleted rows and joins the netoff aggregate', async () => {
+    await service.findAll({ page: 2, pageSize: 10 } as QueryInvoiceDto);
+
+    expect(qb.where).toHaveBeenCalledWith('e.isDeleted = :isDeleted', {
+      isDeleted: false,
+    });
+    expect(qb.leftJoin).toHaveBeenCalledWith(
+      expect.stringContaining('erp_invoice_voucher_netoff'),
+      'netoff_agg',
+      'netoff_agg.invoice_id = e.id',
+    );
+  });
+
+  it('pages with offset and limit and returns the page metadata', async () => {
     const result = await service.findAll({
       page: 2,
       pageSize: 10,
     } as QueryInvoiceDto);
 
-    expect(qb.where).toHaveBeenCalledWith('e.isDeleted = :isDeleted', {
-      isDeleted: false,
-    });
-    expect(qb.skip).toHaveBeenCalledWith(10);
-    expect(qb.take).toHaveBeenCalledWith(10);
+    expect(qb.offset).toHaveBeenCalledWith(10);
+    expect(qb.limit).toHaveBeenCalledWith(10);
     expect(result).toMatchObject({
       items: [],
       total: 0,
@@ -62,10 +72,70 @@ describe('InvoiceQueryService', () => {
     });
   });
 
-  it('orders by createdAt descending when no sort is given', async () => {
+  it('attaches netOffAmount and remainingAmount from the raw row', async () => {
+    const entity = { id: 'inv-1' } as Invoice;
+    qb.getRawAndEntities.mockResolvedValue({
+      entities: [entity],
+      raw: [{ e_id: 'inv-1', netOffAmount: '150', remainingAmount: '50' }],
+    });
+
+    const result = await service.findAll({} as QueryInvoiceDto);
+
+    expect(result.items[0]).toMatchObject({
+      id: 'inv-1',
+      netOffAmount: 150,
+      remainingAmount: 50,
+    });
+  });
+
+  it('defaults to invoice date descending when no sort is given', async () => {
     await service.findAll({} as QueryInvoiceDto);
 
-    expect(qb.orderBy).toHaveBeenCalledWith('e.createdAt', 'DESC');
+    expect(qb.orderBy).toHaveBeenCalledWith('e.invoiceDate', 'DESC');
+  });
+
+  it('filters by direction, partner tax code and tag', async () => {
+    await service.findAll({
+      direction: 'OUT',
+      partner_tax_code: '0101',
+      tag_id: 'tag-1',
+    } as QueryInvoiceDto);
+
+    expect(qb.andWhere).toHaveBeenCalledWith('e.direction = :direction', {
+      direction: 'OUT',
+    });
+    expect(qb.andWhere).toHaveBeenCalledWith(
+      '(e.sellerTaxCode = :ptc OR e.buyerTaxCode = :ptc)',
+      { ptc: '0101' },
+    );
+    expect(qb.andWhere).toHaveBeenCalledWith(
+      expect.stringContaining('sys_entity_tags'),
+      { tagId: 'tag-1' },
+    );
+  });
+
+  it('filters by branch overlap and by blank branch', async () => {
+    const branch = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
+
+    await service.findAll({
+      column_filters: JSON.stringify({ branchId: [branch, '__BLANK__'] }),
+    } as QueryInvoiceDto);
+
+    expect(qb.andWhere).toHaveBeenCalledWith(
+      '(e.branchIds && CAST(:branchIds AS uuid[]) OR cardinality(e.branchIds) = 0)',
+      { branchIds: [branch] },
+    );
+  });
+
+  it('ignores branch values that are not uuids instead of casting them', async () => {
+    await service.findAll({
+      column_filters: JSON.stringify({ branchId: ['hn'] }),
+    } as QueryInvoiceDto);
+
+    expect(qb.andWhere).not.toHaveBeenCalledWith(
+      expect.stringContaining('uuid[]'),
+      expect.anything(),
+    );
   });
 
   it('applies the keyword to the searchable columns', async () => {
@@ -81,6 +151,8 @@ describe('InvoiceQueryService', () => {
       vatAmount: 0,
       discountAmount: 0,
       totalAmount: 0,
+      netOffAmount: 0,
+      remainingAmount: 0,
     });
 
     const result = await service.findAll({
@@ -98,6 +170,8 @@ describe('InvoiceQueryService', () => {
       vatAmount: 0,
       discountAmount: 0,
       totalAmount: 0,
+      netOffAmount: 0,
+      remainingAmount: 0,
     });
   });
 
@@ -109,6 +183,7 @@ describe('InvoiceQueryService', () => {
       where: { id: 'id-1', isDeleted: false },
     });
   });
+
   it('finds only active branches by id', async () => {
     repo.query = jest.fn().mockResolvedValue([{ id: 'b1' }]);
 

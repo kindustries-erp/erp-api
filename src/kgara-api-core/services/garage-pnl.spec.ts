@@ -505,6 +505,72 @@ describe('GarageDashboardService & GaragePnlService - PnL Commission Calculation
     expect(report.oj.netProfit).toBe(18000000);
   });
 
+  it('Scenario 8: Integration verification for OJ account cases - correctly aggregated into garage total and dedicated OJ P&L report', async () => {
+    // Giả lập dữ liệu có case từ tài khoản OJ (classification = 'OJ', accountKey = 'OJ')
+    const mockQb = {
+      leftJoin: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getRawOne: jest.fn().mockResolvedValue({
+        revenue: '350000000', // Tổng doanh thu chung (bao gồm cả xe thường và xe OJ)
+        cogs: '210000000',
+        caseCount: '15',
+        kyGuiRevenue: '50000000',
+        kyGuiCogs: '30000000',
+        kyGuiCaseCount: '2',
+        suaChuaChungRevenue: '180000000',
+        suaChuaChungCogs: '110000000',
+        suaChuaChungCaseCount: '8',
+        ojRevenue: '120000000', // Dữ liệu từ tài khoản OJ sync về
+        ojCogs: '70000000',
+        ojCaseCount: '5',
+      }),
+    };
+    mockCaseRepo.createQueryBuilder.mockReturnValue(mockQb);
+
+    mockOpexService.getSummaryByPeriod.mockResolvedValue({
+      directCost: { total: 0, ojTotal: 0, items: [] },
+      selling: { total: 0, ojTotal: 0, items: [] },
+      opex: {
+        total: 30000000,
+        ojTotal: 5000000,
+        items: [
+          { categoryKey: 'VAN_HANH', amount: 30000000, ojAmount: 5000000 },
+        ],
+      },
+      financialExpense: { total: 0, ojTotal: 0, items: [] },
+      commission: { total: 0, ojTotal: 0, items: [] },
+    });
+
+    const report = await service.getPnlReport(2026, 11);
+
+    // 1. Kiểm tra số liệu OJ độc lập (cho switch "Riêng OJ" trên UI PnL)
+    expect(report.oj.caseCount).toBe(5);
+    expect(report.oj.revenue).toBe(120000000);
+    expect(report.oj.cogs).toBe(70000000);
+    expect(report.oj.grossProfit).toBe(50000000); // 120M - 70M
+    expect(report.oj.grossMarginRate).toBeCloseTo((50000000 / 120000000) * 100);
+    expect(report.oj.opexTotal).toBe(5000000);
+    expect(report.oj.netProfit).toBe(45000000); // 50M - 5M
+
+    // 2. Kiểm tra số liệu tổng chung xưởng (cho tab "Toàn bộ" trên UI PnL)
+    expect(report.caseCount).toBe(15);
+    expect(report.revenue).toBe(350000000);
+    expect(report.cogs).toBe(210000000);
+    expect(report.grossProfit).toBe(140000000); // 350M - 210M
+
+    // 3. Phân khúc OJ trong mảng chi tiết
+    const ojSegment = report.revenueByClassification.find(
+      (c: any) => c.key === 'OJ',
+    );
+    expect(ojSegment).toBeDefined();
+    expect(ojSegment?.revenue).toBe(120000000);
+    expect(ojSegment?.cogs).toBe(70000000);
+    expect(ojSegment?.caseCount).toBe(5);
+  });
+
   describe('syncCommissionVouchers()', () => {
     const mockPnlReport = {
       commission: {
