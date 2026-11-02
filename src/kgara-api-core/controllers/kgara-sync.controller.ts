@@ -20,6 +20,8 @@ import { RequirePermissions } from '../../auth/decorators/require-permissions.de
 import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import { BranchId } from '../decorators/branch-id.decorator';
 import { SyncAllDto } from '../dto/sync-all.dto';
+import { SyncAllBranchesDto } from '../dto/sync-all-branches.dto';
+import { KgaraBulkSyncService } from '../services/kgara-bulk-sync.service';
 
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
 @Controller('greenway')
@@ -31,6 +33,7 @@ export class KgaraSyncController {
     private readonly branchRepo: Repository<KgaraBranch>,
     private readonly syncService: KgaraSyncService,
     private readonly authService: KgaraAuthService,
+    private readonly bulkSyncService: KgaraBulkSyncService,
   ) {}
 
   @Post('sync/all')
@@ -44,33 +47,6 @@ export class KgaraSyncController {
     @Query('account') queryAccount?: string,
     @Body() body?: SyncAllDto,
   ) {
-    if (body?.allBranches) {
-      const result = await this.syncService.syncAllBranches(
-        this.authService.getConfiguredAccounts(),
-        {
-          from: body.from,
-          to: body.to,
-          includeDetails: body.includeDetails,
-          forceDetails: body.forceDetails,
-        },
-      );
-      const failedAccounts = result.accounts
-        .filter((a) => !a.ok)
-        .map((a) => `${a.accountKey} (${a.error})`);
-      const failedBranches = result.branches
-        .filter((b) => !b.ok)
-        .map((b) => `${b.accountKey}/${b.branchExternalId}: ${b.error}`);
-      const problems = [...failedAccounts, ...failedBranches];
-
-      return {
-        success: result.success,
-        data: result,
-        message: result.success
-          ? 'Đồng bộ tất cả chi nhánh thành công.'
-          : `Đồng bộ có lỗi: ${problems.join('; ')}`,
-      };
-    }
-
     const branchId = body?.branchId || queryBranchId || headerBranchId;
     if (!branchId) {
       return { success: false, message: 'Missing branchId' };
@@ -98,6 +74,27 @@ export class KgaraSyncController {
       data: result,
       message: 'All-In-One sync completed successfully.',
     };
+  }
+
+  @Post('sync/all-branches')
+  @RequirePermissions({
+    resource: ErpResource.GARAGE,
+    action: ErpAction.CREATE,
+  })
+  startAllBranchesSync(@Body() body: SyncAllBranchesDto) {
+    return this.bulkSyncService.start({
+      scope: body.scope,
+      from: body.from,
+      to: body.to,
+      includeDetails: body.includeDetails,
+      forceDetails: body.forceDetails,
+    });
+  }
+
+  @Get('sync/all-branches/status')
+  @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
+  getAllBranchesSyncStatus() {
+    return this.bulkSyncService.getStatus();
   }
 
   @Post('sync/branches')

@@ -6,6 +6,7 @@ import { CorePermission } from '../rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
 import { KgaraSyncService } from './kgara-sync.service';
 import { KgaraAuthService } from './kgara-auth.service';
+import { KgaraBulkSyncService } from './services/kgara-bulk-sync.service';
 import { KgaraAccountKey } from './enums/kgara-account.enum';
 import { NotificationsService } from '../notifications/notifications.service';
 import * as cronUtil from '../common/utils/cron.util';
@@ -17,6 +18,7 @@ describe('KgaraSyncScheduler', () => {
   let userRoleRepo: any;
   let syncService: any;
   let authService: any;
+  let bulkSyncService: any;
   let notificationsService: any;
 
   beforeEach(async () => {
@@ -66,6 +68,11 @@ describe('KgaraSyncScheduler', () => {
       }),
     };
 
+    bulkSyncService = {
+      tryLock: jest.fn().mockReturnValue(true),
+      unlock: jest.fn(),
+    };
+
     authService = {
       getConfiguredAccounts: jest
         .fn()
@@ -98,6 +105,10 @@ describe('KgaraSyncScheduler', () => {
         {
           provide: KgaraAuthService,
           useValue: authService,
+        },
+        {
+          provide: KgaraBulkSyncService,
+          useValue: bulkSyncService,
         },
         {
           provide: NotificationsService,
@@ -217,6 +228,22 @@ describe('KgaraSyncScheduler', () => {
       ([, payload]: [string, { type: string }]) => payload.type === 'ERROR',
     );
     expect(errorAlerts).toHaveLength(1);
+  });
+
+  it('should skip the cron run while a manual bulk sync holds the lock', async () => {
+    bulkSyncService.tryLock.mockReturnValueOnce(false);
+
+    await scheduler.runScheduledSyncCheck();
+
+    expect(syncService.syncBranchesForAccounts).not.toHaveBeenCalled();
+    expect(bulkSyncService.unlock).not.toHaveBeenCalled();
+  });
+
+  it('should release the bulk-sync lock after a cron run', async () => {
+    await scheduler.runScheduledSyncCheck();
+
+    expect(bulkSyncService.tryLock).toHaveBeenCalledTimes(1);
+    expect(bulkSyncService.unlock).toHaveBeenCalledTimes(1);
   });
 
   it('should skip execution when cron is disabled', async () => {
