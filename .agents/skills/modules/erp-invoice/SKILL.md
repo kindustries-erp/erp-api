@@ -284,7 +284,7 @@ Chạy song song với v1 trên cùng bảng `erp_invoices`, không đổi schem
 
 | Method | Endpoint | Resource | Action | Ghi chú |
 | :--- | :--- | :--- | :--- | :--- |
-| `GET` | `/api/v2/invoices` | `invoices` | `read` | Envelope `{ items, total, page, pageSize, totalPages, summaries }`; lọc qua `TableQueryDto`; luôn `is_deleted = false` |
+| `GET` | `/api/v2/invoices` | `invoices` | `read` | Envelope `{ items, total, page, pageSize, totalPages, summaries }`; mỗi item có thêm `netOffAmount`, `remainingAmount`; lọc qua `TableQueryDto` + `direction`, `partner_tax_code`, `tag_id`; `sort=-key,key`; mặc định `invoiceDate DESC`; luôn `is_deleted = false` |
 | `GET` | `/api/v2/invoices/column-options` | `invoices` | `read` | Khai báo trước `:id` |
 | `GET` | `/api/v2/invoices/:id` | `invoices` | `read` | `{ message, data }`, `data.items` có dòng hàng |
 | `POST` | `/api/v2/invoices` | `invoices` | `create` | `createdBy` lấy từ JWT (`req.user.sub`), không nhận từ body |
@@ -295,6 +295,10 @@ Chạy song song với v1 trên cùng bảng `erp_invoices`, không đổi schem
 
 Quy tắc:
 - `RequirePermissions` trên mọi endpoint; `:id` dùng `ParseUUIDPipe`; route tĩnh khai báo trước `:id`.
+- Danh sách (`GET /`): `netOffAmount` = tổng cấn trừ (voucher + điều chỉnh, gộp trong subquery `netoff_agg`, 1 dòng/hóa đơn); `remainingAmount` theo công thức v1 (hóa đơn điều chỉnh khi `tax_invoice_status = 3` hoặc tổng < 0). Cả hai là cột lọc/sort/summary. Helper: `helpers/invoice-netoff.helper.ts`, cột và summary: `helpers/invoice-table-columns.ts`.
+- Lọc chi nhánh (`column_filters.branchId`) khớp `branch_ids` (overlap), `__BLANK__` khớp hóa đơn không có chi nhánh; giá trị không phải UUID bị bỏ qua để tránh lỗi cast.
+- Cột alias cho bảng V2: `posting` (= `postingStatus`), `note` (= `notes`).
+- Sort và lọc danh sách dùng `offset/limit` (không `skip/take`) vì có sắp xếp theo biểu thức cấn trừ.
 - Chi nhánh (`branchIds`/`branchId`) phải tồn tại và `is_active = true` trong `erp_branches` (cột `is_active`, không có `is_deleted`). `branch_id` = phần tử đầu của `branch_ids`.
 - Hóa đơn POSTED không đổi được chi nhánh trong v2 (`INVOICE_BRANCH_LOCKED_POSTED`) cho tới khi có accounting-core v2 (UC2 chưa port).
 - `invoice_no_normalized` do v2 tự tính khi ghi (`normalizeInvoiceNo`). v1 không ghi cột này nên một số dòng cũ đang NULL.
