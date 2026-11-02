@@ -167,6 +167,16 @@ export class KgaraCase {
   })
   branchExternalId: string | null;
 
+  /** Account identifier ('MAIN', 'OJ', etc.) */
+  @Index()
+  @Column({
+    type: 'varchar',
+    length: 50,
+    name: 'account_key',
+    default: 'MAIN',
+  })
+  accountKey: string;
+
   // ── KGara Sync classification (Immutable from ERP) ─────────────────────────
 
   /** NguonGocKhachHangName from KGara – Read-only immutable source */

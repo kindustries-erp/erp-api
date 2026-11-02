@@ -9,6 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { KgaraBranch } from './entities/kgara_branch.entity';
 import { KgaraSyncService } from './kgara-sync.service';
+import { KgaraAccountKey } from './enums/kgara-account.enum';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CorePermission } from '../rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
@@ -110,8 +111,6 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
         },
         execute: async () => {
           this.logger.log('Starting scheduled Kgara sync check...');
-          const branches = await this.branchRepo.find();
-
           let totalDeleted = 0;
           let totalWithInvoices = 0;
           let totalDetailsSynced = 0;
@@ -125,16 +124,32 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
           const from = firstDayTwoMonthsAgo.toLocaleDateString('en-CA');
           const to = now.toLocaleDateString('en-CA');
 
+          // Sync branches for all configured accounts before scanning
+          for (const acc of [KgaraAccountKey.MAIN, KgaraAccountKey.OJ]) {
+            try {
+              await this.syncService.syncBranches(acc);
+            } catch (bErr: any) {
+              this.logger.warn(
+                `Scheduled branch sync for account ${acc} skipped: ${bErr?.message}`,
+              );
+            }
+          }
+
+          const branches = await this.branchRepo.find();
+
           for (const branch of branches) {
             if (!branch.externalId) continue;
+            const accountKey =
+              (branch.accountKey as KgaraAccountKey) || KgaraAccountKey.MAIN;
             this.logger.log(
-              `Syncing cases and deletion check for branch ${branch.externalId} (${from} to ${to})`,
+              `Syncing cases and deletion check for branch ${branch.externalId} (account: ${accountKey}, ${from} to ${to})`,
             );
 
             // Watermark incremental sync
             const watermark = await this.syncService.getIncrementalWatermark(
               branch.externalId,
               '/api/v1/gr/cases/list',
+              accountKey,
             );
 
             // 1. Sync cases, gross profit, and soft deletion
@@ -143,6 +158,7 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
               from,
               to,
               watermark,
+              accountKey,
             );
 
             if (result) {
@@ -156,10 +172,11 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
                 branch.externalId,
                 from,
                 to,
+                accountKey,
               );
             } catch (gpErr: any) {
               this.logger.warn(
-                `Gross profit sync for branch ${branch.externalId} skipped: ${gpErr?.message}`,
+                `Gross profit sync for branch ${branch.externalId} (account: ${accountKey}) skipped: ${gpErr?.message}`,
               );
             }
 
@@ -167,14 +184,14 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
             try {
               const detailsRes = await this.syncService.syncCaseDetailsBatch(
                 branch.externalId,
-                { from, to, force: false },
+                { from, to, force: false, accountKey },
               );
               if (detailsRes) {
                 totalDetailsSynced += detailsRes.totalLinesSynced;
               }
             } catch (detailErr: any) {
               this.logger.warn(
-                `Batch case details sync for branch ${branch.externalId} skipped: ${detailErr?.message}`,
+                `Batch case details sync for branch ${branch.externalId} (account: ${accountKey}) skipped: ${detailErr?.message}`,
               );
             }
           }

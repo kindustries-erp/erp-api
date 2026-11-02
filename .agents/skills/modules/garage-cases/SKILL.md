@@ -933,3 +933,39 @@ Nhằm tinh gọn tối đa thanh công cụ (Toolbar) và đồng bộ trải n
 - Sheet `Bảng kê phiếu kết thúc` có 2 cột cuối: **Dự thu (VNĐ)** và **Dự chi (VNĐ)**, lấy qua `GarageHubService.getCaseLedger(caseIds)` → `GarageCaseLedgerHandler` (phiếu thu `EXPECTED` và phiếu chi `PENDING`/`APPROVED` gắn `case_id` của phiếu dịch vụ; phiếu đã hủy không tính). Hai cột đặt cuối để không lệch chữ cột công thức cũ.
 - Đã thu / Đã trả vẫn lấy từ `kgara_case_settlements` (không đổi).
 - Sheet `Dashboard`: thẻ **DỰ THU** (sau ĐÃ THU) và **DỰ CHI** (sau CÒN PHẢI TRẢ); chart mới **Đã thu - Dự thu - Đã trả - Dự chi** theo kỳ (full width, hàng chart thứ 3); bảng dữ liệu `buildCashSeries` (`helpers/garage-cases-dashboard-data.helper.ts`); footnote ghi rõ số có thể khác báo cáo kỳ vì khác tập dữ liệu.
+
+---
+
+## 11. Hỗ Trợ Đa Tài Khoản KGara (Multi-Account Sync: MAIN & OJ) (cập nhật 2026-11-02)
+
+- **Cột `account_key` (`varchar(50) DEFAULT 'MAIN'`)**:
+  Được bổ sung qua Migration `20261102160000-AddAccountKeyToKgaraTables` trên 4 bảng cốt lõi:
+  1. `kgara_auth`: Lưu phiên đăng nhập & Bearer Token độc lập cho từng tài khoản (`MAIN` vs `OJ`), có index unique `(account_key)`.
+  2. `kgara_branches`: Phân biệt chi nhánh trực thuộc tài khoản nào.
+  3. `kgara_cases`: Đánh dấu nguồn gốc vụ việc thuộc tài khoản nào.
+  4. `kgara_sync_runs`: Ghi log watermark và lịch sử đồng bộ riêng biệt.
+
+- **Cấu hình & Biến Môi trường**:
+  - `MAIN`: `KGARA_MA_KHACH_HANG`, `KGARA_USERNAME`, `KGARA_PASSWORD`.
+  - `OJ`: Hỗ trợ cả 2 dạng định danh cấu hình:
+    - Chuẩn mới: `KGARA_OJ_MA_KHACH_HANG`, `KGARA_OJ_USERNAME`, `KGARA_OJ_PASSWORD`.
+    - Tương thích file `.env` hiện hữu: `KGARA_MA_KHACH_HANG_2`, `KGARA_USERNAME_2`, `KGARA_PASSWORD_2`.
+
+- **Cơ chế Phân loại Tự động & Quản lý Công nợ Phân khúc OJ**:
+  - Khi đồng bộ vụ việc từ tài khoản `OJ`:
+    - Tự động gán `classification = 'OJ'`.
+    - Tự động gán `accountKey = 'OJ'`.
+    - Tự động tra cứu và gán `categoryId` trỏ tới danh mục nghiệp vụ OJ (`semanticKey = 'OJ'` hoặc `code IN ('OJ', 'OJ_NGOAI')`).
+    - Tự động kích hoạt cờ `exclude_from_debt = true` (theo Phương án A: không ghi nhận công nợ dịch vụ garage chung của xưởng, trừ khi người dùng chủ động gỡ bỏ cờ trên UI).
+
+- **Tích Hợp Bảng Phân Tích Kết Quả Kinh Doanh (`garage-cases?tab=dashboard`)**:
+  - `GaragePnlService.getPnlReport`: Tự động cộng gộp doanh thu, giá vốn của các case có `classification = 'OJ'` vào tổng thể xưởng dịch vụ.
+  - Đồng thời tách riêng các chỉ số `report.oj` (`ojRevenue`, `ojCogsDirect`, `ojGrossProfit`, `ojNetProfit`, ...).
+  - Phục vụ hoàn hảo cả 2 chế độ hiển thị trên UI:
+    - **Chế độ "Toàn bộ"**: Hiển thị tổng chung + dòng con mở rộng `1.1.1. Trong đó: Phát sinh liên quan OJ` và `2.1.1. Trong đó: Phát sinh liên quan OJ`.
+    - **Chế độ "Riêng OJ"** (khi bật switch `isOjOnly`): Hiển thị trực tiếp toàn bộ kết quả kinh doanh riêng của phân khúc xe OJ.
+
+- **Cô lập Xóa mềm (Soft-delete Isolation)**:
+  - `SyncDeletionService` chỉ so khớp danh sách vụ việc trong phạm vi cùng `account_key`.
+  - Tránh triệt để rủi ro quét tài khoản OJ xóa mềm nhầm vụ việc của MAIN và ngược lại.
+

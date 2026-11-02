@@ -20,4 +20,8 @@ export class SyncAllDto {
   @IsOptional()
   @IsBoolean()
   forceDetails?: boolean;
+
+  @IsOptional()
+  @IsString()
+  account?: string;
 }

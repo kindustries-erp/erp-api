@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
@@ -10,6 +11,16 @@ import {
 export class KgaraAuth {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  /** Account identifier ('MAIN', 'OJ', etc.) */
+  @Index({ unique: true })
+  @Column({
+    type: 'varchar',
+    length: 50,
+    name: 'account_key',
+    default: 'MAIN',
+  })
+  accountKey: string;
 
   @Column({ type: 'text', name: 'access_token', nullable: true })
   accessToken: string | null;
