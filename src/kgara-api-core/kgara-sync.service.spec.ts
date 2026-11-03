@@ -61,6 +61,12 @@ describe('KgaraSyncService', () => {
         transaction: jest.fn((cb) =>
           cb({
             save: jest.fn().mockImplementation((e) => Promise.resolve(e)),
+            getRepository: jest.fn(() => ({
+              find: jest.fn().mockResolvedValue([]),
+              create: jest.fn((data) => ({ ...data })),
+              save: jest.fn().mockImplementation((e) => Promise.resolve(e)),
+              update: jest.fn().mockResolvedValue({ affected: 0 }),
+            })),
           }),
         ),
       },

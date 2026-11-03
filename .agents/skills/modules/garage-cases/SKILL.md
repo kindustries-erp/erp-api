@@ -70,6 +70,8 @@ Các nghiệp vụ trọng tâm:
 | `id` | `uuid` | NO | `gen_random_uuid()` | Khóa chính dòng chi tiết (PK) |
 | `hd_phieu_dich_vu_chi_tiet_id` | `varchar(100)` | NO | — | Mã chi tiết dòng từ KGara (**Unique Index**) |
 | `hd_phieu_dich_vu_id` | `varchar(100)` | NO | — | Mã vụ việc cha (`HdPhieuDichVuID`) (**Index**) |
+| `account_key` | `varchar(50)` | NO | `'MAIN'` | Tài khoản Kgara nguồn (`MAIN` / `OJ`) (**Index**). Migration `1786400000000-KgaraAccountScopeBranchesAndLines` |
+| `deleted_at` | `timestamptz` | YES | `NULL` | Xóa mềm dòng khi Kgara không còn trả dòng đó (**Index**). Mọi truy vấn đọc dòng phải lọc `deleted_at IS NULL` |
 | `noi_dung_chi_tiet` | `text` | YES | `NULL` | Tên hoặc mô tả chi tiết hạng mục |
 | `san_pham_code` | `varchar(100)` | YES | `NULL` | Mã sản phẩm / mã phụ tùng / mã dịch vụ |
 | `san_pham_name` | `varchar(255)` | YES | `NULL` | Tên sản phẩm / phụ tùng / công việc |
@@ -184,7 +186,7 @@ Các nghiệp vụ trọng tâm:
 
 ### 2.7. Bảng `kgara_branches`, `kgara_auth`, `kgara_sync_runs`
 
-- **`kgara_branches`**: Danh mục chi nhánh / phân xưởng KGara (`external_id`, `code`, `name`, `parent_id`, `is_active`).
+- **`kgara_branches`**: Danh mục chi nhánh / phân xưởng KGara (`external_id`, `account_key`, `code`, `name`, `parent_id`, `is_active`). Khóa unique là cặp `(external_id, account_key)`, không còn unique theo `external_id` đơn lẻ, vì một chi nhánh (CN2) có thể nằm trong cả hai tài khoản MAIN và OJ.
 - **`kgara_auth`**: Lưu trữ phiên đăng nhập KGara (`access_token`, `refresh_token`, `token_expires`, `ss_client_id`).
 - **`kgara_sync_runs`**: Nhật ký chi tiết từng lần gọi API đồng bộ (`endpoint`, `status`, `row_count`, `request_started_at`, `request_ended_at`, `error_message`, `data_as_of`).
 
@@ -567,6 +569,23 @@ Cơ chế dùng chung `ExportJobRunner` (`src/common/export-jobs/export-job-runn
   - Tab Phải thu (`/cases/customers-debt`) đã lọc tình trạng 3 từ trước.
 - **Phải trả không có chi phí nhân công**: `kgara_gross_profit.chi_phi` = `ChiPhiVon` (giá vốn), `ChiPhiKhac` = 0. Phải thu `tien_co_thue` đã gồm tiền công (dòng `DV`).
 - Test: `kgara-completion-date.helper.spec.ts`, `kgara-sync.service.spec.ts` (mục *completion date rule*), `garage-debts-analytics.service.spec.ts`, `kgara-suppliers-debt-query.engine.spec.ts`.
+
+### 5.17. Khóa Danh Tính Phiếu Đa Tài Khoản, Chống Ghi Chéo & Xóa Mềm Dòng (2026-11)
+
+- **Nguyên nhân gốc (R1–R5)**: CN2 (`0b4d6d3a…`) xuất hiện ở cả hai tài khoản MAIN (mã `GR-`) và OJ (mã `GN-`). List OJ không có `HdPhieuDichVuID`, nên `findOne({where:{hdPhieuDichVuId: undefined}})` bị TypeORM bỏ điều kiện và ghi đè một hàng bất kỳ. Ngoài ra `raw_data` bị ghi đè bởi payload list, dòng vắng không bao giờ bị xóa, và dòng được ghi tuần tự không có transaction.
+- **Danh tính phiếu**: UUID `HdPhieuDichVuID` (toàn cục, unique). Khi list thiếu UUID (OJ), `resolveCaseGuid` tra qua `exports/receivables` theo `SoChungTu` (`buildGuidMap`, lấy bản ghi đầu tiên) — helper `helpers/kgara-case-identity.helper.ts`. Không tra được thì bỏ qua và chỉ log, không ghi DB.
+- **Chặn ghi chéo**: nếu phiếu đã tồn tại với `account_key` khác thì không ghi đè, tăng `conflictCount` và log cảnh báo. Không "chuyển cha" dòng sang phiếu khác.
+- **Merge raw**: `rawData = { ...cũ, ...payload_list }` để giữ `ListPhieuDichVuChiTiet` đã có.
+- **Chi nhánh theo cặp**: `syncBranches` tra `{externalId, accountKey}`; mặc định `accountKey = MAIN` để giữ hợp đồng API cũ.
+- **Dòng dịch vụ**: `syncCaseDetail` ghi trong một transaction qua `reconcileCaseLines` (`helpers/kgara-case-lines-reconcile.helper.ts`): upsert theo `hd_phieu_dich_vu_chi_tiet_id`, gắn `account_key`, đặt `deleted_at = NULL`; dòng của phiếu này không còn trong Kgara thì xóa mềm. Chỉ xóa khi mảng `ListPhieuDichVuChiTiet` là mảng hợp lệ — thiếu mảng thì không xóa gì.
+- **Reader**: `kgara-case-services-query`, `kgara-completed-cases-export` và `kgara-reports` đều lọc `deleted_at IS NULL`.
+- **Ảnh hưởng doanh thu / chi phí**:
+  - Báo cáo lãi lỗ (`garage-pnl`) và dashboard tính doanh thu, chi phí theo `COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue)` và `COALESCE(gp.chi_phi, c.chi_phi)`. Phiếu có dòng trong `kgara_gross_profit` lấy từ sổ lãi gộp, không dùng `tien_co_thue`. Lệch `tien_co_thue` chỉ tác động khi phiếu không có dòng lãi gộp.
+  - `tien_co_thue` trên `kgara_cases` vẫn là nguồn cho công nợ phải thu và các chỉ số dashboard theo `tien_co_thue` (ví dụ `tienCoThueWithInvoice`, `tienCoThueOj`). Lệch tổng phiếu ảnh hưởng các chỉ số này.
+  - Dòng dịch vụ (`kgara_case_services`) chỉ dùng cho báo cáo chi tiết dòng (query/export dòng). Lệch dòng không đổi tổng doanh thu PnL.
+- **Trạng thái dữ liệu (đối chiếu dry-run 2026-11-03, chỉ đọc)**: MAIN 537 phiếu Kgara so với 561 phiếu DB trong kỳ; 963 dòng thiếu trong DB, 122 dòng thừa; 19 phiếu lệch tổng tiền. OJ 38 phiếu Kgara thiếu trong DB, 5 hàng `GN-` đang mang UUID của phiếu MAIN. Chưa backfill production (cần duyệt riêng, KINDU-41). Script `src/kgara-api-core/scripts/kgara-reconcile-cases.ts` chỉ dry-run; `--apply` bị chặn.
+
+---
 
 ## 6. Tích hợp Liên Module
 

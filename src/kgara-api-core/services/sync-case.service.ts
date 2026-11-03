@@ -15,6 +15,15 @@ import { SyncGrossProfitService } from './sync-gross-profit.service';
 import { GarageCaseForecastService } from './garage-case-forecast.service';
 import { GarageHubService } from '../hub/garage-hub.service';
 import { resolveCompletionDate } from '../helpers/kgara-completion-date.helper';
+import {
+  buildGuidMap,
+  KgaraReceivableRow,
+  resolveCaseGuid,
+} from '../helpers/kgara-case-identity.helper';
+import {
+  KgaraCaseLineInput,
+  reconcileCaseLines,
+} from '../helpers/kgara-case-lines-reconcile.helper';
 import { ErpModuleCategory } from '../../module-config/entities/erp_module_category.entity';
 import { GARAGE_CASE_SEMANTIC } from '../../module-config/registry/module-field-registry';
 import { KgaraAccountKey } from '../enums/kgara-account.enum';
@@ -67,7 +76,7 @@ export class SyncCaseService {
       const branches = await this.client.getBranches(accountKey);
       for (const b of branches) {
         let branch = await this.branchRepo.findOne({
-          where: { externalId: b.DonViID },
+          where: { externalId: b.DonViID, accountKey },
         });
         if (!branch) {
           branch = new KgaraBranch();
@@ -111,6 +120,10 @@ export class SyncCaseService {
     let page = 1;
     let totalPages = 1;
     let totalRows = 0;
+    let guidBySoChungTu = new Map<string, string>();
+    let guidMapLoaded = false;
+    let skippedCount = 0;
+    let conflictCount = 0;
 
     // Compute effective lookback date range (look back 2 months to catch cross-month ongoing service cases)
     let effectiveFrom: string | undefined = from;
@@ -189,16 +202,44 @@ export class SyncCaseService {
         totalPages = response?.pagination?.totalPages || 1;
         const dataAsOf = response?.dataAsOf;
 
+        // Tài khoản OJ không trả HdPhieuDichVuID trong list: tra UUID qua receivables theo SoChungTu
+        if (!guidMapLoaded && cases.some((c) => !c.HdPhieuDichVuID)) {
+          guidBySoChungTu = await this.loadReceivableGuidMap(
+            branchExternalId,
+            effectiveFrom,
+            effectiveTo,
+            updatedSince,
+            accountKey,
+          );
+          guidMapLoaded = true;
+        }
+
         for (const c of cases) {
-          let gwCase = await this.caseRepo.findOne({
-            where: { hdPhieuDichVuId: c.HdPhieuDichVuID },
-          });
-          if (!gwCase) {
-            gwCase = new KgaraCase();
-            gwCase.hdPhieuDichVuId = c.HdPhieuDichVuID;
+          const caseGuid = resolveCaseGuid(c, guidBySoChungTu);
+          if (!caseGuid) {
+            skippedCount++;
+            this.logger.warn(
+              `Skip case ${c.SoChungTu} (account: ${accountKey}): no HdPhieuDichVuID`,
+            );
+            continue;
           }
 
-          syncedIds.add(c.HdPhieuDichVuID);
+          let gwCase = await this.caseRepo.findOne({
+            where: { hdPhieuDichVuId: caseGuid },
+          });
+          if (gwCase?.accountKey && gwCase.accountKey !== String(accountKey)) {
+            conflictCount++;
+            this.logger.warn(
+              `Skip case ${c.SoChungTu}: already owned by account ${gwCase.accountKey}, refusing to overwrite from ${accountKey}`,
+            );
+            continue;
+          }
+          if (!gwCase) {
+            gwCase = new KgaraCase();
+            gwCase.hdPhieuDichVuId = caseGuid;
+          }
+
+          syncedIds.add(caseGuid);
 
           // State transitions handling
           const previousStatus = gwCase.tinhTrangDichVu;
@@ -241,7 +282,7 @@ export class SyncCaseService {
             gwCase.chiPhi = 0;
             gwCase.loiNhuan = 0;
             await this.grossProfitRepo.delete({
-              hdPhieuDichVuId: c.HdPhieuDichVuID,
+              hdPhieuDichVuId: caseGuid,
             });
 
             if (gwCase.id) {
@@ -263,7 +304,7 @@ export class SyncCaseService {
             gwCase.chiPhi = null;
             gwCase.loiNhuan = null;
             await this.grossProfitRepo.delete({
-              hdPhieuDichVuId: c.HdPhieuDichVuID,
+              hdPhieuDichVuId: caseGuid,
             });
             this.logger.log(
               `Case ${gwCase.soChungTu || gwCase.hdPhieuDichVuId} reverted from Completed (3) to In-Progress (${newStatus}). Gross profit reset.`,
@@ -300,7 +341,8 @@ export class SyncCaseService {
 
           gwCase.branchExternalId = branchExternalId;
           gwCase.accountKey = accountKey;
-          gwCase.rawData = c;
+          // Giữ các trường của payload chi tiết (ví dụ ListPhieuDichVuChiTiet) khi list ghi đè
+          gwCase.rawData = { ...(gwCase.rawData ?? {}), ...c };
 
           if (accountKey === KgaraAccountKey.OJ) {
             gwCase.classification = 'OJ';
@@ -499,7 +541,12 @@ export class SyncCaseService {
         deletedCount: 0,
         withLinkedInvoices: [],
       };
-      if (from && to) {
+      // Hàng bị bỏ qua không nằm trong syncedIds; chạy phát hiện xóa lúc đó sẽ xóa nhầm
+      if (skippedCount > 0 || conflictCount > 0) {
+        this.logger.warn(
+          `Deletion detection skipped for branch ${branchExternalId} (account: ${accountKey}): skipped=${skippedCount}, conflicts=${conflictCount}`,
+        );
+      } else if (from && to) {
         deletionResult = await this.syncDeletion.detectAndMarkDeletedCases(
           branchExternalId,
           from,
@@ -519,6 +566,34 @@ export class SyncCaseService {
       );
       throw error;
     }
+  }
+
+  /** Tải toàn bộ receivables của đơn vị để map SoChungTu → HdPhieuDichVuID */
+  private async loadReceivableGuidMap(
+    branchExternalId: string,
+    from: string | undefined,
+    to: string | undefined,
+    updatedSince: string | undefined,
+    accountKey: KgaraAccountKey,
+  ): Promise<Map<string, string>> {
+    const rows: KgaraReceivableRow[] = [];
+    let page = 1;
+    let totalPages = 1;
+    do {
+      const response = await this.client.getReceivables(
+        branchExternalId,
+        from,
+        to,
+        updatedSince,
+        page,
+        200,
+        accountKey,
+      );
+      rows.push(...(response?.data || []));
+      totalPages = response?.pagination?.totalPages || 1;
+      page++;
+    } while (page <= totalPages);
+    return buildGuidMap(rows);
   }
 
   async syncCaseDetail(
@@ -785,6 +860,7 @@ export class SyncCaseService {
         caseData.PhieuDichVuChiTiet ||
         caseData.HoaDonChiTiet;
 
+      const lineInputs: KgaraCaseLineInput[] = [];
       if (rawLines && Array.isArray(rawLines)) {
         for (const s of rawLines) {
           const detailId =
@@ -795,14 +871,7 @@ export class SyncCaseService {
             s.Id;
           if (!detailId) continue;
 
-          let srv = await this.caseServiceRepo.findOne({
-            where: { hdPhieuDichVuChiTietId: detailId },
-          });
-          if (!srv) {
-            srv = new KgaraCaseService();
-            srv.hdPhieuDichVuChiTietId = detailId;
-            srv.hdPhieuDichVuId = targetCaseId;
-          }
+          const srv: Partial<KgaraCaseService> = {};
 
           srv.noiDungChiTiet =
             s.NoiDungChiTiet || s.TenSanPhamDichVu || s.noiDungChiTiet || null;
@@ -841,9 +910,25 @@ export class SyncCaseService {
           srv.tienPhuPhi = Number(s.TienPhuPhi ?? s.tienPhuPhi ?? 0);
 
           srv.rawData = s;
-          await this.caseServiceRepo.save(srv);
-          linesCount++;
+          lineInputs.push({ detailId, data: srv });
         }
+      }
+
+      // Thiếu mảng dòng trong payload thì reconcile không xóa gì; mảng hợp lệ (kể cả rỗng) thì đối soát đầy đủ
+      const linesResult = await this.caseServiceRepo.manager.transaction(
+        (manager) =>
+          reconcileCaseLines(
+            manager,
+            targetCaseId,
+            effectiveAccountKey,
+            Array.isArray(rawLines) ? lineInputs : undefined,
+          ),
+      );
+      linesCount = linesResult.upserted;
+      if (linesResult.conflicts.length > 0) {
+        this.logger.warn(
+          `Case ${targetCaseId}: ${linesResult.conflicts.length} line(s) belong to another case, not moved: ${linesResult.conflicts.join(', ')}`,
+        );
       }
 
       await this.syncRunLogger.closeSyncRun(
