@@ -63,6 +63,7 @@ export class GarageCashflowService {
     page: number = 1,
     pageSize: number = 20,
     filtersStr?: string,
+    tab?: string,
   ) {
     return this.queryEngine.getColumnOptions(
       column,
@@ -70,6 +71,7 @@ export class GarageCashflowService {
       page,
       pageSize,
       filtersStr,
+      tab,
     );
   }
 

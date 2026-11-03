@@ -11,7 +11,7 @@ describe('ErpInvoicesCronService', () => {
 
   beforeEach(() => {
     erpInvoicesCoreService = {
-      getPortalConfig: jest.fn(),
+      getInternalPortalConfig: jest.fn(),
       checkTokenValid: jest.fn(),
       autoReloginWithRetry: jest.fn(),
       syncFromPortal: jest.fn().mockResolvedValue({}),
@@ -73,7 +73,7 @@ describe('ErpInvoicesCronService', () => {
     beforeEach(() => {
       jest.spyOn(cronUtil, 'isGdtInvoiceCronEnabled').mockReturnValue(true);
       jest.spyOn(cronUtil, 'isWithinInvoiceSyncWindow').mockReturnValue(true);
-      erpInvoicesCoreService.getPortalConfig.mockResolvedValue({
+      erpInvoicesCoreService.getInternalPortalConfig.mockResolvedValue({
         token: 'valid-token',
         cookies: 'c',
       });
@@ -172,7 +172,9 @@ describe('ErpInvoicesCronService', () => {
     });
 
     it('should attempt auto-relogin and notify if re-login fails for empty token', async () => {
-      erpInvoicesCoreService.getPortalConfig.mockResolvedValue({ token: '' });
+      erpInvoicesCoreService.getInternalPortalConfig.mockResolvedValue({
+        token: '',
+      });
       erpInvoicesCoreService.autoReloginWithRetry.mockResolvedValue(null);
 
       await cronService.autoSyncCurrentMonth();
@@ -186,7 +188,9 @@ describe('ErpInvoicesCronService', () => {
     });
 
     it('should attempt auto-relogin and proceed with sync if re-login succeeds for empty token', async () => {
-      erpInvoicesCoreService.getPortalConfig.mockResolvedValue({ token: '' });
+      erpInvoicesCoreService.getInternalPortalConfig.mockResolvedValue({
+        token: '',
+      });
       erpInvoicesCoreService.autoReloginWithRetry.mockResolvedValue({
         token: 'new-token',
         cookies: 'new-cookies',
@@ -216,7 +220,7 @@ describe('ErpInvoicesCronService', () => {
     });
 
     it('should pause cron and notify if auth error is thrown during auto-relogin', async () => {
-      erpInvoicesCoreService.getPortalConfig.mockResolvedValue({
+      erpInvoicesCoreService.getInternalPortalConfig.mockResolvedValue({
         token: 'invalid-token',
       });
       erpInvoicesCoreService.checkTokenValid.mockResolvedValue(false);
@@ -236,9 +240,11 @@ describe('ErpInvoicesCronService', () => {
       );
 
       // Verify subsequent runs are skipped
-      erpInvoicesCoreService.getPortalConfig.mockClear();
+      erpInvoicesCoreService.getInternalPortalConfig.mockClear();
       await cronService.autoSyncCurrentMonth();
-      expect(erpInvoicesCoreService.getPortalConfig).not.toHaveBeenCalled();
+      expect(
+        erpInvoicesCoreService.getInternalPortalConfig,
+      ).not.toHaveBeenCalled();
 
       // Verify resumeAfterPasswordUpdate restores it
       cronService.resumeAfterPasswordUpdate();
@@ -246,7 +252,7 @@ describe('ErpInvoicesCronService', () => {
     });
 
     it('should sync purchase and sold invoices sequentially with valid token without re-login', async () => {
-      erpInvoicesCoreService.getPortalConfig.mockResolvedValue({
+      erpInvoicesCoreService.getInternalPortalConfig.mockResolvedValue({
         token: 'valid-token',
         cookies: 'valid-cookies',
       });

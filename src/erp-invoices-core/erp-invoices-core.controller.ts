@@ -35,6 +35,8 @@ import { CreateErpInvoiceDto } from './dto/create-erp-invoice.dto';
 import { UpdateErpInvoiceDto } from './dto/update-erp-invoice.dto';
 import { PostInvoiceDto } from './dto/post-invoice.dto';
 import { PortalFetchDto } from './dto/portal-invoice.dto';
+import { PortalTokenDto } from './dto/portal-token.dto';
+import { BulkDownloadXmlDto } from './dto/bulk-download-xml.dto';
 import { PortalLoginDto } from './dto/portal-login.dto';
 
 import { NotificationsService } from '../notifications/notifications.service';
@@ -452,6 +454,10 @@ export class ErpInvoicesCoreController {
     return this.service.cancel(id);
   }
 
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.UPDATE,
+  })
   @Post(':id/sync-detail')
   syncDetail(@Param('id') id: string, @Body('token') token?: string) {
     return this.service.syncDetailFromPortal(id, token);
@@ -551,9 +557,7 @@ export class ErpInvoicesCoreController {
     action: ErpAction.UPDATE,
   })
   @Post('portal/bulk-download-xml')
-  bulkDownloadXml(
-    @Body() body: { token?: string; cookies?: string; direction: 'IN' | 'OUT' },
-  ) {
+  bulkDownloadXml(@Body() body: BulkDownloadXmlDto) {
     return this.service.bulkDownloadXml(
       body.token,
       body.cookies,
@@ -576,7 +580,13 @@ export class ErpInvoicesCoreController {
   })
   @Post('portal/login')
   async loginPortal(@Body() dto: PortalLoginDto) {
-    return await this.service.loginPortalWithCaptcha(dto);
+    // Token đã được lưu vào cấu hình phía server; không trả ra client
+    const result = await this.service.loginPortalWithCaptcha(dto);
+    return {
+      success: result.success,
+      hasToken: Boolean(result.token),
+      message: result.message,
+    };
   }
 
   @RequirePermissions({
@@ -593,15 +603,7 @@ export class ErpInvoicesCoreController {
     action: ErpAction.UPDATE,
   })
   @Post('portal/token')
-  async savePortalToken(
-    @Body()
-    body: {
-      token: string;
-      cookies?: string;
-      username?: string;
-      password?: string;
-    },
-  ) {
+  async savePortalToken(@Body() body: PortalTokenDto) {
     await this.service.savePortalConfig(
       body.token,
       body.cookies,
@@ -773,6 +775,10 @@ export class ErpInvoicesCoreController {
   // Server-Sent Events (SSE)
   // ---------------------------------------------------------------------------
 
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
   @Sse('portal/progress')
   progress(): Observable<MessageEvent> {
     const keepAlive$ = new Observable<MessageEvent>((subscriber) => {

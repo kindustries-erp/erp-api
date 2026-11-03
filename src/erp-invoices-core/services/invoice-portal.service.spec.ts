@@ -2,12 +2,18 @@ import { UnauthorizedException } from '@nestjs/common';
 import { InvoicePortalService } from './invoice-portal.service';
 import { CompanyProfile } from '../../company-profile/entities/company-profile.entity';
 import { safeDecrypt } from '../../common/utils/encrypt.util';
+import { GdtCronStateHelper } from '../helpers/gdt-cron-state.helper';
 
 jest.mock('../../common/utils/delay.util', () => ({
   sleep: jest.fn().mockResolvedValue(undefined),
 }));
 
 describe('InvoicePortalService - Auth & Auto Re-login', () => {
+  beforeAll(() => {
+    process.env.GDT_ENCRYPT_SECRET =
+      process.env.GDT_ENCRYPT_SECRET || 'unit-test-gdt-secret';
+  });
+
   let service: InvoicePortalService;
   let mockInvoiceRepo: any;
   let mockCompanyProfileRepo: any;
@@ -122,7 +128,9 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
       expect((publicConfig as any).password).toBeUndefined();
       expect(publicConfig.hasPassword).toBe(true);
       expect(publicConfig.username).toEqual('0318334886');
-      expect(publicConfig.token).toEqual('token_abc');
+      expect((publicConfig as any).token).toBeUndefined();
+      expect(publicConfig.hasToken).toBe(true);
+      expect(publicConfig.hasCookies).toBe(true);
     });
 
     it('getInternalPortalConfig should decrypt stored password for internal backend use', async () => {
@@ -228,6 +236,52 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
       const result = await service.autoReloginWithRetry(3, 10);
       expect(loginSpy).toHaveBeenCalledTimes(3);
       expect(result).toBeNull();
+    });
+
+    it('does not try to log in while paused for wrong password (zero-lockout)', async () => {
+      await service.savePortalConfig(
+        'old_token',
+        'old_cookies',
+        '0318334886',
+        'wrong_pass',
+      );
+      GdtCronStateHelper.pauseDueToAuthError();
+      try {
+        const loginSpy = jest.spyOn(service, 'loginWithCaptcha');
+
+        const result = await service.autoReloginWithRetry(3, 10);
+
+        expect(result).toBeNull();
+        expect(loginSpy).not.toHaveBeenCalled();
+      } finally {
+        GdtCronStateHelper.resume();
+      }
+    });
+
+    it('shares one login between concurrent relogin calls (single-flight)', async () => {
+      await service.savePortalConfig(
+        'old_token',
+        'old_cookies',
+        '0318334886',
+        'pass',
+      );
+      jest.spyOn(service, 'getCaptcha').mockResolvedValue({
+        content: '<svg>...</svg>',
+        key: 'captcha_key_123',
+        text: 'ABC123',
+      } as any);
+      const loginSpy = jest
+        .spyOn(service, 'loginWithCaptcha')
+        .mockResolvedValue({ success: true, token: 'new_tok' } as any);
+
+      const [first, second] = await Promise.all([
+        service.autoReloginWithRetry(3, 10),
+        service.autoReloginWithRetry(3, 10),
+      ]);
+
+      expect(loginSpy).toHaveBeenCalledTimes(1);
+      expect(first?.token).toBe('new_tok');
+      expect(second?.token).toBe('new_tok');
     });
 
     it('should NOT retry if login fails with 401 Unauthorized to prevent account lockout', async () => {
@@ -569,7 +623,7 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
 
   describe('syncFromPortal - date windows & token recovery', () => {
     beforeEach(() => {
-      process.env.GDT_QUERY_WINDOW_DAYS = '10';
+      process.env.GDT_QUERY_WINDOW_DAYS = '9';
       jest
         .spyOn(service as any, 'validatePortalTaxpayer')
         .mockResolvedValue(undefined);
@@ -586,7 +640,7 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
     const emptyPage = () =>
       new Response(JSON.stringify({ datas: [], total: 0 }), { status: 200 });
 
-    it('queries each 10-day window instead of each single day', async () => {
+    it('queries each 9-day window instead of each single day', async () => {
       const fetchSpy = jest
         .spyOn(global, 'fetch')
         .mockImplementation(() => Promise.resolve(emptyPage()));
@@ -607,10 +661,35 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
       );
       expect(urls).toHaveLength(3);
       expect(urls[0]).toContain('ge=01/10/2026');
-      expect(urls[0]).toContain('le=10/10/2026');
-      expect(urls[1]).toContain('ge=11/10/2026');
-      expect(urls[2]).toContain('ge=21/10/2026');
+      expect(urls[0]).toContain('le=09/10/2026');
+      expect(urls[1]).toContain('ge=10/10/2026');
+      expect(urls[1]).toContain('le=18/10/2026');
+      expect(urls[2]).toContain('ge=19/10/2026');
       expect(urls[2]).toContain('le=25/10/2026');
+    });
+
+    it('uses 9-day windows by default when GDT_QUERY_WINDOW_DAYS is unset', async () => {
+      delete process.env.GDT_QUERY_WINDOW_DAYS;
+      const fetchSpy = jest
+        .spyOn(global, 'fetch')
+        .mockImplementation(() => Promise.resolve(emptyPage()));
+
+      await service.syncFromPortal(
+        {
+          token: 'tok',
+          dateFrom: '2026-10-01',
+          dateTo: '2026-10-25',
+          type: 'sold',
+        } as any,
+        'user-1',
+        true,
+      );
+
+      const urls = fetchSpy.mock.calls.map((c) =>
+        decodeURIComponent((c[0] as URL).toString()),
+      );
+      expect(urls).toHaveLength(3);
+      expect(urls[0]).toContain('le=09/10/2026');
     });
 
     it('splits a window in half when GDT rejects the range with 400', async () => {
@@ -619,7 +698,7 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
         .mockImplementation((url: any) => {
           const s = decodeURIComponent(url.toString());
           return Promise.resolve(
-            s.includes('ge=01/10/2026') && s.includes('le=10/10/2026')
+            s.includes('ge=01/10/2026') && s.includes('le=09/10/2026')
               ? new Response('bad range', { status: 400 })
               : emptyPage(),
           );
@@ -629,7 +708,7 @@ describe('InvoicePortalService - Auth & Auto Re-login', () => {
         {
           token: 'tok',
           dateFrom: '2026-10-01',
-          dateTo: '2026-10-10',
+          dateTo: '2026-10-09',
           type: 'sold',
         } as any,
         'user-1',

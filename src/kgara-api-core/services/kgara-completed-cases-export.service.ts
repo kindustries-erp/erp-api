@@ -113,7 +113,13 @@ export class KgaraCompletedCasesExportService {
       linkedInvoiceVatMap,
     );
 
-    buildSheet2PnlTracking(workbook, cases, branchNameMap, serviceLinesMap);
+    buildSheet2PnlTracking(
+      workbook,
+      cases,
+      branchNameMap,
+      serviceLinesMap,
+      linkedInvoiceVatMap,
+    );
 
     buildSheet3ItemizedServices(workbook, cases, serviceLinesMap);
 
@@ -356,6 +362,7 @@ export class KgaraCompletedCasesExportService {
           const dbLines = await this.serviceRepo
             .createQueryBuilder('line')
             .where('line.hdPhieuDichVuId IN (:...chunk)', { chunk })
+            .andWhere('line.deletedAt IS NULL')
             .orderBy('line.hdPhieuDichVuId', 'ASC')
             .addOrderBy('line.createdAt', 'ASC')
             .getMany();

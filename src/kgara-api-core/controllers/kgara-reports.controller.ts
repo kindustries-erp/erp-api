@@ -1,6 +1,6 @@
 import { Controller, Get, Query, Param, UseGuards } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { KgaraReceivable } from '../entities/kgara_receivable.entity';
 import { KgaraPayable } from '../entities/kgara_payable.entity';
 import { KgaraCaseService } from '../entities/kgara_case_service.entity';
@@ -80,7 +80,9 @@ export class KgaraReportsController {
   @Get('cases/:id/services')
   @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getCaseServices(@Param('id') id: string) {
-    return this.caseServiceRepo.find({ where: { hdPhieuDichVuId: id } });
+    return this.caseServiceRepo.find({
+      where: { hdPhieuDichVuId: id, deletedAt: IsNull() },
+    });
   }
 
   @Get('cases/:id/payments')

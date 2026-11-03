@@ -1,0 +1,112 @@
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { {{headerEntityName}} } from './entities/{{headerEntityKebab}}.entity';
+import { Create{{headerEntityName}}Dto } from './dto/create-{{headerEntityKebab}}.dto';
+import { Query{{headerEntityName}}Dto } from './dto/query-{{headerEntityKebab}}.dto';
+import { Update{{headerEntityName}}Dto } from './dto/update-{{headerEntityKebab}}.dto';
+import { to{{headerEntityName}}Response } from './helpers/{{headerEntityKebab}}.mapper';
+import { {{headerEntityName}}CommandService } from './services/{{headerEntityKebab}}-command.service';
+import { {{headerEntityName}}QueryService } from './services/{{headerEntityKebab}}-query.service';
+
+@Injectable()
+export class {{moduleClass}}Service {
+  constructor(
+    private readonly query: {{headerEntityName}}QueryService,
+    private readonly command: {{headerEntityName}}CommandService,
+  ) {}
+
+  async findAll(dto: Query{{headerEntityName}}Dto) {
+    const page = await this.query.findAll(dto);
+    return {
+      items: page.items.map((item) => to{{headerEntityName}}Response(item)),
+      total: page.total,
+      page: page.page,
+      pageSize: page.pageSize,
+      totalPages: Math.ceil(page.total / page.pageSize),
+      summaries: page.summaries,
+    };
+  }
+
+  findColumnOptions(
+    column: string,
+    search: string | undefined,
+    page: number,
+    pageSize: number,
+    filters?: string,
+  ) {
+    return this.query.findColumnOptions(
+      column,
+      search,
+      page,
+      pageSize,
+      filters,
+    );
+  }
+
+  async getNextCode(date?: string) {
+    const nextCode = await this.command.generateDailyReceiptNo(date);
+    return { nextCode };
+  }
+
+  async findOne(id: string) {
+    const entity = await this.requireById(id);
+    return {
+      message: 'Lấy thông tin thành công',
+      data: to{{headerEntityName}}Response(entity),
+    };
+  }
+
+  async create(dto: Create{{headerEntityName}}Dto) {
+    const entity = await this.command.create(dto);
+    return {
+      message: 'Tạo thành công',
+      data: to{{headerEntityName}}Response(entity),
+    };
+  }
+
+  async update(id: string, dto: Update{{headerEntityName}}Dto) {
+    const entity = await this.requireById(id);
+    const saved = await this.command.update(entity, dto);
+    return {
+      message: 'Cập nhật thành công',
+      data: to{{headerEntityName}}Response(saved),
+    };
+  }
+
+  async post(id: string) {
+    const entity = await this.requireById(id);
+    const saved = await this.command.post(entity);
+    return {
+      message: 'Ghi sổ thành công',
+      data: to{{headerEntityName}}Response(saved),
+    };
+  }
+
+  async cancel(id: string) {
+    const entity = await this.requireById(id);
+    const saved = await this.command.cancel(entity);
+    return {
+      message: 'Hủy chứng từ thành công',
+      data: to{{headerEntityName}}Response(saved),
+    };
+  }
+
+  async remove(id: string) {
+    const entity = await this.requireById(id);
+    const saved = await this.command.softDelete(entity);
+    return {
+      message: 'Xóa thành công',
+      data: to{{headerEntityName}}Response(saved),
+    };
+  }
+
+  private async requireById(id: string): Promise<{{headerEntityName}}> {
+    const entity = await this.query.findById(id);
+    if (!entity) {
+      throw new NotFoundException(
+        `Không tìm thấy {{headerEntityName}} với id ${id}`,
+      );
+    }
+    return entity;
+  }
+}
+

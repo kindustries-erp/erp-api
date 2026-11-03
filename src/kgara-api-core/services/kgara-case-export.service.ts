@@ -13,7 +13,7 @@ export type { CompletedCasesExportParams, CaseServicesExportParams };
 /**
  * KgaraCaseExportService Facade:
  * Điều phối các yêu cầu xuất báo cáo Excel cho phân hệ Garage.
- * Tuân thủ mô hình Facade Pattern theo chuẩn /api-service-refactor (< 80 LoC).
+ * Tuân thủ mô hình Facade Pattern theo chuẩn /api-structure (< 80 LoC).
  */
 @Injectable()
 export class KgaraCaseExportService {

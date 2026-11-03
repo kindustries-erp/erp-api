@@ -1,0 +1,72 @@
+import { NotFoundException } from '@nestjs/common';
+import { {{headerEntityName}} } from './entities/{{headerEntityKebab}}.entity';
+import { {{moduleClass}}Service } from './{{moduleName}}.service';
+import { {{headerEntityName}}CommandService } from './services/{{headerEntityKebab}}-command.service';
+import { {{headerEntityName}}QueryService } from './services/{{headerEntityKebab}}-query.service';
+
+describe('{{moduleClass}}Service (Facade)', () => {
+  let query: {
+    findAll: jest.Mock;
+    findById: jest.Mock;
+    findColumnOptions: jest.Mock;
+  };
+  let command: {
+    generateDailyReceiptNo: jest.Mock;
+    create: jest.Mock;
+    update: jest.Mock;
+    post: jest.Mock;
+    cancel: jest.Mock;
+    softDelete: jest.Mock;
+  };
+  let service: {{moduleClass}}Service;
+
+  beforeEach(() => {
+    query = {
+      findAll: jest.fn().mockResolvedValue({
+        items: [],
+        total: 0,
+        page: 1,
+        pageSize: 20,
+        summaries: {},
+      }),
+      findById: jest.fn(),
+      findColumnOptions: jest.fn(),
+    };
+    command = {
+      generateDailyReceiptNo: jest.fn().mockResolvedValue('{{voucherPrefix}}-20260101-001'),
+      create: jest.fn(),
+      update: jest.fn(),
+      post: jest.fn(),
+      cancel: jest.fn(),
+      softDelete: jest.fn(),
+    };
+    service = new {{moduleClass}}Service(
+      query as unknown as {{headerEntityName}}QueryService,
+      command as unknown as {{headerEntityName}}CommandService,
+    );
+  });
+
+  it('throws NotFoundException if entity does not exist', async () => {
+    query.findById.mockResolvedValue(null);
+    await expect(service.findOne('missing-id')).rejects.toThrow(
+      NotFoundException,
+    );
+  });
+
+  it('wraps create in standard envelope { message, data }', async () => {
+    const entity = {
+      id: 'id-1',
+      receiptNo: '{{voucherPrefix}}-001',
+      receiptDate: '2026-01-01',
+      totalAmount: '0',
+      status: 'DRAFT',
+      paymentStatus: 'UNPAID',
+    } as {{headerEntityName}};
+    command.create.mockResolvedValue(entity);
+
+    const res = await service.create({} as any);
+    expect(res.message).toBe('Tạo thành công');
+    expect(res.data.receiptNo).toBe('{{voucherPrefix}}-001');
+  });
+});
+

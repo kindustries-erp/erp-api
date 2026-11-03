@@ -284,7 +284,7 @@ Chạy song song với v1 trên cùng bảng `erp_invoices`, không đổi schem
 
 | Method | Endpoint | Resource | Action | Ghi chú |
 | :--- | :--- | :--- | :--- | :--- |
-| `GET` | `/api/v2/invoices` | `invoices` | `read` | Envelope `{ items, total, page, pageSize, totalPages, summaries }`; lọc qua `TableQueryDto`; luôn `is_deleted = false` |
+| `GET` | `/api/v2/invoices` | `invoices` | `read` | Envelope `{ items, total, page, pageSize, totalPages, summaries }`; mỗi item có thêm `netOffAmount`, `remainingAmount`; lọc qua `TableQueryDto` + `direction`, `partner_tax_code`, `tag_id`; `sort=-key,key`; mặc định `invoiceDate DESC`; luôn `is_deleted = false` |
 | `GET` | `/api/v2/invoices/column-options` | `invoices` | `read` | Khai báo trước `:id` |
 | `GET` | `/api/v2/invoices/:id` | `invoices` | `read` | `{ message, data }`, `data.items` có dòng hàng |
 | `POST` | `/api/v2/invoices` | `invoices` | `create` | `createdBy` lấy từ JWT (`req.user.sub`), không nhận từ body |
@@ -295,6 +295,10 @@ Chạy song song với v1 trên cùng bảng `erp_invoices`, không đổi schem
 
 Quy tắc:
 - `RequirePermissions` trên mọi endpoint; `:id` dùng `ParseUUIDPipe`; route tĩnh khai báo trước `:id`.
+- Danh sách (`GET /`): `netOffAmount` = tổng cấn trừ (voucher + điều chỉnh, gộp trong subquery `netoff_agg`, 1 dòng/hóa đơn); `remainingAmount` theo công thức v1 (hóa đơn điều chỉnh khi `tax_invoice_status = 3` hoặc tổng < 0). Cả hai là cột lọc/sort/summary. Helper: `helpers/invoice-netoff.helper.ts`, cột và summary: `helpers/invoice-table-columns.ts`.
+- Lọc chi nhánh (`column_filters.branchId`) khớp `branch_ids` (overlap), `__BLANK__` khớp hóa đơn không có chi nhánh; giá trị không phải UUID bị bỏ qua để tránh lỗi cast.
+- Cột alias cho bảng V2: `posting` (= `postingStatus`), `note` (= `notes`).
+- Sort và lọc danh sách dùng `offset/limit` (không `skip/take`) vì có sắp xếp theo biểu thức cấn trừ.
 - Chi nhánh (`branchIds`/`branchId`) phải tồn tại và `is_active = true` trong `erp_branches` (cột `is_active`, không có `is_deleted`). `branch_id` = phần tử đầu của `branch_ids`.
 - Hóa đơn POSTED không đổi được chi nhánh trong v2 (`INVOICE_BRANCH_LOCKED_POSTED`) cho tới khi có accounting-core v2 (UC2 chưa port).
 - `invoice_no_normalized` do v2 tự tính khi ghi (`normalizeInvoiceNo`). v1 không ghi cột này nên một số dòng cũ đang NULL.
@@ -431,7 +435,7 @@ Ghi chú payload SSE `portal/progress`: thêm trường tùy chọn `currentItem
 - **Kiểm tra Hồ sơ Người nộp thuế (`validatePortalTaxpayer`)**:
   - Đối chiếu danh sách mã số thuế trả về từ hồ sơ GDT (`username`, `id`, `groupId`, `tinInfoTT86.mst`,...) với MST doanh nghiệp trong `company_profile` để chặn nguy cơ kéo nhầm dữ liệu đơn vị khác (`GDT_TAXPAYER_MISMATCH`).
 - **Cửa sổ ngày & Phân trang (`helpers/gdt-date-window.helper.ts`)**:
-  - Kéo danh sách theo cửa sổ ngày, mỗi cửa sổ tối đa `GDT_QUERY_WINDOW_DAYS` ngày (mặc định 10, kẹp 1–31), `size=50`, tối đa 50 trang/cửa sổ/endpoint, cursor `state`.
+  - Kéo danh sách theo cửa sổ ngày, mỗi cửa sổ tối đa `GDT_QUERY_WINDOW_DAYS` ngày (mặc định 9, kẹp 1–31), `size=50`, tối đa 50 trang/cửa sổ/endpoint, cursor `state`.
   - Hàng đợi cửa sổ trong `syncFromPortal`: cổng trả 400 hoặc cửa sổ chạm trần 50 trang thì chia đôi và quét lại (đếm `truncatedWindows`). Cửa sổ 1 ngày không chia được nữa thì ghi `failedSegments`.
   - Khoảng trễ ngẫu nhiên 4-7 giây giữa các request để tránh bị chặn IP/tài khoản.
 - **Quét lùi của Cron (`GDT_CRON_LOOKBACK_DAYS`, mặc định 35)**:
@@ -682,7 +686,7 @@ Phân hệ Hóa đơn trên frontend đã được hợp nhất vào một route
   5. `tab=out-lines`: **Chi tiết bán ra** (Lines Table chiều `OUT`, bộ lọc `subcat`).
   6. `tab=draft`: **Hóa đơn nháp** (`ErpInvoicesDraftPage` - Quản lý hóa đơn SInvoice Viettel nháp).
 
-### 8.2. Cấu trúc Source Code Atomic 3 Tầng (`ui-atomic-refactor`)
+### 8.2. Cấu trúc Source Code Atomic 3 Tầng (`ui-structure`)
 Toàn bộ source code frontend của module nằm tại `src/modules/erp-invoices-core/` và tuân thủ nghiêm ngặt chuẩn Atomic 3 tầng:
 
 ```text

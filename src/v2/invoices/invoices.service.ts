@@ -8,7 +8,7 @@ import { Invoice } from './entities/invoice.entity';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { QueryInvoiceDto } from './dto/query-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
-import { toInvoiceResponse } from './helpers/invoice.mapper';
+import { toInvoiceListItem, toInvoiceResponse } from './helpers/invoice.mapper';
 import { resolveBranchIds } from './helpers/invoice-branch.helper';
 import { INVOICE_MESSAGES } from './invoice-messages';
 import { InvoiceCommandService } from './services/invoice-command.service';
@@ -29,7 +29,7 @@ export class InvoicesService {
   async findAll(dto: QueryInvoiceDto) {
     const page = await this.query.findAll(dto);
     return {
-      items: page.items.map((item) => toInvoiceResponse(item)),
+      items: page.items.map((item) => toInvoiceListItem(item)),
       total: page.total,
       page: page.page,
       pageSize: page.pageSize,

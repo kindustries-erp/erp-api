@@ -11,6 +11,7 @@ import {
   COMPLETED_CASES_COLUMNS,
   COMPLETED_CASES_ALL_COLUMNS,
   CASE_PNL_COLUMNS,
+  CASE_PNL_COLUMN_GROUPS,
   COMPLETED_CASE_SERVICES_COLUMNS,
   type ExcelReportColumnDef,
 } from './kgara-excel-style.helper';
@@ -523,13 +524,19 @@ export function buildSheet2PnlTracking(
   cases: any[],
   branchNameMap: Record<string, string>,
   serviceLinesMap: Map<string, any[]>,
+  linkedInvoiceVatMap: Record<string, number> = {},
 ): void {
   const sheet = workbook.addWorksheet('Theo dõi lãi lỗ');
   initSheetStructure(sheet, CASE_PNL_COLUMNS);
 
+  /** Chữ cột theo vị trí thực trong CASE_PNL_COLUMNS, để công thức không lệch khi thêm cột. */
+  const letter = (key: string) =>
+    getExcelColumnLetter(CASE_PNL_COLUMNS.findIndex((c) => c.key === key) + 1);
+
   const sums: Record<string, number> = {
     doanhThuDichVu: 0,
     doanhThuPhuTung: 0,
+    vatAmount: 0,
     doanhThu: 0,
     giaVonPhuTung: 0,
     chiPhiKhac: 0,
@@ -586,9 +593,13 @@ export function buildSheet2PnlTracking(
     const cost = rawCost > 0 ? rawCost : gvPt;
     const profit = rev - cost;
     const margin = rev > 0 ? (profit / rev) * 100 : 0;
+    // Ưu tiên VAT của hóa đơn đầu ra liên kết; không có thì dùng nguồn dự phòng (giống Sheet 1).
+    const vatAmount =
+      linkedInvoiceVatMap[c.id] ?? resolveCaseVatAmount(c, lines);
 
     sums.doanhThuDichVu += dtDv;
     sums.doanhThuPhuTung += dtPt;
+    sums.vatAmount += vatAmount;
     sums.doanhThu += rev;
     sums.giaVonPhuTung += gvPt;
     sums.chiPhiKhac += cpKhac;
@@ -610,13 +621,23 @@ export function buildSheet2PnlTracking(
       ngayHoanThanhCongViec: toExcelWallClockDate(c.ngayHoanThanhCongViec),
       doanhThuDichVu: dtDv,
       doanhThuPhuTung: dtPt,
-      doanhThu: { formula: `G${rowIdx}+H${rowIdx}`, result: rev },
+      vatAmount,
+      doanhThu: {
+        formula: `${letter('doanhThuDichVu')}${rowIdx}+${letter('doanhThuPhuTung')}${rowIdx}`,
+        result: rev,
+      },
       giaVonPhuTung: gvPt,
       chiPhiKhac: cpKhac,
-      chiPhi: { formula: `J${rowIdx}+K${rowIdx}`, result: cost },
-      loiNhuan: { formula: `I${rowIdx}-L${rowIdx}`, result: profit },
+      chiPhi: {
+        formula: `${letter('giaVonPhuTung')}${rowIdx}+${letter('chiPhiKhac')}${rowIdx}`,
+        result: cost,
+      },
+      loiNhuan: {
+        formula: `${letter('doanhThu')}${rowIdx}-${letter('chiPhi')}${rowIdx}`,
+        result: profit,
+      },
       margin: {
-        formula: `IF(I${rowIdx}>0, M${rowIdx}/I${rowIdx}, 0)`,
+        formula: `IF(${letter('doanhThu')}${rowIdx}>0, ${letter('loiNhuan')}${rowIdx}/${letter('doanhThu')}${rowIdx}, 0)`,
         result: margin / 100,
       },
       branchName,
@@ -639,10 +660,13 @@ export function buildSheet2PnlTracking(
     styleMarginCell(row.getCell('margin'), margin);
   });
 
+  const marginAt = (rowNo: number) =>
+    `IF(${letter('doanhThu')}${rowNo}>0, (${letter('loiNhuan')}${rowNo}/${letter('doanhThu')}${rowNo}), 0)`;
   applyStandardExcelReportLayout(sheet, CASE_PNL_COLUMNS, 4, sums, {
-    sumRow: { margin: 'IF(I1>0, (M1/I1), 0)' },
-    subtotalRow: { margin: 'IF(I2>0, (M2/I2), 0)' },
+    sumRow: { margin: marginAt(1) },
+    subtotalRow: { margin: marginAt(2) },
   });
+  applyColumnGroupStyles(sheet, CASE_PNL_COLUMNS, 5, CASE_PNL_COLUMN_GROUPS);
 }
 
 /**

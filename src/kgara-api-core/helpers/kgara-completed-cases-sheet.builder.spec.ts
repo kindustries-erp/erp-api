@@ -126,11 +126,11 @@ describe('cột tùy chọn của Sheet 1', () => {
     };
   };
 
-  it('không chọn thì chỉ có 29 cột mặc định', () => {
-    expect(resolveCompletedCasesColumns()).toHaveLength(29);
-    expect(
-      resolveCompletedCasesColumns().some((c) => c.key === 'vatAmount'),
-    ).toBe(false);
+  it('không chọn thì chỉ có 30 cột mặc định, Thuế GTGT đứng ngay trái Doanh thu', () => {
+    const keys = resolveCompletedCasesColumns().map((c) => c.key);
+    expect(keys).toHaveLength(30);
+    expect(keys.indexOf('vatAmount')).toBe(keys.indexOf('doanhThu') - 1);
+    expect(keys).not.toContain('exclusionRules');
   });
 
   it('chọn cột tùy chọn thì xuất đúng giá trị và cộng tổng thuế GTGT', () => {

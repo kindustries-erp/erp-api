@@ -34,6 +34,7 @@ import {
 } from '../helpers/invoice-gdt.helper';
 import {
   buildDateWindows,
+  GDT_WINDOW_DEFAULT_DAYS,
   clampWindowDays,
   formatDateWindowLabel,
   splitDateWindow,
@@ -83,6 +84,11 @@ export type PortalProgressEvent = {
 @Injectable()
 export class InvoicePortalService implements OnModuleInit {
   private readonly logger = new Logger(InvoicePortalService.name);
+  /** Lần đăng nhập lại đang chạy; các lời gọi đồng thời chờ chung kết quả này */
+  private reloginInFlight: Promise<{
+    token: string;
+    cookies?: string;
+  } | null> | null = null;
   private static readonly GDT_API_BASE_URL =
     'https://hoadondientu.gdt.gov.vn/api';
   private static readonly GDT_PROFILE_URL = `${InvoicePortalService.GDT_API_BASE_URL}/security-taxpayer/profile`;
@@ -208,9 +214,13 @@ export class InvoicePortalService implements OnModuleInit {
     return prior?.branchId ?? null;
   }
 
+  /**
+   * Trạng thái cấu hình Cổng Thuế cho UI. Không trả token/cookies thô:
+   * chỉ cho biết đã có hay chưa để tránh lộ phiên đăng nhập GDT.
+   */
   async getPortalConfig(): Promise<{
-    token: string;
-    cookies: string;
+    hasToken: boolean;
+    hasCookies: boolean;
     username: string;
     hasPassword: boolean;
   }> {
@@ -219,8 +229,8 @@ export class InvoicePortalService implements OnModuleInit {
       order: { created_at: 'ASC' },
     });
     return {
-      token: profile?.gdt_portal_token || '',
-      cookies: profile?.gdt_portal_cookies || '',
+      hasToken: Boolean(profile?.gdt_portal_token),
+      hasCookies: Boolean(profile?.gdt_portal_cookies),
       username: profile?.gdt_portal_username || profile?.tax_code || '',
       hasPassword: Boolean(profile?.gdt_portal_password),
     };
@@ -286,9 +296,35 @@ export class InvoicePortalService implements OnModuleInit {
     GdtCronStateHelper.resume();
   }
 
+  /**
+   * Đăng nhập lại Cổng Thuế bằng tài khoản đã lưu.
+   * - Đang tạm dừng vì sai mật khẩu (zero-lockout): không thử đăng nhập, tránh khóa tài khoản GDT.
+   * - Nhiều lời gọi đồng thời (cron và thao tác thủ công) dùng chung một lần đăng nhập.
+   */
   async autoReloginWithRetry(
     maxRetries = 3,
     retryDelayMs = 60000,
+  ): Promise<{ token: string; cookies?: string } | null> {
+    if (GdtCronStateHelper.isPaused()) {
+      this.logger.warn(
+        'Đang tạm dừng đăng nhập Cổng Thuế do sai mật khẩu. Không thử đăng nhập lại để tránh khóa tài khoản.',
+      );
+      return null;
+    }
+    if (!this.reloginInFlight) {
+      this.reloginInFlight = this.runAutoRelogin(
+        maxRetries,
+        retryDelayMs,
+      ).finally(() => {
+        this.reloginInFlight = null;
+      });
+    }
+    return this.reloginInFlight;
+  }
+
+  private async runAutoRelogin(
+    maxRetries: number,
+    retryDelayMs: number,
   ): Promise<{ token: string; cookies?: string } | null> {
     const config = await this.getInternalPortalConfig();
     if (!config.username || !config.password) {
@@ -513,6 +549,9 @@ export class InvoicePortalService implements OnModuleInit {
 
     if (!dto.dateFrom || !dto.dateTo)
       throw new BadRequestException('dateFrom and dateTo are required');
+    // Định dạng YYYY-MM-DD nên so sánh chuỗi đúng thứ tự thời gian
+    if (dto.dateFrom > dto.dateTo)
+      throw new BadRequestException('dateFrom không được sau dateTo');
 
     const type = dto.type ?? 'purchase';
     const direction: 'IN' | 'OUT' = type === 'purchase' ? 'IN' : 'OUT';
@@ -540,7 +579,7 @@ export class InvoicePortalService implements OnModuleInit {
           ];
 
     const windowDays = clampWindowDays(
-      Number(process.env.GDT_QUERY_WINDOW_DAYS ?? 10),
+      Number(process.env.GDT_QUERY_WINDOW_DAYS ?? GDT_WINDOW_DEFAULT_DAYS),
     );
 
     const task = async () => {
@@ -560,6 +599,20 @@ export class InvoicePortalService implements OnModuleInit {
         windowLoop: while (windows.length > 0) {
           const win = windows.shift()!;
           const windowMark = rawItems.length;
+          // Mốc thống kê đầu cửa sổ: khi chia lại cửa sổ phải khôi phục đúng số liệu này
+          const statsMark = {
+            pages: pagesFetched,
+            total: totalFromPortal,
+            succeeded: succeededRequests,
+            failed: failedSegments.length,
+          };
+          const rollbackWindow = () => {
+            rawItems.length = windowMark;
+            pagesFetched = statsMark.pages;
+            totalFromPortal = statsMark.total;
+            succeededRequests = statsMark.succeeded;
+            failedSegments.length = statsMark.failed;
+          };
           const formattedDate = formatDateWindowLabel(win);
 
           for (const cfg of queryConfigs) {
@@ -641,7 +694,7 @@ export class InvoicePortalService implements OnModuleInit {
                   const parts =
                     response?.status === 400 ? splitDateWindow(win) : null;
                   if (parts) {
-                    rawItems.length = windowMark;
+                    rollbackWindow();
                     windows.unshift(...parts);
                     truncatedWindows++;
                     continue windowLoop;
@@ -712,7 +765,7 @@ export class InvoicePortalService implements OnModuleInit {
                 truncatedWindows++;
                 const parts = splitDateWindow(win);
                 if (parts) {
-                  rawItems.length = windowMark;
+                  rollbackWindow();
                   windows.unshift(...parts);
                   continue windowLoop;
                 }
@@ -931,19 +984,27 @@ export class InvoicePortalService implements OnModuleInit {
               this.logger.error('XML background download failed', e),
             );
         } else {
-          // Trigger sync directly if no background XML download needed
-          if (direction === 'IN') {
-            await this.vinfastPartsService.syncCatalog({
+          // Trigger sync directly if no background XML download needed.
+          // Hóa đơn đã lưu xong, lỗi sổ phụ tùng không được làm hỏng kết quả đồng bộ GDT.
+          try {
+            if (direction === 'IN') {
+              await this.vinfastPartsService.syncCatalog({
+                progress$: this.progress$,
+                dateFrom: dto.dateFrom,
+                dateTo: dto.dateTo,
+              });
+            }
+            await this.vinfastPartsService.syncLedger({
               progress$: this.progress$,
               dateFrom: dto.dateFrom,
               dateTo: dto.dateTo,
             });
+          } catch (err) {
+            this.logger.error(
+              'Đồng bộ sổ phụ tùng sau khi lấy hóa đơn lỗi',
+              err,
+            );
           }
-          await this.vinfastPartsService.syncLedger({
-            progress$: this.progress$,
-            dateFrom: dto.dateFrom,
-            dateTo: dto.dateTo,
-          });
         }
 
         this.logger.log(
@@ -1108,7 +1169,7 @@ export class InvoicePortalService implements OnModuleInit {
             completed: false,
             currentItem,
           });
-          await new Promise((r) => setTimeout(r, 500));
+          await sleep(500);
         } catch (e) {
           this.logger.warn(
             `Lỗi tải XML cho ${inv.invoiceNo}: ${(e as Error).message}`,

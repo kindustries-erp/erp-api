@@ -9,6 +9,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { KgaraBranch } from './entities/kgara_branch.entity';
 import { KgaraSyncService } from './kgara-sync.service';
+import { KgaraAuthService } from './kgara-auth.service';
+import { KgaraBulkSyncService } from './services/kgara-bulk-sync.service';
+import { KgaraAccountKey } from './enums/kgara-account.enum';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CorePermission } from '../rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
@@ -26,6 +29,7 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
   private intervalId?: NodeJS.Timeout;
   private isRunning = false;
   private lastExecutedSlotKey: string | null = null;
+  private lastBranchSyncAlertKey: string | null = null;
 
   constructor(
     @InjectRepository(KgaraBranch)
@@ -35,6 +39,8 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
     @InjectRepository(CoreUserRole)
     private readonly userRoleRepo: Repository<CoreUserRole>,
     private readonly syncService: KgaraSyncService,
+    private readonly authService: KgaraAuthService,
+    private readonly bulkSyncService: KgaraBulkSyncService,
     private readonly notificationsService: NotificationsService,
   ) {}
 
@@ -93,6 +99,13 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
   @Cron('0 15 9,15,16,17,21 * * *', { timeZone: 'Asia/Ho_Chi_Minh' })
   async runScheduledSyncCheck() {
     if (this.isRunning) return;
+    // Không chạy chồng lên job đồng bộ thủ công (drawer) đang chạy
+    if (!this.bulkSyncService.tryLock()) {
+      this.logger.warn(
+        'Bỏ qua lượt đồng bộ tự động: đang có lượt đồng bộ khác chạy.',
+      );
+      return;
+    }
     this.isRunning = true;
 
     // Đánh dấu slot nếu chạy qua Cron trigger
@@ -110,8 +123,6 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
         },
         execute: async () => {
           this.logger.log('Starting scheduled Kgara sync check...');
-          const branches = await this.branchRepo.find();
-
           let totalDeleted = 0;
           let totalWithInvoices = 0;
           let totalDetailsSynced = 0;
@@ -125,16 +136,43 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
           const from = firstDayTwoMonthsAgo.toLocaleDateString('en-CA');
           const to = now.toLocaleDateString('en-CA');
 
+          // Chỉ xử lý các tài khoản có credentials trong env (MAIN, OJ nếu có *_2)
+          const configuredAccounts = this.authService.getConfiguredAccounts();
+
+          // Sync branches for all configured accounts before scanning
+          const branchSync =
+            await this.syncService.syncBranchesForAccounts(configuredAccounts);
+          const failedBranchSync = branchSync.accounts.filter((a) => !a.ok);
+          if (failedBranchSync.length > 0) {
+            const alertDetail = failedBranchSync
+              .map((a) => `${a.accountKey}: ${a.error}`)
+              .join('; ');
+            // Cùng một lỗi trong cùng một ngày chỉ báo admin một lần
+            const alertKey = `${to}|${alertDetail}`;
+            if (alertKey !== this.lastBranchSyncAlertKey) {
+              this.lastBranchSyncAlertKey = alertKey;
+              await this.notifyAdminsOnError(alertDetail);
+            }
+          } else {
+            this.lastBranchSyncAlertKey = null;
+          }
+
+          const branches = await this.branchRepo.find();
+
           for (const branch of branches) {
             if (!branch.externalId) continue;
+            const accountKey =
+              (branch.accountKey as KgaraAccountKey) || KgaraAccountKey.MAIN;
+            if (!configuredAccounts.includes(accountKey)) continue;
             this.logger.log(
-              `Syncing cases and deletion check for branch ${branch.externalId} (${from} to ${to})`,
+              `Syncing cases and deletion check for branch ${branch.externalId} (account: ${accountKey}, ${from} to ${to})`,
             );
 
             // Watermark incremental sync
             const watermark = await this.syncService.getIncrementalWatermark(
               branch.externalId,
               '/api/v1/gr/cases/list',
+              accountKey,
             );
 
             // 1. Sync cases, gross profit, and soft deletion
@@ -143,6 +181,7 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
               from,
               to,
               watermark,
+              accountKey,
             );
 
             if (result) {
@@ -156,10 +195,11 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
                 branch.externalId,
                 from,
                 to,
+                accountKey,
               );
             } catch (gpErr: any) {
               this.logger.warn(
-                `Gross profit sync for branch ${branch.externalId} skipped: ${gpErr?.message}`,
+                `Gross profit sync for branch ${branch.externalId} (account: ${accountKey}) skipped: ${gpErr?.message}`,
               );
             }
 
@@ -167,14 +207,14 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
             try {
               const detailsRes = await this.syncService.syncCaseDetailsBatch(
                 branch.externalId,
-                { from, to, force: false },
+                { from, to, force: false, accountKey },
               );
               if (detailsRes) {
                 totalDetailsSynced += detailsRes.totalLinesSynced;
               }
             } catch (detailErr: any) {
               this.logger.warn(
-                `Batch case details sync for branch ${branch.externalId} skipped: ${detailErr?.message}`,
+                `Batch case details sync for branch ${branch.externalId} (account: ${accountKey}) skipped: ${detailErr?.message}`,
               );
             }
           }
@@ -191,6 +231,7 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
       });
     } finally {
       this.isRunning = false;
+      this.bulkSyncService.unlock();
     }
   }
 

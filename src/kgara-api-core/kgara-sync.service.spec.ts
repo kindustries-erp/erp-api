@@ -17,6 +17,7 @@ import { SyncDeletionService } from './services/sync-deletion.service';
 import { SyncGrossProfitService } from './services/sync-gross-profit.service';
 import { SyncDebtService } from './services/sync-debt.service';
 import { SyncCaseService } from './services/sync-case.service';
+import { KgaraAccountKey } from './enums/kgara-account.enum';
 
 describe('KgaraSyncService', () => {
   let service: KgaraSyncService;
@@ -60,6 +61,12 @@ describe('KgaraSyncService', () => {
         transaction: jest.fn((cb) =>
           cb({
             save: jest.fn().mockImplementation((e) => Promise.resolve(e)),
+            getRepository: jest.fn(() => ({
+              find: jest.fn().mockResolvedValue([]),
+              create: jest.fn((data) => ({ ...data })),
+              save: jest.fn().mockImplementation((e) => Promise.resolve(e)),
+              update: jest.fn().mockResolvedValue({ affected: 0 }),
+            })),
           }),
         ),
       },
@@ -167,6 +174,45 @@ describe('KgaraSyncService', () => {
     });
   });
 
+  describe('syncBranchesForAccounts', () => {
+    it('keeps syncing other accounts when one account fails', async () => {
+      clientService.getBranches.mockImplementation(async (acc: string) => {
+        if (acc === 'OJ') throw new Error('Login failed: HTTP 401');
+        return [{ DonViID: 'b1', MaSo: 'BR01', TenDonVi: 'Branch 1' }];
+      });
+      branchRepo.findOne.mockResolvedValue(null);
+
+      const result = await service.syncBranchesForAccounts([
+        KgaraAccountKey.MAIN,
+        KgaraAccountKey.OJ,
+      ]);
+
+      expect(result.success).toBe(false);
+      expect(result.accounts).toEqual([
+        { accountKey: KgaraAccountKey.MAIN, ok: true },
+        {
+          accountKey: KgaraAccountKey.OJ,
+          ok: false,
+          error: 'Login failed: HTTP 401',
+        },
+      ]);
+      expect(branchRepo.save).toHaveBeenCalled();
+    });
+
+    it('reports success when every account syncs', async () => {
+      clientService.getBranches.mockResolvedValue([]);
+
+      const result = await service.syncBranchesForAccounts([
+        KgaraAccountKey.MAIN,
+      ]);
+
+      expect(result).toEqual({
+        success: true,
+        accounts: [{ accountKey: KgaraAccountKey.MAIN, ok: true }],
+      });
+    });
+  });
+
   describe('syncCasesForBranch', () => {
     it('should sync cases correctly with pagination', async () => {
       clientService.getCases.mockResolvedValueOnce({
@@ -199,9 +245,47 @@ describe('KgaraSyncService', () => {
         undefined,
         1,
         200,
+        expect.anything(),
       );
       expect(caseRepo.save).toHaveBeenCalled();
       expect(syncRunRepo.save).toHaveBeenCalled();
+    });
+
+    it('should auto-assign classification OJ and excludeFromDebt=true when syncing for OJ account', async () => {
+      clientService.getCases.mockResolvedValue({
+        data: [
+          {
+            HdPhieuDichVuID: 'c-oj-1',
+            SoChungTu: 'OJ01',
+            TinhTrangDichVu: 3,
+            TenTinhTrangDichVu: 'Hoàn tất',
+            TongTienThanhToan: 2000000,
+            TienDaThanhToan: 0,
+            NgayPhatSinh: '2026-10-01',
+          },
+        ],
+        pagination: { totalPages: 1 },
+        dataAsOf: '2026-10-01T12:00:00Z',
+      });
+
+      caseRepo.findOne.mockResolvedValue(null);
+
+      await service.syncCasesForBranch(
+        'br-oj-1',
+        undefined,
+        undefined,
+        undefined,
+        'OJ' as any,
+      );
+
+      expect(caseRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          hdPhieuDichVuId: 'c-oj-1',
+          accountKey: 'OJ',
+          classification: 'OJ',
+          excludeFromDebt: true,
+        }),
+      );
     });
 
     it('should detect and soft-delete missing cases when full range is provided', async () => {
@@ -706,16 +790,20 @@ describe('KgaraSyncService', () => {
         'br-test',
         '2026-10-01',
         '2026-10-31',
+        undefined,
+        'MAIN',
       );
       expect(service.syncGrossProfitForBranch).toHaveBeenCalledWith(
         'br-test',
         '2026-10-01',
         '2026-10-31',
+        'MAIN',
       );
       expect(service.syncCaseDetailsBatch).toHaveBeenCalledWith('br-test', {
         from: '2026-10-01',
         to: '2026-10-31',
         force: undefined,
+        accountKey: 'MAIN',
       });
       expect(res.grossProfitSuccess).toBe(true);
       expect(res.detailsResult?.totalLinesSynced).toBe(12);

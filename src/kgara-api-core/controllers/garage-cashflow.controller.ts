@@ -92,6 +92,7 @@ export class GarageCashflowController {
     @Query('page') page: number,
     @Query('pageSize') pageSize: number,
     @Query('column_filters') column_filters: string,
+    @Query('tab') tab?: string,
   ) {
     return this.cashflowService.getColumnOptions(
       column,
@@ -99,6 +100,7 @@ export class GarageCashflowController {
       page,
       pageSize,
       column_filters,
+      tab,
     );
   }
 

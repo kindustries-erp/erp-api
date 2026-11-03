@@ -1,0 +1,23 @@
+import {
+  Column,
+  Entity,
+  Index,
+  JoinColumn,
+  ManyToOne,
+  type Relation,
+} from 'typeorm';
+import { BaseGoodsReceiptLineEntity } from '@/v2/core/goods-receipts/entities/base-goods-receipt-line.entity';
+import { {{headerEntityName}} } from './{{headerEntityKebab}}.entity';
+
+@Entity('{{lineTableName}}')
+export class {{lineEntityName}} extends BaseGoodsReceiptLineEntity {
+  @Index()
+  @Column({ type: 'uuid', name: '{{snakeCase headerEntityName}}_id' })
+  {{headerEntityCamel}}Id: string;
+
+  @ManyToOne(() => {{headerEntityName}}, (header) => header.lines, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: '{{snakeCase headerEntityName}}_id' })
+  {{headerEntityCamel}}: Relation<{{headerEntityName}}>;
+}

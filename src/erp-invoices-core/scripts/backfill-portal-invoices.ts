@@ -27,6 +27,7 @@ import {
 } from '../helpers/invoice-gdt.helper';
 import {
   buildDateWindows,
+  GDT_WINDOW_DEFAULT_DAYS,
   formatDateWindowLabel,
   GdtDateWindow,
   toGdtDate,
@@ -163,7 +164,9 @@ async function run(): Promise<void> {
   const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
   if (cookies) headers.Cookie = cookies;
 
-  const windowDays = Number(scriptEnv.config.GDT_QUERY_WINDOW_DAYS ?? 10);
+  const windowDays = Number(
+    scriptEnv.config.GDT_QUERY_WINDOW_DAYS ?? GDT_WINDOW_DEFAULT_DAYS,
+  );
   const windows = buildDateWindows(from, to, windowDays);
 
   const client = new Client({

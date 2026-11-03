@@ -1,0 +1,105 @@
+import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import {
+  applyTableFilters,
+  applyTableSort,
+  computeTableSummaries,
+  findTableColumnOptions,
+  TableColumnConfig,
+} from '@/common/utils/table-query';
+import { {{headerEntityName}} } from '../entities/{{headerEntityKebab}}.entity';
+import { Query{{headerEntityName}}Dto } from '../dto/query-{{headerEntityKebab}}.dto';
+
+const TABLE_COLUMNS: Record<string, TableColumnConfig> = {
+  receiptNo: { type: 'text', dbColumn: 'receipt_no' },
+  receipt_no: { type: 'text', dbColumn: 'receipt_no' },
+  receiptDate: { type: 'date', dbColumn: 'receipt_date' },
+  receipt_date: { type: 'date', dbColumn: 'receipt_date' },
+  supplierName: { type: 'text', dbColumn: 'supplier_name' },
+  supplier_name: { type: 'text', dbColumn: 'supplier_name' },
+  branchName: { type: 'text', dbColumn: 'branch_name' },
+  branch_name: { type: 'text', dbColumn: 'branch_name' },
+  totalAmount: { type: 'number', dbColumn: 'total_amount' },
+  total_amount: { type: 'number', dbColumn: 'total_amount' },
+  status: { type: 'status', dbColumn: 'status' },
+  paymentStatus: { type: 'status', dbColumn: 'payment_status' },
+  payment_status: { type: 'status', dbColumn: 'payment_status' },
+  remarks: { type: 'text', dbColumn: 'remarks' },
+  createdAt: { type: 'date', dbColumn: 'created_at' },
+  created_at: { type: 'date', dbColumn: 'created_at' },
+};
+
+const SUMMARY_COLUMNS = ['totalAmount', 'total_amount'];
+
+@Injectable()
+export class {{headerEntityName}}QueryService {
+  constructor(
+    @InjectRepository({{headerEntityName}})
+    private readonly repo: Repository<{{headerEntityName}}>,
+  ) {}
+
+  async findAll(dto: Query{{headerEntityName}}Dto) {
+    const qb = this.repo
+      .createQueryBuilder('voucher')
+      .where('voucher.isDeleted = :isDeleted', { isDeleted: false });
+
+    applyTableFilters(qb, dto, TABLE_COLUMNS, 'voucher');
+
+    const summaries = await computeTableSummaries(
+      qb,
+      SUMMARY_COLUMNS,
+      TABLE_COLUMNS,
+      'voucher',
+    );
+
+    applyTableSort(qb, dto.sort, TABLE_COLUMNS, 'voucher', 'createdAt', 'DESC');
+
+    const page = Math.max(1, Number(dto.page) || 1);
+    const pageSize = Math.max(1, Math.min(200, Number(dto.pageSize) || 20));
+
+    qb.skip((page - 1) * pageSize).take(pageSize);
+
+    const [items, total] = await qb.getManyAndCount();
+
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      summaries,
+    };
+  }
+
+  async findById(id: string): Promise<{{headerEntityName}} | null> {
+    return this.repo.findOne({
+      where: { id, isDeleted: false },
+      relations: ['lines'],
+      order: { lines: { lineNo: 'ASC' } },
+    });
+  }
+
+  async findColumnOptions(
+    column: string,
+    search: string | undefined,
+    page: number,
+    pageSize: number,
+    filters?: string,
+  ) {
+    const baseQb = this.repo
+      .createQueryBuilder('voucher')
+      .where('voucher.isDeleted = :isDeleted', { isDeleted: false });
+
+    return findTableColumnOptions({
+      baseQb,
+      column,
+      search,
+      page,
+      pageSize,
+      filters,
+      columnConfigs: TABLE_COLUMNS,
+      alias: 'voucher',
+    });
+  }
+}
+

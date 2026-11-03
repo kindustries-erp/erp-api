@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { GwSyncRun, GwSyncStatus } from '../entities/kgara_sync_run.entity';
 import { parseSafeDate } from '../utils/kgara-parser.util';
+import { KgaraAccountKey } from '../enums/kgara-account.enum';
 
 @Injectable()
 export class SyncRunLoggerService {
@@ -18,12 +19,14 @@ export class SyncRunLoggerService {
     endpoint: string,
     queryParams: any,
     pageSize: number,
+    accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
   ): Promise<GwSyncRun> {
     const run = new GwSyncRun();
     run.branchExternalId = branchId;
     run.endpoint = endpoint;
     run.queryParams = queryParams;
     run.pageSize = pageSize;
+    run.accountKey = accountKey;
     run.requestStartedAt = new Date();
     return this.syncRunRepo.save(run);
   }
@@ -48,9 +51,15 @@ export class SyncRunLoggerService {
   async getIncrementalWatermark(
     branchExternalId: string,
     endpoint: string,
+    accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
   ): Promise<string | undefined> {
     const lastRun = await this.syncRunRepo.findOne({
-      where: { branchExternalId, endpoint, status: GwSyncStatus.SUCCESS },
+      where: {
+        branchExternalId,
+        endpoint,
+        status: GwSyncStatus.SUCCESS,
+        accountKey,
+      },
       order: { requestStartedAt: 'DESC' },
     });
     if (!lastRun || !lastRun.requestStartedAt) return undefined;

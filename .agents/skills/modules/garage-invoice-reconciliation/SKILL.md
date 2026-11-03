@@ -90,7 +90,7 @@ flowchart TD
 
 ## 5. Cơ Chế Đồng Bộ 2 Chiều (Bidirectional Net-Off & Settlement Sync)
 
-Được quản lý thông qua Pure Engine Helper độc lập: [`kgara-case-netoff-sync.helper.ts`](erp/erp-api/src/kgara-api-core/helpers/kgara-case-netoff-sync.helper.ts) (chuẩn `/api-service-refactor` Pattern C).
+Được quản lý thông qua Pure Engine Helper độc lập: [`kgara-case-netoff-sync.helper.ts`](erp/erp-api/src/kgara-api-core/helpers/kgara-case-netoff-sync.helper.ts) (chuẩn `/api-structure` Pattern C).
 
 1. **Nhận diện liên kết linh hoạt (Dual Linkage)**:
    * Hỗ trợ cả 2 cơ chế liên kết đồng thời bằng phép `UNION`:
@@ -146,7 +146,7 @@ WHERE tien_con_phai_thanh_toan < -0.01;
 1. **Kiến Trúc Drawer (`CaseLinePaymentDrawer` & `GarageCaseReconciliationDrawer`)**:
    * Dùng hook `useGarageCaseReconciliationLogic` để quản lý tập trung toàn bộ state đối soát (Hóa đơn đầu vào/ra, Sao kê ngân hàng, Sổ quỹ, Dòng tiền ngoài sổ).
    * Chuẩn hóa Drawer 2 cột `layout="2-columns"` theo `/standardize-drawer`.
-   * Cấu trúc Atomic Organism chuẩn `/ui-atomic-refactor`: Phân rã thành `src/modules/garage/components/organisms/manual-cashflow-tab-content/` (mọi file < 180 LoC, co-located tests).
+   * Cấu trúc Atomic Organism chuẩn `/ui-structure`: Phân rã thành `src/modules/garage/components/organisms/manual-cashflow-tab-content/` (mọi file < 180 LoC, co-located tests).
 
 2. **Quy Trình Nhập Dòng Tiền Ngoài Sổ (Draft-First, Local Staging & Batch Submit)**:
    * **Form Nhập Liệu 1 Hàng 3 Cột**: Bỏ visual selector phương thức (mặc định `TIEN_MAT_NGOAI`). 3 trường cốt lõi bố trí trên cùng 1 hàng: Người nộp/nhận, Số tiền (VNĐ) kèm text tiếng Việt, Ngày phát sinh với App component chuẩn `<DatePicker />`.

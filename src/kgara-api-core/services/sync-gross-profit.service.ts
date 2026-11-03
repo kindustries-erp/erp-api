@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
 import { KgaraClientService } from '../kgara-client.service';
 import { parseSafeDate } from '../utils/kgara-parser.util';
+import { KgaraAccountKey } from '../enums/kgara-account.enum';
 
 @Injectable()
 export class SyncGrossProfitService {
@@ -19,9 +20,10 @@ export class SyncGrossProfitService {
     branchExternalId: string,
     from?: string,
     to?: string,
+    accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
   ): Promise<void> {
     this.logger.log(
-      `Syncing gross profit ONLY for branch ${branchExternalId}...`,
+      `Syncing gross profit ONLY for branch ${branchExternalId} (account: ${accountKey})...`,
     );
     try {
       const monthsToSync = new Set<string>();
@@ -68,6 +70,7 @@ export class SyncGrossProfitService {
           branchExternalId,
           range.from,
           range.to,
+          accountKey,
         );
 
         const results = profitResponse?.results;

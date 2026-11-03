@@ -1,0 +1,26 @@
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import { IsArray, IsIn, IsOptional, ValidateNested } from 'class-validator';
+import {
+  BaseCreateGoodsReceiptDto,
+  BaseCreateGoodsReceiptLineDto,
+} from '@/v2/core/goods-receipts/dto';
+
+export class Create{{lineEntityName}}Dto extends BaseCreateGoodsReceiptLineDto {}
+
+export class Create{{headerEntityName}}Dto extends BaseCreateGoodsReceiptDto {
+  @ApiPropertyOptional({ description: 'Trạng thái thanh toán', default: 'UNPAID' })
+  @IsOptional()
+  @IsIn(['UNPAID', 'PARTIALLY_PAID', 'PAID'])
+  paymentStatus?: string;
+
+  @ApiPropertyOptional({
+    description: 'Danh sách mặt hàng chi tiết',
+    type: () => [Create{{lineEntityName}}Dto],
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => Create{{lineEntityName}}Dto)
+  declare lines?: Create{{lineEntityName}}Dto[];
+}
