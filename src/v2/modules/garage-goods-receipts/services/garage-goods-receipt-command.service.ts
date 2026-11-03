@@ -7,6 +7,7 @@ import { GarageInventoryBalance } from '../entities/garage-inventory-balance.ent
 import { CreateGarageGoodsReceiptDto } from '../dto/create-garage-goods-receipt.dto';
 import { UpdateGarageGoodsReceiptDto } from '../dto/update-garage-goods-receipt.dto';
 import { toGarageGoodsReceiptEntityFields } from '../helpers/garage-goods-receipt.mapper';
+import { BaseVoucherEngineService } from '@/v2/core/goods-receipts/services/base-voucher-engine.service';
 
 @Injectable()
 export class GarageGoodsReceiptCommandService {
@@ -14,24 +15,16 @@ export class GarageGoodsReceiptCommandService {
     private readonly dataSource: DataSource,
     @InjectRepository(GarageGoodsReceipt)
     private readonly repo: Repository<GarageGoodsReceipt>,
+    private readonly voucherEngine: BaseVoucherEngineService,
   ) {}
 
   async generateDailyReceiptNo(orderDate?: string): Promise<string> {
-    const baseDate = orderDate ? new Date(orderDate) : new Date();
-    const year = baseDate.getFullYear();
-    const month = String(baseDate.getMonth() + 1).padStart(2, '0');
-    const day = String(baseDate.getDate()).padStart(2, '0');
-    const prefix = `GGR-${year}${month}${day}-`;
-
-    const latest = await this.repo
-      .createQueryBuilder('r')
-      .where('r.receiptNo LIKE :prefix', { prefix: `${prefix}%` })
-      .orderBy('r.receiptNo', 'DESC')
-      .getOne();
-
-    const latestSeq = latest?.receiptNo?.slice(prefix.length) ?? '000';
-    const nextSeq = String(Number(latestSeq || '0') + 1).padStart(3, '0');
-    return `${prefix}${nextSeq}`;
+    return this.voucherEngine.generateDailyVoucherNo(
+      this.repo,
+      'receiptNo',
+      'GGR',
+      orderDate,
+    );
   }
 
   async create(dto: CreateGarageGoodsReceiptDto): Promise<GarageGoodsReceipt> {
@@ -51,16 +44,13 @@ export class GarageGoodsReceiptCommandService {
         paymentStatus: headerDto.paymentStatus || 'UNPAID',
       });
 
-      // Calculate total from lines if present
-      let calculatedTotal = 0;
+      // Calculate total from lines using core voucher engine
       const lineEntities: GarageGoodsReceiptLine[] = [];
-
       let lineNo = 1;
       for (const l of lines) {
         const qty = Number(l.qtyReceived || 0);
         const cost = Number(l.unitCost || 0);
         const amount = l.amount !== undefined ? Number(l.amount) : qty * cost;
-        calculatedTotal += amount;
 
         const line = lineRepo.create({
           lineNo: lineNo++,
@@ -74,6 +64,8 @@ export class GarageGoodsReceiptCommandService {
         });
         lineEntities.push(line);
       }
+
+      const calculatedTotal = this.voucherEngine.sumLineAmounts(lineEntities);
 
       if (dto.totalAmount !== undefined && dto.totalAmount !== null) {
         entityFields.totalAmount = String(dto.totalAmount);
@@ -101,31 +93,27 @@ export class GarageGoodsReceiptCommandService {
     entity: GarageGoodsReceipt,
     dto: UpdateGarageGoodsReceiptDto,
   ): Promise<GarageGoodsReceipt> {
-    if (entity.status !== 'DRAFT') {
-      throw new BadRequestException(
-        'Chỉ có thể chỉnh sửa phiếu ở trạng thái Nháp (DRAFT)',
-      );
-    }
+    this.voucherEngine.validateVoucherTransition(entity.status, 'update');
 
     return this.dataSource.transaction(async (manager) => {
       const receiptRepo = manager.getRepository(GarageGoodsReceipt);
       const lineRepo = manager.getRepository(GarageGoodsReceiptLine);
 
       const { lines, ...headerDto } = dto;
-      Object.assign(entity, toGarageGoodsReceiptEntityFields(headerDto));
+      const entityFields = toGarageGoodsReceiptEntityFields(headerDto);
+      Object.assign(entity, entityFields);
 
       if (lines !== undefined) {
-        // Remove existing lines and re-create
+        // Xóa các lines cũ và chèn lại
         await lineRepo.delete({ garageGoodsReceiptId: entity.id });
 
-        let calculatedTotal = 0;
         const lineEntities: GarageGoodsReceiptLine[] = [];
         let lineNo = 1;
+
         for (const l of lines) {
           const qty = Number(l.qtyReceived || 0);
           const cost = Number(l.unitCost || 0);
           const amount = l.amount !== undefined ? Number(l.amount) : qty * cost;
-          calculatedTotal += amount;
 
           const line = lineRepo.create({
             garageGoodsReceiptId: entity.id,
@@ -142,7 +130,9 @@ export class GarageGoodsReceiptCommandService {
         }
 
         if (dto.totalAmount === undefined) {
-          entity.totalAmount = String(calculatedTotal);
+          entity.totalAmount = String(
+            this.voucherEngine.sumLineAmounts(lineEntities),
+          );
         }
         entity.lines = lineEntities;
       }
@@ -152,14 +142,7 @@ export class GarageGoodsReceiptCommandService {
   }
 
   async post(entity: GarageGoodsReceipt): Promise<GarageGoodsReceipt> {
-    if (entity.status === 'POSTED') {
-      throw new BadRequestException(
-        'Phiếu nhập kho này đã được ghi sổ trước đó',
-      );
-    }
-    if (entity.status === 'CANCELLED') {
-      throw new BadRequestException('Không thể ghi sổ phiếu đã bị hủy');
-    }
+    this.voucherEngine.validateVoucherTransition(entity.status, 'post');
 
     return this.dataSource.transaction(async (manager) => {
       const receiptRepo = manager.getRepository(GarageGoodsReceipt);
@@ -177,7 +160,7 @@ export class GarageGoodsReceiptCommandService {
         throw new BadRequestException('Phiếu nhập kho chưa có mặt hàng nào');
       }
 
-      // Update inventory balances
+      // Update inventory balances for garage
       for (const line of lines) {
         const itemCode = line.itemCode || line.itemName;
         let balance = await balanceRepo.findOne({
@@ -215,9 +198,7 @@ export class GarageGoodsReceiptCommandService {
   }
 
   async cancel(entity: GarageGoodsReceipt): Promise<GarageGoodsReceipt> {
-    if (entity.status === 'CANCELLED') {
-      throw new BadRequestException('Phiếu nhập kho đã bị hủy trước đó');
-    }
+    this.voucherEngine.validateVoucherTransition(entity.status, 'cancel');
 
     return this.dataSource.transaction(async (manager) => {
       const receiptRepo = manager.getRepository(GarageGoodsReceipt);
@@ -256,11 +237,7 @@ export class GarageGoodsReceiptCommandService {
   }
 
   async softDelete(entity: GarageGoodsReceipt): Promise<GarageGoodsReceipt> {
-    if (entity.status !== 'DRAFT') {
-      throw new BadRequestException(
-        'Chỉ có thể xóa phiếu nhập kho ở trạng thái Nháp (DRAFT)',
-      );
-    }
+    this.voucherEngine.validateVoucherTransition(entity.status, 'delete');
     entity.isDeleted = true;
     return this.repo.save(entity);
   }

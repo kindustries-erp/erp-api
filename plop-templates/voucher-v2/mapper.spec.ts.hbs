@@ -1,0 +1,64 @@
+import { {{headerEntityName}} } from '../entities/{{headerEntityKebab}}.entity';
+import { {{lineEntityName}} } from '../entities/{{lineEntityKebab}}.entity';
+import {
+  to{{headerEntityName}}Response,
+  to{{headerEntityName}}EntityFields,
+  to{{lineEntityName}}Response,
+} from './{{headerEntityKebab}}.mapper';
+
+describe('{{headerEntityName}} Mapper', () => {
+  it('maps entity and lines to response DTO without isDeleted', () => {
+    const line: {{lineEntityName}} = {
+      id: 'line-1',
+      {{headerEntityCamel}}Id: 'rec-1',
+      lineNo: 1,
+      itemCode: 'ITEM-1',
+      itemName: 'Hàng mẫu',
+      unit: 'Cái',
+      qtyReceived: '2.00',
+      unitCost: '50000.00',
+      amount: '100000.00',
+      notes: null,
+      createdAt: new Date('2026-01-01'),
+      updatedAt: new Date('2026-01-01'),
+      {{headerEntityCamel}}: null as any,
+    };
+
+    const entity: {{headerEntityName}} = {
+      id: 'rec-1',
+      receiptNo: '{{voucherPrefix}}-20260101-001',
+      receiptDate: '2026-01-01',
+      supplierId: null,
+      supplierName: 'NCC A',
+      branchId: null,
+      branchName: null,
+      totalAmount: '100000.00',
+      status: 'DRAFT',
+      paymentStatus: 'UNPAID',
+      remarks: 'Ghi chú',
+      createdBy: null,
+      isDeleted: false,
+      createdAt: new Date('2026-01-01'),
+      updatedAt: new Date('2026-01-01'),
+      lines: [line],
+    };
+
+    const res = to{{headerEntityName}}Response(entity);
+    expect(res.receiptNo).toBe('{{voucherPrefix}}-20260101-001');
+    expect(res.totalAmount).toBe(100000);
+    expect(res.lines).toHaveLength(1);
+    expect(res.lines?.[0].qtyReceived).toBe(2);
+    expect((res as any).isDeleted).toBeUndefined();
+  });
+
+  it('maps partial DTO to entity fields omitting undefined', () => {
+    const fields = to{{headerEntityName}}EntityFields({
+      receiptNo: 'REC-001',
+      totalAmount: 50000,
+    });
+    expect(fields.receiptNo).toBe('REC-001');
+    expect(fields.totalAmount).toBe('50000');
+    expect(fields.status).toBeUndefined();
+  });
+});
+

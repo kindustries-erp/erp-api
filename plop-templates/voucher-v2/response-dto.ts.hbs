@@ -1,0 +1,84 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+export class {{lineEntityName}}ResponseDto {
+  @ApiProperty()
+  id: string;
+
+  @ApiProperty()
+  lineNo: number;
+
+  @ApiPropertyOptional()
+  itemCode?: string;
+
+  @ApiProperty()
+  itemName: string;
+
+  @ApiPropertyOptional()
+  unit?: string;
+
+  @ApiProperty()
+  qtyReceived: number;
+
+  @ApiProperty()
+  unitCost: number;
+
+  @ApiProperty()
+  amount: number;
+
+  @ApiPropertyOptional()
+  notes?: string;
+
+  @ApiProperty()
+  createdAt: string;
+
+  @ApiProperty()
+  updatedAt: string;
+}
+
+export class {{headerEntityName}}ResponseDto {
+  @ApiProperty()
+  id: string;
+
+  @ApiProperty()
+  receiptNo: string;
+
+  @ApiProperty()
+  receiptDate: string;
+
+  @ApiPropertyOptional()
+  supplierId?: string;
+
+  @ApiPropertyOptional()
+  supplierName?: string;
+
+  @ApiPropertyOptional()
+  branchId?: string;
+
+  @ApiPropertyOptional()
+  branchName?: string;
+
+  @ApiProperty()
+  totalAmount: number;
+
+  @ApiProperty()
+  status: string;
+
+  @ApiProperty()
+  paymentStatus: string;
+
+  @ApiPropertyOptional()
+  remarks?: string;
+
+  @ApiPropertyOptional()
+  createdBy?: string;
+
+  @ApiProperty()
+  createdAt: string;
+
+  @ApiProperty()
+  updatedAt: string;
+
+  @ApiPropertyOptional({ type: [{{lineEntityName}}ResponseDto] })
+  lines?: {{lineEntityName}}ResponseDto[];
+}
+

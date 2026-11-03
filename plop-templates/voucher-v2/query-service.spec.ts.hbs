@@ -1,0 +1,69 @@
+import { Repository } from 'typeorm';
+import { {{headerEntityName}} } from '../entities/{{headerEntityKebab}}.entity';
+import { Query{{headerEntityName}}Dto } from '../dto/query-{{headerEntityKebab}}.dto';
+import { {{headerEntityName}}QueryService } from './{{headerEntityKebab}}-query.service';
+
+describe('{{headerEntityName}}QueryService', () => {
+  let repo: {
+    createQueryBuilder: jest.Mock;
+    findOne: jest.Mock;
+  };
+  let qb: {
+    where: jest.Mock;
+    andWhere: jest.Mock;
+    skip: jest.Mock;
+    take: jest.Mock;
+    orderBy: jest.Mock;
+    addOrderBy: jest.Mock;
+    getManyAndCount: jest.Mock;
+    clone: jest.Mock;
+    select: jest.Mock;
+    addSelect: jest.Mock;
+    getRawOne: jest.Mock;
+  };
+  let service: {{headerEntityName}}QueryService;
+
+  beforeEach(() => {
+    qb = {
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      addOrderBy: jest.fn().mockReturnThis(),
+      getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+      clone: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      getRawOne: jest.fn().mockResolvedValue({ totalAmount_sum: '0' }),
+    };
+
+    repo = {
+      createQueryBuilder: jest.fn().mockReturnValue(qb),
+      findOne: jest.fn().mockResolvedValue(null),
+    };
+
+    service = new {{headerEntityName}}QueryService(
+      repo as unknown as Repository<{{headerEntityName}}>,
+    );
+  });
+
+  it('filters active rows with isDeleted = false', async () => {
+    const dto: Query{{headerEntityName}}Dto = { page: 1, pageSize: 20 };
+    await service.findAll(dto);
+    expect(qb.where).toHaveBeenCalledWith('voucher.isDeleted = :isDeleted', {
+      isDeleted: false,
+    });
+  });
+
+  it('eager loads lines on findById', async () => {
+    await service.findById('sample-id');
+    expect(repo.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'sample-id', isDeleted: false },
+        relations: ['lines'],
+      }),
+    );
+  });
+});
+

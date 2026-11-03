@@ -1,3 +1,6 @@
+import { Reflector } from '@nestjs/core';
+import { ErpAction, ErpResource } from '@/rbac-core/enums';
+import { RBAC_PERMISSIONS_KEY } from '@/auth/decorators/require-permissions.decorator';
 import { GarageGoodsReceiptsCoreService } from '../garage-goods-receipts-core.service';
 import { CreateGarageGoodsReceiptDto } from '../dto/create-garage-goods-receipt.dto';
 import { QueryGarageGoodsReceiptDto } from '../dto/query-garage-goods-receipt.dto';
@@ -17,6 +20,7 @@ describe('GarageGoodsReceiptController', () => {
     remove: jest.Mock;
   };
   let controller: GarageGoodsReceiptController;
+  const reflector = new Reflector();
 
   beforeEach(() => {
     service = {
@@ -83,5 +87,34 @@ describe('GarageGoodsReceiptController', () => {
     expect(service.post).toHaveBeenCalledWith('id-1');
     expect(service.cancel).toHaveBeenCalledWith('id-1');
     expect(service.remove).toHaveBeenCalledWith('id-1');
+  });
+
+  describe('RBAC permissions verification', () => {
+    it('verifies all routes are protected with GARAGE_GOODS_RECEIPTS resource', () => {
+      const endpoints = [
+        { handler: controller.findAll, action: ErpAction.READ },
+        { handler: controller.columnOptions, action: ErpAction.READ },
+        { handler: controller.getNextCode, action: ErpAction.READ },
+        { handler: controller.findOne, action: ErpAction.READ },
+        { handler: controller.create, action: ErpAction.CREATE },
+        { handler: controller.update, action: ErpAction.UPDATE },
+        { handler: controller.postReceipt, action: ErpAction.UPDATE },
+        { handler: controller.cancelReceipt, action: ErpAction.UPDATE },
+        { handler: controller.remove, action: ErpAction.DELETE },
+      ];
+
+      for (const ep of endpoints) {
+        const perms = reflector.get(RBAC_PERMISSIONS_KEY, ep.handler);
+        expect(perms).toBeDefined();
+        expect(perms).toEqual(
+          expect.arrayContaining([
+            {
+              resource: ErpResource.GARAGE_GOODS_RECEIPTS,
+              action: ep.action,
+            },
+          ]),
+        );
+      }
+    });
   });
 });

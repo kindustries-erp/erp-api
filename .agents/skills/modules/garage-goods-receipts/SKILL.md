@@ -1,13 +1,13 @@
 ---
 name: garage-goods-receipts
-description: Module tri thức Quản lý Nhập kho và Quản lý kho Garage (Garage Goods Receipts & Inventory) trong erp-api (v2/garage-goods-receipts-core) và erp-web. Chứa database schema (erp_garage_goods_receipts, erp_garage_goods_receipt_lines, erp_garage_inventory_balances), DTOs, API endpoints, logic ghi sổ POSTED (tăng tồn kho), logic hủy CANCELLED (giảm hoàn tồn kho), và kiến trúc Web V2 theo chuẩn Atomic Design.
+description: Module tri thức Quản lý Nhập kho và Quản lý kho Garage (Garage Goods Receipts & Inventory) trong erp-api (v2/modules/garage-goods-receipts) và erp-web. Chứa database schema (erp_garage_goods_receipts, erp_garage_goods_receipt_lines, erp_garage_inventory_balances), DTOs, API endpoints, logic ghi sổ POSTED (tăng tồn kho), logic hủy CANCELLED (giảm hoàn tồn kho), và kiến trúc Web V2 theo chuẩn Atomic Design.
 ---
 
 # 🏬 Module Tri Thức: Nhập Kho & Quản Lý Kho Garage (Garage Goods Receipts & Inventory)
 
 ## 1. Tổng quan Nghiệp vụ
 
-Phân hệ Nhập kho và Quản lý kho Garage (`garage-goods-receipts-core` trên Backend và `v2/modules/garage-goods-receipts` trên Frontend) phục vụ nhập vật tư, phụ tùng thay thế và linh kiện phục vụ sửa chữa xe tại xưởng dịch vụ/garage.
+Phân hệ Nhập kho và Quản lý kho Garage (`src/v2/modules/garage-goods-receipts` trên Backend và `src/v2/modules/garage-goods-receipts` trên Frontend) phục vụ nhập vật tư, phụ tùng thay thế và linh kiện phục vụ sửa chữa xe tại xưởng dịch vụ/garage.
 
 Các nghiệp vụ trọng tâm:
 - **Lập phiếu nhập kho Garage**: Nhập thông tin nhà cung cấp, ngày nhập kho, chi nhánh tiếp nhận, ghi chú và danh sách phụ tùng chi tiết (Mã SKU, tên phụ tùng, đơn vị tính, số lượng, đơn giá, thành tiền).
@@ -96,4 +96,23 @@ Các nghiệp vụ trọng tâm:
   - `components/organisms/`: Bảng dữ liệu chuẩn hóa, Lưới dòng hàng (`GarageGoodsReceiptLinesTable`, `GarageGoodsReceiptLineRow`), Form sections.
   - `drawers/`: Drawer chi tiết & chỉnh sửa (`GarageGoodsReceiptDrawer` sử dụng `V2StandardDrawer`).
   - `pages/`: Template trang V2 (`GarageGoodsReceiptsPage`).
+
+---
+
+## 5. Kiến Trúc Kế Thừa V2 Core & Phân Quyền RBAC
+
+### Kế thừa V2 Core Base Voucher Engine
+Module `garage-goods-receipts` (`src/v2/modules/garage-goods-receipts/`) sử dụng cơ chế **Mô hình 2 (Bảng DB riêng biệt, Kế thừa Engine ở Tầng Code)**:
+- **DB riêng biệt**: Dùng các bảng `erp_garage_goods_receipts`, `erp_garage_goods_receipt_lines` và `erp_garage_inventory_balances`.
+- **Tái sử dụng Engine từ V2 Core**: Inject `BaseVoucherEngineService` từ `src/v2/core/goods-receipts/`:
+  - `generateDailyReceiptNo`: Tự động sinh mã `GGR-YYYYMMDD-XXX`.
+  - `sumLineAmounts`: Tính tổng tiền chi tiết từ các dòng hàng.
+  - `validateVoucherTransition`: Xác thực chuyển trạng thái DRAFT -> POSTED -> CANCELLED và chặn sửa/xóa khi không hợp lệ.
+  - Chiến lược cập nhật kho chuyên biệt: Tự động cập nhật số dư tồn kho phụ tùng xưởng vào `erp_garage_inventory_balances`.
+
+### Phân quyền RBAC
+- **Migration**: `SeedGarageGoodsReceiptsPermissions20261103085000` tự động sao chép các quyền READ, CREATE, UPDATE, DELETE từ resource `garage` sang `garage_goods_receipts`.
+- **Backend Guard**: Controller được bảo vệ bởi `@UseGuards(JwtAuthGuard, CoreRbacGuard)` và `@RequirePermissions({ resource: ErpResource.GARAGE_GOODS_RECEIPTS, action: ... })`.
+- **Frontend RBAC**: Khai báo `garage_goods_receipts` trong `RBAC_COLLECTIONS` (nhóm "Garage & Xưởng dịch vụ") trên Web giúp quản trị viên phân quyền linh hoạt qua Role Drawer và Permission Matrix.
+
 

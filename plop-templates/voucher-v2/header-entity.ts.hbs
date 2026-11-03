@@ -1,0 +1,70 @@
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  Index,
+  OneToMany,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
+import { {{lineEntityName}} } from './{{lineEntityKebab}}.entity';
+
+@Entity('{{tableName}}')
+export class {{headerEntityName}} {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Index({ unique: true })
+  @Column({ type: 'varchar', length: 100, name: 'receipt_no' })
+  receiptNo: string;
+
+  @Index()
+  @Column({ type: 'date', name: 'receipt_date' })
+  receiptDate: string;
+
+  @Index()
+  @Column({ type: 'varchar', length: 100, name: 'supplier_id', nullable: true })
+  supplierId: string | null;
+
+  @Column({ type: 'varchar', length: 255, name: 'supplier_name', nullable: true })
+  supplierName: string | null;
+
+  @Index()
+  @Column({ type: 'varchar', length: 100, name: 'branch_id', nullable: true })
+  branchId: string | null;
+
+  @Column({ type: 'varchar', length: 255, name: 'branch_name', nullable: true })
+  branchName: string | null;
+
+  @Column({ type: 'numeric', precision: 15, scale: 2, name: 'total_amount', default: 0 })
+  totalAmount: string;
+
+  @Index()
+  @Column({ type: 'varchar', length: 50, name: 'status', default: 'DRAFT' })
+  status: string;
+
+  @Column({ type: 'varchar', length: 50, name: 'payment_status', default: 'UNPAID' })
+  paymentStatus: string;
+
+  @Column({ type: 'text', name: 'remarks', nullable: true })
+  remarks: string | null;
+
+  @Column({ type: 'varchar', length: 100, name: 'created_by', nullable: true })
+  createdBy: string | null;
+
+  @Index()
+  @Column({ type: 'boolean', name: 'is_deleted', default: false })
+  isDeleted: boolean;
+
+  @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamptz', name: 'updated_at' })
+  updatedAt: Date;
+
+  @OneToMany(() => {{lineEntityName}}, (line) => line.{{headerEntityCamel}}, {
+    cascade: true,
+  })
+  lines: {{lineEntityName}}[];
+}
+

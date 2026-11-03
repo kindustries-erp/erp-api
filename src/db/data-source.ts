@@ -86,9 +86,9 @@ import { ErpAiLog } from '../ai-hub-core/entities/erp-ai-log.entity';
 import { ErpAiPromptTemplate } from '../ai-hub-core/entities/erp-ai-prompt-template.entity';
 import { Invoice } from '@/v2/invoices/entities/invoice.entity'; // api-v2-module:invoices:entity-imports
 import { InvoiceItem } from '@/v2/invoices/entities/invoice-item.entity';
-import { GarageGoodsReceipt } from '@/v2/garage-goods-receipts-core/entities/garage-goods-receipt.entity'; // api-v2-module:garage-goods-receipts-core:entity-imports
-import { GarageGoodsReceiptLine } from '@/v2/garage-goods-receipts-core/entities/garage-goods-receipt-line.entity';
-import { GarageInventoryBalance } from '@/v2/garage-goods-receipts-core/entities/garage-inventory-balance.entity';
+import { GarageGoodsReceipt } from '@/v2/modules/garage-goods-receipts/entities/garage-goods-receipt.entity'; // api-v2-module:garage-goods-receipts:entity-imports
+import { GarageGoodsReceiptLine } from '@/v2/modules/garage-goods-receipts/entities/garage-goods-receipt-line.entity';
+import { GarageInventoryBalance } from '@/v2/modules/garage-goods-receipts/entities/garage-inventory-balance.entity';
 // plop:api-v2-entity-imports
 const entities = [
   CoreUser,
@@ -177,7 +177,7 @@ const entities = [
   VinfastPartsLedger,
   Invoice, // api-v2-module:invoices:entities
   InvoiceItem,
-  GarageGoodsReceipt, // api-v2-module:garage-goods-receipts-core:entities
+  GarageGoodsReceipt, // api-v2-module:garage-goods-receipts:entities
   GarageGoodsReceiptLine,
   GarageInventoryBalance,
   // plop:api-v2-entities
