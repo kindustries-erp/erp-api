@@ -32,6 +32,7 @@ import {
   extractNetPayableAmount,
   extractKgaraClassification,
   mapKgaraClassificationToErp,
+  resolveStoredRevenue,
 } from '../utils/kgara-parser.util';
 
 @Injectable()
@@ -253,11 +254,15 @@ export class SyncCaseService {
           gwCase.khachHangName = c.KhachHangName || c.TenKhachHang;
           gwCase.tinhTrangDichVu = newStatus;
           gwCase.tenTinhTrangDichVu = c.TenTinhTrangDichVu;
-          gwCase.tienCoThue = netPayable;
+          gwCase.tienCoThue = resolveStoredRevenue(
+            gwCase.tienCoThue,
+            c,
+            netPayable,
+          );
           gwCase.tienDaThanhToan = c.TienDaThanhToan;
           gwCase.tienConPhaiThanhToan = Math.max(
             0,
-            netPayable - Number(c.TienDaThanhToan || 0),
+            Number(gwCase.tienCoThue) - Number(c.TienDaThanhToan || 0),
           );
 
           if (gwCase.id) {

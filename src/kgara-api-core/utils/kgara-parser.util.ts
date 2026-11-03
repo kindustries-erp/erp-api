@@ -70,6 +70,24 @@ export function extractNetPayableAmount(item: any): number {
 }
 
 /**
+ * Số tiền doanh thu lưu cho vụ việc khi đồng bộ từ danh sách.
+ * Dòng danh sách Kgara không có TienChietKhau / TongTienThanhToan, nên nếu ghi
+ * theo danh sách sẽ đè số ròng (đã có từ chi tiết) bằng số gross. Khi đó giữ số đã lưu.
+ */
+export function resolveStoredRevenue(
+  existing: number | string | null | undefined,
+  listRow: any,
+  netFromRow: number,
+): number {
+  const listHasNetFields =
+    'TienChietKhau' in listRow || 'TongTienThanhToan' in listRow;
+  if (listHasNetFields || existing === null || existing === undefined) {
+    return netFromRow;
+  }
+  return Number(existing);
+}
+
+/**
  * Trích xuất trường Phân loại xe (NguonGocKhachHangName / NguonGocKhachHangCode) từ payload KGara
  */
 export function extractKgaraClassification(item: any): {
