@@ -223,9 +223,11 @@ export class GarageDebtsExportService {
   async resolveBranchLabel(branchId: string): Promise<string | undefined> {
     if (!branchId) return undefined;
     try {
-      const branch = await this.branchRepo?.findOne({
+      // Chi nhánh có thể có hai hàng (MAIN/OJ): ưu tiên tên của MAIN, không lấy tùy ý
+      const rows = await this.branchRepo?.find({
         where: { externalId: branchId },
       });
+      const branch = rows?.find((r) => r.accountKey === 'MAIN') ?? rows?.[0];
       return branch?.name || branchId;
     } catch {
       return branchId;

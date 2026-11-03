@@ -14,6 +14,7 @@ import { KgaraBranch } from '../entities/kgara_branch.entity';
 import { KgaraSyncService } from '../kgara-sync.service';
 import { KgaraAuthService } from '../kgara-auth.service';
 import { KgaraAccountKey } from '../enums/kgara-account.enum';
+import { resolveBranchAccount } from '../helpers/kgara-branch-account.helper';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
@@ -36,6 +37,27 @@ export class KgaraSyncController {
     private readonly bulkSyncService: KgaraBulkSyncService,
   ) {}
 
+  /**
+   * Tra tài khoản Kgara của chi nhánh. Không đoán khi CN2 có nhiều tài khoản:
+   * trả lỗi yêu cầu tham số `account`.
+   */
+  private async resolveAccountForBranch(
+    branchId: string,
+    explicitAccount?: string,
+  ): Promise<{ accountKey: KgaraAccountKey } | { error: string }> {
+    const rows = await this.branchRepo.find({
+      where: { externalId: branchId },
+    });
+    const result = resolveBranchAccount(rows, explicitAccount);
+    if (result.ok) return { accountKey: result.accountKey };
+    if (result.reason === 'INVALID_ACCOUNT') {
+      return { error: `account không hợp lệ: ${explicitAccount}` };
+    }
+    return {
+      error: `Chi nhánh ${branchId} có nhiều tài khoản Kgara (MAIN/OJ): cần tham số account`,
+    };
+  }
+
   @Post('sync/all')
   @RequirePermissions({
     resource: ErpResource.GARAGE,
@@ -52,14 +74,14 @@ export class KgaraSyncController {
       return { success: false, message: 'Missing branchId' };
     }
 
-    const branch = await this.branchRepo.findOne({
-      where: { externalId: branchId },
-    });
-    const accountKey =
-      (branch?.accountKey as KgaraAccountKey) ||
-      (body?.account as KgaraAccountKey) ||
-      (queryAccount as KgaraAccountKey) ||
-      KgaraAccountKey.MAIN;
+    const resolved = await this.resolveAccountForBranch(
+      branchId,
+      body?.account || queryAccount,
+    );
+    if ('error' in resolved) {
+      return { success: false, message: resolved.error };
+    }
+    const accountKey = resolved.accountKey;
 
     const result = await this.syncService.syncAllInOne(branchId, {
       from: body?.from,
@@ -126,15 +148,18 @@ export class KgaraSyncController {
     resource: ErpResource.GARAGE,
     action: ErpAction.CREATE,
   })
-  async syncCasesIncremental(@BranchId() branchId: string) {
+  async syncCasesIncremental(
+    @BranchId() branchId: string,
+    @Query('account') queryAccount?: string,
+  ) {
     if (!branchId) {
       return { success: false, message: 'Missing x-kgara-branch-id header' };
     }
-    const branch = await this.branchRepo.findOne({
-      where: { externalId: branchId },
-    });
-    const accountKey =
-      (branch?.accountKey as KgaraAccountKey) || KgaraAccountKey.MAIN;
+    const resolved = await this.resolveAccountForBranch(branchId, queryAccount);
+    if ('error' in resolved) {
+      return { success: false, message: resolved.error };
+    }
+    const accountKey = resolved.accountKey;
 
     const watermark = await this.syncService.getIncrementalWatermark(
       branchId,
@@ -172,14 +197,14 @@ export class KgaraSyncController {
     }
     const from = body?.from || queryFrom;
     const to = body?.to || queryTo;
-    const branch = await this.branchRepo.findOne({
-      where: { externalId: branchId },
-    });
-    const accountKey =
-      (branch?.accountKey as KgaraAccountKey) ||
-      (body?.account as KgaraAccountKey) ||
-      (queryAccount as KgaraAccountKey) ||
-      KgaraAccountKey.MAIN;
+    const resolved = await this.resolveAccountForBranch(
+      branchId,
+      body?.account || queryAccount,
+    );
+    if ('error' in resolved) {
+      return { success: false, message: resolved.error };
+    }
+    const accountKey = resolved.accountKey;
 
     return this.syncService.syncCasesForBranch(
       branchId,
@@ -207,14 +232,14 @@ export class KgaraSyncController {
     }
     const from = body?.from || queryFrom;
     const to = body?.to || queryTo;
-    const branch = await this.branchRepo.findOne({
-      where: { externalId: branchId },
-    });
-    const accountKey =
-      (branch?.accountKey as KgaraAccountKey) ||
-      (body?.account as KgaraAccountKey) ||
-      (queryAccount as KgaraAccountKey) ||
-      KgaraAccountKey.MAIN;
+    const resolved = await this.resolveAccountForBranch(
+      branchId,
+      body?.account || queryAccount,
+    );
+    if ('error' in resolved) {
+      return { success: false, message: resolved.error };
+    }
+    const accountKey = resolved.accountKey;
 
     return this.syncService.syncGrossProfitForBranch(
       branchId,
@@ -229,11 +254,27 @@ export class KgaraSyncController {
     resource: ErpResource.GARAGE,
     action: ErpAction.CREATE,
   })
-  async syncCaseDetail(@Param('id') id: string, @BranchId() branchId: string) {
+  async syncCaseDetail(
+    @Param('id') id: string,
+    @BranchId() branchId: string,
+    @Query('account') queryAccount?: string,
+  ) {
     if (!branchId) {
       return { success: false, message: 'Missing x-kgara-branch-id header' };
     }
-    return this.syncService.syncCaseDetail(branchId, id);
+    // Không truyền account thì dùng account đã lưu trên phiếu (service tự xử lý)
+    let accountKey: KgaraAccountKey | undefined;
+    if (queryAccount) {
+      const resolved = await this.resolveAccountForBranch(
+        branchId,
+        queryAccount,
+      );
+      if ('error' in resolved) {
+        return { success: false, message: resolved.error };
+      }
+      accountKey = resolved.accountKey;
+    }
+    return this.syncService.syncCaseDetail(branchId, id, accountKey);
   }
 
   @Post('sync/case-details')
@@ -247,6 +288,7 @@ export class KgaraSyncController {
     @Query('from') queryFrom?: string,
     @Query('to') queryTo?: string,
     @Query('force') queryForce?: string,
+    @Query('account') queryAccount?: string,
     @Body()
     body?: {
       branchId?: string;
@@ -254,6 +296,7 @@ export class KgaraSyncController {
       to?: string;
       force?: boolean;
       concurrency?: number;
+      account?: string;
     },
   ) {
     const effectiveBranchId =
@@ -263,6 +306,20 @@ export class KgaraSyncController {
     const force = body?.force ?? (queryForce === 'true' || queryForce === '1');
     const concurrency = body?.concurrency;
 
+    // Không truyền account: mỗi phiếu dùng account của chính nó
+    let accountKey: KgaraAccountKey | undefined;
+    const explicitAccount = body?.account || queryAccount;
+    if (explicitAccount) {
+      const resolved = await this.resolveAccountForBranch(
+        effectiveBranchId ?? '',
+        explicitAccount,
+      );
+      if ('error' in resolved) {
+        return { success: false, message: resolved.error };
+      }
+      accountKey = resolved.accountKey;
+    }
+
     const result = await this.syncService.syncCaseDetailsBatch(
       effectiveBranchId,
       {
@@ -270,6 +327,7 @@ export class KgaraSyncController {
         to,
         force,
         concurrency,
+        accountKey,
       },
     );
 
