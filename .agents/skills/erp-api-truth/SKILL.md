@@ -1,6 +1,6 @@
 ---
 name: erp-api-truth
-description: Ngữ cảnh hiện hành của erp-api (backend NestJS của ERP) - lane giao hàng, hợp đồng DB/API, tooling, quy trình git/CI và bản đồ module. Load đầu tiên trước mọi task trong erp-api. Với việc tổ chức lại code hoặc refactor, dùng skill erp-api-structure.
+description: Ngữ cảnh hiện hành của erp-api (backend NestJS của ERP) - lane giao hàng, hợp đồng DB/API, tooling, quy trình git/CI, bản đồ module và checklist bảo mật (references/security-baseline.md). Load đầu tiên trước mọi task trong erp-api. Với việc tổ chức lại code hoặc refactor, dùng skill erp-api-structure.
 ---
 
 # ERP API — Current Truth
@@ -61,6 +61,7 @@ Backend contract, auth, DTO, persistence, business rule, bằng chứng build/te
 - Mỗi thay đổi service, controller hoặc logic quan trọng phải có `.spec.ts` đi kèm (Auto-TDD, theo `.agents/AGENTS.md`).
 - Dùng `must` cho chuẩn đã được enforce trong repo, `prefer` cho hướng đi mục tiêu.
 - Phân tầng: controller → DTO/validation → service/use-case → persistence/helper.
+- Endpoint mới hoặc sửa auth, upload, DTO, xử lý lỗi, truy vấn SQL: đối chiếu `references/security-baseline.md` (guard, DTO class thay vì `any`, giới hạn upload, secret không có giá trị mặc định, không lộ lỗi nội bộ) và ghi mục đã kiểm khi báo xong.
 - Nếu tạo helper hoặc service mới thay vì dùng lại cái cũ, ghi lý do vào task.
 - Task chỉ xong khi có bằng chứng validate và trạng thái commit/push.
 
