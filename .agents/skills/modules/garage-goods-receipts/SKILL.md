@@ -1,0 +1,99 @@
+---
+name: garage-goods-receipts
+description: Module tri thức Quản lý Nhập kho và Quản lý kho Garage (Garage Goods Receipts & Inventory) trong erp-api (v2/garage-goods-receipts-core) và erp-web. Chứa database schema (erp_garage_goods_receipts, erp_garage_goods_receipt_lines, erp_garage_inventory_balances), DTOs, API endpoints, logic ghi sổ POSTED (tăng tồn kho), logic hủy CANCELLED (giảm hoàn tồn kho), và kiến trúc Web V2 theo chuẩn Atomic Design.
+---
+
+# 🏬 Module Tri Thức: Nhập Kho & Quản Lý Kho Garage (Garage Goods Receipts & Inventory)
+
+## 1. Tổng quan Nghiệp vụ
+
+Phân hệ Nhập kho và Quản lý kho Garage (`garage-goods-receipts-core` trên Backend và `v2/modules/garage-goods-receipts` trên Frontend) phục vụ nhập vật tư, phụ tùng thay thế và linh kiện phục vụ sửa chữa xe tại xưởng dịch vụ/garage.
+
+Các nghiệp vụ trọng tâm:
+- **Lập phiếu nhập kho Garage**: Nhập thông tin nhà cung cấp, ngày nhập kho, chi nhánh tiếp nhận, ghi chú và danh sách phụ tùng chi tiết (Mã SKU, tên phụ tùng, đơn vị tính, số lượng, đơn giá, thành tiền).
+- **Trạng thái phiếu**:
+  - `DRAFT`: Phiếu nháp, có thể chỉnh sửa chi tiết phụ tùng hoặc xóa phiếu.
+  - `POSTED`: Đã ghi sổ nhập kho. Tự động cộng dồn số lượng phụ tùng vào số dư tồn kho Garage (`erp_garage_inventory_balances`). Không thể chỉnh sửa trực tiếp.
+  - `CANCELLED`: Hủy phiếu nhập kho đã ghi sổ. Tự động trừ hoàn trả số lượng đã tăng trong số dư tồn kho Garage.
+- **Quản lý Tồn kho Garage (`erp_garage_inventory_balances`)**: Theo dõi số lượng tồn kho phụ tùng (`item_code`) theo từng chi nhánh (`branch_id`).
+
+---
+
+## 2. Database Schema & Quan hệ Dữ liệu
+
+### Bảng `erp_garage_goods_receipts` (Header)
+| Cột | Kiểu dữ liệu | Nullable | Default | Mô tả |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `uuid` | NO | `gen_random_uuid()` | Khóa chính (PK) |
+| `receipt_no` | `varchar(100)` | NO | — | Mã số phiếu (Unique, vd: `GGR-2026-0001`) |
+| `receipt_date` | `date` | NO | — | Ngày nhập hàng thực tế |
+| `supplier_id` | `varchar(100)` | YES | `NULL` | ID nhà cung cấp |
+| `supplier_name` | `varchar(255)` | YES | `NULL` | Tên nhà cung cấp |
+| `branch_id` | `varchar(100)` | YES | `NULL` | ID chi nhánh nhận hàng |
+| `branch_name` | `varchar(255)` | YES | `NULL` | Tên chi nhánh nhận hàng |
+| `total_amount` | `numeric(15,2)` | NO | `0` | Tổng giá trị hàng nhập |
+| `status` | `varchar(50)` | NO | `'DRAFT'` | Trạng thái (`DRAFT`, `POSTED`, `CANCELLED`) |
+| `payment_status` | `varchar(50)` | NO | `'UNPAID'` | Trạng thái thanh toán |
+| `remarks` | `text` | YES | `NULL` | Ghi chú phiếu |
+| `created_by` | `varchar(100)` | YES | `NULL` | User tạo |
+| `created_at` | `timestamptz` | NO | `now()` | Thời điểm tạo |
+| `updated_at` | `timestamptz` | NO | `now()` | Thời điểm cập nhật |
+| `deleted_at` | `timestamptz` | YES | `NULL` | Thời điểm xóa mềm |
+
+### Bảng `erp_garage_goods_receipt_lines` (Detail Lines)
+| Cột | Kiểu dữ liệu | Nullable | Default | Mô tả |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `uuid` | NO | `gen_random_uuid()` | Khóa chính (PK) |
+| `receipt_id` | `uuid` | NO | — | FK trỏ về `erp_garage_goods_receipts.id` (CASCADE) |
+| `item_code` | `varchar(100)` | NO | — | Mã phụ tùng (SKU) |
+| `item_name` | `varchar(255)` | NO | — | Tên phụ tùng |
+| `unit` | `varchar(50)` | YES | `'Cái'` | Đơn vị tính |
+| `qty_received` | `numeric(12,2)` | NO | `0` | Số lượng nhập |
+| `unit_cost` | `numeric(15,2)` | NO | `0` | Đơn giá nhập |
+| `amount` | `numeric(15,2)` | NO | `0` | Thành tiền (`qty_received * unit_cost`) |
+| `notes` | `text` | YES | `NULL` | Ghi chú dòng |
+| `created_at` | `timestamptz` | NO | `now()` | Thời điểm tạo |
+| `updated_at` | `timestamptz` | NO | `now()` | Thời điểm cập nhật |
+
+### Bảng `erp_garage_inventory_balances` (Số Dư Kho Garage)
+| Cột | Kiểu dữ liệu | Nullable | Default | Mô tả |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `uuid` | NO | `gen_random_uuid()` | Khóa chính (PK) |
+| `item_code` | `varchar(100)` | NO | — | Mã phụ tùng (Unique kết hợp cùng `branch_id`) |
+| `item_name` | `varchar(255)` | YES | `NULL` | Tên phụ tùng |
+| `unit` | `varchar(50)` | YES | `'Cái'` | Đơn vị tính |
+| `branch_id` | `varchar(100)` | YES | `NULL` | Chi nhánh lưu kho |
+| `quantity` | `numeric(12,2)` | NO | `0` | Số lượng tồn kho hiện tại |
+| `created_at` | `timestamptz` | NO | `now()` | Thời điểm tạo |
+| `updated_at` | `timestamptz` | NO | `now()` | Thời điểm cập nhật |
+
+---
+
+## 3. API Endpoints (`/api/v2/garage-goods-receipts`)
+
+| Phương thức | Endpoint | Resource RBAC | Mô tả |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/v2/garage-goods-receipts` | `garage_goods_receipts:read` | Lấy danh sách phân trang, tìm kiếm, lọc theo cột |
+| `GET` | `/api/v2/garage-goods-receipts/options` | `garage_goods_receipts:read` | Lấy danh sách distinct options cho bộ lọc cột |
+| `GET` | `/api/v2/garage-goods-receipts/next-code` | `garage_goods_receipts:read` | Sinh mã phiếu kế tiếp tự động (`GGR-YYYY-XXXX`) |
+| `GET` | `/api/v2/garage-goods-receipts/:id` | `garage_goods_receipts:read` | Xem chi tiết phiếu kèm toàn bộ dòng phụ tùng |
+| `POST` | `/api/v2/garage-goods-receipts` | `garage_goods_receipts:create` | Tạo mới phiếu nhập và lưu danh sách dòng hàng |
+| `PUT` | `/api/v2/garage-goods-receipts/:id` | `garage_goods_receipts:update` | Cập nhật phiếu nhập kho ở trạng thái `DRAFT` |
+| `POST` | `/api/v2/garage-goods-receipts/:id/post` | `garage_goods_receipts:update` | Ghi sổ phiếu nhập: chuyển status `POSTED` & tăng tồn kho |
+| `POST` | `/api/v2/garage-goods-receipts/:id/cancel` | `garage_goods_receipts:update` | Hủy phiếu đã ghi sổ: chuyển `CANCELLED` & hoàn trừ tồn kho |
+| `DELETE` | `/api/v2/garage-goods-receipts/:id` | `garage_goods_receipts:delete` | Xóa mềm phiếu nhập kho |
+
+---
+
+## 4. Frontend Web V2 Architecture
+
+- **Thư mục module**: `erp/erp-web/src/v2/modules/garage-goods-receipts/`
+- **Routing URL**: `/garage-goods-receipts`
+- **Cấu trúc Atomic Design**:
+  - `domain/entities/`: Entity interfaces & Form contracts.
+  - `domain/rules/`: Validation và dirty checking rules.
+  - `components/molecules/`: Badges trạng thái semantic (`GarageGoodsReceiptStatusBadge`).
+  - `components/organisms/`: Bảng dữ liệu chuẩn hóa, Lưới dòng hàng (`GarageGoodsReceiptLinesTable`, `GarageGoodsReceiptLineRow`), Form sections.
+  - `drawers/`: Drawer chi tiết & chỉnh sửa (`GarageGoodsReceiptDrawer` sử dụng `V2StandardDrawer`).
+  - `pages/`: Template trang V2 (`GarageGoodsReceiptsPage`).
+

@@ -32,5 +32,6 @@ export enum ErpResource {
   DASHBOARD = 'dashboard',
   ATTACHMENTS = 'attachments',
   CUSTOM_FIELDS = 'custom_fields',
+  GARAGE_GOODS_RECEIPTS = 'garage_goods_receipts', // api-v2-module:garage-goods-receipts-core:rbac-resource
   // plop:api-v2-resources
 }
