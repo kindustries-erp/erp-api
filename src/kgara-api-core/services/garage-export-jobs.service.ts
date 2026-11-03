@@ -138,7 +138,13 @@ export class GarageExportJobsService implements OnModuleDestroy {
 
     return this.casesRunner.start({
       userId,
-      fingerprint: stableStringify({ branchId: branchId ?? '', ...dto }),
+      fingerprint: stableStringify({
+        branchId: branchId ?? '',
+        ...dto,
+        selectedColumns: dto.selectedColumns
+          ? [...dto.selectedColumns].sort()
+          : undefined,
+      }),
       fileName,
       totalUnits: PROGRESS_TOTAL_UNITS,
       dateFrom: dto.date_from,

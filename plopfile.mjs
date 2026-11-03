@@ -1,5 +1,11 @@
 import { buildApiV2Data } from './plop-helpers/apiV2Data.mjs';
 import { moduleFileMap, rbacPlan, wiringPlan } from './plop-helpers/apiV2Files.mjs';
+import {
+  buildApiVoucherData,
+  voucherFileMap,
+  voucherRbacPlan,
+  voucherWiringPlan,
+} from './plop-helpers/apiVoucherData.mjs';
 import { enumEntryExists, insertAtMarker } from './plop-helpers/apiV2Wiring.mjs';
 
 /** Biến một mục wiring thành action `modify` có chèn idempotent tại marker. */
@@ -102,7 +108,7 @@ export default function (plop) {
 
   // 3. GENERATOR: API v2 module (Facade + sub-services + helpers + response DTO + spec co-located)
   plop.setGenerator('api-module-v2', {
-    description: 'Tạo module API v2 theo kiến trúc Facade + sub-services, kèm spec (xem skill api-v2-refactor)',
+    description: 'Tạo module API v2 theo kiến trúc Facade + sub-services, kèm spec (xem skill api-structure)',
     prompts: [
       {
         type: 'input',
@@ -159,6 +165,81 @@ export default function (plop) {
         })),
         ...rbacPlan(data).map(toModifyAction),
         ...wiringPlan(data).map(toModifyAction),
+      ];
+    },
+  });
+
+  // 4. GENERATOR: API v2 voucher module (Header + Lines Document, Transaction, Vòng đời DRAFT/POSTED/CANCELLED)
+  plop.setGenerator('api-voucher-v2', {
+    description:
+      'Tạo module API v2 chứng từ Header + Lines (Document/Voucher) kèm vòng đời POST/CANCEL, sinh số tự động và spec',
+    prompts: [
+      {
+        type: 'input',
+        name: 'moduleInput',
+        message: 'Tên module (kebab-case, vd: garage-goods-issues-core):',
+        validate: (value) => (/.+/.test(value) ? true : 'Vui lòng nhập tên module'),
+      },
+      {
+        type: 'input',
+        name: 'headerEntityInput',
+        message: 'Tên Entity Header chính (PascalCase, vd: GarageGoodsIssue):',
+        validate: (value) => (/.+/.test(value) ? true : 'Vui lòng nhập tên entity header'),
+      },
+      {
+        type: 'input',
+        name: 'lineEntityInput',
+        message: 'Tên Entity Detail Line (PascalCase, vd: GarageGoodsIssueLine):',
+        default: (answers) => `${answers.headerEntityInput}Line`,
+      },
+      {
+        type: 'input',
+        name: 'voucherPrefixInput',
+        message: 'Tiền tố mã chứng từ (vd: GGI, GR, PO, SO):',
+        default: 'REC',
+      },
+      {
+        type: 'input',
+        name: 'tableNameInput',
+        message: 'Tên bảng PostgreSQL Header (để trống = erp_<module không -core>):',
+        default: '',
+      },
+      {
+        type: 'input',
+        name: 'lineTableNameInput',
+        message: 'Tên bảng PostgreSQL Lines (để trống = <header_table>_lines):',
+        default: '',
+      },
+      {
+        type: 'input',
+        name: 'routePathInput',
+        message: 'Đường dẫn API (để trống = module không -core):',
+        default: '',
+      },
+      {
+        type: 'input',
+        name: 'permissionResourceInput',
+        message: 'Resource RBAC snake_case (để trống = theo module):',
+        default: '',
+      },
+      {
+        type: 'confirm',
+        name: 'wireInput',
+        message: 'Nối tự động vào app.module.ts và data-source.ts? (resource RBAC luôn được đăng ký)',
+        default: false,
+      },
+    ],
+    actions: (answers) => {
+      const data = buildApiVoucherData(answers);
+      return [
+        ...voucherFileMap(data).map(({ template, path }) => ({
+          type: 'add',
+          path,
+          templateFile: `plop-templates/voucher-v2/${template}`,
+          data,
+        })),
+        ...voucherRbacPlan(data).map(toModifyAction),
+        ...voucherWiringPlan(data).map(toModifyAction),
       ];
     },
   });

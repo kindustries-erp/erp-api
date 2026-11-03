@@ -14,6 +14,18 @@ import { parseTcbCsv, parseTcbXlsx } from '../parsers/tcb.parser';
 import { parseBidvXlsx } from '../parsers/bidv.parser';
 import { parseCashXlsx } from '../parsers/cash.parser';
 
+/** Gán chi nhánh chung cho mọi giao dịch import; không chọn chi nhánh = branchIds rỗng. */
+export function withImportBranch(
+  dtos: CreateBankTransactionDto[],
+  branchId: string | undefined,
+): CreateBankTransactionDto[] {
+  return dtos.map((d) => ({
+    ...d,
+    branchId: branchId ?? undefined,
+    branchIds: branchId ? [branchId] : [],
+  }));
+}
+
 @Injectable()
 export class TransactionImportService {
   constructor(
@@ -25,7 +37,7 @@ export class TransactionImportService {
 
   async importFiles(
     files: Express.Multer.File[],
-    branchId: string,
+    branchId: string | undefined,
     bankAccountId?: string,
     cashBookId?: string,
   ) {
@@ -121,6 +133,8 @@ export class TransactionImportService {
 
     startDate.setDate(startDate.getDate() - 2);
     endDate.setDate(endDate.getDate() + 2);
+
+    allDtos = withImportBranch(allDtos, branchId);
 
     const referenceNumbers = allDtos
       .map((d) => d.referenceNumber)

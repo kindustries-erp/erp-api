@@ -3,7 +3,7 @@ import { ErpModuleAttributeDef } from '../entities/erp_module_attribute_def.enti
 import { ErpEntityAttributeValue } from '../entities/erp_entity_attribute_value.entity';
 import {
   getModuleFieldRegistry,
-  isBuiltinOrLegacyCode,
+  isBuiltinCode,
 } from '../registry/module-field-registry';
 
 export interface AttributeValueDetail {
@@ -321,7 +321,7 @@ export class EntityCustomFieldsHelper {
     const byCode: Record<string, unknown> = {};
     for (const av of (item.attributeValues || []) as AttributeValueDetail[]) {
       if (!av.attrCode || av.isSystem) continue;
-      if (isBuiltinOrLegacyCode(upperType, av.attrCode)) continue;
+      if (isBuiltinCode(upperType, av.attrCode)) continue;
       const parsed = item.customAttributes?.[av.attrCode];
       byCode[av.attrCode] = parsed !== undefined ? parsed : av.valueText;
     }

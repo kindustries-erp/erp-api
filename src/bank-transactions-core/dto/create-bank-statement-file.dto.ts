@@ -1,8 +1,9 @@
 import { IsString, IsOptional, IsUUID } from 'class-validator';
 
 export class CreateBankStatementFileDto {
+  @IsOptional()
   @IsUUID()
-  branchId: string;
+  branchId?: string | null;
 
   @IsOptional()
   @IsUUID()

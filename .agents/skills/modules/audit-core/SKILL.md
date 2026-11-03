@@ -7,7 +7,7 @@ description: Module tri thức Nhật ký Kiểm toán Hệ thống (Audit Logs 
 
 ## 1. Tổng quan Nghiệp vụ
 
-Module `audit-core` chịu trách nhiệm ghi nhận, lập chỉ mục và cung cấp dữ liệu nhật ký kiểm toán (Audit Logs) toàn diện cho toàn bộ hệ thống Liouni ERP theo nguyên tắc **Zero-Trust Audit Tracking**.
+Module `audit-core` chịu trách nhiệm ghi nhận, lập chỉ mục và cung cấp dữ liệu nhật ký kiểm toán (Audit Logs) toàn diện cho toàn bộ hệ thống ERP theo nguyên tắc **Zero-Trust Audit Tracking**.
 
 Các nghiệp vụ trọng tâm:
 - **Tự động Bắt Biến động Dữ liệu (`GlobalAuditInterceptor`)**: Tự động ghi lại mọi thao tác làm thay đổi dữ liệu (`POST`, `PUT`, `PATCH`, `DELETE`) kèm thông tin người dùng, route, IP, user-agent và snapshot dữ liệu trước/sau.

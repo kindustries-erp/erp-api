@@ -50,6 +50,34 @@ export class OriginalPdfLookupInfoResponseDto {
 
   @ApiPropertyOptional({ description: 'Chi tiết lỗi nếu tải thất bại' })
   pdfError: string | null;
+
+  @ApiProperty({ description: 'Hóa đơn có file XML trên hệ thống hay không' })
+  hasXml: boolean;
+
+  @ApiProperty({
+    description:
+      'Thông tin tra cứu bổ sung (SearchKey, Mã TC, Mã số bí mật, ...)',
+    type: 'array',
+    items: {
+      type: 'object',
+      properties: {
+        label: { type: 'string' },
+        value: { type: 'string' },
+      },
+    },
+  })
+  hints: { label: string; value: string }[];
+}
+
+export class ManualPdfUploadResponseDto {
+  @ApiProperty({ description: 'ID hóa đơn' })
+  invoiceId: string;
+
+  @ApiProperty({ description: 'Key file PDF đã lưu trên R2' })
+  pdfFileKey: string;
+
+  @ApiProperty({ description: 'Nguồn tệp PDF (luôn là manual_upload)' })
+  pdfSource: string;
 }
 
 export class SyncAdvancedResponseDto {

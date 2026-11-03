@@ -26,6 +26,16 @@ export class GwSyncRun {
   })
   branchExternalId: string | null;
 
+  /** Account identifier ('MAIN', 'OJ', etc.) */
+  @Index()
+  @Column({
+    type: 'varchar',
+    length: 50,
+    name: 'account_key',
+    default: 'MAIN',
+  })
+  accountKey: string;
+
   @Column({ type: 'varchar', length: 255, name: 'endpoint' })
   endpoint: string;
 

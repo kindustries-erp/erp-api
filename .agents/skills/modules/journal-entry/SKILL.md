@@ -7,7 +7,7 @@ description: Module tri thức Sổ Nhật Ký Chung & Bút toán Tổng hợp (
 
 ## 1. Tổng quan Nghiệp vụ
 
-Module `journal-entry` (thuộc phân hệ `accounting-core`) đóng vai trò là **Sổ Nhật Ký Chung** trung tâm trong hệ thống kế toán kép (Double-entry Bookkeeping) của Liouni ERP.
+Module `journal-entry` (thuộc phân hệ `accounting-core`) đóng vai trò là **Sổ Nhật Ký Chung** trung tâm trong hệ thống kế toán kép (Double-entry Bookkeeping) của ERP.
 
 Tất cả các nghiệp vụ kinh tế phát sinh từ các phân hệ Dòng tiền ngân hàng, Sổ quỹ tiền mặt, Hóa đơn thuế, Mua hàng, Bán hàng và các bút toán điều chỉnh kế toán đều được hạch toán, ghi nhận và tra cứu tập trung tại đây.
 
@@ -247,7 +247,7 @@ Mỗi khi chỉnh sửa module `journal-entry` hoặc `accounting-core`, bắt b
 ```bash
 # 1. Chạy Unit Tests Backend (erp-api)
 cd erp/erp-api
-bun test src/accounting-core
+bunx jest src/accounting-core
 
 # 2. Kiểm tra Type Backend
 bun run type:check

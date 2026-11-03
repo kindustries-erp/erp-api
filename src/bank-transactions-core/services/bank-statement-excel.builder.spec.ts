@@ -5,6 +5,14 @@ import {
 } from './bank-statement-excel.builder';
 import { ErpBankTransaction } from '../entities/erp_bank_transaction.entity';
 
+const AQUA = 'FFDAEEF3';
+
+const readWorkbook = async (buffer: Buffer) => {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer as any);
+  return workbook;
+};
+
 describe('BankStatementExcelBuilder', () => {
   let builder: BankStatementExcelBuilder;
 
@@ -12,10 +20,11 @@ describe('BankStatementExcelBuilder', () => {
     builder = new BankStatementExcelBuilder();
   });
 
-  it('builds a valid Excel workbook with 21 columns and proper 2-tone styles', async () => {
+  it('builds a valid Excel workbook with 25 columns and Vinfast-style TỔNG/SUBTOTAL rows', async () => {
     const transactions: Partial<ErpBankTransaction>[] = [
       {
         id: 'txn-1',
+        bankAccountId: 'acc-1',
         transDate: new Date('2026-03-14T14:01:32.000Z'), // 21:01:32 in Vietnam
         referenceNumber: 'FT26073820107654',
         description: 'Thanh toan tien sua chua',
@@ -25,7 +34,11 @@ describe('BankStatementExcelBuilder', () => {
         correspondentAccount: '333311188',
         correspondentName: 'TA QUANG NHAT',
         correspondentBank: 'Techcombank',
+        cashflowClassification: 'OPERATING',
+        cashflowPurpose: 'CUSTOMER_PAYMENT',
+        note: 'Ghi chú test',
         bankAccount: {
+          id: 'acc-1',
           bankCode: 'TCB',
           accountNumber: '111886',
         } as any,
@@ -58,112 +71,107 @@ describe('BankStatementExcelBuilder', () => {
       netOffDetails,
     });
 
-    expect(buffer).toBeDefined();
     expect(buffer.length).toBeGreaterThan(0);
 
-    // Read back with ExcelJS to verify structure and formatting
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(buffer as any);
-
+    const workbook = await readWorkbook(buffer);
     const worksheet = workbook.worksheets[0];
-    expect(worksheet).toBeDefined();
-    expect(worksheet.name).toBe('Sao kê Ngân hàng');
+    expect(worksheet.name).toBe('TCB - 111886');
 
     // Header row is row 4
     const headerRow = worksheet.getRow(4);
     expect(headerRow.getCell(3).value).toBe('Ngày GD');
-    expect(headerRow.getCell(15).value).toBe('[HĐ] Chi nhánh');
-    expect(headerRow.getCell(16).value).toBe('[HĐ] Ngày HĐ');
-    expect(headerRow.getCell(17).value).toBe('[HĐ] Số HĐ');
-    expect(headerRow.getCell(21).value).toBe('[HĐ] Tổng tiền HĐ (VND)');
+    expect(headerRow.getCell(14).value).toBe('Phân loại');
+    expect(headerRow.getCell(15).value).toBe('Mục đích');
+    expect(headerRow.getCell(16).value).toBe('Ghi chú');
+    expect(headerRow.getCell(17).value).toBe('Đối tượng');
+    expect(headerRow.getCell(18).value).toBe('Chi nhánh GD');
+    expect(headerRow.getCell(19).value).toBe('[HĐ] Chi nhánh');
+    expect(headerRow.getCell(25).value).toBe('[HĐ] Tổng tiền HĐ (VND)');
 
-    // Check Header color separation:
-    // Bank cols (1-14) Slate 700: FF334155
-    const bankHeaderFill: any = headerRow.getCell(3).fill;
-    expect(bankHeaderFill?.fgColor?.argb).toBe('FF334155');
-
-    // Invoice cols (15-21) Emerald 800: FF065F46
-    const invHeaderFill: any = headerRow.getCell(15).fill;
-    expect(invHeaderFill?.fgColor?.argb).toBe('FF065F46');
+    // Header fills: bank Slate 700, invoice Emerald 800, aqua for cashflow + branch
+    expect((headerRow.getCell(3).fill as any)?.fgColor?.argb).toBe('FF334155');
+    expect((headerRow.getCell(19).fill as any)?.fgColor?.argb).toBe('FF065F46');
+    expect((headerRow.getCell(14).fill as any)?.fgColor?.argb).toBe(AQUA);
 
     // Data row is row 5
     const dataRow = worksheet.getRow(5);
 
-    // Verify Column 3 (Ngày GD): Value MUST be a Date instance for Pivot Table grouping
+    // Ngày GD must remain a Date instance for pivot grouping
     const dateCell = dataRow.getCell(3);
     expect(dateCell.value).toBeInstanceOf(Date);
     const dateVal = dateCell.value as Date;
     expect(dateVal.getUTCFullYear()).toBe(2026);
     expect(dateVal.getUTCMonth()).toBe(2); // March
     expect(dateVal.getUTCDate()).toBe(14);
-    expect(dateVal.getUTCHours()).toBe(21); // Correct GMT+7 hour!
+    expect(dateVal.getUTCHours()).toBe(21); // GMT+7
     expect(dateVal.getUTCMinutes()).toBe(1);
     expect(dateVal.getUTCSeconds()).toBe(32);
     expect(dateCell.numFmt).toBe('dd/mm/yyyy hh:mm:ss');
 
-    // Verify Column 15-21 (Invoice Net-off fields)
-    expect(dataRow.getCell(15).value).toBe('Chi nhánh Nam Sài Gòn');
-    expect(dataRow.getCell(16).value).toBe('12/03/2026');
-    expect(dataRow.getCell(17).value).toBe('0001234');
-    expect(dataRow.getCell(18).value).toBe('1C26TBB');
-    expect(dataRow.getCell(19).value).toContain('CONG TY GREENWAY AUTO');
-    expect(dataRow.getCell(20).value).toBe('Dich vu son phu gam');
-    expect(dataRow.getCell(21).value).toBe(1500000);
-    expect(dataRow.getCell(21).numFmt).toBe('#,##0.00');
+    // Cashflow labels + note
+    expect(dataRow.getCell(14).value).toBe('Hoạt động kinh doanh');
+    expect(dataRow.getCell(15).value).toBe('Khách hàng thanh toán');
+    expect(dataRow.getCell(16).value).toBe('Ghi chú test');
+    expect(dataRow.getCell(18).value).toBe('Chi nhánh Nam Sài Gòn');
 
-    // Verify 2-tone fill style for data cells:
-    // Invoice cell (col 15) must have pastel fill FFF0FDF4 and double left border
-    const invDataFill: any = dataRow.getCell(15).fill;
-    expect(invDataFill?.fgColor?.argb).toBe('FFF0FDF4');
-    expect(dataRow.getCell(15).border?.left?.style).toBe('double');
+    // Invoice net-off fields (18-24)
+    expect(dataRow.getCell(19).value).toBe('Chi nhánh Nam Sài Gòn');
+    expect(dataRow.getCell(20).value).toBe('12/03/2026');
+    expect(dataRow.getCell(21).value).toBe('0001234');
+    expect(dataRow.getCell(22).value).toBe('1C26TBB');
+    expect(dataRow.getCell(23).value).toContain('CONG TY GREENWAY AUTO');
+    expect(dataRow.getCell(24).value).toBe('Dich vu son phu gam');
+    expect(dataRow.getCell(25).value).toBe(1500000);
+    expect(dataRow.getCell(25).numFmt).toBe('#,##0.00');
 
-    // Verify SUM formula in row 1
-    const sumRow = worksheet.getRow(1);
-    expect(sumRow.getCell(6).value).toMatchObject({
-      formula: expect.stringContaining('SUM'),
+    // Invoice data cell: pastel emerald fill + double left border on first invoice col
+    expect((dataRow.getCell(19).fill as any)?.fgColor?.argb).toBe('FFF0FDF4');
+    expect(dataRow.getCell(19).border?.left?.style).toBe('double');
+
+    // Aqua fill for cashflow + note + branch data cells, not for others
+    expect((dataRow.getCell(14).fill as any)?.fgColor?.argb).toBe(AQUA);
+    expect((dataRow.getCell(18).fill as any)?.fgColor?.argb).toBe(AQUA);
+    expect((dataRow.getCell(13).fill as any)?.fgColor?.argb).not.toBe(AQUA);
+
+    // Row 1 (TỔNG): label in column 1, amber 50 fill, amber 900 bold font
+    const totalRow = worksheet.getRow(1);
+    expect(totalRow.getCell(1).value).toBe('TỔNG');
+    expect(totalRow.getCell(1).font?.bold).toBe(true);
+    expect(totalRow.getCell(1).font?.color?.argb).toBe('FF78350F');
+    expect((totalRow.getCell(6).fill as any)?.fgColor?.argb).toBe('FFFFFBEB');
+    expect(totalRow.getCell(6).value).toMatchObject({
+      formula: 'SUM(F5:F5)',
     });
-
-    // Verify SUM & SUBTOTAL formulas for Column 21 ([HĐ] Tổng tiền HĐ (VND))
-    expect(sumRow.getCell(21).value).toEqual({
-      formula: 'SUM(U5:U5)',
+    expect(totalRow.getCell(25).value).toEqual({
+      formula: 'SUM(Y5:Y5)',
       result: 1500000,
     });
-    expect(sumRow.getCell(21).numFmt).toBe('#,##0.00');
+    expect(totalRow.getCell(25).numFmt).toBe('#,##0.00');
 
-    // Verify Row 1 (SUM) fill is Amber 50 (FFFFFBEB) and font is Amber 900 (FF78350F)
-    expect(sumRow.font?.color?.argb).toBe('FF78350F');
-    const sumBankFill: any = sumRow.getCell(6).fill;
-    expect(sumBankFill?.fgColor?.argb).toBe('FFFFFBEB');
-    const sumInvFill: any = sumRow.getCell(21).fill;
-    expect(sumInvFill?.fgColor?.argb).toBe('FFFFFBEB');
-
-    // Verify Row 2 (SUBTOTAL) formulas & styling (Row 2 is Slate 50, font Slate 900)
+    // Row 2 (SUBTOTAL): label in column 1, slate 50 fill, slate 600 italic font
     const subtotalRow = worksheet.getRow(2);
-    expect(subtotalRow.getCell(21).value).toEqual({
-      formula: 'SUBTOTAL(9,U5:U5)',
+    expect(subtotalRow.getCell(1).value).toBe('SUBTOTAL (theo bộ lọc)');
+    expect(subtotalRow.getCell(1).font?.italic).toBe(true);
+    expect(subtotalRow.getCell(1).font?.color?.argb).toBe('FF475569');
+    expect((subtotalRow.getCell(6).fill as any)?.fgColor?.argb).toBe(
+      'FFF8FAFC',
+    );
+    expect(subtotalRow.getCell(25).value).toEqual({
+      formula: 'SUBTOTAL(9,Y5:Y5)',
       result: 1500000,
     });
-    expect(subtotalRow.getCell(21).numFmt).toBe('#,##0.00');
-
-    // Verify Row 2 font color is Slate 900 (FF0F172A)
-    expect(subtotalRow.font?.color?.argb).toBe('FF0F172A');
-
-    // Verify Row 2 fill is Slate 50 (FFF8FAFC), NOT Blue (FFEFF6FF)
-    const subtotalBankFill: any = subtotalRow.getCell(6).fill;
-    expect(subtotalBankFill?.fgColor?.argb).toBe('FFF8FAFC');
-
-    const subtotalInvFill: any = subtotalRow.getCell(21).fill;
-    expect(subtotalInvFill?.fgColor?.argb).toBe('FFF8FAFC');
+    expect(subtotalRow.getCell(25).numFmt).toBe('#,##0.00');
   });
 
   it('gracefully handles transactions without invoice net-offs and cash books', async () => {
     const transactions: Partial<ErpBankTransaction>[] = [
       {
         id: 'txn-2',
+        cashBookId: 'cb-1',
         transDate: null as any,
         creditAmount: 0 as any,
         debitAmount: 100000 as any,
-        cashBook: { name: 'Quỹ tiền mặt VP' } as any,
+        cashBook: { id: 'cb-1', name: 'Quỹ tiền mặt VP' } as any,
       },
     ];
 
@@ -173,16 +181,29 @@ describe('BankStatementExcelBuilder', () => {
       netOffDetails: [],
     });
 
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(buffer as any);
+    const workbook = await readWorkbook(buffer);
     const worksheet = workbook.worksheets[0];
-    expect(worksheet.name).toBe('Sổ quỹ Tiền mặt');
+    expect(worksheet.name).toBe('Quỹ tiền mặt VP');
 
     const dataRow = worksheet.getRow(5);
     expect(dataRow.getCell(2).value).toBe('Quỹ tiền mặt VP');
     expect(dataRow.getCell(3).value).toBe('');
-    expect(dataRow.getCell(15).value).toBe('');
-    expect(dataRow.getCell(17).value).toBe('');
+    expect(dataRow.getCell(19).value).toBe('');
+    expect(dataRow.getCell(20).value).toBe('');
+  });
+
+  it('writes the default sheet name with a TỔNG/SUBTOTAL header when there are no transactions', async () => {
+    const buffer = await builder.build({
+      sourceType: 'CASH',
+      transactions: [],
+      netOffDetails: [],
+    });
+
+    const workbook = await readWorkbook(buffer);
+    expect(workbook.worksheets).toHaveLength(1);
+    expect(workbook.worksheets[0].name).toBe('Sổ quỹ Tiền mặt');
+    expect(workbook.worksheets[0].getRow(1).getCell(1).value).toBe('TỔNG');
+    expect(workbook.worksheets[0].getRow(1).getCell(6).value).toBe(0);
   });
 
   it('filters columns dynamically when selectedColumns is provided', async () => {
@@ -204,12 +225,10 @@ describe('BankStatementExcelBuilder', () => {
       selectedColumns: ['stt', 'transDate', 'credit', 'description'],
     });
 
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(buffer as any);
+    const workbook = await readWorkbook(buffer);
     const worksheet = workbook.worksheets[0];
 
-    // Header row 4 should have exactly 4 columns
-    // Natural order in allColumns: stt (1), transDate (3), description (5), credit (6)
+    // Natural order in allColumns: stt (1), transDate (2), description (3), credit (4)
     const headerRow = worksheet.getRow(4);
     expect(headerRow.getCell(1).value).toBe('STT');
     expect(headerRow.getCell(2).value).toBe('Ngày GD');
@@ -217,12 +236,122 @@ describe('BankStatementExcelBuilder', () => {
     expect(headerRow.getCell(4).value).toBe('Thu (VND)');
     expect(headerRow.getCell(5).value).toBeNull();
 
-    // Data row 5 should match selected column values
     const dataRow = worksheet.getRow(5);
     expect(dataRow.getCell(1).value).toBe(1);
     expect(dataRow.getCell(2).value).toBeInstanceOf(Date);
     expect(dataRow.getCell(3).value).toBe('Test Selected Columns');
     expect(dataRow.getCell(4).value).toBe(500000);
     expect(dataRow.getCell(4).numFmt).toBe('#,##0.00');
+  });
+
+  it('tách mỗi tài khoản ngân hàng thành một sheet, STT bắt đầu lại từ 1', async () => {
+    const transactions: Partial<ErpBankTransaction>[] = [
+      {
+        id: 'txn-a1',
+        bankAccountId: 'acc-a',
+        creditAmount: 100 as any,
+        debitAmount: 0 as any,
+        bankAccount: {
+          id: 'acc-a',
+          bankCode: 'TCB',
+          accountNumber: '111',
+        } as any,
+      },
+      {
+        id: 'txn-b1',
+        bankAccountId: 'acc-b',
+        creditAmount: 200 as any,
+        debitAmount: 0 as any,
+        bankAccount: {
+          id: 'acc-b',
+          bankCode: 'VCB',
+          accountNumber: '222',
+        } as any,
+      },
+      {
+        id: 'txn-a2',
+        bankAccountId: 'acc-a',
+        creditAmount: 300 as any,
+        debitAmount: 0 as any,
+        bankAccount: {
+          id: 'acc-a',
+          bankCode: 'TCB',
+          accountNumber: '111',
+        } as any,
+      },
+    ];
+
+    const buffer = await builder.build({
+      sourceType: 'BANK',
+      transactions: transactions as ErpBankTransaction[],
+      netOffDetails: [],
+    });
+
+    const workbook = await readWorkbook(buffer);
+    expect(workbook.worksheets.map((ws) => ws.name)).toEqual([
+      'TCB - 111',
+      'VCB - 222',
+    ]);
+
+    const tcb = workbook.getWorksheet('TCB - 111')!;
+    expect(tcb.getRow(5).getCell(1).value).toBe(1);
+    expect(tcb.getRow(6).getCell(1).value).toBe(2);
+    // Tổng riêng của sheet TCB: 100 + 300
+    expect(tcb.getRow(1).getCell(6).value).toEqual({
+      formula: 'SUM(F5:F6)',
+      result: 400,
+    });
+
+    const vcb = workbook.getWorksheet('VCB - 222')!;
+    expect(vcb.getRow(5).getCell(1).value).toBe(1);
+    expect(vcb.getRow(1).getCell(6).value).toEqual({
+      formula: 'SUM(F5:F5)',
+      result: 200,
+    });
+  });
+
+  it('gom giao dịch không có tài khoản vào sheet "Khác" và tránh trùng tên sheet', async () => {
+    const transactions: Partial<ErpBankTransaction>[] = [
+      {
+        id: 'txn-x1',
+        bankAccountId: 'acc-1',
+        creditAmount: 1 as any,
+        debitAmount: 0 as any,
+        bankAccount: {
+          id: 'acc-1',
+          bankCode: 'TCB',
+          accountNumber: '999',
+        } as any,
+      },
+      {
+        id: 'txn-x2',
+        bankAccountId: 'acc-2',
+        creditAmount: 1 as any,
+        debitAmount: 0 as any,
+        bankAccount: {
+          id: 'acc-2',
+          bankCode: 'TCB',
+          accountNumber: '999',
+        } as any,
+      },
+      {
+        id: 'txn-x3',
+        creditAmount: 1 as any,
+        debitAmount: 0 as any,
+      },
+    ];
+
+    const buffer = await builder.build({
+      sourceType: 'BANK',
+      transactions: transactions as ErpBankTransaction[],
+      netOffDetails: [],
+    });
+
+    const workbook = await readWorkbook(buffer);
+    expect(workbook.worksheets.map((ws) => ws.name)).toEqual([
+      'TCB - 999',
+      'TCB - 999 (2)',
+      'Khác',
+    ]);
   });
 });

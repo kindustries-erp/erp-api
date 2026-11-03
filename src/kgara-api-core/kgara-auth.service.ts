@@ -3,12 +3,37 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { KgaraAuth } from './entities/kgara_auth.entity';
 import { ConfigService } from '@nestjs/config';
+import { KgaraAccountKey } from './enums/kgara-account.enum';
+
+export interface KgaraAccountCredentials {
+  host: string;
+  username: string;
+  password: string;
+  makhachhang: string;
+}
+
+/** Tên biến env theo từng tài khoản (host dùng chung KGARA_API_HOST). */
+const KGARA_ENV_KEYS: Record<
+  KgaraAccountKey,
+  { username: string; password: string; makhachhang: string }
+> = {
+  [KgaraAccountKey.MAIN]: {
+    username: 'KGARA_USERNAME',
+    password: 'KGARA_PASSWORD',
+    makhachhang: 'KGARA_MA_KHACH_HANG',
+  },
+  [KgaraAccountKey.OJ]: {
+    username: 'KGARA_USERNAME_2',
+    password: 'KGARA_PASSWORD_2',
+    makhachhang: 'KGARA_MA_KHACH_HANG_2',
+  },
+};
 
 @Injectable()
 export class KgaraAuthService {
   private readonly logger = new Logger(KgaraAuthService.name);
-
-  private refreshPromise: Promise<string | null> | null = null;
+  private refreshPromises = new Map<string, Promise<string | null>>();
+  private lastErrors = new Map<string, string>();
 
   constructor(
     @InjectRepository(KgaraAuth)
@@ -16,12 +41,52 @@ export class KgaraAuthService {
     private configService: ConfigService,
   ) {}
 
-  async getValidToken(): Promise<string | null> {
-    const auths = await this.authRepo.find({
+  getCredentials(
+    accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
+  ): KgaraAccountCredentials | null {
+    const creds = this.readCredentials(accountKey);
+    if (!creds) {
+      const message = `Kgara ${accountKey} credentials not fully configured.`;
+      this.lastErrors.set(accountKey, message);
+      this.logger.error(message);
+    }
+    return creds;
+  }
+
+  /** Lý do lỗi gần nhất của tài khoản (đăng nhập/refresh/cấu hình), null nếu lần gần nhất thành công. */
+  getLastError(accountKey: KgaraAccountKey): string | null {
+    return this.lastErrors.get(accountKey) ?? null;
+  }
+
+  /** Các tài khoản có đủ credentials trong env (không log lỗi khi thiếu). */
+  getConfiguredAccounts(): KgaraAccountKey[] {
+    return Object.values(KgaraAccountKey).filter(
+      (accountKey) => this.readCredentials(accountKey) !== null,
+    );
+  }
+
+  private readCredentials(
+    accountKey: KgaraAccountKey,
+  ): KgaraAccountCredentials | null {
+    const keys = KGARA_ENV_KEYS[accountKey];
+    const host = this.configService.get<string>('KGARA_API_HOST');
+    const username = this.configService.get<string>(keys.username);
+    const password = this.configService.get<string>(keys.password);
+    const makhachhang = this.configService.get<string>(keys.makhachhang);
+
+    if (!host || !username || !password || !makhachhang) {
+      return null;
+    }
+    return { host, username, password, makhachhang };
+  }
+
+  async getValidToken(
+    accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
+  ): Promise<string | null> {
+    const auth = await this.authRepo.findOne({
+      where: { accountKey },
       order: { createdAt: 'DESC' },
-      take: 1,
     });
-    const auth = auths.length > 0 ? auths[0] : null;
     const now = new Date();
     const fiveMinutesFromNow = new Date(now.getTime() + 5 * 60 * 1000);
 
@@ -35,114 +100,138 @@ export class KgaraAuthService {
     }
 
     if (auth && auth.refreshToken) {
-      return this.executeRefreshLocked(auth.refreshToken);
+      return this.executeRefreshLocked(auth.refreshToken, accountKey);
     }
 
-    return this.login();
+    return this.login(accountKey);
   }
 
-  async forceRefreshToken(): Promise<string | null> {
-    const auths = await this.authRepo.find({
+  async forceRefreshToken(
+    accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
+  ): Promise<string | null> {
+    const auth = await this.authRepo.findOne({
+      where: { accountKey },
       order: { createdAt: 'DESC' },
-      take: 1,
     });
-    const auth = auths.length > 0 ? auths[0] : null;
 
     if (auth && auth.refreshToken) {
-      return this.executeRefreshLocked(auth.refreshToken);
+      return this.executeRefreshLocked(auth.refreshToken, accountKey);
     }
 
-    return this.login();
+    return this.login(accountKey);
   }
 
   private executeRefreshLocked(
     refreshTokenStr: string,
+    accountKey: KgaraAccountKey,
   ): Promise<string | null> {
-    if (!this.refreshPromise) {
-      this.refreshPromise = this.refreshToken(refreshTokenStr).finally(() => {
-        this.refreshPromise = null;
-      });
+    const key = accountKey.toString();
+    const existing = this.refreshPromises.get(key);
+    if (existing) {
+      return existing;
     }
-    return this.refreshPromise;
+
+    const promise = this.refreshToken(refreshTokenStr, accountKey).finally(
+      () => {
+        this.refreshPromises.delete(key);
+      },
+    );
+    this.refreshPromises.set(key, promise);
+    return promise;
   }
 
-  private async login(): Promise<string | null> {
-    this.logger.log('Logging in to Kgara API');
-    const host = this.configService.get<string>('KGARA_API_HOST');
-    const username = this.configService.get<string>('KGARA_USERNAME');
-    const password = this.configService.get<string>('KGARA_PASSWORD');
-    const makhachhang = this.configService.get<string>('KGARA_MA_KHACH_HANG');
-
-    if (!host || !username || !password || !makhachhang) {
-      this.logger.error('Kgara credentials not fully configured.');
+  private async login(accountKey: KgaraAccountKey): Promise<string | null> {
+    this.logger.log(`Logging in to Kgara API for account: ${accountKey}`);
+    const creds = this.getCredentials(accountKey);
+    if (!creds) {
       return null;
     }
 
     try {
-      const response = await fetch(`https://${host}/api/v1/auth/login`, {
+      const response = await fetch(`https://${creds.host}/api/v1/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          UserName: username,
-          Password: password,
-          MaKhachHang: makhachhang,
+          UserName: creds.username,
+          Password: creds.password,
+          MaKhachHang: creds.makhachhang,
         }),
       });
 
       if (!response.ok) {
-        throw new Error(`Login failed: ${response.statusText}`);
+        throw new Error(
+          `Login failed: HTTP ${response.status} ${response.statusText}`,
+        );
       }
 
       const data = await response.json();
-      return this.saveTokens(data);
-    } catch (error) {
-      this.logger.error(`Failed to login: ${error.message}`);
+      return this.saveTokens(data, accountKey);
+    } catch (error: any) {
+      this.lastErrors.set(accountKey, error?.message || 'Login failed');
+      this.logger.error(
+        `Failed to login for account ${accountKey}: ${error?.message}`,
+      );
       return null;
     }
   }
 
-  private async refreshToken(refreshTokenStr: string): Promise<string | null> {
-    this.logger.log('Refreshing Kgara token');
-    const host = this.configService.get<string>('KGARA_API_HOST');
-    const makhachhang = this.configService.get<string>('KGARA_MA_KHACH_HANG');
+  private async refreshToken(
+    refreshTokenStr: string,
+    accountKey: KgaraAccountKey,
+  ): Promise<string | null> {
+    this.logger.log(`Refreshing Kgara token for account: ${accountKey}`);
+    const creds = this.getCredentials(accountKey);
+    if (!creds) {
+      return null;
+    }
 
     try {
       const response = await fetch(
-        `https://${host}/api/v1/auth/refresh-token`,
+        `https://${creds.host}/api/v1/auth/refresh-token`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            MaKhachHang: makhachhang,
+            MaKhachHang: creds.makhachhang,
             RefreshToken: refreshTokenStr,
           }),
         },
       );
 
       if (!response.ok) {
-        this.logger.warn('Refresh failed, falling back to login');
-        return this.login();
+        this.logger.warn(
+          `Refresh failed for account ${accountKey}, falling back to login`,
+        );
+        return this.login(accountKey);
       }
 
       const data = await response.json();
-      return this.saveTokens(data);
-    } catch (error) {
-      this.logger.error(`Failed to refresh token: ${error.message}`);
-      return this.login();
+      return this.saveTokens(data, accountKey);
+    } catch (error: any) {
+      this.logger.error(
+        `Failed to refresh token for account ${accountKey}: ${error?.message}`,
+      );
+      return this.login(accountKey);
     }
   }
 
-  private async saveTokens(data: any): Promise<string> {
-    const auth = new KgaraAuth();
+  private async saveTokens(
+    data: any,
+    accountKey: KgaraAccountKey,
+  ): Promise<string> {
+    let auth = await this.authRepo.findOne({ where: { accountKey } });
+    if (!auth) {
+      auth = new KgaraAuth();
+      auth.accountKey = accountKey;
+    }
+
     auth.accessToken = data.AccessToken;
     auth.refreshToken = data.RefreshToken;
     auth.tokenExpires = new Date(data.TokenExpires);
-    auth.ssClientId = data.SS_ClientID || ''; // Default branch ID
+    auth.ssClientId = data.SS_ClientID || '';
 
-    // Optional cleanup of old tokens
-    await this.authRepo.clear();
     await this.authRepo.save(auth);
-
+    this.lastErrors.delete(accountKey);
     return auth.accessToken as string;
   }
 }

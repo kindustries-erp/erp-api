@@ -8,6 +8,11 @@ import { ErpInvoiceItem } from '../entities/erp_invoice_item.entity';
 import { ErpBranch } from '../../branches-core/entities/erp_branch.entity';
 import { R2Service } from '../../r2/r2.service';
 import { VinfastPartsService } from '../../vinfast-parts/vinfast-parts.service';
+import { InvoiceBranchService } from './invoice-branch.service';
+import {
+  normalizeBranchColumns,
+  readBranchIds,
+} from '../../common/utils/branch-ids.util';
 import { InvoiceCategoryAutopostService } from './sub-services/invoice-category-autopost.service';
 import {
   parseVietnamInvoiceXml,
@@ -21,7 +26,10 @@ import {
   resolveInInvoiceBranchCode,
 } from '../helpers/invoice-branch.helper';
 import { classifyInvoiceLine } from '../helpers/out-invoice-display.helper';
-import { extractStandardItemCode } from '../helpers/vinfast-part-code.helper';
+import {
+  extractStandardItemCode,
+  isVinfastCandidateSeller,
+} from '../helpers/vinfast-part-code.helper';
 
 // ---------------------------------------------------------------------------
 // Result types
@@ -62,6 +70,7 @@ export class InvoiceImportService {
     @InjectRepository(ErpInvoice)
     private readonly repository: Repository<ErpInvoice>,
     private readonly r2: R2Service,
+    private readonly branchService: InvoiceBranchService,
     @Optional()
     @InjectRepository(ErpBranch)
     private readonly branchRepository?: Repository<ErpBranch>,
@@ -368,8 +377,9 @@ export class InvoiceImportService {
             }
           }
 
-          // 3. Backfill branchId if missing
-          if (!existingInvoice.branchId) {
+          // 3. Backfill chi nhánh khi hóa đơn chưa có (qua InvoiceBranchService để ghi đủ 2 cột)
+          let pendingBranchId: string | null = null;
+          if (readBranchIds(existingInvoice).length === 0) {
             const resolvedBranchId =
               direction === 'OUT'
                 ? await this.resolveBranchIdForOut(
@@ -381,8 +391,9 @@ export class InvoiceImportService {
                     parsed.buyerTaxCode,
                   );
             if (resolvedBranchId) {
-              updatePayload.branchId = resolvedBranchId;
+              pendingBranchId = resolvedBranchId;
               existingInvoice.branchId = resolvedBranchId;
+              existingInvoice.branchIds = [resolvedBranchId];
               updated = true;
             }
           }
@@ -430,6 +441,7 @@ export class InvoiceImportService {
                 discountAmount: item.discountAmount,
                 sellerName: existingInvoice.sellerName,
                 sellerTaxCode: existingInvoice.sellerTaxCode,
+                direction: existingInvoice.direction,
               });
 
               return this.repository.manager.create(ErpInvoiceItem, {
@@ -465,6 +477,15 @@ export class InvoiceImportService {
           // 6. Save update payload if any field was backfilled
           if (updated && Object.keys(updatePayload).length > 0) {
             await this.repository.update(existingInvoice.id, updatePayload);
+          }
+          if (pendingBranchId) {
+            await this.branchService.assign(
+              [existingInvoice.id],
+              [pendingBranchId],
+              {
+                onlyIfUnassigned: true,
+              },
+            );
           }
 
           skipped.push({
@@ -534,7 +555,7 @@ export class InvoiceImportService {
           direction,
           status: 'CONFIRMED',
           taxInvoiceStatus,
-          branchId,
+          ...normalizeBranchColumns({ branchId }),
           sellerName: parsed.sellerName,
           sellerTaxCode: parsed.sellerTaxCode,
           sellerAddress: parsed.sellerAddress,
@@ -624,6 +645,7 @@ export class InvoiceImportService {
               discountAmount: item.discountAmount,
               sellerName: savedInvoice.sellerName,
               sellerTaxCode: savedInvoice.sellerTaxCode,
+              direction: savedInvoice.direction,
             });
 
             return this.repository.manager.create(ErpInvoiceItem, {
@@ -646,22 +668,20 @@ export class InvoiceImportService {
 
         // 3.5. VinFast Parts Catalog & Ledger Auto-sync
         if (this.vinfastPartsService && savedInvoice.direction === 'IN') {
-          const sellerMst = savedInvoice.sellerTaxCode ?? '';
-          const sellerName = (savedInvoice.sellerName ?? '').toUpperCase();
-          const isVinfast =
-            sellerMst === '0108926276' ||
-            sellerMst === '0108926276-001' ||
-            sellerName.includes('VINFAST');
+          const isVinfast = isVinfastCandidateSeller(
+            savedInvoice.sellerName,
+            savedInvoice.sellerTaxCode,
+          );
 
           if (isVinfast && parsed.items && parsed.items.length > 0) {
             await this.vinfastPartsService
-              .syncCatalog({})
+              .syncCatalog({ invoiceIds: [savedInvoice.id] })
               .catch((e) =>
                 this.logger.warn(`Vinfast catalog sync error: ${e.message}`),
               );
 
             await this.vinfastPartsService
-              .syncLedger({})
+              .syncLedger({ invoiceIds: [savedInvoice.id] })
               .catch((e) =>
                 this.logger.warn(`Vinfast ledger sync error: ${e.message}`),
               );

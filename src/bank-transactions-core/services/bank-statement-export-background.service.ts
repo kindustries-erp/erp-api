@@ -24,6 +24,7 @@ import type {
   BankStatementExportHistoryResult,
   BankStatementExportJob,
 } from '../types/bank-statement-export.types';
+import { readBranchIds } from '../../common/utils/branch-ids.util';
 
 export type {
   BankStatementExportProgressEvent,
@@ -319,6 +320,7 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
     const qb = this.transactionQueryService.buildTransactionQueryBuilder(query);
 
     const transactions = await qb.getMany();
+    await this.attachBranchNames(transactions);
 
     onProgress(
       40,
@@ -331,7 +333,6 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
       netOffDetails = await this.transactionRepo.manager
         .createQueryBuilder('erp_invoice_voucher_netoff', 'netoff')
         .innerJoin('erp_invoices', 'inv', 'inv.id = netoff.invoice_id')
-        .leftJoin('erp_branches', 'inv_branch', 'inv_branch.id = inv.branch_id')
         .select([
           'netoff.bank_transaction_id as "bankTransactionId"',
           'netoff.net_off_amount as "netOffAmount"',
@@ -346,7 +347,7 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
           'inv.buyer_name as "buyerName"',
           'inv.buyer_tax_code as "buyerTaxCode"',
           'inv.total_amount as "totalAmount"',
-          'inv_branch.name as "invoiceBranchName"',
+          '(SELECT string_agg(ib.name, \', \' ORDER BY ib.name) FROM erp_branches ib WHERE ib.id = ANY(inv.branch_ids)) as "invoiceBranchName"',
         ])
         .where('netoff.bank_transaction_id IN (:...ids)', { ids })
         .orderBy('inv.invoice_date', 'ASC')
@@ -365,6 +366,26 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
 
     onProgress(100, 'Tạo file hoàn tất!');
     return buffer;
+  }
+
+  /** Gắn tên mọi chi nhánh của từng dòng (`branchNames`), không chỉ chi nhánh đầu. */
+  private async attachBranchNames(
+    transactions: { branchIds?: string[] | null; branchId?: string | null }[],
+  ): Promise<void> {
+    const allIds = [...new Set(transactions.flatMap((t) => readBranchIds(t)))];
+    if (allIds.length === 0) return;
+    const rows: { id: string; name: string }[] =
+      await this.transactionRepo.manager.query(
+        'SELECT id, name FROM erp_branches WHERE id = ANY($1::uuid[])',
+        [allIds],
+      );
+    const nameById = new Map(rows.map((r) => [r.id, r.name]));
+    for (const t of transactions) {
+      (t as { branchNames?: string }).branchNames = readBranchIds(t)
+        .map((id) => nameById.get(id))
+        .filter((name): name is string => !!name)
+        .join(', ');
+    }
   }
 
   private parseSelectedColumns(raw?: string[] | string): string[] | undefined {
@@ -468,6 +489,7 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
     const stable = {
       sourceType: query.sourceType || '',
       branchId: query.branchId || '',
+      branchIds: [...(query.branchIds || [])].sort(),
       bankAccountId: query.bankAccountId || '',
       cashBookId: query.cashBookId || '',
       startDate: query.startDate || '',

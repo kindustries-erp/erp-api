@@ -39,7 +39,7 @@ export class KgaraCaseServicesExportService {
     const items = result.data || [];
 
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'Liouni ERP';
+    workbook.creator = 'ERP';
     workbook.created = new Date();
 
     const sheet = workbook.addWorksheet('Chi tiết DV & Phụ tùng');

@@ -1,0 +1,18 @@
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  BaseGoodsReceiptLineResponseDto,
+  BaseGoodsReceiptResponseDto,
+} from '@/v2/core/goods-receipts/dto/base-goods-receipt-response.dto';
+
+export class {{lineEntityName}}ResponseDto extends BaseGoodsReceiptLineResponseDto {}
+
+export class {{headerEntityName}}ResponseDto extends BaseGoodsReceiptResponseDto {
+  @ApiPropertyOptional({ description: 'Trạng thái thanh toán' })
+  paymentStatus?: string;
+
+  @ApiPropertyOptional({
+    description: 'Danh sách mặt hàng',
+    type: [{{lineEntityName}}ResponseDto],
+  })
+  declare lines?: {{lineEntityName}}ResponseDto[];
+}

@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   OneToMany,
@@ -14,8 +15,16 @@ import { ErpCashBook } from './erp_cash_book.entity';
 import { ErpInvoiceVoucherNetOff } from '../../erp-invoices-core/entities/erp_invoice_voucher_netoff.entity';
 import { ErpChartOfAccount } from '../../accounting-core/entities/erp_chart_of_account.entity';
 import { ErpModuleCategory } from '../../module-config/entities/erp_module_category.entity';
+import { ErpBusinessPartner } from '../../v2/business-partners-core/entities/erp_business_partner.entity';
+import {
+  CashflowClassification,
+  CashflowPurpose,
+} from '../constants/cashflow-attributes.constants';
 
 @Entity({ name: 'erp_bank_transactions' })
+@Index('IDX_erp_bank_txn_cashflow_classification', ['cashflowClassification'])
+@Index('IDX_erp_bank_txn_cashflow_purpose', ['cashflowPurpose'])
+@Index('IDX_erp_bank_txn_partner_id', ['partnerId'])
 export class ErpBankTransaction {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -29,6 +38,22 @@ export class ErpBankTransaction {
   @ManyToOne(() => ErpModuleCategory, { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'category_id' })
   category: ErpModuleCategory | null;
+
+  @Column({
+    type: 'varchar',
+    length: 50,
+    name: 'cashflow_classification',
+    nullable: true,
+  })
+  cashflowClassification: CashflowClassification | null;
+
+  @Column({
+    type: 'varchar',
+    length: 50,
+    name: 'cashflow_purpose',
+    nullable: true,
+  })
+  cashflowPurpose: CashflowPurpose | null;
 
   @Column({ type: 'uuid', name: 'bank_account_id', nullable: true })
   bankAccountId: string | null;
@@ -44,12 +69,27 @@ export class ErpBankTransaction {
   @JoinColumn({ name: 'cash_book_id' })
   cashBook: ErpCashBook | null;
 
-  @Column({ type: 'uuid', name: 'branch_id' })
-  branchId: string;
+  @Column({ type: 'uuid', name: 'partner_id', nullable: true })
+  partnerId: string | null;
 
-  @ManyToOne(() => ErpBranch)
+  @ManyToOne(() => ErpBusinessPartner, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'partner_id' })
+  partner: ErpBusinessPartner | null;
+
+  @Column({ type: 'uuid', name: 'branch_id', nullable: true })
+  branchId: string | null;
+
+  @Column({
+    type: 'uuid',
+    array: true,
+    name: 'branch_ids',
+    default: () => "'{}'",
+  })
+  branchIds: string[];
+
+  @ManyToOne(() => ErpBranch, { nullable: true })
   @JoinColumn({ name: 'branch_id' })
-  branch: ErpBranch;
+  branch: ErpBranch | null;
 
   @Column({ type: 'int', name: 'stt', nullable: true })
   stt: number | null;
@@ -101,8 +141,8 @@ export class ErpBankTransaction {
   @Column({ type: 'text', name: 'description', nullable: true })
   description: string | null;
 
-  @Column({ type: 'text', name: 'accounting_description', nullable: true })
-  accountingDescription: string | null;
+  @Column({ type: 'text', name: 'note', nullable: true })
+  note: string | null;
 
   @Column({
     type: 'varchar',

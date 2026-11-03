@@ -1,6 +1,6 @@
 ---
 name: invoice-debts
-description: Module tri thức Quản lý Báo cáo Công nợ Khách hàng & Nhà cung cấp (Invoice Debts & Aging Analysis) trong Liouni ERP (erp-invoices-core). Chứa toàn bộ database queries, DTOs, API endpoints, logic tổng hợp thời gian thực, tuổi nợ (aging), tiến độ thanh toán, phân quyền RBAC và giao diện SpreadsheetPageTemplate / Detail Drawer.
+description: Module tri thức Quản lý Báo cáo Công nợ Khách hàng & Nhà cung cấp (Invoice Debts & Aging Analysis) trong ERP (erp-invoices-core). Chứa toàn bộ database queries, DTOs, API endpoints, logic tổng hợp thời gian thực, tuổi nợ (aging), tiến độ thanh toán, phân quyền RBAC và giao diện SpreadsheetPageTemplate / Detail Drawer.
 ---
 
 # 📦 Module Tri Thức: Công Nợ Theo Đối Tượng (Invoice Debts) - Backend & Frontend
@@ -21,7 +21,8 @@ Module Công Nợ Theo Đối Tượng (`invoice-debts`, hiển thị trên Side
 5. **Dòng Tổng phụ & Popover Tỷ lệ Hero (Subtotal Summary)**: Tính toán song song tổng lũy kế trên trang hiện tại và tổng toàn bộ hệ thống (`grandTotalAmount`, `grandTotalPaid`, `grandTotalBalance`, `totalPartners`, `totalInvoiceCount`) cho cả 2 cột tài chính.
 6. **Kiến trúc Sub-Services & An toàn Bảo mật**:
    - `InvoiceDebtsService`: Facade mỏng (~140 dòng).
-   - `InvoiceDebtsQueryService`: Phụ trách toàn bộ query tổng hợp công nợ và options phân trang/lọc.
+   - `InvoiceDebtsQueryService`: Phụ trách toàn bộ query tổng hợp công nợ và options phân trang/lọc. Biểu thức MST/tên đối tác lấy từ `buildInvoicePartnerSqlParts` (`src/common/utils/invoice-partner-key.util.ts`, dùng chung với đồng bộ đối tác và sao kê); không đổi số liệu khi refactor.
+   - **Chưa phân bổ** (`unallocatedAmount`) và **Còn lại sau phân bổ** (`netBalanceAmount` = `balanceAmount − unallocatedAmount`, có thể âm khi trả trước): `invoice-debts-unallocated.helper.ts` cộng phần chưa cấn trừ của các dòng sao kê có `partner_id` theo MST đối tác (`tax_code`), join vào danh sách công nợ theo `taxCode`, gắn một lần cho dòng có tổng HĐ lớn nhất của MST (một MST có thể có nhiều dòng do khác tên; nếu cộng trùng theo dòng thì tổng bị sai). Không đổi cách gom nhóm công nợ. Dòng thu (credit) cho khách hàng (OUT), dòng chi (debit) cho NCC (IN). Endpoint chi tiết: `GET /erp-invoices/debts/:taxCode/unallocated-payments?partner_type=CUSTOMER|SUPPLIER` (`InvoiceDebtsDetailService.getUnallocatedPayments`) trả các dòng sao kê của đối tác còn phần chưa cấn trừ (tối đa 500, mới nhất trước): `id, transDate, referenceNumber, description, note, cashflowPurpose, amount, netOffAmount, unallocatedAmount`. Web: tab "3. Khoản chưa phân bổ" trong drawer chi tiết công nợ (`InvoicePartnerUnallocatedSection`). Tổng cộng: `summary.grandTotalUnallocated` (tổng cột chưa phân bổ trên toàn bộ kết quả đang lọc, đã kiểm tra khớp SQL trực tiếp) và `summary.grandTotalNetBalance` = `grandTotalBalance − grandTotalUnallocated`. Web: ô tổng trong hàng tổng cộng của bảng. Chưa có lũy kế (cumulative) theo trang cho cột này.
    - `InvoiceDebtsDetailService`: Phụ trách chi tiết hóa đơn của từng đối tác (`getPartnerInvoices`), sử dụng parameterized SQL ($1, $2, ...) phòng chống triệt để SQL injection.
    - `InvoiceDebtsExportService`: Phụ trách xuất Excel báo cáo công nợ đồng bộ 2 sheet.
 
@@ -193,3 +194,15 @@ bunx jest src/erp-invoices-core/services/invoice-debts.service.spec.ts --forceEx
 cd erp/erp-web
 bun run build
 ```
+
+## 10. Cấn trừ khoản sao kê/quỹ vào công nợ (Net-off theo đối tác)
+
+- **Endpoint**: `POST /api/v1/erp-invoices/debts/:taxCode/net-off`, quyền `INVOICES:UPDATE`.
+- **Body**: `{ partnerType: 'CUSTOMER'|'SUPPLIER', bankTransactionId, allocations: [{ invoiceId, amount }] }`.
+- **Service**: `InvoiceDebtsNetOffService` (`services/sub-services/invoice-debts-net-off.service.ts`), facade `InvoiceDebtsService.allocateNetOff`.
+- **Ghi dữ liệu**: cùng bảng `erp_invoice_voucher_netoff` (cộng dồn khi cặp hóa đơn-giao dịch đã có link). Không đổi schema.
+- **Khóa**: trong transaction, `SELECT ... FOR UPDATE` trên giao dịch trước, sau đó hóa đơn theo `id` tăng dần.
+- **Kiểm tra**: giao dịch đúng MST đối tác và đúng chiều (NCC cần giao dịch chi, khách cần giao dịch thu); hóa đơn đúng chiều và đúng MST/CCCD; không phải điều chỉnh giảm (`tax_invoice_status = 3`) hoặc số âm; `status 4` bị loại; số phân bổ ≤ số dư hóa đơn (`total - netoff - adjustment offset`, cùng công thức bảng chi tiết); tổng ≤ số chưa phân bổ của giao dịch. Kiểm tra theo cent.
+- **Sau commit**: gán chi nhánh cho hóa đơn chưa có chi nhánh khi giao dịch có đúng một chi nhánh (`InvoiceBranchService.assign`, `onlyIfUnassigned`), làm mới bút toán sao kê (lỗi chỉ ghi log).
+- **Web**: drawer V2 `DebtNetOffDrawer` (`src/v2/modules/invoice-debts/drawers/`), mở từ nút "Cấn trừ" ở tab "Khoản chưa phân bổ" trong drawer công nợ đối tác (v1).
+- **Spec**: `invoice-debts-net-off.service.spec.ts` (16 case).

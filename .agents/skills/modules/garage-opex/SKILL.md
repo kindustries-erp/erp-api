@@ -7,7 +7,7 @@ description: Module tri thức Quản lý Chi phí Vận hành (OPEX), Giá vố
 
 ## 1. Tổng quan Nghiệp vụ
 
-Phân hệ **Quản lý Chi phí Vận hành Garage (`garage-opex`)** thuộc lõi `kgara-api-core` trong hệ thống Liouni ERP. Module này chịu trách nhiệm số hóa, phân loại, lưu trữ và tổng hợp toàn bộ các khoản chi phí phát sinh ngoài các chi phí trực tiếp trên phiếu dịch vụ (như phụ tùng, công thợ), phục vụ việc lập Báo cáo Lợi nhuận P&L (`getPnlReport`) và phân tích điểm hòa vốn cho xưởng dịch vụ Greenway.
+Phân hệ **Quản lý Chi phí Vận hành Garage (`garage-opex`)** thuộc lõi `kgara-api-core` trong hệ thống ERP. Module này chịu trách nhiệm số hóa, phân loại, lưu trữ và tổng hợp toàn bộ các khoản chi phí phát sinh ngoài các chi phí trực tiếp trên phiếu dịch vụ (như phụ tùng, công thợ), phục vụ việc lập Báo cáo Lợi nhuận P&L (`getPnlReport`) và phân tích điểm hòa vốn cho xưởng dịch vụ Greenway.
 
 ### Các nghiệp vụ trọng tâm:
 - **3 Nhóm Chi Phí Cốt Lõi (`CostGroupType`)**:
@@ -101,7 +101,7 @@ src/kgara-api-core/
 ├── dto/
 │   └── garage-opex.dto.ts                # CreateGarageOpexDto, UpdateGarageOpexDto, ApplyRecurringOpexDto, ListGarageOpexQueryDto
 ├── helpers/
-│   └── garage-opex-query.builder.ts      # Pure Query Builder Engine (< 300 LoC) theo Pattern C (/api-service-refactor)
+│   └── garage-opex-query.builder.ts      # Pure Query Builder Engine (< 300 LoC) theo Pattern C (/api-structure)
 ├── services/
 │   ├── garage-opex.service.ts            # Logic nghiệp vụ CRUD, Recurrence engine, P&L aggregation (< 500 LoC)
 │   └── garage-opex.service.spec.ts       # Bộ kiểm thử Unit test cho OPEX (10 tests)
@@ -136,7 +136,7 @@ src/kgara-api-core/
 - Cột **Số tiền** có filter popover tự động format phân tách hàng nghìn `đ`.
 - Cột **Loại chi phí** gắn icon xem chi tiết Drawer (`TableText` with `onDetailClick`).
 - Bổ sung 2 cột: **Chu kỳ lặp** (`recurrenceType`) và **Hạn kết thúc** (`recurrenceUntil`).
-- **Chuẩn Hóa Drawer Form (`GarageOpexDrawer`) theo `/ui-atomic-refactor 5 tầng`**:
+- **Chuẩn Hóa Drawer Form (`GarageOpexDrawer`) theo `/ui-structure 5 tầng`**:
   - Tách từ file nguyên khối cũ (888 LoC) thành thư mục Organism chuẩn `src/modules/garage/components/organisms/garage-opex-drawer/`:
     - `GarageOpexDrawer.tsx` (Organism < 150 LoC): Container bọc `StandardFormDrawer`, footer buttons, trigger.
     - `GarageOpexDrawerForm.tsx` (Molecule < 180 LoC): Các ô nhập liệu (Kỳ, Loại CP, Số tiền, Phân bổ OJ, Ghi chú, Chu kỳ lặp).
@@ -186,7 +186,7 @@ Khi người dùng tạo khoản chi lặp lại hàng tháng đến tháng $M_{
   ```
 - **Chạy kiểm thử Unit Tests**:
   ```bash
-  bun test src/kgara-api-core/services/garage-opex.service.spec.ts
+  bunx jest src/kgara-api-core/services/garage-opex.service.spec.ts
   ```
 
 ## Dòng opex sinh từ phiếu chi garage (cập nhật 2026-10-17)

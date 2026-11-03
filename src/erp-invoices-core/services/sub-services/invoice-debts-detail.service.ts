@@ -146,4 +146,49 @@ export class InvoiceDebtsDetailService {
       description: r.description,
     }));
   }
+
+  /**
+   * Các khoản sao kê đã gắn đối tác (MST) nhưng còn phần chưa cấn trừ hóa đơn nào.
+   * Dòng thu cho khách hàng (OUT), dòng chi cho nhà cung cấp (IN). Tham số hóa toàn bộ SQL.
+   */
+  async getUnallocatedPayments(
+    taxCode: string,
+    partnerType?: InvoicePartnerType,
+  ) {
+    const amountFilter =
+      partnerType === InvoicePartnerType.SUPPLIER
+        ? 't.debit_amount > 0'
+        : 't.credit_amount > 0';
+    const rows: any[] = await this.invoiceRepo.query(
+      `
+      SELECT t.id,
+             TO_CHAR(t.trans_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD') AS "transDate",
+             t.reference_number AS "referenceNumber",
+             t.description,
+             t.note,
+             t.cashflow_purpose AS "cashflowPurpose",
+             GREATEST(t.credit_amount, t.debit_amount)::text AS "amount",
+             COALESCE(n.net_off, 0)::text AS "netOffAmount",
+             GREATEST(0, GREATEST(t.credit_amount, t.debit_amount) - COALESCE(n.net_off, 0))::text AS "unallocatedAmount"
+      FROM erp_bank_transactions t
+      JOIN erp_business_partners p ON p.id = t.partner_id AND p.is_deleted = false
+      LEFT JOIN (
+        SELECT bank_transaction_id, SUM(net_off_amount) AS net_off
+        FROM erp_invoice_voucher_netoff
+        GROUP BY bank_transaction_id
+      ) n ON n.bank_transaction_id = t.id
+      WHERE t.is_deleted = false
+        AND p.tax_code = $1
+        AND ${amountFilter}
+        AND GREATEST(0, GREATEST(t.credit_amount, t.debit_amount) - COALESCE(n.net_off, 0)) > 0
+      ORDER BY t.trans_date DESC
+      LIMIT 500
+      `,
+      [taxCode],
+    );
+    return {
+      items: rows,
+      total: rows.length,
+    };
+  }
 }

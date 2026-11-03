@@ -106,6 +106,7 @@ export class GarageCashflowQueryEngine {
     page: number = 1,
     pageSize: number = 20,
     filtersStr?: string,
+    tab?: string,
   ) {
     const qb = this.voucherRepo.createQueryBuilder('voucher');
     qb.leftJoin('voucher.case', 'case');
@@ -130,8 +131,20 @@ export class GarageCashflowQueryEngine {
       qb.andWhere("voucher.voucher_type = 'PAYMENT'");
     } else if (column === 'paymentStatus') {
       selectField = 'voucher.payment_status';
-      qb.andWhere("voucher.voucher_type = 'PAYMENT'");
+      if (tab === 'vouchers') {
+        qb.andWhere("voucher.voucher_type = 'PAYMENT'");
+      }
     } else return { items: [], total: 0, page, pageSize, totalPages: 0 };
+
+    if (tab === 'forecast') {
+      qb.andWhere(
+        "( (voucher.voucher_type = 'RECEIPT' AND voucher.payment_status = 'EXPECTED') OR (voucher.voucher_type = 'PAYMENT' AND voucher.payment_status IN ('PENDING', 'APPROVED')) )",
+      );
+    } else if (tab === 'vouchers') {
+      qb.andWhere(
+        "( (voucher.voucher_type = 'RECEIPT' AND (voucher.payment_status IS NULL OR voucher.payment_status NOT IN ('EXPECTED', 'CANCELLED'))) OR (voucher.voucher_type = 'PAYMENT' AND (voucher.payment_status IS NULL OR voucher.payment_status = 'PAID')) )",
+      );
+    }
 
     qb.select(`DISTINCT ${selectField}`, 'value');
     qb.andWhere(`${selectField} IS NOT NULL`);
@@ -370,6 +383,20 @@ export class GarageCashflowQueryEngine {
     }
     if (query.case_id) {
       qb.andWhere('voucher.caseId = :case_id', { case_id: query.case_id });
+    }
+
+    const isForecast =
+      query.tab === 'forecast' || query.ledger_type === 'FORECAST';
+    const isActual = query.tab === 'vouchers' || query.ledger_type === 'ACTUAL';
+
+    if (isForecast) {
+      qb.andWhere(
+        "( (voucher.voucher_type = 'RECEIPT' AND voucher.payment_status = 'EXPECTED') OR (voucher.voucher_type = 'PAYMENT' AND voucher.payment_status IN ('PENDING', 'APPROVED')) )",
+      );
+    } else if (isActual) {
+      qb.andWhere(
+        "( (voucher.voucher_type = 'RECEIPT' AND (voucher.payment_status IS NULL OR voucher.payment_status NOT IN ('EXPECTED', 'CANCELLED'))) OR (voucher.voucher_type = 'PAYMENT' AND (voucher.payment_status IS NULL OR voucher.payment_status = 'PAID')) )",
+      );
     }
 
     if (query.column_filters) {

@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { InvoiceImportService } from './invoice-import.service';
+import { InvoiceBranchService } from './invoice-branch.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ErpInvoice } from '../entities/erp_invoice.entity';
 import { R2Service } from '../../r2/r2.service';
@@ -35,6 +36,12 @@ describe('InvoiceImportService', () => {
           provide: R2Service,
           useValue: {
             uploadBuffer: jest.fn(),
+          },
+        },
+        {
+          provide: InvoiceBranchService,
+          useValue: {
+            assign: jest.fn().mockResolvedValue({ updated: [], skipped: [] }),
           },
         },
       ],

@@ -51,7 +51,7 @@ echo "✅ Đã tạo $AGENTS_DIR/skills.json"
 
 # 2. Tạo AGENTS.md router
 cat << 'EOF' > "$AGENTS_DIR/AGENTS.md"
-# Liouni ERP Workspace Router
+# ERP Workspace Router
 
 **ROUTING ONLY:** This `.agents` directory is the **entry point and router**. Do NOT look for application-specific implementation rules here.
 

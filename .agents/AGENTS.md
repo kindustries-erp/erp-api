@@ -1,10 +1,10 @@
-# Liouni ERP API Agent Bootstrap
+# ERP API Agent Bootstrap
 
 Source of truth for this repo (`./erp-api`).
 
 ## Read order
 
-1. `.agents/skills/liouni-erp-api-current-truth/SKILL.md`
+1. `.agents/skills/erp-api-truth/SKILL.md`
 
 ## API Specific Agent Mandates
 
@@ -20,8 +20,9 @@ Source of truth for this repo (`./erp-api`).
 
 ### 3. Strict Pre-push Hook
 
-- Before running `git push`, you **MUST** run `bun run check:ci` and `bun run test` (or the equivalent test script for API).
-- Do NOT push if any of these commands fail. Fix the issues first.
+- Commit: pre-commit tự chạy lint-staged (eslint, prettier, `jest --findRelatedTests` trên file staged). Không chạy full test thủ công.
+- Push: pre-push chạy `bun run type:check`. Do NOT push if it fails.
+- Full test / build / check:ci chạy trên GitHub CI (job `check`, `test`, `build`). Không push tiếp khi CI của nhánh đang đỏ.
 
 ### 4. Rebase First Conflict Resolution
 
@@ -62,7 +63,7 @@ Source of truth for this repo (`./erp-api`).
 - MUST use bun/bunx exclusively (do NOT use npm)
 - evidence-first
 - before commit/push, `cd` into the repo root (`./erp-api`)
-- **Strict Git Workflow**: You MUST follow the exact commit/push sequence defined below (pull -> build -> check:ci -> test -> commit -> push).
+- **Strict Git Workflow**: You MUST follow the exact commit/push sequence defined below (test -> commit -> pull --rebase -> check:ci -> push, theo `erp-git-workflow`).
 - push this repo with `github-industries`
 - when debugging localhost, remember to run `bun start:dev` on port 10010 and use the admin account `admin@liouni.com` (mật khẩu lấy từ kênh bảo mật của team, không ghi vào repo)
 - by default, work on the `DATABASE_URL` in `.env` (master; luôn đọc `.env` để xác nhận DB thực tế); use the matching `.env.<tenant>-<stage>` file (greenway/klotus) only when explicitly indicated; scripts must take the env file explicitly (a bare `.env` may point at a production DB)
@@ -76,7 +77,7 @@ Source of truth for this repo (`./erp-api`).
 
 ---
 
-## Liouni ERP API Rules
+## ERP API Rules
 
 ### Git Workflow Mandates
 
@@ -84,10 +85,7 @@ Source of truth for this repo (`./erp-api`).
 
 2. When asked to **commit code**, you MUST execute the following in order:
    - Ensure current branch is `erp-master`
-   - `bun run build`
-   - `bun run check:ci`
-   - `bun run test` (or `bunx jest --forceExit`)
-   - `git commit`
+   - `git commit` (pre-commit tự chạy lint-staged và `jest --findRelatedTests` trên file staged; không chạy full test thủ công)
 
 3. When asked to **pull code**, you MUST execute the following in order:
    - If there are uncommitted changes, you MUST execute the full **commit code** sequence first.
@@ -96,10 +94,7 @@ Source of truth for this repo (`./erp-api`).
 4. When asked to **push code**, you MUST execute the following in order:
    - If there are uncommitted changes, you MUST execute the full **commit code** sequence first.
    - `git pull --rebase github-industries erp-master` (and resolve conflicts if any)
-   - `bun run build`
-   - `bun run check:ci`
-   - `bun run test` (or `bunx jest --forceExit`)
-   - `git push github-industries erp-master`
+   - `git push github-industries erp-master` (pre-push chạy `bun run type:check`; full test/build/check:ci chạy trên GitHub CI, theo dõi CI sau khi push)
 
 5. When asked to **sync/deploy to downstream branches** (`erp-greenway-production`, `erp-greenway-staging`, `erp-klotus-*`):
    - First ensure `erp-master` is committed, tested, and pushed to `github-industries erp-master`.
@@ -110,7 +105,7 @@ Source of truth for this repo (`./erp-api`).
 
 ### Required behavior
 
-- load `@.agents/skills/liouni-erp-api-current-truth/SKILL.md`
+- load `@.agents/skills/erp-api-truth/SKILL.md`
 - use repo-local context as default guidance
 - MUST use bun/bunx exclusively (do NOT use npm)
 - when debugging and testing API locally, always start dev on port 10010
@@ -126,7 +121,7 @@ Source of truth for this repo (`./erp-api`).
 - always check branch 1st when push. All modifications must be developed and pushed on `erp-master` 1st, then merged/synced downstream to other branches.
 - reuse existing components/modules/services/DTOs/helpers/utils/functions first
 - extend/adapt before duplicating
-- manage all task execution, planning, and verification in Antigravity Brain (`implementation_plan.md` -> `walkthrough.md`)
+- plan trình trong hội thoại và chờ `OK`; theo dõi task trên Plane (project KINDU) bằng skill `plane-work-items`. Antigravity Brain chỉ là bản phụ.
 - keep task checklist updated in realtime
 - if task status in docs drifts from code reality, verify by code + build/test + git state before correcting the artifact
 

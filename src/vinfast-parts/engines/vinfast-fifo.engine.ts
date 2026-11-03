@@ -17,28 +17,90 @@ export interface LedgerEntryForFifo {
   licensePlate?: string;
   calculatedCogs?: number | null;
   calculatedUnitCost?: number | null;
+  balanceQty?: number;
+  balanceValue?: number;
+  shortageQty?: number;
   [key: string]: any;
 }
 
+export interface FifoEntryMetrics {
+  cogs: number | null;
+  shortageQty: number;
+  balanceQty: number;
+  balanceValue: number;
+}
+
+export interface FifoRunResult {
+  unitRows: FifoUnitRow[];
+  /** Số liệu theo từng dòng, cùng thứ tự với `entries`. */
+  metrics: FifoEntryMetrics[];
+}
+
+/** Số lượng có dấu: điều chỉnh đảo chiều (adjSign -1) thành số âm. */
+function signedQty(row: LedgerEntryForFifo): number {
+  let qty = Number(row.qty || 0);
+  if (row.isAdjustment && row.adjSign === -1) {
+    qty = -qty;
+  }
+  return qty;
+}
+
+const EPSILON = 0.0001;
+
+function round4(value: number): number {
+  return Math.round(value * 10000) / 10000;
+}
+
 /**
- * Pure Engine tính toán ghép cặp FIFO đơn vị (Unit-level matching)
- * từ danh sách các dòng sổ cái (Ledger Entries) đã sắp xếp theo ngày.
+ * Pure Engine FIFO đơn vị: lõi mô phỏng duy nhất cho bảng kê và số liệu lũy kế.
+ *
+ * Trạng thái đơn vị:
+ * - IN_STOCK: còn trong kho, chưa bán và chưa từng bị trả.
+ * - SOLD: đã bán (có giá vốn FIFO và lợi nhuận).
+ * - RETURNED: đã bán rồi trả về kho; vẫn tính là tồn cho tới khi bán lại.
+ * - ADJUSTMENT: lô nhập bị điều chỉnh giảm.
+ * - SHORTAGE: phần xuất (hoặc đảo nhập) vượt tồn, không có giá vốn.
+ *
+ * Bất biến: balanceQty = Σ IN đã ký − Σ OUT đã ký (kể cả thiếu hàng).
  */
-export function calculateFifoUnitRows(
-  entries: LedgerEntryForFifo[],
-): FifoUnitRow[] {
+export function runFifo(entries: LedgerEntryForFifo[]): FifoRunResult {
   const unitRows: FifoUnitRow[] = [];
   let unitIndexCounter = 1;
+  // Chỉ số các đơn vị đang trong kho (IN_STOCK hoặc RETURNED), theo thứ tự FIFO
   const inQueue: number[] = [];
+  let shortageTotal = 0;
+  const metrics: FifoEntryMetrics[] = [];
+
+  const addShortage = (
+    row: LedgerEntryForFifo,
+    qty: number,
+    outPricePerUnit: number,
+  ) => {
+    shortageTotal += qty;
+    unitRows.push({
+      unitIndex: unitIndexCounter++,
+      inLedgerId: '',
+      inDate: '',
+      inInvoiceNo: '',
+      inInvoiceId: '',
+      inUnitCost: 0,
+      outLedgerId: row.id,
+      outDate: row.transactionDate,
+      outInvoiceNo: row.invoiceNo,
+      outInvoiceId: row.invoiceId,
+      licensePlate: row.licensePlate,
+      outPrice: outPricePerUnit,
+      cogsFifo: null,
+      profit: null,
+      qty: round4(qty),
+      status: 'SHORTAGE',
+    });
+  };
 
   for (const row of entries) {
-    let qty = Number(row.qty || 0);
-    let amount = Number(row.preVatAmount || 0);
-
-    if (row.isAdjustment && row.adjSign === -1) {
-      qty = -qty;
-      amount = -amount;
-    }
+    const qty = signedQty(row);
+    const amount = Number(row.preVatAmount || 0);
+    let cogs: number | null = null;
 
     if (row.direction === 'IN') {
       if (qty > 0) {
@@ -56,17 +118,16 @@ export function calculateFifoUnitRows(
         inQueue.push(unitRows.length - 1);
       } else if (qty < 0) {
         let qToReverse = Math.abs(qty);
-        while (qToReverse > 0 && inQueue.length > 0) {
+        while (qToReverse > EPSILON && inQueue.length > 0) {
           const rowIndex = inQueue[0];
           const unitRow = unitRows[rowIndex];
 
-          if (unitRow.qty! <= qToReverse + 0.0001) {
+          if (unitRow.qty! <= qToReverse + EPSILON) {
             qToReverse -= unitRow.qty!;
             unitRow.status = 'ADJUSTMENT';
             inQueue.shift();
           } else {
-            unitRow.qty =
-              Math.round((unitRow.qty! - qToReverse) * 10000) / 10000;
+            unitRow.qty = round4(unitRow.qty! - qToReverse);
             unitRows.push({
               ...unitRow,
               qty: qToReverse,
@@ -76,17 +137,22 @@ export function calculateFifoUnitRows(
             qToReverse = 0;
           }
         }
+        if (qToReverse > EPSILON) {
+          addShortage(row, qToReverse, 0);
+        }
       }
     } else if (row.direction === 'OUT') {
+      cogs = 0;
       if (qty > 0) {
-        const outPricePerUnit = qty !== 0 ? amount / qty : 0;
+        const outPricePerUnit = amount / qty;
         let qNeeded = qty;
-        while (qNeeded > 0 && inQueue.length > 0) {
+        while (qNeeded > EPSILON && inQueue.length > 0) {
           const rowIndex = inQueue[0];
           const unitRow = unitRows[rowIndex];
 
-          if (unitRow.qty! <= qNeeded + 0.0001) {
+          if (unitRow.qty! <= qNeeded + EPSILON) {
             qNeeded -= unitRow.qty!;
+            cogs += unitRow.qty! * unitRow.inUnitCost;
             unitRow.outLedgerId = row.id;
             unitRow.outDate = row.transactionDate;
             unitRow.outInvoiceNo = row.invoiceNo;
@@ -98,8 +164,9 @@ export function calculateFifoUnitRows(
             unitRow.status = 'SOLD';
             inQueue.shift();
           } else {
-            const consumed = Math.round(qNeeded * 10000) / 10000;
-            unitRow.qty = Math.round((unitRow.qty! - consumed) * 10000) / 10000;
+            const consumed = round4(qNeeded);
+            unitRow.qty = round4(unitRow.qty! - consumed);
+            cogs += consumed * unitRow.inUnitCost;
 
             unitRows.push({
               ...unitRow,
@@ -118,73 +185,110 @@ export function calculateFifoUnitRows(
             qNeeded = 0;
           }
         }
+
+        if (qNeeded > EPSILON) {
+          addShortage(row, qNeeded, outPricePerUnit);
+        }
+      } else if (qty < 0) {
+        // Hàng trả lại: đảo các lần bán gần nhất, đưa đơn vị về kho với giá vốn cũ
+        let remaining = Math.abs(qty);
+        for (let k = unitRows.length - 1; k >= 0 && remaining > EPSILON; k--) {
+          const unitRow = unitRows[k];
+          if (unitRow.status !== 'SOLD') continue;
+
+          const take = Math.min(unitRow.qty!, remaining);
+          if (take < unitRow.qty! - EPSILON) {
+            // Phần chưa trả giữ nguyên trạng thái đã bán
+            unitRows.push({
+              ...unitRow,
+              qty: round4(unitRow.qty! - take),
+              unitIndex: unitIndexCounter++,
+            });
+          }
+
+          cogs -= take * unitRow.inUnitCost;
+          unitRow.qty = take;
+          unitRow.status = 'RETURNED';
+          unitRow.returnLedgerId = row.id;
+          unitRow.returnDate = row.transactionDate;
+          unitRow.returnInvoiceNo = row.invoiceNo;
+          unitRow.outPrice = undefined;
+          unitRow.profit = undefined;
+          unitRow.cogsFifo = undefined;
+          inQueue.unshift(k);
+          remaining -= take;
+        }
+
+        if (remaining > EPSILON) {
+          // Không có lần bán để đảo: nhập lại kho với giá vốn 0 (cần đối chiếu)
+          unitRows.push({
+            unitIndex: unitIndexCounter++,
+            inLedgerId: '',
+            inDate: '',
+            inInvoiceNo: '',
+            inInvoiceId: '',
+            inUnitCost: 0,
+            qty: round4(remaining),
+            returnLedgerId: row.id,
+            returnDate: row.transactionDate,
+            returnInvoiceNo: row.invoiceNo,
+            status: 'RETURNED',
+          });
+          inQueue.unshift(unitRows.length - 1);
+        }
       }
     }
+
+    let balanceQty = -shortageTotal;
+    let balanceValue = 0;
+    for (const idx of inQueue) {
+      balanceQty += unitRows[idx].qty!;
+      balanceValue += unitRows[idx].qty! * unitRows[idx].inUnitCost;
+    }
+
+    metrics.push({
+      cogs: row.direction === 'OUT' ? round4(cogs ?? 0) : null,
+      shortageQty: round4(shortageTotal),
+      balanceQty: round4(balanceQty),
+      balanceValue: round4(balanceValue),
+    });
   }
 
-  return unitRows;
+  return { unitRows, metrics };
 }
 
 /**
- * Pure Engine tính toán giá vốn FIFO (COGS) gắn vào từng dòng lịch sử sổ cái.
+ * Bảng kê phân rã đơn vị FIFO (đầu ra cho màn hình chi tiết).
+ */
+export function calculateFifoUnitRows(
+  entries: LedgerEntryForFifo[],
+): FifoUnitRow[] {
+  return runFifo(entries).unitRows;
+}
+
+/**
+ * Gắn giá vốn FIFO và số liệu lũy kế vào từng dòng sổ cái.
+ * Dòng trả hàng (qty âm) có COGS âm bằng giá vốn của phần hàng đưa về kho.
  */
 export function calculateLedgerHistoryCogs(
   entries: LedgerEntryForFifo[],
 ): LedgerEntryForFifo[] {
-  const inQueue: { id: string; qty: number; unitCost: number }[] = [];
+  const { metrics } = runFifo(entries);
 
-  for (const row of entries) {
-    let qty = Number(row.qty || 0);
-
-    if (row.isAdjustment && row.adjSign === -1) {
-      qty = -qty;
-    }
+  entries.forEach((row, i) => {
+    const m = metrics[i];
+    const qty = signedQty(row);
 
     if (row.direction === 'IN') {
-      if (qty > 0) {
-        inQueue.push({
-          id: row.id,
-          qty,
-          unitCost: Number(row.unitCost || 0),
-        });
-      } else if (qty < 0) {
-        let qToReverse = Math.abs(qty);
-        while (qToReverse > 0 && inQueue.length > 0) {
-          const batch = inQueue[0];
-          if (batch.qty <= qToReverse) {
-            qToReverse -= batch.qty;
-            inQueue.shift();
-          } else {
-            batch.qty -= qToReverse;
-            qToReverse = 0;
-          }
-        }
-      }
       row.calculatedCogs = null;
     } else {
-      let cogsForThisOut = 0;
-      if (qty > 0) {
-        let qNeeded = qty;
-        while (qNeeded > 0) {
-          if (inQueue.length === 0) {
-            break;
-          }
-          const batch = inQueue[0];
-          if (batch.qty <= qNeeded) {
-            cogsForThisOut += batch.qty * batch.unitCost;
-            qNeeded -= batch.qty;
-            inQueue.shift();
-          } else {
-            cogsForThisOut += qNeeded * batch.unitCost;
-            batch.qty -= qNeeded;
-            qNeeded = 0;
-          }
-        }
-      }
-      row.calculatedCogs = cogsForThisOut;
-      row.calculatedUnitCost = qty !== 0 ? cogsForThisOut / qty : 0;
+      row.calculatedCogs = m.cogs;
+      row.calculatedUnitCost = qty !== 0 ? (m.cogs ?? 0) / qty : 0;
     }
-  }
+    row.balanceQty = m.balanceQty;
+    row.balanceValue = m.balanceValue;
+    row.shortageQty = m.shortageQty;
+  });
 
   return entries;
 }

@@ -1,6 +1,6 @@
 ---
 name: erp-inventory-adjustments
-description: Module tri thức Quản lý Kiểm kê & Điều chỉnh Kho trong Liouni ERP. Chứa toàn bộ database schema (erp_inventory_adjustments, erp_inventory_adjustment_lines), DTOs, API endpoints, logic sinh mã tự động DC-YYYYMMDD-XXX, tính chênh lệch thừa/thiếu và hạch toán số dư tồn kho.
+description: Module tri thức Quản lý Kiểm kê & Điều chỉnh Kho trong ERP. Chứa toàn bộ database schema (erp_inventory_adjustments, erp_inventory_adjustment_lines), DTOs, API endpoints, logic sinh mã tự động DC-YYYYMMDD-XXX, tính chênh lệch thừa/thiếu và hạch toán số dư tồn kho.
 ---
 
 # 📦 Module Tri Thức: Quản Lý Kiểm Kê & Điều Chỉnh Kho (`erp-inventory-adjustments`)

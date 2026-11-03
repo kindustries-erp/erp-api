@@ -11,6 +11,8 @@ import {
   ValidateNested,
   IsBoolean,
   IsObject,
+  IsArray,
+  ArrayUnique,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { normalizeUom } from '../helpers/uom.helper';
@@ -104,10 +106,22 @@ export class CreateErpInvoiceItemDto {
 }
 
 export class CreateErpInvoiceDto {
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: 'Chi nhánh chính (tương thích cũ). Ưu tiên dùng branchIds.',
+  })
   @IsOptional()
   @IsUUID()
   branchId?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'Nhiều chi nhánh; mảng rỗng = chưa gán chi nhánh',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsUUID('all', { each: true })
+  branchIds?: string[];
 
   @ApiProperty()
   @IsString()

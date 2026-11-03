@@ -1,7 +1,4 @@
-import {
-  getModuleFieldRegistry,
-  isBuiltinOrLegacyCode,
-} from './module-field-registry';
+import { getModuleFieldRegistry, isBuiltinCode } from './module-field-registry';
 
 describe('module-field-registry', () => {
   it('đăng ký built-in cho GARAGE_CASE', () => {
@@ -17,14 +14,11 @@ describe('module-field-registry', () => {
     expect(getModuleFieldRegistry('BOM')).toBeUndefined();
   });
 
-  it('nhận diện code built-in và legacy, không nhận custom', () => {
-    expect(isBuiltinOrLegacyCode('GARAGE_CASE', 'exclude_from_debt')).toBe(
-      true,
-    );
-    expect(isBuiltinOrLegacyCode('GARAGE_CASE', 'excludeFromReports')).toBe(
-      true,
-    );
-    expect(isBuiltinOrLegacyCode('GARAGE_CASE', 'ghi_chu_xe')).toBe(false);
-    expect(isBuiltinOrLegacyCode('BOM', 'exclude_from_debt')).toBe(false);
+  it('nhận diện code built-in (key hoặc cột), không nhận custom', () => {
+    expect(isBuiltinCode('GARAGE_CASE', 'exclude_from_debt')).toBe(true);
+    expect(isBuiltinCode('GARAGE_CASE', 'exclude_from_reports')).toBe(true);
+    expect(isBuiltinCode('GARAGE_CASE', 'excludeFromReports')).toBe(true);
+    expect(isBuiltinCode('GARAGE_CASE', 'ghi_chu_xe')).toBe(false);
+    expect(isBuiltinCode('BOM', 'exclude_from_debt')).toBe(false);
   });
 });

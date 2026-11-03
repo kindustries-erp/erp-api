@@ -1,4 +1,4 @@
 {
-  "src/**/*.ts": ["eslint --fix", "prettier --write"],
+  "src/**/*.ts": ["eslint --fix", "prettier --write", "jest --bail --findRelatedTests --passWithNoTests --forceExit"],
   "test/**/*.ts": ["eslint --fix", "prettier --write"]
 }

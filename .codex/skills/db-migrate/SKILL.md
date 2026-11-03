@@ -1,6 +1,6 @@
 ---
 name: db-migrate
-description: "Skill hỗ trợ Agent phân loại ý định (generate schema, run migrate, clone/sync data) và gọi runner TypeORM chuẩn cho dự án erp-api, kết nối PostgreSQL Dedicated/Local (db-dev.liouni.com), backup trước khi apply schema và runbook migrate Production DB."
+description: "Skill hỗ trợ Agent phân loại ý định (generate schema, run migrate, clone/sync data) và gọi runner TypeORM chuẩn cho dự án erp-api, kết nối PostgreSQL theo `DATABASE_URL` của file env đang dùng, backup trước khi apply schema và runbook migrate Production DB."
 ---
 
 <!-- GENERATED FILE - DO NOT EDIT. Nguồn canonical (skill): .agents/skills/db-migrate/SKILL.md -->

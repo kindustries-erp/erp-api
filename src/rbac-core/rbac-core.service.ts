@@ -493,6 +493,10 @@ export class RbacCoreService {
       { resource: 'garage_debts', label: 'Công nợ Garage' },
       { resource: 'garage_cashflow', label: 'Thu chi xưởng (Garage Cashflow)' },
       {
+        resource: ErpResource.GARAGE_GOODS_RECEIPTS,
+        label: 'Nhập kho Garage (Garage Goods Receipts)',
+      },
+      {
         resource: 'accounting_configs',
         label: 'Accounting Configs (Cấu hình kế toán)',
       },

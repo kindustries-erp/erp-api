@@ -190,6 +190,37 @@ export class DocumentTraceabilityService {
     const nodes: TraceabilityNodeDto[] = [];
     const userId = user?.sub || user?.id;
 
+    // Quyền chỉ phụ thuộc docType → kiểm tra mỗi docType một lần, song song
+    const permByDocType = new Map<string, boolean>();
+    if (userId) {
+      const docTypes = new Set<string>();
+      for (const [nodeId, rawNode] of rawNodesMap.entries()) {
+        if (nodeId !== rootId) docTypes.add(rawNode.docType);
+      }
+      await Promise.all(
+        [...docTypes].map(async (docType) => {
+          const allowed =
+            docType === 'BANK_TXN'
+              ? await this.rbacService.hasAnyPermission(userId, [
+                  {
+                    resource: ErpResource.BANK_STATEMENTS,
+                    action: ErpAction.READ,
+                  },
+                  {
+                    resource: ErpResource.CASH_STATEMENTS,
+                    action: ErpAction.READ,
+                  },
+                ])
+              : await this.rbacService.hasPermission(
+                  userId,
+                  this.getResourceForDocType(docType as TraceabilityNodeType),
+                  ErpAction.READ,
+                );
+          permByDocType.set(docType, allowed);
+        }),
+      );
+    }
+
     for (const [nodeId, rawNode] of rawNodesMap.entries()) {
       const requiredResource = this.getResourceForDocType(rawNode.docType);
       const isCurrent = nodeId === rootId;
@@ -197,18 +228,7 @@ export class DocumentTraceabilityService {
       // Root node permission is already guaranteed by Controller Guard
       let hasPerm = isCurrent;
       if (!hasPerm && userId) {
-        if (rawNode.docType === 'BANK_TXN') {
-          hasPerm = await this.rbacService.hasAnyPermission(userId, [
-            { resource: ErpResource.BANK_STATEMENTS, action: ErpAction.READ },
-            { resource: ErpResource.CASH_STATEMENTS, action: ErpAction.READ },
-          ]);
-        } else {
-          hasPerm = await this.rbacService.hasPermission(
-            userId,
-            requiredResource,
-            ErpAction.READ,
-          );
-        }
+        hasPerm = permByDocType.get(rawNode.docType) ?? false;
       } else if (!hasPerm && !userId) {
         // Fallback for unauthenticated/system tasks
         hasPerm = true;

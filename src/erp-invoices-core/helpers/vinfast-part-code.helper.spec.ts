@@ -5,6 +5,15 @@ import {
   normalizePrefix,
 } from './vinfast-part-code.helper';
 
+const VINFAST_SELLER = {
+  sellerName: 'CÔNG TY CỔ PHẦN VINFAST VIỆT NAM',
+  sellerTaxCode: '0202357718',
+};
+const MEGA_SELLER = {
+  sellerName: 'CÔNG TY TNHH MM MEGA MARKET (VIỆT NAM)',
+  sellerTaxCode: '0302249586',
+};
+
 describe('VinFast Part Code & Standard Prefix Item Code Extraction', () => {
   describe('extractVinfastItemCode', () => {
     it('extracts standard VinFast 3-letter + 8-digit codes with VF- prefix', () => {
@@ -232,6 +241,137 @@ describe('VinFast Part Code & Standard Prefix Item Code Extraction', () => {
         unit: 'ream',
       });
       expect(resPaper.itemCode).toBe('HC-VPP');
+    });
+  });
+
+  describe('context-aware rules (chiều hóa đơn, đơn vị tính, người bán)', () => {
+    it('maps labour lines (unit công) with a numeric code to DV-SUACHUA, not VF-', () => {
+      const res = extractStandardItemCode({
+        description: '99400103 KIỂM TRA VÀ THAY THẾ GIOĂNG CÁP CAO ÁP XE VF8',
+        unit: 'Công',
+        direction: 'OUT',
+        itemCode: '99400103',
+        sellerName: 'CÔNG TY CỔ PHẦN GREENWAY AUTOMOTIVES',
+        sellerTaxCode: '0318334886',
+      });
+      expect(res.itemCode).toBe('DV-SUACHUA');
+    });
+
+    it('maps repair orders (SỬA XE ... QT ...) to DV-SUACHUA even with a code-like number', () => {
+      const res = extractStandardItemCode({
+        description: 'SỬA XE 50H74325 QT S52801-WO-260828-0018',
+        unit: '',
+        direction: 'OUT',
+      });
+      expect(res.itemCode).toBe('DV-SUACHUA');
+    });
+
+    it('maps rescue charges to DV-CUUHO, not a VinFast part from a chassis-like string', () => {
+      const res = extractStandardItemCode({
+        description: 'Chi phí cứu hộ xe 60H37753 RLLVFPNTXSH853466 2512',
+        unit: 'Lần',
+        direction: 'OUT',
+      });
+      expect(res.itemCode).toBe('DV-CUUHO');
+    });
+
+    it('prefers the real part code in the description over the warranty motor rule', () => {
+      expect(
+        extractVinfastItemCode(
+          'Tên hàng hóa dịch vụ:PWT64093000AB - Động cơ điện - Thay thế động cơ bảo hành xe',
+          { direction: 'OUT' },
+        ),
+      ).toBe('VF-PWT64093000AB');
+    });
+
+    it('falls back to the warranty motor code only when no real code is in the description', () => {
+      expect(
+        extractVinfastItemCode('Động cơ điện - thay thế động cơ bảo hành', {
+          direction: 'OUT',
+        }),
+      ).toBe('VF-PVT20030000');
+    });
+
+    it('does not turn a numeric code into VF- when the line unit is labour', () => {
+      expect(
+        extractVinfastItemCode('50103501 THAY THẾ BÌNH ẮC QUY 12V', {
+          unit: 'CÔNG',
+          direction: 'OUT',
+        }),
+      ).toBeNull();
+    });
+
+    it('does not take a vehicle/serial-like code from a purchase invoice of a non-VinFast seller', () => {
+      expect(
+        extractVinfastItemCode('- Số máy: DJK086892', {
+          direction: 'IN',
+          ...MEGA_SELLER,
+        }),
+      ).toBeNull();
+    });
+
+    it('keeps a numeric code as VF- only for a VinFast seller, otherwise PT-', () => {
+      expect(
+        normalizePrefix('187877', 'PARTS', { direction: 'IN', ...MEGA_SELLER }),
+      ).toBe('PT-187877');
+      expect(
+        normalizePrefix('106206', 'PARTS', {
+          direction: 'IN',
+          ...VINFAST_SELLER,
+        }),
+      ).toBe('VF-106206');
+    });
+
+    it('keeps the legacy behaviour when no context is passed', () => {
+      expect(normalizePrefix('106206')).toBe('VF-106206');
+      expect(extractVinfastItemCode('106206 - Đệm cao su')).toBe('VF-106206');
+    });
+  });
+
+  describe('part adjustment lines keep the VinFast part code', () => {
+    it('does not map a negative-amount part adjustment to a discount code', () => {
+      const res = extractStandardItemCode({
+        description:
+          'Điều chỉnh giảm số lượng,giảm thành tiền của hàng hóa dịch vụ: BEX73060301AC TẤM ỐP',
+        unit: 'CHIẾC',
+        direction: 'OUT',
+        preVatAmount: -282334,
+        discountAmount: 0,
+      });
+      expect(res.itemCode).toBe('VF-BEX73060301AC');
+    });
+
+    it('still maps a real discount line (chiết khấu) to a discount code', () => {
+      const res = extractStandardItemCode({
+        description: 'Chiết khấu thương mại',
+        unit: '',
+        direction: 'OUT',
+        preVatAmount: -100000,
+      });
+      expect(res.itemCode).toBe('CK-THUONGMAI');
+    });
+  });
+
+  describe('long VinFast suffixes and negative part lines', () => {
+    it('keeps a 5-character suffix code (BIN73044011AABKB) from a VinFast seller', () => {
+      expect(
+        extractVinfastItemCode('BIN73044011AABKB - ASM_ARMREST_DR_TRIM_RR_RH', {
+          direction: 'IN',
+          ...VINFAST_SELLER,
+        }),
+      ).toBe('VF-BIN73044011AABKB');
+    });
+
+    it('keeps a negative purchase line with an explicit part code as the part, not a discount', () => {
+      const res = extractStandardItemCode({
+        description: 'CHS20000812AA - RIGHT_FRONT_SHOCK_ABSORBER_BODY_ASSY',
+        unit: 'CHIẾC',
+        direction: 'IN',
+        preVatAmount: -100000,
+        discountAmount: 0,
+        ...VINFAST_SELLER,
+      });
+      expect(res.itemCode).toBe('VF-CHS20000812AA');
     });
   });
 });

@@ -234,19 +234,12 @@ export class InvoiceCategoryAutopostService {
 
     // 3. Nếu hóa đơn CHƯA POST -> Tạo mới Journal Entry
     // Đảm bảo có branchId
-    if (!invoice.branchId) {
-      const branches: { id: string }[] = await this.invoiceRepo.manager.query(
-        `SELECT id FROM erp_branches WHERE is_deleted = false LIMIT 1`,
-      );
-      if (branches.length > 0) {
-        invoice.branchId = branches[0].id;
-        await this.invoiceRepo.save(invoice);
-      } else {
-        throw new BadRequestException(
-          'Hóa đơn chưa có chi nhánh để hạch toán.',
-        );
-      }
-    }
+    // Chưa có chi nhánh vẫn hạch toán (bút toán branch NULL); gán chi nhánh sau sẽ tái phân bổ
+    const branchIds = invoice.branchIds?.length
+      ? invoice.branchIds
+      : invoice.branchId
+        ? [invoice.branchId]
+        : [];
 
     const preVat = Math.round(Number(invoice.preVatAmount || 0) * 100) / 100;
     const vat = Math.round(Number(invoice.vatAmount || 0) * 100) / 100;
@@ -280,30 +273,31 @@ export class InvoiceCategoryAutopostService {
       ? new Date(invoice.invoiceDate)
       : new Date();
 
-    const journalEntry = await this.accountingCoreService.createJournalEntry({
-      branchId: invoice.branchId,
-      date: postingDate,
-      documentDate: postingDate,
-      reference: invoiceRef,
-      description: withFallbackMarker(
-        `${invoiceRef}_${defaultDesc}`,
-        resolution.isFallback,
-        options?.fallbackReason,
-      ),
-      subjectName: invoice.sellerName || undefined,
-      sourceType: 'INVOICE',
-      sourceId: invoice.id,
-      entryNoPrefix,
-      lines,
-    });
+    const journalEntry =
+      await this.accountingCoreService.createJournalEntriesForBranches({
+        branchIds,
+        date: postingDate,
+        documentDate: postingDate,
+        reference: invoiceRef,
+        description: withFallbackMarker(
+          `${invoiceRef}_${defaultDesc}`,
+          resolution.isFallback,
+          options?.fallbackReason,
+        ),
+        subjectName: invoice.sellerName || undefined,
+        sourceType: 'INVOICE',
+        sourceId: invoice.id,
+        entryNoPrefix,
+        lines,
+      });
 
     invoice.postingStatus = 'POSTED';
     invoice.postingDate = postingDate.toISOString().slice(0, 10);
-    invoice.journalEntryId = journalEntry.id;
+    invoice.journalEntryId = journalEntry?.id ?? null;
     await this.invoiceRepo.save(invoice);
 
     this.logger.log(
-      `Auto-posted Invoice ${invoice.invoiceNo} -> JE ${journalEntry.entryNo} (Debit ${resolution.debitAccountCode} / Credit 331)`,
+      `Auto-posted Invoice ${invoice.invoiceNo} -> JE ${journalEntry?.entryNo} (Debit ${resolution.debitAccountCode} / Credit 331)`,
     );
 
     return invoice;

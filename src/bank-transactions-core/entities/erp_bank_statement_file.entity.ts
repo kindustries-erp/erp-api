@@ -15,8 +15,8 @@ export class ErpBankStatementFile {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'branch_id', type: 'uuid' })
-  branchId: string;
+  @Column({ name: 'branch_id', type: 'uuid', nullable: true })
+  branchId: string | null;
 
   @Column({ name: 'bank_account_id', type: 'uuid', nullable: true })
   bankAccountId: string | null;

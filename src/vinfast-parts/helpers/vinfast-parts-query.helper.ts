@@ -68,3 +68,23 @@ export function buildRawColumnFilterSql(
   const sql = ` AND (${conditions.join(' OR ')})`;
   return { sql, nextIndex: idx };
 }
+
+/**
+ * Cột được phép sắp xếp. Map sang biểu thức SQL cố định để tránh nối chuỗi người dùng vào ORDER BY.
+ */
+const STOCK_SORTABLE_COLUMNS: Record<string, string> = {
+  sku: 'c.sku',
+  name: 'c.name',
+  uom: 'c.uom',
+  qtyIn: '"qtyIn"',
+  qtyOut: '"qtyOut"',
+  qtyBalance: '"qtyBalance"',
+};
+
+export function toStockOrderClause(
+  field: string,
+  dir: 'ASC' | 'DESC',
+): string | null {
+  const column = STOCK_SORTABLE_COLUMNS[field];
+  return column ? `${column} ${dir}` : null;
+}

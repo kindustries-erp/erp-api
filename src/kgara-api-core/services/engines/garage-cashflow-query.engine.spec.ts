@@ -139,4 +139,30 @@ describe('GarageCashflowQueryEngine', () => {
       expect(result.data[0]).toHaveProperty('transDate', '2026-10-12');
     });
   });
+
+  describe('listVouchers - Tab & Forecast Filtering', () => {
+    it('applies forecast filter when tab is forecast', async () => {
+      await engine.listVouchers({ tab: 'forecast' });
+
+      expect(qb.andWhere).toHaveBeenCalledWith(
+        "( (voucher.voucher_type = 'RECEIPT' AND voucher.payment_status = 'EXPECTED') OR (voucher.voucher_type = 'PAYMENT' AND voucher.payment_status IN ('PENDING', 'APPROVED')) )",
+      );
+    });
+
+    it('applies actual filter when tab is vouchers', async () => {
+      await engine.listVouchers({ tab: 'vouchers' });
+
+      expect(qb.andWhere).toHaveBeenCalledWith(
+        "( (voucher.voucher_type = 'RECEIPT' AND (voucher.payment_status IS NULL OR voucher.payment_status NOT IN ('EXPECTED', 'CANCELLED'))) OR (voucher.voucher_type = 'PAYMENT' AND (voucher.payment_status IS NULL OR voucher.payment_status = 'PAID')) )",
+      );
+    });
+
+    it('does not apply tab filter when tab is all or undefined', async () => {
+      await engine.listVouchers({});
+
+      const calls = qb.andWhere.mock.calls;
+      const hasTabClause = calls.some((c: any[]) => c[0]?.includes('EXPECTED'));
+      expect(hasTabClause).toBe(false);
+    });
+  });
 });

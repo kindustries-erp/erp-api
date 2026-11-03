@@ -58,7 +58,8 @@ export class KgaraCaseServicesQueryService {
         'c.hd_phieu_dich_vu_id = srv.hd_phieu_dich_vu_id',
       )
       .leftJoin(KgaraBranch, 'b', 'b.external_id = c.branch_external_id')
-      .where('c.kgara_deleted_at IS NULL');
+      .where('c.kgara_deleted_at IS NULL')
+      .andWhere('srv.deleted_at IS NULL');
 
     if (
       params.branchId &&
@@ -400,7 +401,8 @@ export class KgaraCaseServicesQueryService {
         'c',
         'c.hd_phieu_dich_vu_id = srv.hd_phieu_dich_vu_id',
       )
-      .where('c.kgara_deleted_at IS NULL');
+      .where('c.kgara_deleted_at IS NULL')
+      .andWhere('srv.deleted_at IS NULL');
 
     if (
       branchId &&

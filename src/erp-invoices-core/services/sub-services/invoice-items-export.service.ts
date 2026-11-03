@@ -23,8 +23,8 @@ export class InvoiceItemsExportService {
     });
 
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'Liouni ERP';
-    workbook.lastModifiedBy = 'Liouni ERP';
+    workbook.creator = 'ERP';
+    workbook.lastModifiedBy = 'ERP';
     workbook.created = new Date();
 
     const sheetName =

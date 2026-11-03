@@ -8,6 +8,7 @@ import { InvoicePartnerType } from '../dto/get-invoice-debts.dto';
 import { InvoiceDebtsQueryService } from './sub-services/invoice-debts-query.service';
 import { InvoiceDebtsDetailService } from './sub-services/invoice-debts-detail.service';
 import { InvoiceDebtsExportService } from './sub-services/invoice-debts-export.service';
+import { InvoiceDebtsNetOffService } from './sub-services/invoice-debts-net-off.service';
 
 describe('InvoiceDebtsService', () => {
   let service: InvoiceDebtsService;
@@ -26,6 +27,7 @@ describe('InvoiceDebtsService', () => {
         InvoiceDebtsQueryService,
         InvoiceDebtsDetailService,
         InvoiceDebtsExportService,
+        { provide: InvoiceDebtsNetOffService, useValue: {} },
         {
           provide: getRepositoryToken(ErpInvoice),
           useValue: mockInvoiceRepo,

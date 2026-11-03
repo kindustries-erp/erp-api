@@ -7,7 +7,7 @@ description: Module tri thức Đối tác (Khách hàng & Nhà cung cấp) phí
 
 ## 1. Phạm vi
 
-- Route: `/api/v1/business-partners`. Quyền: `ErpResource.BUSINESS_PARTNERS` (`business_partners`) với READ, CREATE, UPDATE, DELETE.
+- Route chính: `/api/v2/business-partners`; alias `/api/v1/business-partners` giữ cho web V1 (một `@Controller` hai path, spec `erp-business-partner.routes.spec.ts`). Quyền: `ErpResource.BUSINESS_PARTNERS` (`business_partners`) với READ, CREATE, UPDATE, DELETE.
 - Phân loại bằng `partnerType`: `CUSTOMER` (khách hàng) hoặc `VENDOR` (nhà cung cấp). Loại khác được chấp nhận và sinh mã tiền tố `DT-`.
 - Xóa là xóa mềm (`isDeleted`). Không có audit log, không có khóa bi quan (không có số dư).
 - Web tiêu thụ: V1 `src/modules/business-partners-core`, `src/modules/partners`, PO drawers; V2 `src/v2/modules/business-partners` (xem skill `business-partners` của erp-web).
@@ -27,10 +27,14 @@ src/v2/business-partners-core/
 │   └── erp-business-partner-code.helper.ts (+ .spec)  # sinh mã, chuẩn hóa mã (hàm thuần)
 └── services/
     ├── erp-business-partner-query.service.ts (+ .spec) # lọc, sắp xếp, tổng, column-options, mã đã dùng
-    └── erp-business-partner-command.service.ts (+ .spec) # kiểm tra trùng mã, create/update/softDelete
+    ├── erp-business-partner-command.service.ts (+ .spec) # kiểm tra trùng mã và MST, create/update/softDelete
+    ├── erp-business-partner-invoice-sync.service.ts (+ .spec) # đồng bộ đối tác từ hóa đơn (1 MST = 1 đối tác), ensureFromInvoiceKey
+    └── erp-business-partner-options.service.ts (+ .spec) # danh sách chọn đối tượng cho sao kê (danh mục + người mua/bán chưa có)
 ```
 
-Sinh bằng `api-module-v2` (xem skill `api-v2-refactor`, mục 3b về chuyển module cũ).
+Helper khóa dùng chung (ngoài module): `src/common/utils/invoice-partner-key.util.ts` (MST/CCCD, biểu thức SQL tên/MST từ hóa đơn; công nợ và đồng bộ dùng chung).
+
+Sinh bằng `api-module-v2` (xem skill `erp-api-structure`, mục 3b về chuyển module cũ).
 
 ## 3. Schema (đã xác minh đối chiếu với DB, chỉ đọc)
 
@@ -49,6 +53,8 @@ Index unique trên `code` chỉ áp dụng cho bản ghi chưa xóa mềm (parti
 | `POST /` | `{ message: 'Tạo thành công', data }` |
 | `PATCH /:id` | `{ message: 'Cập nhật thành công', data }` |
 | `DELETE /:id` | `{ message: 'Xóa thành công', data }` (xóa mềm) |
+| `GET /options?direction=IN\|OUT&search&page&pageSize` | `{ items: [{partnerId, code, name, taxCode, partnerType, source: MASTER\|INVOICE}], total, page, pageSize, totalPages }`. Quyền: một trong `business_partners`, `bank_statements`, `cash_statements` (READ). `OUT` = khách hàng (tiền thu), `IN` = NCC (tiền chi) |
+| `POST /sync-from-invoices` | Body `{ dryRun?: boolean }` → `{ message, dryRun, count, items: [{taxCode, name, address, partnerType}] }`. Tạo đối tác cho từng MST còn thiếu (1 MST = 1 đối tác, loại theo chiều có nhiều hóa đơn hơn, hòa → CUSTOMER). Chạy lại không tạo trùng. Quyền: `business_partners` CREATE |
 
 - `data` là response DTO: `id, code, name, displayName, partnerType, taxCode, phone, email, address, contactName, status, notes, createdAt, updatedAt`. Không có `isDeleted` (V1 có trả trường này).
 - `summaries` là `{}` vì BP không có cột số. Web tự đặt `summaries.code = total` cho ô đếm.
@@ -68,9 +74,17 @@ Index unique trên `code` chỉ áp dụng cho bản ghi chưa xóa mềm (parti
 - Khi sửa, mã rỗng hoặc chỉ có khoảng trắng thì giữ mã cũ.
 - Mã đã xóa mềm không dùng lại được (xem mục 7).
 
+### 4.3 Quy tắc MST
+
+- MST (`taxCode`) sau khi trim là khóa gom đối tác từ hóa đơn: một MST chỉ thuộc một đối tác chưa xóa mềm. Tạo/sửa trùng MST trả 400 `MST "X" đã thuộc đối tác "CODE"` (kiểm ở `ErpBusinessPartnerCommandService.assertTaxCodeAvailable`, không có ràng buộc DB).
+- Index `IDX_erp_business_partners_tax_code` (partial, `is_deleted = false`) để tra cứu khi đồng bộ.
+- Khóa tìm-hoặc-tạo từ hóa đơn (`ensureFromInvoiceKey`): có MST thì theo MST; không có MST thì theo tên (không phân biệt hoa thường, chỉ đối tác không MST).
+
 ## 5. Phụ thuộc từ module khác
 
-Entity `ErpBusinessPartner` (`src/v2/business-partners-core/entities/`) được import bởi: `sales-orders-core`, `goods-issues-core`, `goods-receipts-core`, `purchase-orders-core` (ManyToOne `supplier`), `operating-expenses-core` (ManyToOne `supplier`), `public-warranty`, `basic-masters-core`, `db/data-source.ts`, và các script seed. Không module nào inject `BusinessPartnersCoreService`.
+Entity `ErpBusinessPartner` (`src/v2/business-partners-core/entities/`) được import bởi: `sales-orders-core`, `goods-issues-core`, `goods-receipts-core`, `purchase-orders-core` (ManyToOne `supplier`), `operating-expenses-core` (ManyToOne `supplier`), `public-warranty`, `basic-masters-core`, `bank-transactions-core` (ManyToOne `partner` trên `erp_bank_transactions.partner_id`, `ON DELETE SET NULL`), `db/data-source.ts`, và các script seed.
+
+Module nhận `BusinessPartnersCoreService` (export từ `BusinessPartnersCoreModule`): `bank-transactions-core` (gọi `ensurePartnerForInvoiceKey` khi gán đối tượng từ hóa đơn, và `listOptions` cho danh sách chọn).
 
 Đổi tên hoặc đổi cột entity sẽ ảnh hưởng tất cả các module trên.
 
@@ -91,5 +105,5 @@ bunx eslint "src/v2/business-partners-core/**/*.ts" --max-warnings=0
 
 ## 8. Liên quan
 
-- Skill tổng: `api-v2-refactor` (hợp đồng, bẫy, quy trình chuyển module cũ).
+- Skill tổng: `api-structure` (hợp đồng, bẫy, quy trình chuyển module cũ).
 - Web: `erp-web/.agents/skills/modules/business-partners/SKILL.md`.

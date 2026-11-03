@@ -6,7 +6,9 @@ import { VINFAST_CAR_PART_CODES } from '../../reports-core/vinfast-car-part-code
 import {
   buildRawMultiKeywordSql,
   buildRawColumnFilterSql,
+  toStockOrderClause,
 } from '../helpers/vinfast-parts-query.helper';
+import { VINFAST_VALID_LEDGER_SUBQUERY_SQL } from '../helpers/vinfast-ledger-rules.helper';
 
 @Injectable()
 export class VinfastPartsStockService {
@@ -180,25 +182,26 @@ export class VinfastPartsStockService {
       try {
         const parsedSorts = JSON.parse(sorts) as string[];
         if (Array.isArray(parsedSorts) && parsedSorts.length > 0) {
-          const sortClauses = parsedSorts.map((s) => {
-            const isDesc = s.startsWith('-');
-            const field = isDesc ? s.substring(1) : s;
-            const dir = isDesc ? 'DESC' : 'ASC';
-            if (['qtyIn', 'qtyOut', 'qtyBalance'].includes(field)) {
-              return `"${field}" ${dir}`;
-            }
-            return `c.${field} ${dir}`;
-          });
-          orderSql = `ORDER BY ${sortClauses.join(', ')}`;
+          const sortClauses = parsedSorts
+            .map((s) => {
+              const isDesc = s.startsWith('-');
+              return toStockOrderClause(
+                isDesc ? s.substring(1) : s,
+                isDesc ? 'DESC' : 'ASC',
+              );
+            })
+            .filter((clause): clause is string => clause !== null);
+          if (sortClauses.length > 0) {
+            orderSql = `ORDER BY ${sortClauses.join(', ')}`;
+          }
         }
       } catch (e) {}
     } else if (sortBy) {
-      const dir = (sortDir || 'ASC').toUpperCase();
-      if (['qtyIn', 'qtyOut', 'qtyBalance'].includes(sortBy)) {
-        orderSql = `ORDER BY "${sortBy}" ${dir}`;
-      } else {
-        orderSql = `ORDER BY c.${sortBy} ${dir}`;
-      }
+      const clause = toStockOrderClause(
+        sortBy,
+        (sortDir || 'ASC').toUpperCase() === 'DESC' ? 'DESC' : 'ASC',
+      );
+      if (clause) orderSql = `ORDER BY ${clause}`;
     }
 
     const baseQuery = `
@@ -213,7 +216,7 @@ export class VinfastPartsStockService {
           COALESCE(SUM(CASE WHEN l.direction = 'OUT' THEN l.qty ELSE 0 END), 0) as "qtyOut",
           (COALESCE(SUM(CASE WHEN l.direction = 'IN' THEN l.qty ELSE 0 END), 0) - COALESCE(SUM(CASE WHEN l.direction = 'OUT' THEN l.qty ELSE 0 END), 0)) as "qtyBalance"
         FROM vinfast_parts_catalog c
-        LEFT JOIN vinfast_parts_ledger l ON l.part_sku = c.sku
+        LEFT JOIN ${VINFAST_VALID_LEDGER_SUBQUERY_SQL} l ON l.part_sku = c.sku
         WHERE c.is_service = false ${vehicleTypeFilter} ${searchFilter} ${cSearchFilter} ${cFiltersSql}
         GROUP BY c.sku, c.name, c.uom, c.is_service
       )
@@ -457,7 +460,7 @@ export class VinfastPartsStockService {
           COALESCE(SUM(CASE WHEN l.direction = 'OUT' THEN l.qty ELSE 0 END), 0) as "qtyOut",
           (COALESCE(SUM(CASE WHEN l.direction = 'IN' THEN l.qty ELSE 0 END), 0) - COALESCE(SUM(CASE WHEN l.direction = 'OUT' THEN l.qty ELSE 0 END), 0)) as "qtyBalance"
         FROM vinfast_parts_catalog c
-        LEFT JOIN vinfast_parts_ledger l ON l.part_sku = c.sku
+        LEFT JOIN ${VINFAST_VALID_LEDGER_SUBQUERY_SQL} l ON l.part_sku = c.sku
         WHERE c.is_service = false ${vehicleTypeFilter} ${cFiltersSql} ${searchSql}
         GROUP BY c.sku, c.name, c.uom, c.is_service
       )

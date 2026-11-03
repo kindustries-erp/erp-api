@@ -34,6 +34,10 @@ export class ErpBusinessPartner {
   @Column({ type: 'varchar', length: 255, name: 'partner_type' })
   partnerType: string;
 
+  // Tra cứu theo MST khi đồng bộ từ hóa đơn; không ràng buộc duy nhất ở DB (kiểm ở service)
+  @Index('IDX_erp_business_partners_tax_code', ['taxCode'], {
+    where: '"is_deleted" = false',
+  })
   @Column({ type: 'varchar', length: 255, name: 'tax_code', nullable: true })
   taxCode: string | null;
 

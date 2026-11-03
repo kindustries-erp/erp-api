@@ -28,7 +28,6 @@ import {
   type BucketUnit,
   type DateBasis,
 } from './garage-cases-dashboard-data.helper';
-import { COMPLETED_CASES_COLUMNS } from './kgara-excel-style.helper';
 import {
   SHEET1_FIRST_DATA_ROW,
   SHEET1_NAME,
@@ -78,66 +77,56 @@ export function buildCasesDashboard(
   summary: Sheet1Summary,
   meta: CasesDashboardMeta,
 ): XlsxChartSpec[] {
-  const { rows, sums } = summary;
+  const { rows, sums, columns } = summary;
   const sheetRef = `'${SHEET1_NAME}'`;
   const lastRow = SHEET1_FIRST_DATA_ROW + Math.max(rows.length, 1) - 1;
-  const col = (key: string) => {
-    const letter = columnLetter(
-      COMPLETED_CASES_COLUMNS.findIndex((c) => c.key === key) + 1,
-    );
+  /** Vùng dữ liệu cột trên Sheet 1; null nếu cột không được chọn khi xuất. */
+  const colRange = (key: string): string | null => {
+    const idx = columns.findIndex((c) => c.key === key);
+    if (idx < 0) return null;
+    const letter = columnLetter(idx + 1);
     return `${sheetRef}!${letter}${SHEET1_FIRST_DATA_ROW}:${letter}${lastRow}`;
+  };
+  /** KPI SUM tham chiếu Sheet 1; thiếu cột thì giữ giá trị tính sẵn. */
+  const sumKpi = (key: string, result: number) => {
+    const range = colRange(key);
+    return range ? { formula: `SUM(${range})`, result } : result;
   };
 
   const revenue = sums.doanhThu ?? 0;
   const profit = sums.loiNhuan ?? 0;
+  const revenueRange = colRange('doanhThu');
+  const profitRange = colRange('loiNhuan');
+  const marginKpi =
+    revenueRange && profitRange
+      ? {
+          formula: `IF(SUM(${revenueRange})>0,SUM(${profitRange})/SUM(${revenueRange}),0)`,
+          result: revenue > 0 ? profit / revenue : 0,
+        }
+      : revenue > 0
+        ? profit / revenue
+        : 0;
   const kpis: DashboardKpi[] = [
     { label: 'SỐ PHIẾU DỊCH VỤ', value: rows.length },
-    {
-      label: 'DOANH THU',
-      value: { formula: `SUM(${col('doanhThu')})`, result: revenue },
-    },
-    {
-      label: 'CHI PHÍ',
-      value: { formula: `SUM(${col('chiPhi')})`, result: sums.chiPhi ?? 0 },
-    },
-    {
-      label: 'LỢI NHUẬN',
-      value: { formula: `SUM(${col('loiNhuan')})`, result: profit },
-    },
+    { label: 'DOANH THU', value: sumKpi('doanhThu', revenue) },
+    { label: 'CHI PHÍ', value: sumKpi('chiPhi', sums.chiPhi ?? 0) },
+    { label: 'LỢI NHUẬN', value: sumKpi('loiNhuan', profit) },
     {
       label: 'BIÊN LỢI NHUẬN',
-      value: {
-        formula: `IF(SUM(${col('doanhThu')})>0,SUM(${col('loiNhuan')})/SUM(${col('doanhThu')}),0)`,
-        result: revenue > 0 ? profit / revenue : 0,
-      },
+      value: marginKpi,
       numFmt: '0.0%',
     },
-    {
-      label: 'ĐÃ THU',
-      value: { formula: `SUM(${col('daThu')})`, result: sums.daThu ?? 0 },
-    },
-    {
-      label: 'DỰ THU',
-      value: { formula: `SUM(${col('duThu')})`, result: sums.duThu ?? 0 },
-    },
+    { label: 'ĐÃ THU', value: sumKpi('daThu', sums.daThu ?? 0) },
+    { label: 'DỰ THU', value: sumKpi('duThu', sums.duThu ?? 0) },
     {
       label: 'CÒN PHẢI THU',
-      value: {
-        formula: `SUM(${col('conPhaiThu')})`,
-        result: sums.conPhaiThu ?? 0,
-      },
+      value: sumKpi('conPhaiThu', sums.conPhaiThu ?? 0),
     },
     {
       label: 'CÒN PHẢI TRẢ',
-      value: {
-        formula: `SUM(${col('conPhaiTra')})`,
-        result: sums.conPhaiTra ?? 0,
-      },
+      value: sumKpi('conPhaiTra', sums.conPhaiTra ?? 0),
     },
-    {
-      label: 'DỰ CHI',
-      value: { formula: `SUM(${col('duChi')})`, result: sums.duChi ?? 0 },
-    },
+    { label: 'DỰ CHI', value: sumKpi('duChi', sums.duChi ?? 0) },
   ];
 
   const period =

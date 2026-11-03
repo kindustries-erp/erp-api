@@ -7,7 +7,7 @@ description: Module tri thức Quản lý Đơn bán hàng (Sales Orders) trong 
 
 ## 1. Tổng quan Nghiệp vụ
 
-Module `sales-orders-core` chịu trách nhiệm quản lý toàn bộ vòng đời của Đơn bán hàng (Sales Orders - SO) trong hệ thống Liouni ERP. Đây là mắt xích trung tâm kết nối giữa hoạt động thương mại bán xe/phụ tùng với phân hệ Kho (`inventory-core`), Sản xuất (`production-core`), Hóa đơn thuế (`erp-invoices-core`) và Báo cáo quản trị (`reports-core`).
+Module `sales-orders-core` chịu trách nhiệm quản lý toàn bộ vòng đời của Đơn bán hàng (Sales Orders - SO) trong hệ thống ERP. Đây là mắt xích trung tâm kết nối giữa hoạt động thương mại bán xe/phụ tùng với phân hệ Kho (`inventory-core`), Sản xuất (`production-core`), Hóa đơn thuế (`erp-invoices-core`) và Báo cáo quản trị (`reports-core`).
 
 ### 1.1. Các tính năng cốt lõi:
 - **Quản lý Đơn Bán Hàng (SO Lifecycle)**:
@@ -29,7 +29,7 @@ Module `sales-orders-core` chịu trách nhiệm quản lý toàn bộ vòng đ�
   - Kiểm tra trạng thái đơn (`DELIVERING` / `PARTIAL_DELIVERING`).
   - Ngăn chặn bypass: Bắt buộc xác nhận qua tracking serial nếu đơn hàng có thiết bị tracking đang giao.
 - **Xuất Phiếu Bán Hàng Excel (`exportXlsx`)**:
-  - Tạo file Excel chuẩn nhận diện thương hiệu Liouni/Klotus sử dụng `exceljs`.
+  - Tạo file Excel chuẩn nhận diện thương hiệu của từng tenant sử dụng `exceljs`.
   - Bao gồm thông tin công ty từ `CompanyProfileService`, chi tiết người mua, danh sách sản phẩm và các Serial đính kèm.
 
 ---

@@ -172,12 +172,12 @@ graph TD
 cd erp/erp-api && bun run type:check
 
 # Chạy unit tests cho module chi phí vận hành
-bun test src/operating-expenses-core/operating-expenses-core.service.spec.ts
-bun test src/operating-expenses-core/services/smart-account-mapping.service.spec.ts
+bunx jest src/operating-expenses-core/operating-expenses-core.service.spec.ts
+bunx jest src/operating-expenses-core/services/smart-account-mapping.service.spec.ts
 
 # Chạy unit tests cho hạch toán sao kê & hóa đơn
-bun test src/bank-transactions-core/services/transaction-accounting.service.spec.ts
-bun test src/erp-invoices-core/services/invoice-lifecycle.service.spec.ts
+bunx jest src/bank-transactions-core/services/transaction-accounting.service.spec.ts
+bunx jest src/erp-invoices-core/services/invoice-lifecycle.service.spec.ts
 ```
 
 ### Script Hạch toán Hàng loạt Dữ liệu Lịch sử (2025 - Nay)

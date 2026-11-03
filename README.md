@@ -1,4 +1,4 @@
-# Liouni ERP API (NestJS + PostgreSQL)
+# ERP API (NestJS + PostgreSQL)
 
 Backend cho lane ERP active hiện tại (`erp-master`) — thuần **PostgreSQL**, không phụ thuộc Directus runtime.
 
@@ -90,9 +90,5 @@ Theo contract canonical hiện hành trong `/opt/docs/ai/liouni-erp/` và repo-l
 bun run build                 # Type-check + compile
 bun run lint:check            # ESLint (max-warnings=0)
 bun run type:check            # tsc --noEmit
-bun test                      # Jest unit tests
+bun run test                  # Jest unit tests
 ```
-
-## 📝 Giấy phép
-
-Dự án thuộc bản quyền của **Liouni Production**.

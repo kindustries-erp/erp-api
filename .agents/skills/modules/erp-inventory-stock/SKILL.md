@@ -1,6 +1,6 @@
 ---
 name: erp-inventory-stock
-description: Module tri thức Sổ Tồn kho Thực tế & Định giá Tồn kho trong Liouni ERP. Chứa toàn bộ database schema (erp_inventory_balances), công thức tính tồn khả dụng, giá vốn bình quân gia quyền (avgUnitCost), khóa bi quan (pessimistic_write) chống race condition và xuất Excel tồn kho.
+description: Module tri thức Sổ Tồn kho Thực tế & Định giá Tồn kho trong ERP. Chứa toàn bộ database schema (erp_inventory_balances), công thức tính tồn khả dụng, giá vốn bình quân gia quyền (avgUnitCost), khóa bi quan (pessimistic_write) chống race condition và xuất Excel tồn kho.
 ---
 
 # 📦 Module Tri Thức: Sổ Tồn Kho & Định Giá Tồn Kho (`erp-inventory-stock`)

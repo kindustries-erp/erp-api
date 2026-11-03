@@ -3,6 +3,8 @@ import { BusinessPartnersCoreService } from './business-partners-core.service';
 import { CreateErpBusinessPartnerDto } from './dto/create-erp-business-partner.dto';
 import { ErpBusinessPartnerCommandService } from './services/erp-business-partner-command.service';
 import { ErpBusinessPartnerQueryService } from './services/erp-business-partner-query.service';
+import { ErpBusinessPartnerInvoiceSyncService } from './services/erp-business-partner-invoice-sync.service';
+import { ErpBusinessPartnerOptionsService } from './services/erp-business-partner-options.service';
 import { toErpBusinessPartnerResponse } from './helpers/erp-business-partner.mapper';
 
 describe('BusinessPartnersCoreService', () => {
@@ -36,7 +38,10 @@ describe('BusinessPartnersCoreService', () => {
     update: jest.Mock;
     softDelete: jest.Mock;
     assertCodeAvailable: jest.Mock;
+    assertTaxCodeAvailable: jest.Mock;
   };
+  let invoiceSync: { findMissingCandidates: jest.Mock; run: jest.Mock };
+  let options: { listOptions: jest.Mock };
   let service: BusinessPartnersCoreService;
 
   beforeEach(() => {
@@ -51,10 +56,18 @@ describe('BusinessPartnersCoreService', () => {
       update: jest.fn(async (entity, dto) => ({ ...entity, ...dto })),
       softDelete: jest.fn(async (entity) => ({ ...entity, isDeleted: true })),
       assertCodeAvailable: jest.fn().mockResolvedValue(undefined),
+      assertTaxCodeAvailable: jest.fn().mockResolvedValue(undefined),
     };
+    invoiceSync = {
+      findMissingCandidates: jest.fn().mockResolvedValue([]),
+      run: jest.fn().mockResolvedValue({ created: 0, items: [] }),
+    };
+    options = { listOptions: jest.fn().mockResolvedValue({ items: [] }) };
     service = new BusinessPartnersCoreService(
       query as unknown as ErpBusinessPartnerQueryService,
       command as unknown as ErpBusinessPartnerCommandService,
+      invoiceSync as unknown as ErpBusinessPartnerInvoiceSyncService,
+      options as unknown as ErpBusinessPartnerOptionsService,
     );
   });
 
@@ -212,6 +225,45 @@ describe('BusinessPartnersCoreService', () => {
         ].sort(),
       );
       expect(toErpBusinessPartnerResponse(row)).not.toHaveProperty('isDeleted');
+    });
+  });
+
+  describe('tax code uniqueness', () => {
+    it('checks the normalized tax code before creating', async () => {
+      await service.create({
+        name: 'ABC',
+        partnerType: 'CUSTOMER',
+        taxCode: '  0100  ',
+      } as CreateErpBusinessPartnerDto);
+
+      expect(command.assertTaxCodeAvailable).toHaveBeenCalledWith('0100');
+      expect(command.create).toHaveBeenCalledWith(
+        expect.objectContaining({ taxCode: '0100' }),
+      );
+    });
+
+    it('does not check a tax code when none is given', async () => {
+      await service.create({
+        name: 'ABC',
+        partnerType: 'CUSTOMER',
+      } as CreateErpBusinessPartnerDto);
+
+      expect(command.assertTaxCodeAvailable).not.toHaveBeenCalled();
+    });
+
+    it('propagates a duplicate tax code error and does not create', async () => {
+      command.assertTaxCodeAvailable.mockRejectedValue(
+        new BadRequestException('MST "0100" đã thuộc đối tác "KH-001"'),
+      );
+
+      await expect(
+        service.create({
+          name: 'ABC',
+          partnerType: 'CUSTOMER',
+          taxCode: '0100',
+        } as CreateErpBusinessPartnerDto),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(command.create).not.toHaveBeenCalled();
     });
   });
 

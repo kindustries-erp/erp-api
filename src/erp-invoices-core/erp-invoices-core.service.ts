@@ -207,8 +207,8 @@ export class ErpInvoicesCoreService {
     return this.lifecycleService.cancel(id);
   }
 
-  bulkSetBranch(ids: string[], branchId: string | null) {
-    return this.lifecycleService.bulkSetBranch(ids, branchId);
+  bulkSetBranch(ids: string[], branchIds: string[]) {
+    return this.lifecycleService.bulkSetBranch(ids, branchIds);
   }
 
   bulkSetNotes(ids: string[], notes: string) {
@@ -248,6 +248,11 @@ export class ErpInvoicesCoreService {
 
   getPortalConfig() {
     return this.portalService.getPortalConfig();
+  }
+
+  /** Cấu hình thô (token/cookies đã giải mã) cho nội bộ server, không trả ra API */
+  getInternalPortalConfig() {
+    return this.portalService.getInternalPortalConfig();
   }
 
   savePortalConfig(

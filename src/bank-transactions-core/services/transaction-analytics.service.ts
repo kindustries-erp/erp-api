@@ -1,3 +1,7 @@
+import {
+  applyBranchIdsFilter,
+  resolveFilterBranchIds,
+} from '../../common/utils/branch-ids-filter.util';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -53,8 +57,9 @@ export class TransactionAnalyticsService {
         sourceType: filter.sourceType,
       });
     }
-    if (filter.branchId) {
-      qb.andWhere('txn.branchId = :branchId', { branchId: filter.branchId });
+    const branchIds = resolveFilterBranchIds(filter);
+    if (branchIds.length > 0) {
+      applyBranchIdsFilter(qb, branchIds, 'branchIds');
     }
     if (filter.tagIds && filter.tagIds.length > 0) {
       qb.innerJoin(
@@ -330,8 +335,9 @@ export class TransactionAnalyticsService {
         sourceType: filter.sourceType,
       });
     }
-    if (filter.branchId) {
-      qb.andWhere('txn.branchId = :branchId', { branchId: filter.branchId });
+    const branchIds = resolveFilterBranchIds(filter);
+    if (branchIds.length > 0) {
+      applyBranchIdsFilter(qb, branchIds, 'branchIds');
     }
     if (filter.tagIds && filter.tagIds.length > 0) {
       qb.innerJoin(
@@ -488,10 +494,14 @@ export class TransactionAnalyticsService {
         sourceType: filter.sourceType,
       });
     }
-    if (filter.branchId) {
-      categoryBreakdownQb.andWhere('txn.branch_id = :branchId', {
-        branchId: filter.branchId,
-      });
+    const categoryBranchIds = resolveFilterBranchIds(filter);
+    if (categoryBranchIds.length > 0) {
+      applyBranchIdsFilter(
+        categoryBreakdownQb,
+        categoryBranchIds,
+        'categoryBranchIds',
+        'txn.branch_ids',
+      );
     }
     if (filter.tagIds && filter.tagIds.length > 0) {
       categoryBreakdownQb

@@ -7,7 +7,7 @@ description: Module tri thức Quản lý Phân quyền, Vai trò & RBAC Core (R
 
 ## 1. Tổng quan Nghiệp vụ
 
-Module Phân quyền & Vai trò Core (`rbac-core`) là hạt nhân an ninh và ủy quyền (Authorization) của Liouni ERP, quản lý toàn bộ cơ chế phân quyền dựa trên vai trò (Role-Based Access Control - RBAC) lưu trữ trực tiếp trên Core DB (PostgreSQL):
+Module Phân quyền & Vai trò Core (`rbac-core`) là hạt nhân an ninh và ủy quyền (Authorization) của ERP, quản lý toàn bộ cơ chế phân quyền dựa trên vai trò (Role-Based Access Control - RBAC) lưu trữ trực tiếp trên Core DB (PostgreSQL):
 - **Vai trò (Roles - `core_roles`)**: Nhóm các quyền hạn nghiệp vụ cụ thể (vd: Kế toán, Thủ kho, Giám đốc, Nhân viên kinh doanh). Hỗ trợ kích hoạt / ngưng hoạt động (`is_active`).
 - **Phân quyền Tài nguyên (Permissions - `core_permissions`)**: Ánh xạ cặp `(resource, action)` vào từng vai trò, kèm điều kiện tùy chọn `conditions (JSONB)`.
 - **Gán người dùng vào vai trò (User Role Assignments - `core_user_roles`)**: Cho phép một người dùng (CoreUser) sở hữu một hoặc nhiều vai trò trong hệ thống.

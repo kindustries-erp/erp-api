@@ -6,12 +6,5 @@ if [ "$SKIP_TESTS" = "1" ] || [ "$HUSKY_SKIP_TESTS" = "1" ]; then
   exit 0
 fi
 
-commit_hash="$(git rev-parse HEAD)"
-marker="$(git rev-parse --show-toplevel)/.git/erp-final-gate/$commit_hash"
-if [ -z "$(git status --short)" ] && [ -f "$marker" ]; then
-  echo "Final Gate already passed for $commit_hash; skipping duplicate pre-push checks."
-  exit 0
-fi
-
+# Full test/build/check:style chạy ở GitHub CI; local chỉ chặn lỗi type
 bun run type:check
-bunx jest --forceExit

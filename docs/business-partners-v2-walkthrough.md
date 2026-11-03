@@ -23,7 +23,7 @@ Written for: đội kỹ thuật ERP, người duyệt thay đổi trước khi 
 | API plop | `plop-templates/module-v2/*`, `plop-helpers/apiV2Data.mjs`, `apiV2Wiring.mjs`, `plopfile.mjs` | G1–G7 |
 | Web plop | `plop-templates/v2-module/*`, `plop-helpers/v2Fields.mjs`, `v2ModuleData.mjs` | `decimal`, cột số có summary, `summaries` |
 | Web BP | `api/queries/useBusinessPartnersQuery.ts`, `api/mutations/useBusinessPartnerMutations.ts`, `components/organisms/business-partner-table/BusinessPartnerTable.columns.tsx`, `businessPartners.locale.ts` | Summary đếm, toast tách tạo/sửa |
-| Docs | `erp-api/.agents/skills/api-v2-refactor/SKILL.md` (2b, 3b), `erp-api/.agents/skills/modules/business-partners-core/SKILL.md` (mới), `erp-web/.agents/skills/modules/business-partners/SKILL.md`, `plop-generate` (cả hai repo) | Knowledge-Sync |
+| Docs | `erp-api/.agents/skills/erp-api-structure/references/v2-module.md` (2b, 3b), `erp-api/.agents/skills/modules/business-partners-core/SKILL.md` (mới), `erp-web/.agents/skills/modules/business-partners/SKILL.md`, `plop-generate` (cả hai repo) | Knowledge-Sync |
 
 ## 3. Bằng chứng (chạy trong phiên này, trên working tree chưa commit)
 

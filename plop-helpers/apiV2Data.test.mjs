@@ -73,16 +73,16 @@ describe('moduleFileMap', () => {
   it('lists 16 files under src/<module>/ with co-located specs', () => {
     const files = moduleFileMap(buildApiV2Data(base));
     expect(files).toHaveLength(16);
-    expect(files.every((f) => f.path.startsWith('src/v2/customer-claims-core/'))).toBe(true);
+    expect(files.every((f) => f.path.startsWith('src/v2/modules/customer-claims-core/'))).toBe(true);
     const specs = files.filter((f) => f.path.endsWith('.spec.ts'));
     expect(specs).toHaveLength(5);
   });
 
   it('places the facade at the module root and sub-units in their folders', () => {
     const paths = moduleFileMap(buildApiV2Data(base)).map((f) => f.path);
-    expect(paths).toContain('src/v2/customer-claims-core/customer-claims-core.service.ts');
-    expect(paths).toContain('src/v2/customer-claims-core/services/customer-claim-query.service.ts');
-    expect(paths).toContain('src/v2/customer-claims-core/controllers/customer-claim.controller.ts');
+    expect(paths).toContain('src/v2/modules/customer-claims-core/customer-claims-core.service.ts');
+    expect(paths).toContain('src/v2/modules/customer-claims-core/services/customer-claim-query.service.ts');
+    expect(paths).toContain('src/v2/modules/customer-claims-core/controllers/customer-claim.controller.ts');
   });
 });
 
@@ -179,7 +179,7 @@ describe('v2 location and wiring', () => {
       wireInput: true,
     });
     const snippets = wiringPlan(data).map((item) => item.snippet);
-    expect(snippets).toContain(`import { CustomerClaimsCoreModule } from './v2/customer-claims-core/customer-claims-core.module';`);
-    expect(snippets).toContain(`import { CustomerClaim } from '@/v2/customer-claims-core/entities/customer-claim.entity';`);
+    expect(snippets).toContain(`import { CustomerClaimsCoreModule } from './v2/modules/customer-claims-core/customer-claims-core.module';`);
+    expect(snippets).toContain(`import { CustomerClaim } from '@/v2/modules/customer-claims-core/entities/customer-claim.entity';`);
   });
 });

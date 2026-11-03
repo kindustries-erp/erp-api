@@ -107,7 +107,7 @@ describe('InvoiceDashboardAnalyticsService', () => {
       const result = await service.getDebtsAnalytics(
         '2026-01-01',
         '2026-09-30',
-        'b-1',
+        '6d37f290-b465-4af1-91b6-265ced4b30bb',
       );
 
       expect(mockInvoiceRepo.query).toHaveBeenCalledTimes(4);

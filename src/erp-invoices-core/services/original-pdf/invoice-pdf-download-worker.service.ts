@@ -4,11 +4,11 @@ import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
-import AdmZip from 'adm-zip';
 import { ErpInvoice } from '../../entities/erp_invoice.entity';
 import { ErpEInvoiceSync } from '../../entities/erp_einvoice_sync.entity';
 import { ProviderAdapterRegistry } from '../adapters/provider-adapter.registry';
 import { InvoiceProviderDetectorService } from './invoice-provider-detector.service';
+import { readXmlFromBuffer } from './invoice-xml-reader.helper';
 import { R2Service } from '../../../r2/r2.service';
 
 @Injectable()
@@ -31,6 +31,13 @@ export class InvoicePdfDownloadWorkerService {
     invoice: ErpInvoice,
   ): Promise<{ success: boolean; error?: string }> {
     try {
+      // PDF do người dùng tải lên thủ công: không ghi đè bằng bản tải tự động
+      if (invoice.pdfSource === 'manual_upload') {
+        return { success: true };
+      }
+
+      let xmlContent = '';
+
       // 1. Nếu thiếu provider_code hoặc lookup_code, tự động quét từ XML nếu có
       if (
         (!invoice.providerCode || !invoice.lookupCode) &&
@@ -40,24 +47,7 @@ export class InvoicePdfDownloadWorkerService {
           const fileBuffer = await this.r2Service.downloadBuffer(
             invoice.xmlFileKey,
           );
-          let xmlContent = '';
-          const isZip =
-            invoice.xmlFileKey.toLowerCase().endsWith('.zip') ||
-            (fileBuffer.length >= 4 &&
-              fileBuffer[0] === 0x50 &&
-              fileBuffer[1] === 0x4b);
-
-          if (isZip) {
-            const zip = new AdmZip(fileBuffer);
-            const xmlEntry = zip
-              .getEntries()
-              .find((e) => e.entryName.toLowerCase().endsWith('.xml'));
-            if (xmlEntry) {
-              xmlContent = xmlEntry.getData().toString('utf-8');
-            }
-          } else {
-            xmlContent = fileBuffer.toString('utf-8');
-          }
+          xmlContent = readXmlFromBuffer(fileBuffer, invoice.xmlFileKey);
 
           if (xmlContent) {
             const detected = this.detectorService.detectFromXml(
@@ -76,9 +66,11 @@ export class InvoicePdfDownloadWorkerService {
         }
       }
 
-      // 2. Tìm adapter phù hợp
+      // 2. Tìm adapter phù hợp; NCC không có adapter riêng thì dùng link DownloadPdf trong XML
       const providerCode = invoice.providerCode || 'OTHER';
-      const adapter = this.adapterRegistry.getAdapter(providerCode);
+      const adapter =
+        this.adapterRegistry.getAdapter(providerCode) ??
+        this.adapterRegistry.getAdapter('XML_LINK');
 
       if (!adapter) {
         invoice.pdfSource = 'failed';
@@ -97,6 +89,7 @@ export class InvoicePdfDownloadWorkerService {
         buyerTaxCode: invoice.buyerTaxCode,
         lookupCode: invoice.lookupCode,
         lookupUrl: invoice.lookupUrl,
+        xmlContent,
       });
 
       if (!result.success || !result.pdfBuffer) {

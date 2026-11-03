@@ -19,6 +19,7 @@ import { CorePermission } from '../rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
 import { ErpInvoicesCronService } from './erp-invoices-cron.service';
 import { InvoiceLifecycleService } from './services/invoice-lifecycle.service';
+import { InvoiceBranchService } from './services/invoice-branch.service';
 import { InvoicePortalService } from './services/invoice-portal.service';
 import { InvoiceImportService } from './services/invoice-import.service';
 import { InvoiceFilesService } from './services/invoice-files.service';
@@ -41,6 +42,7 @@ import { InvoiceDebtsController } from './controllers/invoice-debts.controller';
 import { InvoiceDebtsQueryService } from './services/sub-services/invoice-debts-query.service';
 import { InvoiceDebtsDetailService } from './services/sub-services/invoice-debts-detail.service';
 import { InvoiceDebtsExportService } from './services/sub-services/invoice-debts-export.service';
+import { InvoiceDebtsNetOffService } from './services/sub-services/invoice-debts-net-off.service';
 import { InvoiceListQueryService } from './services/sub-services/invoice-list-query.service';
 import { InvoiceExportExcelService } from './services/sub-services/invoice-export-excel.service';
 import { InvoiceStatsService } from './services/sub-services/invoice-stats.service';
@@ -59,6 +61,7 @@ import { ErpJournalEntry } from '../accounting-core/entities/erp_journal_entry.e
 import { ErpJournalEntryLine } from '../accounting-core/entities/erp_journal_entry_line.entity';
 import { AiHubCoreModule } from '../ai-hub-core/ai-hub-core.module';
 import { InvoiceCategoryAutopostService } from './services/sub-services/invoice-category-autopost.service';
+import { InvoicePortalDetailApplier } from './services/sub-services/invoice-portal-detail-applier.service';
 import { InvoiceCategoryMemoryService } from './services/sub-services/invoice-category-memory.service';
 import { InvoiceItemCodeResolverService } from './services/sub-services/invoice-item-code-resolver.service';
 import { InvoiceAdjustmentService } from './services/sub-services/invoice-adjustment.service';
@@ -75,6 +78,7 @@ import { MisaInvoiceAdapter } from './services/adapters/misa-invoice.adapter';
 import { ViettelInvoiceAdapter } from './services/adapters/viettel-invoice.adapter';
 import { HiloInvoiceAdapter } from './services/adapters/hilo-invoice.adapter';
 import { CyberbillInvoiceAdapter } from './services/adapters/cyberbill-invoice.adapter';
+import { XmlDownloadLinkAdapter } from './services/adapters/xml-download-link.adapter';
 
 @Module({
   imports: [
@@ -113,7 +117,9 @@ import { CyberbillInvoiceAdapter } from './services/adapters/cyberbill-invoice.a
   ],
   providers: [
     InvoiceLifecycleService,
+    InvoiceBranchService,
     InvoicePortalService,
+    InvoicePortalDetailApplier,
     InvoiceImportService,
     InvoiceFilesService,
     InvoiceBulkDownloadService,
@@ -129,6 +135,7 @@ import { CyberbillInvoiceAdapter } from './services/adapters/cyberbill-invoice.a
     InvoiceDebtsQueryService,
     InvoiceDebtsDetailService,
     InvoiceDebtsExportService,
+    InvoiceDebtsNetOffService,
     InvoiceDebtsExportBackgroundService,
     InvoiceDashboardStatsService,
     InvoiceDashboardPartnersService,
@@ -148,6 +155,7 @@ import { CyberbillInvoiceAdapter } from './services/adapters/cyberbill-invoice.a
     ViettelInvoiceAdapter,
     HiloInvoiceAdapter,
     CyberbillInvoiceAdapter,
+    XmlDownloadLinkAdapter,
     InvoicePdfDownloadWorkerService,
     InvoiceOriginalPdfFacade,
     ErpInvoicesCoreService,

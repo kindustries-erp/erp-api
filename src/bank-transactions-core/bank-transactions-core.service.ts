@@ -157,7 +157,7 @@ export class BankTransactionsCoreService {
 
   async importFiles(
     files: Express.Multer.File[],
-    branchId: string,
+    branchId: string | undefined,
     bankAccountId?: string,
     cashBookId?: string,
   ) {

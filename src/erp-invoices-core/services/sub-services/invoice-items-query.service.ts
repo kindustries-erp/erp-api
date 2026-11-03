@@ -60,7 +60,6 @@ export class InvoiceItemsQueryService {
     const qb = itemRepo
       .createQueryBuilder('ii')
       .innerJoin(ErpInvoice, 'inv', 'inv.id = ii.invoice_id')
-      .leftJoin('erp_branches', 'b', 'b.id = inv.branch_id')
       .where('inv.is_deleted = false');
 
     if (query.direction) {
@@ -208,7 +207,8 @@ export class InvoiceItemsQueryService {
         postingStatus: 'inv.posting_status',
         taxInvoiceStatus: 'inv.tax_invoice_status',
         branchId: 'inv.branch_id',
-        branchName: 'b.name',
+        branchName:
+          "(SELECT string_agg(bb.name, ', ' ORDER BY bb.name) FROM erp_branches bb WHERE bb.id = ANY(inv.branch_ids))",
         licensePlate: 'inv.license_plate',
         settlementOrder: 'inv.settlement_order',
         createdAt: 'ii.created_at',
@@ -255,9 +255,9 @@ export class InvoiceItemsQueryService {
         'inv.buyer_cccd AS buyer_cccd',
         'inv.license_plate AS license_plate',
         'inv.settlement_order AS settlement_order',
-        'inv.branch_id AS branch_id',
+        'inv.branch_ids AS branch_ids',
         'inv.tax_invoice_status AS tax_invoice_status',
-        'b.name AS branch_name',
+        "(SELECT string_agg(bb.name, ', ' ORDER BY bb.name) FROM erp_branches bb WHERE bb.id = ANY(inv.branch_ids)) AS branch_name",
       ])
       .offset((page - 1) * pageSize)
       .limit(pageSize)
@@ -302,7 +302,10 @@ export class InvoiceItemsQueryService {
         buyerCccd: r.buyer_cccd,
         licensePlate: r.license_plate,
         settlementOrder: r.settlement_order,
-        branchId: r.branch_id,
+        branchId: Array.isArray(r.branch_ids)
+          ? (r.branch_ids[0] ?? null)
+          : null,
+        branchIds: Array.isArray(r.branch_ids) ? r.branch_ids : [],
         taxInvoiceStatus:
           r.tax_invoice_status !== null && r.tax_invoice_status !== undefined
             ? Number(r.tax_invoice_status)
@@ -542,7 +545,7 @@ export class InvoiceItemsQueryService {
     else if (column === 'taxInvoiceStatus')
       selectField = 'inv.tax_invoice_status';
     else if (column === 'branchId' || column === 'branchName')
-      selectField = 'inv.branch_id';
+      selectField = 'UNNEST(inv.branch_ids)';
     else if (column === 'licensePlate') selectField = 'inv.license_plate';
     else if (column === 'settlementOrder') selectField = 'inv.settlement_order';
     else return { items: [], total: 0, page, pageSize, totalPages: 0 };

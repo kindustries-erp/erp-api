@@ -1731,8 +1731,8 @@ export async function buildGarageDebtReport(
   sections?: GarageDebtGroupExportSection[],
 ): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'Liouni ERP';
-  workbook.lastModifiedBy = 'Liouni ERP';
+  workbook.creator = 'ERP';
+  workbook.lastModifiedBy = 'ERP';
   workbook.created = new Date();
 
   const dashboard = createDashboardSheet(workbook, DEBT_DASHBOARD_SHEET);
@@ -1956,8 +1956,8 @@ export async function buildGarageAllDebtsReport(
   supplierSections?: GarageDebtGroupExportSection[],
 ): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'Liouni ERP';
-  workbook.lastModifiedBy = 'Liouni ERP';
+  workbook.creator = 'ERP';
+  workbook.lastModifiedBy = 'ERP';
   workbook.created = new Date();
 
   const dashboard = createDashboardSheet(workbook, DEBT_DASHBOARD_SHEET);

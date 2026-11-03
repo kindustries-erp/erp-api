@@ -1,6 +1,32 @@
 import { encryptText, decryptText, safeDecrypt } from './encrypt.util';
 
 describe('EncryptUtil', () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    process.env.GDT_ENCRYPT_SECRET = 'unit-test-gdt-secret';
+    delete process.env.JWT_SECRET;
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  it('báo lỗi rõ ràng khi thiếu cả GDT_ENCRYPT_SECRET và JWT_SECRET (không có khóa dự phòng)', () => {
+    delete process.env.GDT_ENCRYPT_SECRET;
+    delete process.env.JWT_SECRET;
+    expect(() => encryptText('secret')).toThrow(
+      'Thiếu GDT_ENCRYPT_SECRET hoặc JWT_SECRET',
+    );
+  });
+
+  it('dùng JWT_SECRET khi không có GDT_ENCRYPT_SECRET', () => {
+    delete process.env.GDT_ENCRYPT_SECRET;
+    process.env.JWT_SECRET = 'jwt-only-secret';
+    const encrypted = encryptText('value');
+    expect(decryptText(encrypted)).toEqual('value');
+  });
+
   it('should encrypt and decrypt a string accurately', () => {
     const raw = 'my_super_secret_password_123!@#';
     const encrypted = encryptText(raw);

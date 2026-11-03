@@ -14,7 +14,7 @@ else
   TYPEORM_CMD=(node -r ts-node/register -r tsconfig-paths/register ./node_modules/typeorm/cli.js)
   DATA_SOURCE_PATH="src/db/data-source.cli.ts"
 fi
-BACKUP_DIR="$REPO_ROOT/.agents/skills/db-migrate/backups"
+BACKUP_DIR="$REPO_ROOT/backups"
 mkdir -p "$BACKUP_DIR"
 
 usage() {
@@ -110,7 +110,7 @@ read_database_url_from_env() {
 }
 
 
-normalize_neon_url_for_migration() {
+normalize_pooler_url_for_migration() {
   local raw_url="$1"
   local normalized="$raw_url"
   local changed=0
@@ -126,7 +126,7 @@ normalize_neon_url_for_migration() {
   fi
 
   if [[ $changed -eq 1 ]]; then
-    echo "INFO: Normalized DATABASE_URL for migration/schema operations (Neon pooler guard)." >&2
+    echo "INFO: Normalized DATABASE_URL for migration/schema operations (pooler guard)." >&2
   fi
 
   printf '%s' "$normalized"
@@ -160,7 +160,7 @@ run_generate() {
   local env_file="$1"
   local migration_name="$2"
   local target_url
-  target_url="$(normalize_neon_url_for_migration "$(read_database_url_from_env "$env_file")")"
+  target_url="$(normalize_pooler_url_for_migration "$(read_database_url_from_env "$env_file")")"
 
   [[ "$migration_name" == src/migrations/* ]] || migration_name="src/migrations/$migration_name"
 
@@ -171,7 +171,7 @@ run_generate() {
 run_migrations() {
   local env_file="${1:-}"
   local target_url
-  target_url="$(normalize_neon_url_for_migration "$(read_database_url_from_env "$env_file")")"
+  target_url="$(normalize_pooler_url_for_migration "$(read_database_url_from_env "$env_file")")"
 
   backup_schema "$target_url" "$(basename "${env_file:-runtime-env}")"
 
@@ -186,7 +186,7 @@ run_migrations() {
 run_sync_schema() {
   local env_file="${1:-}"
   local target_url
-  target_url="$(normalize_neon_url_for_migration "$(read_database_url_from_env "$env_file")")"
+  target_url="$(normalize_pooler_url_for_migration "$(read_database_url_from_env "$env_file")")"
 
   backup_schema "$target_url" "$(basename "${env_file:-runtime-env}")"
 
@@ -202,8 +202,8 @@ run_sync_data() {
   require_cmd psql
 
   local source_url target_url
-  source_url="$(normalize_neon_url_for_migration "$(read_database_url_from_env "$source_env")")"
-  target_url="$(normalize_neon_url_for_migration "$(read_database_url_from_env "$target_env")")"
+  source_url="$(normalize_pooler_url_for_migration "$(read_database_url_from_env "$source_env")")"
+  target_url="$(normalize_pooler_url_for_migration "$(read_database_url_from_env "$target_env")")"
 
   echo "WARN: Full sync will overwrite data in target DB: $target_env"
   echo "INFO: Backing up target schema before sync"

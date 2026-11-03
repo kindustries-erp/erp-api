@@ -149,7 +149,7 @@ async function run() {
     console.log('💳 Đang quét danh sách Giao dịch Sao kê & Sổ quỹ từ 2025...');
     let txnQuery = `
       SELECT t.id, t.source_type, t.trans_date, t.debit_amount, t.credit_amount, 
-             t.description, t.accounting_description, t.reference_number, t.correspondent_name,
+             t.description, t.note, t.reference_number, t.correspondent_name,
              t.branch_id, t.correspondent_accounting_account_id,
              ba.accounting_account_id as bank_accounting_account_id,
              cb.accounting_account_id as cash_accounting_account_id
@@ -332,7 +332,7 @@ async function run() {
 
       const branchId = txn.branch_id || defaultBranchId;
       const docDate = new Date(txn.trans_date);
-      const baseDesc = txn.accounting_description || txn.description || 'Giao dịch ngân hàng';
+      const baseDesc = txn.note || txn.description || 'Giao dịch ngân hàng';
 
       // Xác định tài khoản tiền
       let moneyAccount = acc1121;

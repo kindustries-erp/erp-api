@@ -3,6 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ErpInvoice } from '../../entities/erp_invoice.entity';
 import { buildKeywordSqlClause } from './invoice-dashboard-helpers';
+import {
+  branchIdsSqlCondition,
+  parseBranchFilter,
+} from '../../helpers/invoice-branch-filter.helper';
 
 export interface GetTimeHorizonInvoicesQuery {
   dateFrom?: string;
@@ -262,7 +266,7 @@ export class InvoiceDashboardHorizonService {
         inv.status,
         inv.tax_invoice_status as "taxInvoiceStatus",
         inv.description,
-        inv.branch_id as "branchId"
+        inv.branch_ids as "branchIds"
       FROM erp_invoices inv
       LEFT JOIN (
         SELECT invoice_id, SUM(net_off_amount) as net_off_amount
@@ -298,13 +302,9 @@ export class InvoiceDashboardHorizonService {
       const effTo = dateTo.length === 10 ? dateTo + ' 23:59:59.999' : dateTo;
       baseQuery += ` AND inv.invoice_date <= '${effTo.replace(/'/g, "''")}'`;
     }
-    if (branchId) {
-      if (branchId === 'null') {
-        baseQuery += ` AND inv.branch_id IS NULL`;
-      } else {
-        baseQuery += ` AND inv.branch_id = '${branchId.replace(/'/g, "''")}'`;
-      }
-    }
+    const branchFilter = parseBranchFilter(branchId);
+    if (branchFilter)
+      baseQuery += ` AND ${branchIdsSqlCondition(branchFilter)}`;
 
     // 1. Calculate Summary across ALL directions for this horizon
     let metricField = `"balanceAmount"`;
@@ -592,18 +592,25 @@ export class InvoiceDashboardHorizonService {
     };
 
     // Phân rã theo chi nhánh / địa điểm (Branch breakdown)
+    // Mỗi hóa đơn chia đều cho các chi nhánh của nó (giống invoice-stats); chưa gán thành nhóm riêng
     const branchBreakdownSql = `
-      SELECT 
-        COALESCE(q."branchId"::text, 'UNASSIGNED') as "branchId",
-        COALESCE(b.name, CASE WHEN q."branchId" IS NULL THEN 'Chưa phân chi nhánh' ELSE 'Chi nhánh khác' END) as "branchName",
+      SELECT
+        COALESCE(s.bid::text, 'UNASSIGNED') as "branchId",
+        COALESCE(b.name, CASE WHEN s.bid IS NULL THEN 'Chưa phân chi nhánh' ELSE 'Chi nhánh khác' END) as "branchName",
         COALESCE(b.code, '') as "branchCode",
-        SUM(CASE WHEN q.direction = 'OUT' THEN q.${metricField} ELSE 0 END) as "outAmount",
+        SUM(CASE WHEN q.direction = 'OUT' THEN q.${metricField} / s.share ELSE 0 END) as "outAmount",
         COUNT(CASE WHEN q.direction = 'OUT' THEN 1 ELSE NULL END) as "outCount",
-        SUM(CASE WHEN q.direction = 'IN' THEN q.${metricField} ELSE 0 END) as "inAmount",
+        SUM(CASE WHEN q.direction = 'IN' THEN q.${metricField} / s.share ELSE 0 END) as "inAmount",
         COUNT(CASE WHEN q.direction = 'IN' THEN 1 ELSE NULL END) as "inCount"
       FROM (${baseQuery}) q
-      LEFT JOIN erp_branches b ON b.id = q."branchId"
-      GROUP BY q."branchId", b.name, b.code
+      CROSS JOIN LATERAL (
+        SELECT x.bid, GREATEST(cardinality(q."branchIds"), 1) AS share
+        FROM unnest(
+          CASE WHEN cardinality(q."branchIds") = 0 THEN ARRAY[NULL::uuid] ELSE q."branchIds" END
+        ) AS x(bid)
+      ) s
+      LEFT JOIN erp_branches b ON b.id = s.bid
+      GROUP BY s.bid, b.name, b.code
       ORDER BY "outAmount" DESC, "inAmount" DESC
     `;
     const rawBranch = await this.invoiceRepo.query(branchBreakdownSql);

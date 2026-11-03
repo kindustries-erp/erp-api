@@ -131,8 +131,8 @@ export class GarageOpexExportService {
 
     onProgress(70, totalUnits, 'Đang tạo bảng tính Excel...');
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'Liouni ERP';
-    workbook.lastModifiedBy = 'Liouni ERP';
+    workbook.creator = 'ERP';
+    workbook.lastModifiedBy = 'ERP';
     workbook.created = new Date();
 
     // 1. Sheet 1: Dashboard & KPI Overview

@@ -1,5 +1,5 @@
 ---
-description: "Quy trình Git chuẩn Master-First & Branch Sync (Test-First Guard, Knowledge Sync Guard, Push erp-master, Downstream Sync) trong Liouni ERP"
+description: "Quy trình Git chuẩn Master-First & Branch Sync (Test-First Guard, Knowledge Sync Guard, Push erp-master, Downstream Sync) trong ERP"
 ---
 
 <!-- GENERATED FILE - DO NOT EDIT. Sửa nguồn .agents/workflows/erp-git-workflow.md, rồi chạy /sync-agents. -->

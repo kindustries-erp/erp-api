@@ -8,8 +8,16 @@ import { DataSource, Repository } from 'typeorm';
 import { ErpBankTransaction } from '../entities/erp_bank_transaction.entity';
 import { PostBankTransactionDto } from '../dto/post-bank-transaction.dto';
 import { AccountingCoreService } from '../../accounting-core/services/accounting-core.service';
+import { splitEvenly } from '../../common/utils/money-split.util';
 import { UpdateBankTransactionDto } from '../dto/update-bank-transaction.dto';
 import { CreateBankTransactionDto } from '../dto/create-bank-transaction.dto';
+import { normalizeBranchColumns } from '../../common/utils/branch-ids.util';
+import { BusinessPartnersCoreService } from '../../v2/business-partners-core/business-partners-core.service';
+import {
+  CashflowClassification,
+  CashflowPurpose,
+  isPurposeAllowed,
+} from '../constants/cashflow-attributes.constants';
 
 @Injectable()
 export class TransactionAccountingService {
@@ -18,7 +26,33 @@ export class TransactionAccountingService {
     private readonly transactionRepo: Repository<ErpBankTransaction>,
     private readonly dataSource: DataSource,
     private readonly accountingCoreService: AccountingCoreService,
+    private readonly partners: BusinessPartnersCoreService,
   ) {}
+
+  private assertCashflowPair(
+    classification: CashflowClassification | null | undefined,
+    purpose: CashflowPurpose | null | undefined,
+  ): void {
+    if (!isPurposeAllowed(classification, purpose)) {
+      throw new BadRequestException('Mục đích không thuộc Phân loại đã chọn.');
+    }
+  }
+
+  /** Chặn id chi nhánh không tồn tại, tránh lỗi FK 500 từ DB. */
+  private async assertBranchesExist(branchIds: string[]): Promise<void> {
+    if (branchIds.length === 0) return;
+    const rows: { id: string }[] = await this.dataSource.query(
+      'SELECT id FROM erp_branches WHERE id = ANY($1)',
+      [branchIds],
+    );
+    const found = new Set(rows.map((row) => row.id));
+    const missing = branchIds.filter((id) => !found.has(id));
+    if (missing.length > 0) {
+      throw new BadRequestException(
+        `Chi nhánh không tồn tại: ${missing.join(', ')}`,
+      );
+    }
+  }
 
   async createManualTransaction(dto: CreateBankTransactionDto) {
     if (!dto.bankAccountId && !dto.cashBookId) {
@@ -26,8 +60,16 @@ export class TransactionAccountingService {
         'Must provide either bankAccountId or cashBookId',
       );
     }
+    this.assertCashflowPair(dto.cashflowClassification, dto.cashflowPurpose);
     const createData = { ...dto };
     delete (createData as any).attributes;
+    // Chuẩn hóa hai cột chi nhánh để branch_ids luôn là nguồn chuẩn
+    const branchColumns = normalizeBranchColumns({
+      branchIds: dto.branchIds,
+      branchId: dto.branchId,
+    });
+    await this.assertBranchesExist(branchColumns.branchIds);
+    Object.assign(createData, branchColumns);
     const txn = this.transactionRepo.create(createData);
     return this.transactionRepo.save(txn);
   }
@@ -50,7 +92,7 @@ export class TransactionAccountingService {
         postingStatus: 'UNPOSTED',
         journalEntryId: null,
         postingDate: null,
-        description: txn.accountingDescription || txn.description || null,
+        description: txn.note || txn.description || null,
         lines: [],
         totalDebit: 0,
         totalCredit: 0,
@@ -97,12 +139,18 @@ export class TransactionAccountingService {
       postingStatus: 'POSTED',
       journalEntryId: entries.length === 1 ? latest.id : null,
       postingDate: latest.date ? latest.date.toISOString().slice(0, 10) : null,
-      description: latest.description || txn.accountingDescription || null,
+      description: latest.description || txn.note || null,
       lines,
       totalDebit,
       totalCredit,
       isBalanced: Math.abs(totalDebit - totalCredit) < 0.01,
     };
+  }
+
+  /** Danh sách chi nhánh của giao dịch; dữ liệu cũ chỉ có branchId thì coi là 1 phần tử; rỗng = không chi nhánh. */
+  private resolveBranchIds(txn: ErpBankTransaction): string[] {
+    if (txn.branchIds?.length) return txn.branchIds;
+    return txn.branchId ? [txn.branchId] : [];
   }
 
   async postTransaction(id: string, dto: PostBankTransactionDto) {
@@ -112,12 +160,6 @@ export class TransactionAccountingService {
     });
     if (!txn) {
       throw new NotFoundException(`Transaction ${id} not found`);
-    }
-
-    if (!txn.branchId) {
-      throw new BadRequestException(
-        'Giao dịch chưa có chi nhánh. Vui lòng gán chi nhánh trước khi hạch toán.',
-      );
     }
 
     if (!dto.lines || dto.lines.length === 0) {
@@ -185,13 +227,14 @@ export class TransactionAccountingService {
       : txn.transDate;
     const description =
       dto.description?.trim() ||
-      txn.accountingDescription ||
+      txn.note ||
       txn.description ||
       txn.referenceNumber ||
       '';
 
-    await this.accountingCoreService.createJournalEntry({
-      branchId: txn.branchId,
+    // Bút toán nhập tay cũng chia bình quân theo chi nhánh (cùng quy tắc với bút toán tự động)
+    await this.accountingCoreService.createJournalEntriesForBranches({
+      branchIds: this.resolveBranchIds(txn),
       date: postingDate,
       documentDate: txn.transDate,
       description,
@@ -206,9 +249,7 @@ export class TransactionAccountingService {
     if (dto.categoryId !== undefined) {
       txn.categoryId = dto.categoryId || null;
     }
-    if (dto.description !== undefined) {
-      txn.accountingDescription = dto.description?.trim() || null;
-    }
+    // Không ghi dto.description vào note: đó là ghi chú ERP, chỉ sửa ở updateTransaction
     await this.transactionRepo.save(txn);
 
     return this.getTransactionPosting(id);
@@ -238,9 +279,37 @@ export class TransactionAccountingService {
     if (!txn) {
       throw new NotFoundException(`Transaction ${id} not found`);
     }
-    const updateData = { ...dto };
+    this.assertCashflowPair(
+      dto.cashflowClassification !== undefined
+        ? dto.cashflowClassification
+        : txn.cashflowClassification,
+      dto.cashflowPurpose !== undefined
+        ? dto.cashflowPurpose
+        : txn.cashflowPurpose,
+    );
+    const { invoicePartner, ...rest } = dto;
+    const updateData = { ...rest };
     delete (updateData as any).attributes;
+    // Diễn giải ngân hàng (description) là chỉ đọc, không ghi đè qua update
+    delete (updateData as any).description;
     Object.assign(txn, updateData);
+    if (invoicePartner) {
+      txn.partnerId = await this.partners.ensurePartnerForInvoiceKey({
+        taxCode: invoicePartner.taxCode ?? null,
+        name: invoicePartner.name,
+        partnerType: invoicePartner.partnerType,
+      });
+    }
+    // Đồng bộ branch_id (chi nhánh chính) với branch_ids
+    if (dto.branchIds !== undefined) {
+      await this.assertBranchesExist(dto.branchIds);
+      txn.branchIds = dto.branchIds;
+      txn.branchId = dto.branchIds[0] ?? null;
+    } else if (dto.branchId !== undefined) {
+      await this.assertBranchesExist(dto.branchId ? [dto.branchId] : []);
+      txn.branchIds = dto.branchId ? [dto.branchId] : [];
+      txn.branchId = dto.branchId ?? null;
+    }
     const saved = await this.transactionRepo.save(txn);
 
     await this.refreshJournalEntriesForBankTransaction(saved.id);
@@ -315,25 +384,32 @@ export class TransactionAccountingService {
         ? Number(txn.creditAmount)
         : Number(txn.debitAmount);
     const isReceipt = Number(txn.creditAmount) > 0;
-    const baseDescription = txn.accountingDescription || txn.description || '';
+    const baseDescription = txn.note || txn.description || '';
 
     type Group = {
       subject: string | null;
       amount: number;
       counterpartAccountId: string | null;
-      branchId: string;
+      branchId: string | null;
       description: string;
     };
     const groups: Group[] = [];
 
     const defaultCounterpart =
       txn.correspondentAccountingAccountId || t0001AccountId;
+    // Phần tiền chưa cấn trừ hóa đơn: có đối tượng thì ghi 131 (thu) / 331 (chi), không thì giữ T0001
+    const isIncoming = Number(txn.creditAmount) > 0;
+    const unallocatedCounterpart =
+      txn.correspondentAccountingAccountId ||
+      (txn.partnerId
+        ? (isIncoming ? arAccountId : apAccountId) || t0001AccountId
+        : t0001AccountId);
 
     if (netOffRows.length === 0) {
       groups.push({
         subject: txn.correspondentName || null,
         amount: totalAmount,
-        counterpartAccountId: defaultCounterpart,
+        counterpartAccountId: unallocatedCounterpart,
         branchId: txn.branchId,
         description: baseDescription,
       });
@@ -388,12 +464,24 @@ export class TransactionAccountingService {
         groups.push({
           subject: txn.correspondentName || null,
           amount: remaining,
-          counterpartAccountId: defaultCounterpart,
+          counterpartAccountId: unallocatedCounterpart,
           branchId: txn.branchId,
           description: baseDescription,
         });
       }
     }
+
+    // Chia bình quân từng nhóm cho các chi nhánh của giao dịch (phần dư đồng/xu dồn vào các phần đầu)
+    const resolvedBranchIds = this.resolveBranchIds(txn);
+    const targetBranchIds: (string | null)[] = resolvedBranchIds.length
+      ? resolvedBranchIds
+      : [null];
+    const expandedGroups = groups.flatMap((group) => {
+      const parts = splitEvenly(group.amount, targetBranchIds.length, 2);
+      return targetBranchIds
+        .map((branchId, i) => ({ ...group, branchId, amount: parts[i] }))
+        .filter((g) => g.amount !== 0);
+    });
 
     const existingEntries = await this.dataSource.query(
       `SELECT date FROM erp_journal_entries WHERE source_id = $1 AND source_type = $2 AND is_deleted = false LIMIT 1`,
@@ -423,7 +511,7 @@ export class TransactionAccountingService {
       isReceipt,
     );
 
-    const validGroups = groups.filter((g) => g.counterpartAccountId);
+    const validGroups = expandedGroups.filter((g) => g.counterpartAccountId);
     for (let i = 0; i < validGroups.length; i++) {
       const group = validGroups[i];
       const entryNo =

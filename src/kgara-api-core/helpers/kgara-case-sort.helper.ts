@@ -85,3 +85,17 @@ export function applyCaseListSorts(
   }
   query.addOrderBy('case.soChungTu', 'DESC');
 }
+
+/**
+ * Thứ tự mặc định của bảng Vụ việc khi không có sorts. Dùng chung cho danh sách và
+ * xuất Excel theo filter hiện tại để cùng một tập dòng ra cùng một thứ tự.
+ */
+export function applyCaseListDefaultOrder(
+  query: SelectQueryBuilder<KgaraCase>,
+): void {
+  query
+    .orderBy('case.ngayPhatSinh', 'DESC', 'NULLS LAST')
+    .addOrderBy('case.ngayTiepNhan', 'DESC', 'NULLS LAST')
+    .addOrderBy('case.soChungTu', 'DESC')
+    .addOrderBy('case.updatedAt', 'DESC');
+}

@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 import { CoreUser } from '../users/entities/core-user.entity';
 import { CoreUserPreference } from '../users/entities/core-user-preference.entity';
+import { CoreUserTablePreference } from '../users/entities/core-user-table-preference.entity';
 import { CoreRefreshToken } from '../auth/entities/core-refresh-token.entity';
 import { CoreRole } from '../rbac-core/entities/core-role.entity';
 import { CorePermission } from '../rbac-core/entities/core-permission.entity';
@@ -83,10 +84,16 @@ import { ErpSystemOperation } from '../system-operations-core/entities/erp_syste
 import { ErpAiConfig } from '../ai-hub-core/entities/erp-ai-config.entity';
 import { ErpAiLog } from '../ai-hub-core/entities/erp-ai-log.entity';
 import { ErpAiPromptTemplate } from '../ai-hub-core/entities/erp-ai-prompt-template.entity';
+import { Invoice } from '@/v2/invoices/entities/invoice.entity'; // api-v2-module:invoices:entity-imports
+import { InvoiceItem } from '@/v2/invoices/entities/invoice-item.entity';
+import { GarageGoodsReceipt } from '@/v2/modules/garage-goods-receipts/entities/garage-goods-receipt.entity'; // api-v2-module:garage-goods-receipts:entity-imports
+import { GarageGoodsReceiptLine } from '@/v2/modules/garage-goods-receipts/entities/garage-goods-receipt-line.entity';
+import { GarageInventoryBalance } from '@/v2/modules/garage-goods-receipts/entities/garage-inventory-balance.entity';
 // plop:api-v2-entity-imports
 const entities = [
   CoreUser,
   CoreUserPreference,
+  CoreUserTablePreference,
   CoreRefreshToken,
   CoreRole,
   CorePermission,
@@ -168,6 +175,11 @@ const entities = [
   ErpEmailAttachment,
   VinfastPartsCatalog,
   VinfastPartsLedger,
+  Invoice, // api-v2-module:invoices:entities
+  InvoiceItem,
+  GarageGoodsReceipt, // api-v2-module:garage-goods-receipts:entities
+  GarageGoodsReceiptLine,
+  GarageInventoryBalance,
   // plop:api-v2-entities
 ];
 

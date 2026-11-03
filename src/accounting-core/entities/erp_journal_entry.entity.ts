@@ -16,12 +16,12 @@ export class ErpJournalEntry {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'uuid', name: 'branch_id' })
-  branchId: string;
+  @Column({ type: 'uuid', name: 'branch_id', nullable: true })
+  branchId: string | null;
 
-  @ManyToOne(() => ErpBranch)
+  @ManyToOne(() => ErpBranch, { nullable: true })
   @JoinColumn({ name: 'branch_id' })
-  branch: ErpBranch;
+  branch: ErpBranch | null;
 
   @Column({ type: 'varchar', length: 100, name: 'entry_no' })
   entryNo: string;

@@ -444,6 +444,133 @@ describe('GarageDashboardService & GaragePnlService - PnL Commission Calculation
     expect(dvItem.amount).toBe(4800000);
   });
 
+  it('Scenario 7: When financial expenses exist, they are deducted from Net Profit', async () => {
+    const mockQb = {
+      leftJoin: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getRawOne: jest.fn().mockResolvedValue({
+        revenue: '200000000',
+        cogs: '100000000',
+        caseCount: '10',
+        kyGuiRevenue: '0',
+        kyGuiCogs: '0',
+        kyGuiCaseCount: '0',
+        suaChuaChungRevenue: '200000000',
+        suaChuaChungCogs: '100000000',
+        suaChuaChungCaseCount: '10',
+        ojRevenue: '50000000',
+        ojCogs: '20000000',
+        ojCaseCount: '2',
+      }),
+    };
+    mockCaseRepo.createQueryBuilder.mockReturnValue(mockQb);
+
+    mockOpexService.getSummaryByPeriod.mockResolvedValue({
+      directCost: { total: 0, ojTotal: 0, items: [] },
+      selling: { total: 0, ojTotal: 0, items: [] },
+      opex: {
+        total: 40000000,
+        ojTotal: 10000000,
+        items: [
+          { categoryKey: 'NHAN_SU', amount: 40000000, ojAmount: 10000000 },
+        ],
+      },
+      financialExpense: {
+        total: 10000000,
+        ojTotal: 2000000,
+        items: [
+          { categoryKey: 'LAI_VAY', amount: 10000000, ojAmount: 2000000 },
+        ],
+      },
+      commission: { total: 0, ojTotal: 0, items: [] },
+    });
+
+    const report = await service.getPnlReport(2026, 8);
+
+    // Revenue = 200M, COGS = 100M -> GP = 100M
+    // Selling = 0
+    // Opex = 40M
+    // Financial = 10M
+    // Net Profit = 100M - 0 - 40M - 10M = 50M
+    expect(report.grossProfit).toBe(100000000);
+    expect(report.financialExpenses.total).toBe(10000000);
+    expect(report.financialExpenses.ojTotal).toBe(2000000);
+    expect(report.netProfit).toBe(50000000);
+
+    // OJ: GP = 30M, Selling = 0, Opex = 10M, Financial = 2M -> Net = 18M
+    expect(report.oj.financialExpensesTotal).toBe(2000000);
+    expect(report.oj.netProfit).toBe(18000000);
+  });
+
+  it('Scenario 8: Integration verification for OJ account cases - correctly aggregated into garage total and dedicated OJ P&L report', async () => {
+    // Giả lập dữ liệu có case từ tài khoản OJ (classification = 'OJ', accountKey = 'OJ')
+    const mockQb = {
+      leftJoin: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getRawOne: jest.fn().mockResolvedValue({
+        revenue: '350000000', // Tổng doanh thu chung (bao gồm cả xe thường và xe OJ)
+        cogs: '210000000',
+        caseCount: '15',
+        kyGuiRevenue: '50000000',
+        kyGuiCogs: '30000000',
+        kyGuiCaseCount: '2',
+        suaChuaChungRevenue: '180000000',
+        suaChuaChungCogs: '110000000',
+        suaChuaChungCaseCount: '8',
+        ojRevenue: '120000000', // Dữ liệu từ tài khoản OJ sync về
+        ojCogs: '70000000',
+        ojCaseCount: '5',
+      }),
+    };
+    mockCaseRepo.createQueryBuilder.mockReturnValue(mockQb);
+
+    mockOpexService.getSummaryByPeriod.mockResolvedValue({
+      directCost: { total: 0, ojTotal: 0, items: [] },
+      selling: { total: 0, ojTotal: 0, items: [] },
+      opex: {
+        total: 30000000,
+        ojTotal: 5000000,
+        items: [
+          { categoryKey: 'VAN_HANH', amount: 30000000, ojAmount: 5000000 },
+        ],
+      },
+      financialExpense: { total: 0, ojTotal: 0, items: [] },
+      commission: { total: 0, ojTotal: 0, items: [] },
+    });
+
+    const report = await service.getPnlReport(2026, 11);
+
+    // 1. Kiểm tra số liệu OJ độc lập (cho switch "Riêng OJ" trên UI PnL)
+    expect(report.oj.caseCount).toBe(5);
+    expect(report.oj.revenue).toBe(120000000);
+    expect(report.oj.cogs).toBe(70000000);
+    expect(report.oj.grossProfit).toBe(50000000); // 120M - 70M
+    expect(report.oj.grossMarginRate).toBeCloseTo((50000000 / 120000000) * 100);
+    expect(report.oj.opexTotal).toBe(5000000);
+    expect(report.oj.netProfit).toBe(45000000); // 50M - 5M
+
+    // 2. Kiểm tra số liệu tổng chung xưởng (cho tab "Toàn bộ" trên UI PnL)
+    expect(report.caseCount).toBe(15);
+    expect(report.revenue).toBe(350000000);
+    expect(report.cogs).toBe(210000000);
+    expect(report.grossProfit).toBe(140000000); // 350M - 210M
+
+    // 3. Phân khúc OJ trong mảng chi tiết
+    const ojSegment = report.revenueByClassification.find(
+      (c: any) => c.key === 'OJ',
+    );
+    expect(ojSegment).toBeDefined();
+    expect(ojSegment?.revenue).toBe(120000000);
+    expect(ojSegment?.cogs).toBe(70000000);
+    expect(ojSegment?.caseCount).toBe(5);
+  });
+
   describe('syncCommissionVouchers()', () => {
     const mockPnlReport = {
       commission: {

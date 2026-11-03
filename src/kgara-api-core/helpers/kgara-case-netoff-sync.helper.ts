@@ -1,6 +1,5 @@
 import { EntityManager } from 'typeorm';
 import { Logger } from '@nestjs/common';
-import { extractNetPayableAmount } from '../utils/kgara-parser.util';
 
 const logger = new Logger('KgaraCaseNetoffSyncHelper');
 
@@ -8,7 +7,7 @@ const logger = new Logger('KgaraCaseNetoffSyncHelper');
  * Đồng bộ hai chiều giữa cấn trừ Hóa đơn (erp_invoice_voucher_netoff)
  * và Sổ thanh toán Vụ việc Garage (kgara_case_settlements).
  *
- * Tuân thủ quy chuẩn Pattern C (/api-service-refactor):
+ * Tuân thủ quy chuẩn Pattern C (/api-structure):
  * - Pure Engine / Helper độc lập, nhận EntityManager
  * - Không phụ thuộc NestJS Container hay state
  * - Thao tác nguyên khối (atomic) trong transaction hiện tại
@@ -160,11 +159,9 @@ export async function syncSingleCaseSettlementsFromInvoiceNetOffs(
     );
 
     const totalReceipts = Number(settlementSums[0]?.total_receipts || 0);
-    const targetRevenue = extractNetPayableAmount({
-      tienCoThue: caseRecord.tien_co_thue,
-      rawData: caseRecord.raw_data,
-      doanhThu: caseRecord.doanh_thu,
-    });
+    // Giữ doanh thu đã lưu (số ròng từ chi tiết). Không tính lại từ raw_data:
+    // raw của danh sách không có chiết khấu nên sẽ ghi đè bằng số gross.
+    const targetRevenue = Number(caseRecord.tien_co_thue || 0);
     const remainingReceivable = Math.max(0, targetRevenue - totalReceipts);
 
     await manager.query(

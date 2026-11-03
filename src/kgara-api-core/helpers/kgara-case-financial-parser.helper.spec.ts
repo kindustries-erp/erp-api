@@ -1,4 +1,7 @@
-import { KgaraCaseFinancialParserHelper } from './kgara-case-financial-parser.helper';
+import {
+  KgaraCaseFinancialParserHelper,
+  resolveCaseVatAmount,
+} from './kgara-case-financial-parser.helper';
 
 describe('KgaraCaseFinancialParserHelper', () => {
   const mockPayloadGrPdv2606_0025 = {
@@ -141,5 +144,57 @@ describe('KgaraCaseFinancialParserHelper', () => {
       expect(profitCalc.estimatedProfitPreTax).toBe(855000);
       expect(profitCalc.estimatedProfitAfterTax).toBe(957000);
     });
+  });
+});
+
+describe('resolveCaseVatAmount', () => {
+  it('ưu tiên rawData.TienThue khi có', () => {
+    expect(
+      resolveCaseVatAmount({
+        tienCoThue: 2106000,
+        rawData: { TienThue: 156000, TienThueKH: 1 },
+      }),
+    ).toBe(156000);
+  });
+
+  it('cộng TienThueKH và TienThueBH khi không có TienThue', () => {
+    expect(
+      resolveCaseVatAmount({
+        rawData: { TienThueKH: 100000, TienThueBH: 50000 },
+      }),
+    ).toBe(150000);
+  });
+
+  it('suy ra từ tổng dòng (tienCoThue - tienChuaThue) khi có thuế ở dòng', () => {
+    expect(
+      resolveCaseVatAmount({ rawData: {} }, [
+        { tienCoThue: 1080000, tienChuaThue: 1000000 },
+      ]),
+    ).toBe(80000);
+  });
+
+  it('suy ra từ chênh lệch tổng phiếu khi dòng không có thuế và khớp 8%', () => {
+    // Phiếu GR-PDV2607-0046: 2.106.000 - 1.950.000 = 156.000 = 8% của 1.950.000
+    expect(
+      resolveCaseVatAmount({ tienCoThue: 2106000, rawData: {} }, [
+        { tienCoThue: 1950000, tienChuaThue: 1950000 },
+      ]),
+    ).toBe(156000);
+  });
+
+  it('trả về 0 khi chênh lệch không khớp thuế suất chuẩn (chiết khấu/phụ phí)', () => {
+    expect(
+      resolveCaseVatAmount({ tienCoThue: 2000000, rawData: {} }, [
+        { tienCoThue: 1950000, tienChuaThue: 1950000 },
+      ]),
+    ).toBe(0);
+  });
+
+  it('trả về 0 khi tổng phiếu nhỏ hơn tổng dòng', () => {
+    expect(
+      resolveCaseVatAmount({ tienCoThue: 1000000, rawData: {} }, [
+        { tienCoThue: 1950000, tienChuaThue: 1950000 },
+      ]),
+    ).toBe(0);
   });
 });

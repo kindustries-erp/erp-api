@@ -1,10 +1,20 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ErpInvoice } from '../../entities/erp_invoice.entity';
 import { ErpEInvoiceSync } from '../../entities/erp_einvoice_sync.entity';
 import { InvoicePdfDownloadWorkerService } from './invoice-pdf-download-worker.service';
-import { InvoiceProviderDetectorService } from './invoice-provider-detector.service';
+import {
+  InvoiceProviderDetectorService,
+  InvoiceProviderLookupInfo,
+} from './invoice-provider-detector.service';
+import { readXmlFromBuffer } from './invoice-xml-reader.helper';
+import { R2Service } from '../../../r2/r2.service';
 
 export interface SyncAdvancedParams {
   companyTaxCode: string;
@@ -23,6 +33,14 @@ export interface DownloadInvoiceResult {
   pdfError: string | null;
 }
 
+const MAX_MANUAL_PDF_BYTES = 10 * 1024 * 1024;
+
+export interface ManualPdfUploadResult {
+  invoiceId: string;
+  pdfFileKey: string;
+  pdfSource: string;
+}
+
 export interface InvoiceLookupInfoResult {
   invoiceId: string;
   invoiceNo: string;
@@ -34,6 +52,8 @@ export interface InvoiceLookupInfoResult {
   pdfSource: string | null;
   pdfFileKey: string | null;
   pdfError: string | null;
+  hasXml: boolean;
+  hints: { label: string; value: string }[];
 }
 
 @Injectable()
@@ -47,6 +67,7 @@ export class InvoiceOriginalPdfFacade {
     private readonly syncRepo: Repository<ErpEInvoiceSync>,
     private readonly workerService: InvoicePdfDownloadWorkerService,
     private readonly detectorService: InvoiceProviderDetectorService,
+    private readonly r2Service: R2Service,
   ) {}
 
   async downloadForInvoice(invoiceId: string): Promise<DownloadInvoiceResult> {
@@ -142,18 +163,81 @@ export class InvoiceOriginalPdfFacade {
       invoice.lookupCode,
       invoice.lookupUrl,
     );
+    const xmlInfo = await this.readXmlLookupInfo(invoice);
+    const provider =
+      xmlInfo && xmlInfo.providerCode !== 'OTHER' ? xmlInfo : detected;
 
     return {
       invoiceId: invoice.id,
       invoiceNo: invoice.invoiceNo,
-      providerCode: detected.providerCode,
-      providerName: detected.providerName,
-      msttcgp: invoice.msttcgp || detected.msttcgp || null,
-      lookupCode: invoice.lookupCode || null,
-      lookupUrl: invoice.lookupUrl || detected.lookupUrl || null,
+      providerCode: provider.providerCode,
+      providerName: provider.providerName,
+      msttcgp: invoice.msttcgp || provider.msttcgp || null,
+      lookupCode: invoice.lookupCode || xmlInfo?.lookupCode || null,
+      lookupUrl: invoice.lookupUrl || provider.lookupUrl || null,
       pdfSource: invoice.pdfSource || null,
       pdfFileKey: invoice.pdfFileKey || null,
       pdfError: invoice.pdfError || null,
+      hasXml: !!invoice.xmlFileKey,
+      hints: xmlInfo?.hints ?? [],
+    };
+  }
+
+  /** Đọc XML từ R2 để lấy mã tra cứu còn thiếu. Chỉ đọc, không ghi DB. */
+  private async readXmlLookupInfo(
+    invoice: ErpInvoice,
+  ): Promise<InvoiceProviderLookupInfo | null> {
+    if (!invoice.xmlFileKey) return null;
+    try {
+      const fileBuffer = await this.r2Service.downloadBuffer(
+        invoice.xmlFileKey,
+      );
+      const xml = readXmlFromBuffer(fileBuffer, invoice.xmlFileKey);
+      return xml
+        ? this.detectorService.detectFromXml(xml, invoice.sellerTaxCode)
+        : null;
+    } catch (err: any) {
+      this.logger.warn(
+        `Could not read XML for invoice ${invoice.id}: ${err.message}`,
+      );
+      return null;
+    }
+  }
+
+  /** Nhận PDF do người dùng tự tải từ cổng NCC. Key do server sinh, không nhận đường dẫn từ client. */
+  async uploadManualPdf(
+    invoiceId: string,
+    fileBuffer: Buffer,
+  ): Promise<ManualPdfUploadResult> {
+    const invoice = await this.invoiceRepo.findOne({
+      where: { id: invoiceId },
+    });
+    if (!invoice)
+      throw new NotFoundException(`Invoice with ID ${invoiceId} not found`);
+
+    if (fileBuffer.length > MAX_MANUAL_PDF_BYTES) {
+      throw new BadRequestException('File PDF vượt quá 10MB');
+    }
+    if (fileBuffer.subarray(0, 4).toString() !== '%PDF') {
+      throw new BadRequestException('Tệp tải lên không phải PDF hợp lệ');
+    }
+
+    const pdfFileKey = `invoices/pdf/${invoice.id}.pdf`;
+    await this.r2Service.uploadBuffer(
+      pdfFileKey,
+      fileBuffer,
+      'application/pdf',
+    );
+
+    invoice.pdfFileKey = pdfFileKey;
+    invoice.pdfSource = 'manual_upload';
+    invoice.pdfError = null;
+    await this.invoiceRepo.save(invoice);
+
+    return {
+      invoiceId: invoice.id,
+      pdfFileKey,
+      pdfSource: 'manual_upload',
     };
   }
 

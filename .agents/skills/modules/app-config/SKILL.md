@@ -7,7 +7,7 @@ description: Module tri thức Quản lý Cấu hình Ứng dụng & Tùy chọn
 
 ## 1. Tổng quan Nghiệp vụ
 
-Module `app-config` chịu trách nhiệm cung cấp cấu hình hệ thống công khai (Public App Config) và quản lý tùy chọn cá nhân hóa của người dùng (User Preferences) trên toàn bộ hệ sinh thái Liouni ERP.
+Module `app-config` chịu trách nhiệm cung cấp cấu hình hệ thống công khai (Public App Config) và quản lý tùy chọn cá nhân hóa của người dùng (User Preferences) trên toàn bộ hệ sinh thái ERP.
 
 Các nghiệp vụ trọng tâm:
 - **Cấu hình Môi trường Động (Dynamic `APP_ENV`)**: Cung cấp API công khai `GET /api/v1/app/config` để Frontend tự động nhận diện môi trường Backend đang chạy (`development`, `klotus-staging`, `klotus-production`, `greenway-staging`, `greenway-production`) mà không cần thay đổi file cấu hình `.env` ở Frontend.
@@ -71,6 +71,8 @@ Controller Base Route: `/api/v1/app`
 | `GET` | `/api/v1/app/changelog` | *Public (Không cần Auth)* | Query: `QueryChangelogDto` (`search`, `page`, `limit`) | Lấy danh sách nhật ký phát hành phân trang và tìm kiếm server-side |
 | `GET` | `/api/v1/app/preferences` | `JwtAuthGuard` | Header Bearer Token | Lấy toàn bộ tùy chọn cá nhân của user đang đăng nhập |
 | `PATCH`| `/api/v1/app/preferences` | `JwtAuthGuard` | Body: `UpdateUserPreferenceDto` | Cập nhật tùy chọn cá nhân (deep merge JSONB `tableConfigs`, `uiConfigs`) |
+| `GET` | `/api/v1/app/table-preferences` | `JwtAuthGuard` | Header Bearer Token | Lấy cấu hình V2 của mọi bảng: map `tableId -> { columns, views }` (bảng `core_user_table_preferences`) |
+| `PATCH`| `/api/v1/app/table-preferences/:tableId` | `JwtAuthGuard` | Body: `UpdateTablePreferenceDto` (`columns`, `views`) | Ghi đè từng phần của một bảng; phần không gửi giữ nguyên. Validate bằng `TablePreferenceColumnsDto` / `TablePreferenceViewsDto` |
 
 ### Tích hợp Authentication Endpoints:
 - `POST /api/v1/auth/login`: Trả kèm `preferences: { theme, language, tableConfigs, uiConfigs }`

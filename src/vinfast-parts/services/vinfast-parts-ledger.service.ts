@@ -8,6 +8,10 @@ import {
   LedgerEntryForFifo,
 } from '../engines/vinfast-fifo.engine';
 import { FifoUnitRow } from '../dto/fifo-unit-row.dto';
+import {
+  VINFAST_LEDGER_ORDER_SQL,
+  VINFAST_VALID_STATUS_SQL,
+} from '../helpers/vinfast-ledger-rules.helper';
 
 @Injectable()
 export class VinfastPartsLedgerService {
@@ -46,8 +50,8 @@ export class VinfastPartsLedgerService {
         i.license_plate as "licensePlate"
       FROM vinfast_parts_ledger l
       JOIN erp_invoices i ON i.id = l.invoice_id
-      WHERE (l.part_sku = $1 OR l.part_sku = $2) AND i.tax_invoice_status IN (1, 3)
-      ORDER BY l.transaction_date ASC, l.created_at ASC
+      WHERE (l.part_sku = $1 OR l.part_sku = $2) AND i.tax_invoice_status IN ${VINFAST_VALID_STATUS_SQL}
+      ORDER BY ${VINFAST_LEDGER_ORDER_SQL}
     `;
 
     const entries: LedgerEntryForFifo[] = await this.ledgerRepo.query(query, [
@@ -94,8 +98,8 @@ export class VinfastPartsLedgerService {
         i.license_plate as "licensePlate"
       FROM vinfast_parts_ledger l
       JOIN erp_invoices i ON i.id = l.invoice_id
-      WHERE (l.part_sku = $1 OR l.part_sku = $2) AND i.tax_invoice_status IN (1, 3)
-      ORDER BY l.transaction_date ASC, l.created_at ASC
+      WHERE (l.part_sku = $1 OR l.part_sku = $2) AND i.tax_invoice_status IN ${VINFAST_VALID_STATUS_SQL}
+      ORDER BY ${VINFAST_LEDGER_ORDER_SQL}
     `;
 
     const entries: LedgerEntryForFifo[] = await this.ledgerRepo.query(query, [

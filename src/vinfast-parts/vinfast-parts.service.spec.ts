@@ -2,6 +2,7 @@ import { VinfastPartsService } from './vinfast-parts.service';
 import { VinfastPartsStockService } from './services/vinfast-parts-stock.service';
 import { VinfastPartsSyncService } from './services/vinfast-parts-sync.service';
 import { VinfastPartsLedgerService } from './services/vinfast-parts-ledger.service';
+import { isVinfastCandidateSeller } from '../erp-invoices-core/helpers/vinfast-part-code.helper';
 
 describe('VinfastPartsService Filter & Search Specs', () => {
   let service: VinfastPartsService;
@@ -80,6 +81,74 @@ describe('VinfastPartsService Filter & Search Specs', () => {
       expect(
         service.resolveVinfastSku(null, 'VF5_HV_BATTERY_PACK_38_KWH'),
       ).toBe('VF-EEP73110011AP');
+    });
+
+    it('should not invent SKU from non-VinFast descriptions or generic item codes', () => {
+      expect(
+        service.resolveVinfastSku(
+          'VT-TIEU-HAO',
+          'Băng dính giấy một mặt (20mmx30 Yard)',
+        ),
+      ).toBeNull();
+      expect(
+        service.resolveVinfastSku('VT-TIEU-HAO', 'Dây cáp mạng UTP CAT6'),
+      ).toBeNull();
+      expect(service.resolveVinfastSku(null, 'Xăng RON95 Mức 3')).toBeNull();
+    });
+  });
+
+  describe('isVinfastCandidateSeller', () => {
+    it('should accept sellers whose name contains VinFast regardless of case', () => {
+      expect(
+        isVinfastCandidateSeller(
+          'CÔNG TY CỔ PHẦN VINFAST VIỆT NAM',
+          '0202357718',
+        ),
+      ).toBe(true);
+      expect(isVinfastCandidateSeller('Vinfast Service', null)).toBe(true);
+    });
+
+    it('should accept Greenway Automotives only by its MST', () => {
+      expect(
+        isVinfastCandidateSeller(
+          'CÔNG TY CỔ PHẦN GREENWAY AUTOMOTIVES',
+          '0318334886',
+        ),
+      ).toBe(true);
+      expect(isVinfastCandidateSeller('CÔNG TY TNHH GRAB', '0312650437')).toBe(
+        false,
+      );
+      expect(
+        isVinfastCandidateSeller(
+          'DOANH NGHIỆP TƯ NHÂN TRỊNH THANH',
+          '0304980826',
+        ),
+      ).toBe(false);
+    });
+  });
+
+  describe('getPartsStock uses the shared ledger rules', () => {
+    it('should count only valid invoice statuses and apply adjustment sign', async () => {
+      await stockService.getPartsStock();
+      const dataQuery = catalogRepo.query.mock.calls[0][0] as string;
+      expect(dataQuery).toContain('i.tax_invoice_status IN (1, 2, 3, 5)');
+      expect(dataQuery).toContain('l.qty * l.adj_sign AS qty');
+    });
+  });
+
+  describe('getPartsStock sort whitelist', () => {
+    it('should ignore sortBy values outside the whitelist instead of injecting SQL', async () => {
+      await stockService.getPartsStock(
+        undefined,
+        1,
+        50,
+        undefined,
+        '(SELECT 1); DROP TABLE vinfast_parts_ledger; --',
+        'DESC',
+      );
+      const dataQuery = catalogRepo.query.mock.calls[0][0] as string;
+      expect(dataQuery).not.toContain('DROP TABLE');
+      expect(dataQuery).toContain('ORDER BY "qtyBalance" DESC, sku ASC');
     });
   });
 
@@ -277,6 +346,47 @@ describe('VinfastPartsService Filter & Search Specs', () => {
         cumulativeQtyOut: 15,
         cumulativeQtyBalance: 35,
       });
+    });
+  });
+
+  describe('exportPartsStockToExcel fallback for zero invoiceItemTotalAmount', () => {
+    it('should fallback to preVatAmount + vatRate when invoiceItemTotalAmount is 0', async () => {
+      ledgerRepo.query = jest.fn().mockResolvedValue([
+        {
+          partSku: 'VF-EEP73110011AP',
+          id: '1',
+          direction: 'OUT',
+          qty: 1,
+          unitCost: 4288490,
+          preVatAmount: 4288490,
+          transactionDate: new Date('2026-03-01'),
+          isAdjustment: false,
+          adjSign: 1,
+          invoiceId: 'inv-1',
+          invoiceBranchName: 'Bảo Trì',
+          invoiceNo: '291',
+          invoiceSerial: 'C26TGA',
+          invoiceDate: '2026-02-07',
+          buyerName: 'Công ty bảo hiểm PJICO Hà Nội',
+          buyerTaxCode: '0100110768-060',
+          sellerName: 'Greenway',
+          sellerTaxCode: '0312345678',
+          licensePlate: '',
+          partName: 'Kính chắn gió',
+          unit: 'Chiếc',
+          invoiceItemName: 'Kính chắn gió',
+          invoiceItemQty: '1',
+          invoiceItemUnitPrice: '4288490',
+          invoiceItemPreVatAmount: '4288490',
+          invoiceItemVatRate: '8%',
+          invoiceItemVatAmount: '343079.2',
+          invoiceItemTotalAmount: '0',
+        },
+      ]);
+
+      const buffer = await service.exportStockExcel({});
+      expect(buffer).toBeDefined();
+      expect(buffer.length).toBeGreaterThan(0);
     });
   });
 });

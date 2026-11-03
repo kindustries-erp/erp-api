@@ -1,13 +1,13 @@
 ---
 name: erp-inventory-items
-description: Module tri thức Danh mục Mặt hàng & Master Data Kho trong Liouni ERP. Chứa toàn bộ database schema (erp_inventory_items, erp_uoms, erp_item_types, erp_tracking_policies, erp_entity_attribute_values), Module Config EAV engine, DTOs, API endpoints, quy trình quản lý SKU, migration runbook và tích hợp đa module.
+description: Module tri thức Danh mục Mặt hàng & Master Data Kho trong ERP. Chứa toàn bộ database schema (erp_inventory_items, erp_uoms, erp_item_types, erp_tracking_policies, erp_entity_attribute_values), Module Config EAV engine, DTOs, API endpoints, quy trình quản lý SKU, migration runbook và tích hợp đa module.
 ---
 
 # 📦 Module Tri Thức: Danh Mục Mặt Hàng & Dữ Liệu Gốc Kho (`erp-inventory-items`)
 
 ## 1. Tổng quan Nghiệp vụ & Kiến trúc Module Config EAV
 
-Module `erp-inventory-items` (thuộc phân hệ `inventory-core`) quản lý toàn bộ danh mục vật tư, phụ tùng, linh kiện và thành phẩm trong hệ thống Liouni ERP. Đây là master data nền tảng cho mọi hoạt động Mua hàng (PO), Bán hàng (SO), Sản xuất (BOM & MO), Quản lý Kho và Kế toán giá vốn.
+Module `erp-inventory-items` (thuộc phân hệ `inventory-core`) quản lý toàn bộ danh mục vật tư, phụ tùng, linh kiện và thành phẩm trong hệ thống ERP. Đây là master data nền tảng cho mọi hoạt động Mua hàng (PO), Bán hàng (SO), Sản xuất (BOM & MO), Quản lý Kho và Kế toán giá vốn.
 
 Phân hệ đã được **chuẩn hóa 100% theo kiến trúc Module Config Engine (EAV)**:
 1. **Master Data & Ràng buộc toàn vẹn**:
@@ -149,7 +149,7 @@ Khi triển khai trên database mới hoặc cập nhật môi trường staging
 
 1. **Backend Tests & CI Check**:
    ```bash
-   cd erp/erp-api && bun test src/inventory-core
+   cd erp/erp-api && bunx jest src/inventory-core
    cd erp/erp-api && bun run check:ci
    ```
 2. **Frontend Type Check**:
