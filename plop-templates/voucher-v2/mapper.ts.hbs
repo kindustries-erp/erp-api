@@ -1,0 +1,67 @@
+import { {{headerEntityName}} } from '../entities/{{headerEntityKebab}}.entity';
+import { {{lineEntityName}} } from '../entities/{{lineEntityKebab}}.entity';
+import { Create{{headerEntityName}}Dto } from '../dto/create-{{headerEntityKebab}}.dto';
+import {
+  {{headerEntityName}}ResponseDto,
+  {{lineEntityName}}ResponseDto,
+} from '../dto/{{headerEntityKebab}}-response.dto';
+
+export function to{{lineEntityName}}Response(
+  line: {{lineEntityName}},
+): {{lineEntityName}}ResponseDto {
+  return {
+    id: line.id,
+    lineNo: line.lineNo,
+    itemCode: line.itemCode ?? undefined,
+    itemName: line.itemName,
+    unit: line.unit,
+    qtyReceived: Number(line.qtyReceived || 0),
+    unitCost: Number(line.unitCost || 0),
+    amount: Number(line.amount || 0),
+    notes: line.notes ?? undefined,
+    createdAt: line.createdAt ? new Date(line.createdAt).toISOString() : '',
+    updatedAt: line.updatedAt ? new Date(line.updatedAt).toISOString() : '',
+  };
+}
+
+export function to{{headerEntityName}}Response(
+  entity: {{headerEntityName}},
+): {{headerEntityName}}ResponseDto {
+  return {
+    id: entity.id,
+    receiptNo: entity.receiptNo,
+    receiptDate: entity.receiptDate,
+    supplierId: entity.supplierId ?? undefined,
+    supplierName: entity.supplierName ?? undefined,
+    branchId: entity.branchId ?? undefined,
+    branchName: entity.branchName ?? undefined,
+    totalAmount: Number(entity.totalAmount || 0),
+    status: entity.status,
+    paymentStatus: entity.paymentStatus,
+    remarks: entity.remarks ?? undefined,
+    createdBy: entity.createdBy ?? undefined,
+    createdAt: entity.createdAt ? new Date(entity.createdAt).toISOString() : '',
+    updatedAt: entity.updatedAt ? new Date(entity.updatedAt).toISOString() : '',
+    lines: entity.lines?.map((l) => to{{lineEntityName}}Response(l)),
+  };
+}
+
+export function to{{headerEntityName}}EntityFields(
+  dto: Partial<Create{{headerEntityName}}Dto>,
+): Partial<{{headerEntityName}}> {
+  const fields: Partial<{{headerEntityName}}> = {};
+
+  if (dto.receiptNo !== undefined) fields.receiptNo = dto.receiptNo;
+  if (dto.receiptDate !== undefined) fields.receiptDate = dto.receiptDate;
+  if (dto.supplierId !== undefined) fields.supplierId = dto.supplierId ?? null;
+  if (dto.supplierName !== undefined) fields.supplierName = dto.supplierName ?? null;
+  if (dto.branchId !== undefined) fields.branchId = dto.branchId ?? null;
+  if (dto.branchName !== undefined) fields.branchName = dto.branchName ?? null;
+  if (dto.totalAmount !== undefined) fields.totalAmount = String(dto.totalAmount);
+  if (dto.status !== undefined) fields.status = dto.status;
+  if (dto.paymentStatus !== undefined) fields.paymentStatus = dto.paymentStatus;
+  if (dto.remarks !== undefined) fields.remarks = dto.remarks ?? null;
+
+  return fields;
+}
+

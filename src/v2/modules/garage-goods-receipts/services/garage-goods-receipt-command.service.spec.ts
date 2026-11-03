@@ -2,6 +2,7 @@ import { DataSource, Repository } from 'typeorm';
 import { GarageGoodsReceipt } from '../entities/garage-goods-receipt.entity';
 import { CreateGarageGoodsReceiptDto } from '../dto/create-garage-goods-receipt.dto';
 import { GarageGoodsReceiptCommandService } from './garage-goods-receipt-command.service';
+import { BaseVoucherEngineService } from '@/v2/core/goods-receipts/services/base-voucher-engine.service';
 
 describe('GarageGoodsReceiptCommandService', () => {
   let repo: {
@@ -17,6 +18,7 @@ describe('GarageGoodsReceiptCommandService', () => {
   };
   let balanceRepo: { create: jest.Mock; save: jest.Mock; findOne: jest.Mock };
   let dataSource: { transaction: jest.Mock };
+  let voucherEngine: BaseVoucherEngineService;
   let service: GarageGoodsReceiptCommandService;
 
   beforeEach(() => {
@@ -49,9 +51,12 @@ describe('GarageGoodsReceiptCommandService', () => {
       transaction: jest.fn((callback) => callback(manager)),
     };
 
+    voucherEngine = new BaseVoucherEngineService();
+
     service = new GarageGoodsReceiptCommandService(
       dataSource as unknown as DataSource,
       repo as unknown as Repository<GarageGoodsReceipt>,
+      voucherEngine,
     );
   });
 
@@ -112,7 +117,7 @@ describe('GarageGoodsReceiptCommandService', () => {
       lines: [line],
     } as unknown as GarageGoodsReceipt;
 
-    const posted = await service.post(entity);
+    await service.post(entity);
 
     expect(entity.status).toBe('POSTED');
     expect(balanceRepo.create).toHaveBeenCalledWith(

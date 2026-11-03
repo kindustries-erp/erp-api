@@ -9,7 +9,10 @@ Workflow đầy đủ: [`../../workflows/api-v2-refactor.md`](../../workflows/ap
 
 ## 0. Vị trí
 
-Mọi module API v2 nằm trong `src/v2/<module>-core/`, tách khỏi module v1 (`src/<module>-core/`). Import trong module dùng alias `@/` (`@/common`, `@/auth`, `@/rbac-core`). Generator `api-module-v2` tự sinh đúng vị trí và wiring `./v2/...`.
+Kiến trúc API V2 được tổ chức phân cấp tương tự Web V2 (`erp-web/src/v2/`):
+- **Core Foundations & Shared Engines**: Nằm trong `src/v2/core/<core-name>/` (vd: `src/v2/core/goods-receipts/` chứa Base Voucher Engine, shared voucher contracts).
+- **Business Modules**: Nằm trong `src/v2/modules/<module-name>/` (vd: `src/v2/modules/garage-goods-receipts/`).
+- Tách biệt hoàn toàn khỏi các module V1 legacy (`src/<module>-core/`). Import trong module dùng alias `@/` (`@/common`, `@/auth`, `@/rbac-core`, `@/v2/core/...`). Generator `api-module-v2` và `api-voucher-v2` tự sinh đúng vị trí `src/v2/modules/...` và wiring `./v2/modules/...`.
 
 ## 1. Quy ước v2
 
@@ -91,6 +94,39 @@ Generator không ghi đè file đã có (`plop add` lỗi). Trình tự đã dù
 - [ ] Nghiệp vụ thêm vào command/query service, kèm spec
 - [ ] `bun run type:check`, `bunx jest src/v2/<module>-core --forceExit`, `bunx eslint` đều pass
 - [ ] Module skill `.agents/skills/modules/<module>/SKILL.md` đã cập nhật (Knowledge-Sync)
+
+## 4b. Generator Chứng Từ V2 (`api-voucher-v2`)
+
+Dành cho các module dạng **Document - Detail Lines (Master-Detail / Voucher)** như: `garage-goods-receipts`, `garage-goods-issues`, `purchase-orders`, `sales-orders`, `inventory-adjustments`.
+
+### Cách chạy
+```bash
+bunx plop api-voucher-v2
+```
+
+### Prompt yêu cầu:
+1. `moduleInput`: Tên thư mục module (kebab-case, vd: `garage-goods-issues-core`).
+2. `headerEntityInput`: Tên Entity Header chính (PascalCase, vd: `GarageGoodsIssue`).
+3. `lineEntityInput`: Tên Entity Line chi tiết (mặc định `<Header>Line`, vd: `GarageGoodsIssueLine`).
+4. `voucherPrefixInput`: Tiền tố mã chứng từ tự sinh theo ngày (vd: `GGI`, `GR`, `PO`).
+5. `tableNameInput`: Tên bảng PostgreSQL Header (mặc định `erp_<module>`).
+6. `lineTableNameInput`: Tên bảng PostgreSQL Lines (mặc định `<header_table>_lines`).
+7. `routePathInput`: Đường dẫn API (mặc định theo module).
+8. `permissionResourceInput`: Tên RBAC resource snake_case.
+9. `wireInput`: Nối tự động vào AppModule và DataSource (`true`/`false`).
+
+### Cấu trúc sinh ra:
+- **Entities**: Header (`@OneToMany`) và Line (`@ManyToOne`, cascade, FK, `isDeleted`).
+- **DTOs**: Create Header/Line DTOs, Update DTO (PartialType), Query DTO (`TableQueryDto`), Response DTOs.
+- **Helpers**: Mapper hai chiều Header + nested Lines (tự tính tổng dòng hàng).
+- **Core Engine Integration**: Tự động kết nối `BaseVoucherEngineService` (`src/v2/goods-receipts-core/`):
+  - Sinh mã theo ngày: `generateDailyVoucherNo` (`PREFIX-YYYYMMDD-001`).
+  - Kiểm tra trạng thái: `validateVoucherTransition` (`DRAFT` -> `POSTED` -> `CANCELLED`).
+  - Xóa mềm: Chỉ cho phép xóa khi ở trạng thái `DRAFT`.
+  - Transaction an toàn: Lưu cả Header và Lines trong một transaction.
+- **Specs co-located**: Đầy đủ unit test cho Mapper, QueryService, CommandService, Facade, Controller (kèm RBAC verification test).
+
+---
 
 ## 5. Test generator
 
