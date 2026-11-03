@@ -54,6 +54,7 @@ describe('KgaraCaseQueryService', () => {
 
   const mockServiceQueryBuilder: any = {
     where: jest.fn().mockReturnThis(),
+    andWhere: jest.fn().mockReturnThis(),
     orderBy: jest.fn().mockReturnThis(),
     addOrderBy: jest.fn().mockReturnThis(),
     getMany: jest.fn().mockResolvedValue([

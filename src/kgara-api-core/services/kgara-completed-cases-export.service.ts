@@ -362,6 +362,7 @@ export class KgaraCompletedCasesExportService {
           const dbLines = await this.serviceRepo
             .createQueryBuilder('line')
             .where('line.hdPhieuDichVuId IN (:...chunk)', { chunk })
+            .andWhere('line.deletedAt IS NULL')
             .orderBy('line.hdPhieuDichVuId', 'ASC')
             .addOrderBy('line.createdAt', 'ASC')
             .getMany();
