@@ -4,7 +4,7 @@ Source of truth for this repo (`./erp-api`).
 
 ## Read order
 
-1. `.agents/skills/erp-api-current-truth/SKILL.md`
+1. `.agents/skills/erp-api-truth/SKILL.md`
 
 ## API Specific Agent Mandates
 
@@ -105,7 +105,7 @@ Source of truth for this repo (`./erp-api`).
 
 ### Required behavior
 
-- load `@.agents/skills/erp-api-current-truth/SKILL.md`
+- load `@.agents/skills/erp-api-truth/SKILL.md`
 - use repo-local context as default guidance
 - MUST use bun/bunx exclusively (do NOT use npm)
 - when debugging and testing API locally, always start dev on port 10010

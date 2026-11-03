@@ -3,7 +3,7 @@
  * Quét file backend vượt ngưỡng kích thước + vi phạm Clean DI + vệ sinh script (read-only).
  *
  * Chạy từ thư mục erp-api:
- *   bun .agents/skills/api-service-refactor/scripts/scan-oversized-files.ts
+ *   bun .agents/skills/erp-api-structure/scripts/scan-oversized-files.ts
  *   bun .../scan-oversized-files.ts --path=src/ai-hub-core      # chỉ quét một thư mục
  *   bun .../scan-oversized-files.ts --json                       # xuất JSON (cho CI/agent)
  *   bun .../scan-oversized-files.ts --strict                     # exit 1 nếu có vi phạm Clean DI
@@ -261,7 +261,7 @@ async function main() {
 
   if (includeScripts) {
     console.log('\n' + line);
-    console.log(' 🧹 VỆ SINH SCRIPT (chỉ báo cáo, không chặn) - xem quy ước env trong api-service-refactor.md');
+    console.log(' 🧹 VỆ SINH SCRIPT (chỉ báo cáo, không chặn) - xem quy ước env trong api-structure.md');
     console.log(line);
     if (hygiene.length === 0) {
       console.log(' \x1b[32m✔ Không phát hiện.\x1b[0m');
@@ -272,7 +272,7 @@ async function main() {
   }
 
   console.log('\n' + line);
-  console.log(' 💡 Đây là báo cáo CẢNH BÁO, script KHÔNG tự sửa code. Quy chuẩn: .agents/workflows/api-service-refactor.md');
+  console.log(' 💡 Đây là báo cáo CẢNH BÁO, script KHÔNG tự sửa code. Quy chuẩn: .agents/workflows/api-structure.md');
   console.log(' 💡 Khi chạy dưới /plan-and-task: chỉ chạy test scoped ở từng task, full suite ở Final Gate.');
   console.log(line + '\n');
 

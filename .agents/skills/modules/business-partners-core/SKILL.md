@@ -34,7 +34,7 @@ src/v2/business-partners-core/
 
 Helper khóa dùng chung (ngoài module): `src/common/utils/invoice-partner-key.util.ts` (MST/CCCD, biểu thức SQL tên/MST từ hóa đơn; công nợ và đồng bộ dùng chung).
 
-Sinh bằng `api-module-v2` (xem skill `api-v2-refactor`, mục 3b về chuyển module cũ).
+Sinh bằng `api-module-v2` (xem skill `erp-api-structure`, mục 3b về chuyển module cũ).
 
 ## 3. Schema (đã xác minh đối chiếu với DB, chỉ đọc)
 
@@ -105,5 +105,5 @@ bunx eslint "src/v2/business-partners-core/**/*.ts" --max-warnings=0
 
 ## 8. Liên quan
 
-- Skill tổng: `api-v2-refactor` (hợp đồng, bẫy, quy trình chuyển module cũ).
+- Skill tổng: `api-structure` (hợp đồng, bẫy, quy trình chuyển module cũ).
 - Web: `erp-web/.agents/skills/modules/business-partners/SKILL.md`.

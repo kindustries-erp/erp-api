@@ -231,7 +231,7 @@ src/kgara-api-core/
 ├── kgara-sync.service.ts                   # Facade Service đồng bộ dữ liệu KGara
 ├── kgara-sync.service.spec.ts              # Bộ Unit Test kiểm thử logic sync và soft-delete
 └── services/
-    ├── kgara-case-export.service.ts        # Facade Service (< 50 LoC) điều phối xuất Excel theo chuẩn api-service-refactor
+    ├── kgara-case-export.service.ts        # Facade Service (< 50 LoC) điều phối xuất Excel theo chuẩn api-structure
     ├── kgara-completed-cases-export.service.ts # Sub-Service chuyên trách xuất file Excel 3 Sheets bảng kê phiếu kết thúc, theo dõi PnL và chi tiết DV/PT (< 300 LoC)
     ├── kgara-case-services-export.service.ts # Sub-Service chuyên trách xuất riêng bảng kê chi tiết dịch vụ & phụ tùng (< 150 LoC)
     ├── garage-export-jobs.service.ts       # Giữ 3 `ExportJobRunner` (cases, công nợ KH, công nợ NCC); fingerprint gồm branchId; reuse file ≤ 10 phút
@@ -553,7 +553,7 @@ Cơ chế dùng chung `ExportJobRunner` (`src/common/export-jobs/export-job-runn
   - `outsourceCostGcn` (`GiaCongNgoai` / `GCN`): Chi phí gia công ngoài trích xuất từ cột dịch vụ hoặc header phiếu.
   - `estimatedProfit` (`LaiTamTinh`): Lợi nhuận tạm tính trước thuế = Doanh thu sau chiết khấu - Hoa hồng GĐV - Hoa hồng MG - Chi phí giá vốn phụ tùng & gia công ngoài.
   - `estimatedProfitAfterTax` (`LaiTamTinhCoThue`): Lợi nhuận tạm tính sau thuế = Lãi tạm tính + Tiền thuế VAT.
-- **Tiêu chuẩn Kiến trúc Phân tầng 5 Tầng UI (`/ui-atomic-refactor`) & Pattern C Clean DI (`/api-service-refactor`)**:
+- **Tiêu chuẩn Kiến trúc Phân tầng 5 Tầng UI (`/ui-structure`) & Pattern C Clean DI (`/api-structure`)**:
   - `KgaraCaseFinancialParserHelper`: Pure Static Helper độc lập, 0 dependency TypeORM, Clean DI constructor giữ nguyên trong `KgaraCaseLookupService`.
   - Phân rã `QuoteDocumentSummary` thành các Molecules con: `QuoteBillingBlock`, `QuoteCommissionBlock`, `QuoteProfitBlock` đều dưới 120 LoC (chuẩn < 180 LoC).
   - Cột `GCN` (Gia công ngoài) hiển thị rõ ràng trên bảng hạng mục dịch vụ `QuoteServicesDocumentTable` và dòng tổng cộng.
@@ -608,10 +608,10 @@ Khi chỉnh sửa `kgara-api-core`:
 
 ---
 
-## 8. Kiến Trúc Dịch Vụ & Kết Xuất Báo Cáo Excel (`api-service-refactor`)
+## 8. Kiến Trúc Dịch Vụ & Kết Xuất Báo Cáo Excel (`api-structure`)
 
 ### 8.1. Cấu Trúc Facade & Sub-Services
-Module tuân thủ nghiêm ngặt tiêu chuẩn `api-service-refactor` (Pattern B + Pattern C) và Clean DI Constructor (1 signature duy nhất, không overload, không union type):
+Module tuân thủ nghiêm ngặt tiêu chuẩn `api-structure` (Pattern B + Pattern C) và Clean DI Constructor (1 signature duy nhất, không overload, không union type):
 - **Query Facade (`KgaraCaseQueryService`)**: Service facade giữ nguyên 100% method signatures, delegate sang các Sub-services.
 - **Export Facade (`KgaraCaseExportService` - 42 dòng)**: Service facade tinh gọn điều phối xuất Excel, delegate sang các Sub-services:
   - `KgaraCompletedCasesExportService` (~250 dòng): Quản lý truy vấn dữ liệu vụ việc, sổ thanh toán thực tế (`kgara_case_settlements`), hóa đơn liên kết và dòng chi tiết để xây dựng workbook 3 sheets chuyên nghiệp.
@@ -654,7 +654,7 @@ Hàm xuất Excel `exportCompletedCasesExcel` sinh file XLSX gồm 3 sheets:
 ## 9. Kiến Trúc Giao Diện Frontend: Sổ Báo Giá Drawer & Tab Tài Chính Chuẩn Hóa (`erp-web`)
 
 ### 9.1. Phân Tầng Tab Tài Chính & Khối Chuẩn Hóa (`QuoteFinancialsTabContent` & Right Panel)
-Trong Tab Tài chính (`GarageCaseFinancialsTab`), cấu trúc được chuẩn hóa theo mô hình Pure Cashflow Standard, Unified Financial Tree, `/standardize-table` và `/ui-atomic-refactor`:
+Trong Tab Tài chính (`GarageCaseFinancialsTab`), cấu trúc được chuẩn hóa theo mô hình Pure Cashflow Standard, Unified Financial Tree, `/standardize-table` và `/ui-structure`:
 
 1. **Bảng 1: Phải thu & Cấn trừ (`QuoteReceivablesTable`)** — Luôn nằm đầu tiên:
    - **DrawerSection**: Tiêu đề chuẩn hóa `1. Bảng Phải thu & Cấn trừ` (icon `Landmark`, text-primary).
@@ -676,7 +676,7 @@ Trong Tab Tài chính (`GarageCaseFinancialsTab`), cấu trúc được chuẩn 
    - Tuân thủ **No Blue Mandate**: Toàn bộ UI tuân thủ hệ màu chuẩn `primary`, `slate`, `amber`, `emerald` và `rose`.
 
 ### 9.2. Drawer Cấn Trừ Dòng Chi Tiết Phải Thu / Phải Chi (`CaseLinePaymentDrawer`)
-- Tuân thủ tiêu chuẩn `/standardize-drawer` và `/ui-atomic-refactor`:
+- Tuân thủ tiêu chuẩn `/standardize-drawer` và `/ui-structure`:
   - Thành phần cốt lõi: `StandardFormDrawer`, `layout="2-columns"`, `size="xl"`.
   - Header: Tiêu đề kèm tên/mã dòng, `titleExtra` hiển thị:
     - Badge số tiền mục tiêu và badge bên thanh toán / chịu phí (Khách hàng / Bảo hiểm / Garage).
@@ -719,7 +719,7 @@ Trong Tab Tài chính (`GarageCaseFinancialsTab`), cấu trúc được chuẩn 
   4. **Tầng 3 - Hoa hồng Môi giới / Chi phí khác (`TK 1543 / TK 335`)**: Gom vào `commissionCost`.
   5. Tự động cập nhật `giaVonPhuTung` vào `rawData.ListPhieuDichVuChiTiet` và lưu trữ trong bảng `kgara_case_services`.
 
-#### 3. Phân rã kiến trúc Atomic Bảng Sổ Báo Giá (`/ui-atomic-refactor`)
+#### 3. Phân rã kiến trúc Atomic Bảng Sổ Báo Giá (`/ui-structure`)
 Nhằm kiểm soát độ phức tạp mã nguồn (< 180 LoC per file, No Blue Mandate, 100% i18n, Co-located Vitest), file `QuoteDocumentTables.tsx` (trước đây 321 LoC) đã được phân rã thành:
 1. **`QuotePartsDocumentTable`** (`quote-parts-document-table/`):
    - Kích thước: ~136 LoC.
@@ -737,7 +737,7 @@ Nhằm kiểm soát độ phức tạp mã nguồn (< 180 LoC per file, No Blue 
      - Tổng chi phí vụ việc & Badge Lãi gộp toàn vụ việc.
 4. **`QuoteDocumentTables`** (Container): Thu gọn từ 321 LoC xuống chỉ còn **52 LoC**, kết nối các sub-components sạch sẽ.
 
-### 9.5. Kiến Trúc Cây Phân Cấp (Tree Table) Cho Bảng Phải Thu & Bảng Chi Phí Vụ Việc (`/ui-atomic-refactor`)
+### 9.5. Kiến Trúc Cây Phân Cấp (Tree Table) Cho Bảng Phải Thu & Bảng Chi Phí Vụ Việc (`/ui-structure`)
 
 Nhằm mang lại trải nghiệm kế toán trực quan và đồng nhất giữa thu và chi theo luồng Draft-First:
 1. **Thống Nhất Mô Hình 1 Dòng Cha Mục Tiêu (Unified Parent Target Row)**:
@@ -751,7 +751,7 @@ Nhằm mang lại trải nghiệm kế toán trực quan và đồng nhất gi�
    - Icon nhận diện loại chứng từ: Hóa đơn điện tử (🧾), Tiền mặt (💵), Chuyển khoản sao kê (🏦).
    - Tag trạng thái `Chờ lưu` cho các khoản vừa gán nháp ở client.
    - Nút Thùng rác đỏ xóa/gỡ cấn trừ trực tiếp trên từng dòng con khi ở chế độ chỉnh sửa.
-3. **Phân Rã Atomic & Tuân Thủ Chuẩn Mực (`/ui-atomic-refactor`)**:
+3. **Phân Rã Atomic & Tuân Thủ Chuẩn Mực (`/ui-structure`)**:
    - Tầng Molecules dùng chung trong `components/tables/financial-tree-rows/`:
      - `FinancialTreeParentRow.tsx` (159 LoC) & `FinancialTreeParentRow.test.tsx` (112 LoC).
      - `FinancialTreeChildRow.tsx` (108 LoC) & `FinancialTreeChildRow.test.tsx` (57 LoC).
@@ -798,7 +798,7 @@ Nhằm hỗ trợ nghiệp vụ đối soát công nợ chuyên sâu của kế 
 6. **Di Chuyển Icon Liên Kết Hóa Đơn (`Link2`) sang Cột HĐ VAT (`hasInvoice`)**:
    - Gỡ bỏ icon `Link2` khỏi `GarageCaseCodeCell` để ô số chứng từ hiển thị gọn gàng, không bị nghẽn thông tin.
    - Đưa vào cột `hasInvoice` (`100px`): Khi `totalLinked > 0`, render button `Link2` kèm Tooltip chi tiết (`x HĐ bán ra, y HĐ mua vào`) và click mở Drawer đối soát HĐ (`onOpenFinancials`). Khi có cờ VAT, hiển thị song song cả `FileCheck` và `Link2`.
-7. **Tuân Thủ Tuyệt Đối `/ui-atomic-refactor`**:
+7. **Tuân Thủ Tuyệt Đối `/ui-structure`**:
    - 100% files liên quan kiểm soát chặt chẽ dưới ngưỡng **< 180 LoC** (`GarageCaseCodeCell`: 98 LoC, `financial-columns`: 172 LoC, `general-columns`: 175 LoC, `date-columns`: 62 LoC, `progress-columns`: 158 LoC, `classification-dropdown`: 176 LoC, `exclusion-dropdown`: 166 LoC). 100% i18n, No Blue Mandate và 56/56 test files phân hệ Garage đạt PASS.
 
 ### 9.7. Chuẩn Hóa Hiển Thị Tài Chính Mới: Pro Data 2 Hàng (Tổng Thu/Trả), Ngày Kết Thúc KGara, Cột Thuế GTGT & 6 Dải Màu Biên LN
@@ -822,7 +822,7 @@ Nhằm hỗ trợ nghiệp vụ đối soát công nợ chuyên sâu của kế 
      - Dải 5 (`60% - < 80%` - Tốt): Teal nhạt (`bg-teal-100 text-teal-800 border-teal-200/60 dark:bg-teal-950/60 dark:text-teal-300`).
      - Dải 6 (`>= 80%` - Xuất sắc): Purple nhạt (`bg-purple-100 text-purple-800 border-purple-200/60 dark:bg-purple-950/60 dark:text-purple-300`).
      - Khi chưa có doanh thu hoặc `doanhThu <= 0`: Hiển thị `—`.
-5. **Kiểm Soát Kiến Trúc `/ui-atomic-refactor` & `/api-service-refactor`**:
+5. **Kiểm Soát Kiến Trúc `/ui-structure` & `/api-structure`**:
    - 100% UI files kiểm soát dưới **< 180 LoC** (`GarageMarginBadge`: 77 LoC, `GarageCaseProgressCell`: 82 LoC, `progress-columns`: 163 LoC, `financial-columns`: 141 LoC, `date-columns`: 73 LoC, `general-columns`: 176 LoC).
    - Co-located tests 100% pass, No Blue Mandate bảo toàn, 100% i18n.
 
@@ -887,7 +887,7 @@ Nhằm hỗ trợ nghiệp vụ đối soát công nợ chuyên sâu của kế 
        - **Nhóm 4 (`QuoteDirectCostSection`)**: Chi phí phụ tùng $\rightarrow$ Gia công ngoài GCN $\rightarrow$ **Subtotal Tổng giá vốn**.
        - **Nhóm 5 (`QuoteProfitHighlightSection`)**: Callout Card nổi bật thể hiện **Lãi tạm tính trước thuế** (Margin %) và **Lãi có thuế**.
    - **Sổ Chi Phí 4 Ô (`QuoteDocumentCostSummary`)**: Hiển thị đồng bộ $1541: 0\text{ đ} + 1542: 220.000\text{ đ} + 1543: 200.000\text{ đ} + 521: 225.000\text{ đ} = 645.000\text{ đ}$, Lãi gộp $855.000\text{ đ}$ ($57.0\%$).
-   - **Tuân thủ Tuyệt đối `/ui-atomic-refactor` & `/api-service-refactor`**:
+   - **Tuân thủ Tuyệt đối `/ui-structure` & `/api-structure`**:
      - 100% files mới hoặc sửa đổi `< 110 LoC` (vượt xa chuẩn < 180 LoC).
      - 0 vi phạm No Blue Mandate (sử dụng `emerald`, `amber`, `muted-foreground`).
      - 100% i18n VI/EN qua hook `useI18n`.
@@ -913,7 +913,7 @@ Nhằm hỗ trợ nghiệp vụ đối soát công nợ chuyên sâu của kế 
      - Khi người dùng bấm **Áp dụng** (`handleApply`) với checkbox cụ thể, component gọi `onSearchChange("")` và xóa sạch dropdown search state, tránh việc bảng dữ liệu vừa lọc `IN (checkboxes)` vừa lọc `LIKE %text%` dẫn tới 0 kết quả ngoài ý muốn.
      - Trong hàm lọc client `applyGarageCasesTableState`, nếu cột đã có `columnFilters` cụ thể được chọn (`specificFilters[0] !== "__ALL_MATCHING__"`), hệ thống tự động bỏ qua `columnSearch` của cột đó.
 
-### 9.10. Chuẩn Hóa Toolbar & Unified ViewMode Combobox Dropdown (`/ui-atomic-refactor` 5 Tầng)
+### 9.10. Chuẩn Hóa Toolbar & Unified ViewMode Combobox Dropdown (`/ui-structure` 5 Tầng)
 Nhằm tinh gọn tối đa thanh công cụ (Toolbar) và đồng bộ trải nghiệm người dùng với các module Hóa đơn và Sao kê:
 1. **Gom Cụm PillTabs & ViewMode Thành 1 Combobox Đa Nhóm**:
    - Gỡ bỏ `GarageCaseStatusTabs` dạng viên nhộng nổi và vách ngăn thừa ngoài thanh toolbar của `GarageCasesTable`.
