@@ -21,6 +21,9 @@ Các nghiệp vụ trọng tâm:
 
 ## 2. Database Schema & Quan hệ Dữ liệu
 
+> [!NOTE]
+> Trong mã nguồn TypeScript, `GarageGoodsReceipt` kế thừa từ `BaseGoodsReceiptEntity` và `GarageGoodsReceiptLine` kế thừa từ `BaseGoodsReceiptLineEntity` (tại `@/v2/core/goods-receipts/entities/`), giúp tái sử dụng toàn bộ schema cột chung trong khi tên bảng PostgreSQL và index vẫn duy trì độc lập hoàn toàn.
+
 ### Bảng `erp_garage_goods_receipts` (Header)
 | Cột | Kiểu dữ liệu | Nullable | Default | Mô tả |
 | :--- | :--- | :--- | :--- | :--- |
