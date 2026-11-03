@@ -17,7 +17,7 @@ Workflow này hướng dẫn quy trình chuẩn và an toàn tuyệt đối cho 
    - Luôn `cd` vào repo con: `./erp-api` (Backend) hoặc `./erp-web` (Frontend).
 3. **🛡️ Test-First Guard (Kiểm Thử Phân Tầng & Chống Chạy Lặp)**:
    - **Khi Commit**: Husky `pre-commit` tự động chạy `lint-staged` (< 2s). Chỉ test scoped các file thay đổi (`--findRelatedTests`), TUYỆT ĐỐI KHÔNG chạy full test suite cho mỗi commit nhỏ.
-   - **Khi Push `erp-master`**: chạy `bun run verify:final` đúng một lần trên commit cuối sau `pull --rebase`, sau đó `git push ... --no-verify`. `pre-push` chỉ chạy safety check khi commit chưa có marker Final Gate.
+   - **Khi Push `erp-master`**: `pre-push` chạy `bun run type:check` (bypass: `SKIP_TESTS=1`). Full test/build/check:ci chạy trên GitHub CI (job `check`, `test`, `build`); CI của commit cuối phải xanh. `bun run verify:final` là lệnh local tùy chọn.
 4. **🛡️ Module Knowledge Sync Guard**:
    - Khi có thay đổi DB Schema, DTOs, API Endpoints, Permissions hoặc Business Logic của module, **BẮT BUỘC** rà soát và cập nhật file `.agents/skills/modules/<module-name>/SKILL.md` trước khi commit.
 5. **Không bao giờ ghi đè / làm mất code (No Override)**:
@@ -37,7 +37,7 @@ graph TD
     A["1. cd vào repo con (./erp-api hoặc ./erp-web)"] --> B["2. Xác nhận đang ở nhánh erp-master"]
     B --> C["3. git status -s & Review diff"]
     C --> D["4. 🛡️ Knowledge Sync: Cập nhật SKILL.md nếu sửa DB/API/DTO"]
-    D --> E["5. 🧪 Run Tests: bunx jest --forceExit / bun run test (Pass 100%)"]
+    D --> E["5. 🧪 pre-commit tự chạy lint + test liên quan (không chạy full test)"]
     E --> F["6. git add file code + SKILL.md"]
     F --> G["7. git commit -m 'type(scope): message'"]
 ```
@@ -105,7 +105,7 @@ git pull --rebase $REMOTE_NAME $CURRENT_BRANCH
 
 # Nếu có conflict:
 # 1. Mở file conflict để sửa
-# 2. bun run check:ci (kiểm tra typecheck)
+# 2. bun run type:check (kiểm tra typecheck)
 # 3. git add <resolved-files>
 # 4. git rebase --continue
 ```
@@ -123,13 +123,8 @@ git checkout erp-master
 
 REMOTE_NAME=$(git remote | grep -w github-industries || echo "origin")
 
-# 2. Lưu thay đổi và kiểm tra test trước commit
+# 2. Lưu thay đổi; pre-commit tự chạy lint-staged + test liên quan
 if [ -n "$(git status -s)" ]; then
-  if [ -f "jest.config.ts" ] || [ -f "jest.config.js" ]; then
-    bunx jest --forceExit
-  else
-    bun run test
-  fi
   git add -A
   git commit -m "feat/fix/chore: mô tả thay đổi"
 fi
@@ -137,12 +132,13 @@ fi
 # 3. Kéo code mới nhất về
 git pull --rebase $REMOTE_NAME erp-master
 
-# 4. QC toàn diện (Build + Lint + Format + Unit Tests), đúng một lần
-bun run verify:final
+# 4. Push lên remote erp-master (pre-push chạy type:check; full QC chạy trên GitHub CI)
+git push $REMOTE_NAME erp-master
 
-# 5. Push lên remote erp-master (Dùng --no-verify vì đã pass full QC ở trên, tránh Husky chạy lặp lần 2)
-git push $REMOTE_NAME erp-master --no-verify
+# 5. Theo dõi CI GitHub của commit vừa push; phải xanh trước khi sync nhánh khác
 ```
+
+> **Nếu CI đỏ sau khi push**: sửa tiếp trên `erp-master`, commit fix rồi push lại. Không sync sang nhánh downstream và không push thêm thay đổi khác khi CI của `erp-master` còn đỏ.
 
 ---
 
@@ -157,7 +153,7 @@ graph TD
     M3 --> M4["4. git merge erp-master -m 'Merge erp-master into <target-branch>'"]
     M4 --> M5{"Có Conflict?"}
     M5 -- Có --> M6["5. Resolve conflict (Bảo vệ workflow/deploy configs riêng của nhánh đích)"]
-    M5 -- Không --> M7["6. bun run verify:final (Pass 100%)"]
+    M5 -- Không --> M7["6. bun run type:check (pre-push chạy lại; CI sẽ chạy full QC)"]
     M6 --> M7
     M7 --> M8["7. git push github-industries <target-branch>"]
     M8 --> M9["8. git checkout erp-master (Quay lại nhánh chính)"]
@@ -190,16 +186,11 @@ git merge erp-master -m "Merge erp-master into $TARGET_BRANCH"
 # - git add <resolved-files>
 # - git commit -m "chore: resolve merge conflicts from erp-master"
 
-# 6. Kiểm tra lại toàn bộ test suite trên nhánh đích
-bun run check:ci
-if [ -f "jest.config.ts" ] || [ -f "jest.config.js" ]; then
-  bunx jest --forceExit
-else
-  bun run test
-fi
+# 6. Type-check trên nhánh đích (full QC chạy trên GitHub CI của nhánh đích)
+bun run type:check
 
 # 7. Đẩy lên remote để trigger CI/CD deployment của nhánh đích
-git push $REMOTE_NAME $TARGET_BRANCH --no-verify
+git push $REMOTE_NAME $TARGET_BRANCH
 
 # 8. Quay lại nhánh chính erp-master
 git checkout erp-master
@@ -213,8 +204,9 @@ git checkout erp-master
 - [ ] Chạy lệnh Git bên trong `./erp-api` hoặc `./erp-web` (Không chạy ở workspace root).
 - [ ] Không có file nhạy cảm (`.env`, secret) trong commit.
 - [ ] Đã cập nhật file `SKILL.md` của module bị ảnh hưởng.
-- [ ] Unit Test pass 100% (Backend: `bunx jest --forceExit`, Frontend: `bun run test`).
-- [ ] `bun run check:ci` pass sạch 0 lỗi.
+- [ ] `pre-commit` pass khi commit (lint + test liên quan).
+- [ ] `pre-push` pass khi push (`type:check`).
+- [ ] CI GitHub xanh trên commit cuối (check, test, build). Nếu đỏ: fix và push lại trên `erp-master` trước khi làm việc khác.
 - [ ] Đã push thành công lên `github-industries erp-master`.
 - [ ] (Nếu cần deploy các môi trường khác) Đã merge từ `erp-master` sang nhánh đích và push thành công.
 - [ ] Workspace được chuyển trở lại nhánh `erp-master`.

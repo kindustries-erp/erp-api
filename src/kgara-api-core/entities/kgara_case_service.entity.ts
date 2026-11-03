@@ -30,6 +30,21 @@ export class KgaraCaseService {
   @Column({ type: 'varchar', length: 100, name: 'hd_phieu_dich_vu_id' })
   hdPhieuDichVuId: string;
 
+  /** Tài khoản Kgara nguồn (MAIN/OJ), sao chép từ phiếu cha khi sync */
+  @Index('IDX_kgara_case_services_account_key')
+  @Column({
+    type: 'varchar',
+    length: 50,
+    name: 'account_key',
+    default: 'MAIN',
+  })
+  accountKey: string;
+
+  /** Xóa mềm: dòng không còn trong ListPhieuDichVuChiTiet của Kgara */
+  @Index('IDX_kgara_case_services_deleted_at')
+  @Column({ type: 'timestamptz', name: 'deleted_at', nullable: true })
+  deletedAt: Date | null;
+
   // ── V2 typed columns ───────────────────────────────────────────────────────
 
   /** NoiDungChiTiet / TenSanPhamDichVu – line description */

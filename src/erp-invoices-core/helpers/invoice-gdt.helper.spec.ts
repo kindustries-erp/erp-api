@@ -1,4 +1,39 @@
-import { GdtNonJsonResponseError, parseGdtJson } from './invoice-gdt.helper';
+import {
+  fetchWithRetry,
+  GdtNonJsonResponseError,
+  GdtTokenExpiredError,
+  parseGdtJson,
+} from './invoice-gdt.helper';
+
+describe('fetchWithRetry', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('should throw GdtTokenExpiredError on 401 without retrying', async () => {
+    const fetchSpy = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(new Response('', { status: 401 }));
+
+    await expect(
+      fetchWithRetry('https://hoadondientu.gdt.gov.vn/x'),
+    ).rejects.toBeInstanceOf(GdtTokenExpiredError);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('should throw GdtTokenExpiredError on 403 without retrying', async () => {
+    const fetchSpy = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(new Response('', { status: 403 }));
+
+    const error = await fetchWithRetry(
+      'https://hoadondientu.gdt.gov.vn/x',
+    ).catch((e) => e);
+
+    expect(error.message).toBe('GDT_TOKEN_EXPIRED');
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe('parseGdtJson', () => {
   it('should parse a valid JSON body', async () => {

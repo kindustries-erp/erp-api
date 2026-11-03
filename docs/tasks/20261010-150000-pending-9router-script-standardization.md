@@ -9,7 +9,7 @@ Cập nhật: 2026-10-10 · Nhánh: `erp-master` · Bối cảnh: đợt tối �
 - Script phân loại `scripts/backfill-invoice-categories-autopost.ts` viết lại (mode `new|retry-fallback|unposted`, dry-run mặc định); script item-codes dùng handler.
 - Migration `20261010150000-CreateDocumentSequences` (idempotent, no-op trên greenway).
 - Loader env `src/common/scripts/load-script-env.ts`, `script-db.ts` (dry-run bằng rollback), `dry-run-probe.helper.ts`.
-- Dọn 70 script không còn được tham chiếu; workflow `/api-service-refactor`, script scan, SKILL và `CLAUDE.md` đã cập nhật.
+- Dọn 70 script không còn được tham chiếu; workflow `/api-structure`, script scan, SKILL và `CLAUDE.md` đã cập nhật.
 
 ## 1. VIỆC VẬN HÀNH (cần làm ngay, không phải code)
 - [ ] **Tier 9router đang hỏng** (`low/medium/high` → 503 "No active credentials for provider: codex"; `ultra` → 404). AI phân loại hóa đơn, trích biển số, captcha… đang rơi về lỗi.
@@ -28,7 +28,7 @@ Tiện ích đã sẵn: `getWriteGuard` (ma trận cờ), `connectPg`/`withPgSes
 - [ ] **B3**: `sync-invoice-netoffs-to-case-settlements`, `backfill-personal-invoices`, `run-backfill-xml-relations`, `backfill-related-invoices` (xác nhận phần `fetch`/S3 chỉ đọc).
 - [ ] **B4**: `seed-chart-of-accounts-tt99`, `seed-chart-of-accounts-tt200`, `seed-invoice-categories`, `sync-module-config-invoice-categories`, `backfill-kgara-classification`, `import-omoda-cases`, `replicate-opex`.
 - Kiểm chứng mỗi script: `bunx tsc --noEmit` + dry-run trên `.env` + `countRows`/`diffCounts` trước/sau (không đổi).
-- Đích cuối: `bun .agents/skills/api-service-refactor/scripts/scan-oversized-files.ts --strict` báo script hygiene = 0.
+- Đích cuối: `bun .agents/skills/erp-api-structure/scripts/scan-oversized-files.ts --strict` báo script hygiene = 0.
 
 ## 3. CẦN QUYẾT ĐỊNH
 - [ ] Xoá thêm 4 script nghi trùng/một lần? `replicate-opex.ts`, `import-omoda-cases.ts`, `backfill-kgara-classification.ts` (trùng `update-cases-classification.ts`), `sync-module-config-invoice-categories.ts` (chồng `seed-invoice-categories.ts`).

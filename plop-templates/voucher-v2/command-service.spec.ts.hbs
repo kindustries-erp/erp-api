@@ -1,0 +1,111 @@
+import { DataSource, Repository } from 'typeorm';
+import { {{headerEntityName}} } from '../entities/{{headerEntityKebab}}.entity';
+import { Create{{headerEntityName}}Dto } from '../dto/create-{{headerEntityKebab}}.dto';
+import { {{headerEntityName}}CommandService } from './{{headerEntityKebab}}-command.service';
+import { BaseVoucherEngineService } from '../../goods-receipts-core/services/base-voucher-engine.service';
+
+describe('{{headerEntityName}}CommandService', () => {
+  let repo: {
+    create: jest.Mock;
+    save: jest.Mock;
+    createQueryBuilder: jest.Mock;
+  };
+  let lineRepo: {
+    create: jest.Mock;
+    save: jest.Mock;
+    delete: jest.Mock;
+    find: jest.Mock;
+  };
+  let dataSource: { transaction: jest.Mock };
+  let voucherEngine: BaseVoucherEngineService;
+  let service: {{headerEntityName}}CommandService;
+
+  beforeEach(() => {
+    repo = {
+      create: jest.fn((value: object) => value),
+      save: jest.fn((value: object) => Promise.resolve(value)),
+      createQueryBuilder: jest.fn(),
+    };
+    lineRepo = {
+      create: jest.fn((value: object) => value),
+      save: jest.fn((value: object) => Promise.resolve(value)),
+      delete: jest.fn().mockResolvedValue({}),
+      find: jest.fn().mockResolvedValue([]),
+    };
+
+    const manager = {
+      getRepository: jest.fn((entityClass) => {
+        if (entityClass === {{headerEntityName}}) return repo;
+        return lineRepo;
+      }),
+    };
+
+    dataSource = {
+      transaction: jest.fn((callback) => callback(manager)),
+    };
+
+    voucherEngine = new BaseVoucherEngineService();
+
+    service = new {{headerEntityName}}CommandService(
+      dataSource as unknown as DataSource,
+      repo as unknown as Repository<{{headerEntityName}}>,
+      voucherEngine,
+    );
+  });
+
+  it('creates an active row with lines in transaction', async () => {
+    const dto: Create{{headerEntityName}}Dto = {
+      receiptNo: '{{voucherPrefix}}-20260101-001',
+      receiptDate: '2026-01-01',
+      supplierName: 'NCC Mẫu',
+      status: 'DRAFT',
+      lines: [
+        {
+          itemName: 'Hàng mẫu',
+          qtyReceived: 2,
+          unitCost: 100000,
+          amount: 200000,
+        },
+      ],
+    };
+
+    const saved = await service.create(dto);
+    expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+    expect(repo.save).toHaveBeenCalledTimes(1);
+    expect(saved).toMatchObject({ isDeleted: false });
+  });
+
+  it('posts document transitioning status to POSTED', async () => {
+    const entity = {
+      id: 'id-1',
+      status: 'DRAFT',
+      lines: [{ id: 'l-1', itemName: 'Hàng mẫu' }],
+    } as unknown as {{headerEntityName}};
+
+    await service.post(entity);
+    expect(entity.status).toBe('POSTED');
+  });
+
+  it('cancels document transitioning status to CANCELLED', async () => {
+    const entity = {
+      id: 'id-1',
+      status: 'DRAFT',
+    } as unknown as {{headerEntityName}};
+
+    await service.cancel(entity);
+    expect(entity.status).toBe('CANCELLED');
+  });
+
+  it('soft-deletes when status is DRAFT', async () => {
+    const entity = {
+      id: 'id-1',
+      status: 'DRAFT',
+      isDeleted: false,
+    } as {{headerEntityName}};
+
+    await service.softDelete(entity);
+    expect(entity.isDeleted).toBe(true);
+    expect(repo.save).toHaveBeenCalledWith(entity);
+  });
+});
+

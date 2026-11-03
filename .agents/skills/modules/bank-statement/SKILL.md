@@ -398,7 +398,7 @@ src/modules/bank-statements/components/BankStatementsTab/
   - `fetchOptions` mapping `next: res.page < res.totalPages ? res.page + 1 : null` để `useInfiniteQuery` cuộn tải liên tục mượt mà.
   - Hỗ trợ cú pháp lọc `__ALL_MATCHING__` (Chọn tất cả kết quả tìm kiếm) và `__BLANK__` (Lọc giá trị trống).
 
-### 8.5. Detail Drawer & Kiến Trúc 3 Tầng Chuẩn ERP-Invoice (`BankTransactionDetailDrawer` & `/ui-atomic-refactor`)
+### 8.5. Detail Drawer & Kiến Trúc 3 Tầng Chuẩn ERP-Invoice (`BankTransactionDetailDrawer` & `/ui-structure`)
 - **Tổ chức 3 Top Tabs Chuẩn Hóa (Đồng bộ 100% với `erp-invoice`)**:
   1. **Top Tab 1: `Chi tiết` (`txn_details`)**:
      - *Sub-tab 1*: **`1. Chi tiết giao dịch`** (`details`): Xem trước chứng từ UNC / GBC / Phiếu thu chi (`BankTransactionVoucherPreview`).
@@ -447,7 +447,7 @@ src/modules/bank-statements/components/BankStatementsTab/
   - **Phân cấp thị giác chuẩn (Visual Hierarchy)**: Toàn bộ 3 cấp số liệu đồng nhất font `text-xs font-mono tabular-nums`. Phát sinh trang hiện tại (`text-foreground/80 font-medium`) $\to$ Lũy kế (`text-primary font-bold` với ký hiệu `↳`) $\to$ Divider ngăn cách $\to$ Tổng toàn bộ (`text-foreground font-bold`).
   - **Căn chỉnh phẳng (Flush Left-Right)**: Mọi thành phần từ Header, số liệu, divider, progress bar đến nhãn tỷ trọng lũy kế đều thẳng mép trái/phải 100%, không bị thụt lề lồng khung.
 
-### 8.7. Chuẩn Hóa Toolbar & Unified ViewMode Combobox Dropdown (`/ui-atomic-refactor` 5 Tầng)
+### 8.7. Chuẩn Hóa Toolbar & Unified ViewMode Combobox Dropdown (`/ui-structure` 5 Tầng)
 - **Gom Cụm PillTabs & ViewMode Thành 1 Combobox Đa Nhóm**:
   - Gỡ bỏ `PillTabs` thu/chi nổi và vách ngăn thừa ngoài thanh toolbar của `BankStatementSection`.
   - Nâng cấp shared component `ViewModeCombobox` hỗ trợ prop tùy chọn `filterGroup` để hiển thị 2 nhóm rõ ràng trong 1 Popover:
@@ -459,7 +459,7 @@ src/modules/bank-statements/components/BankStatementsTab/
   - Thư mục: `src/modules/bank-statements/components/molecules/bank-statement-view-mode-combobox/`.
   - Đầy đủ các file vệ tinh: `BankStatementViewModeCombobox.tsx`, `.type.ts`, `.test.tsx`, `index.ts`.
 ### 8.8. Chuẩn Hóa Xuất Excel Sao Kê Ngân Hàng & Hóa Đơn Cấn Trừ (`BankStatementExcelBuilder`)
-- **Phân rã Kiến Trúc theo `/api-service-refactor`**:
+- **Phân rã Kiến Trúc theo `/api-structure`**:
   - `BankStatementExportBackgroundService`: Quản lý background jobs, SSE progress, fingerprint caching, file streaming (< 500 LoC).
   - `BankStatementExcelBuilder` (đặt tại `services/bank-statement-excel.builder.ts`): Sub-service độc lập phụ trách logic tạo workbook, nhóm theo tài khoản, 24 cột, styles, borders và formulas (< 500 LoC). Định nghĩa cột, bảng màu và căn lề nằm ở `services/bank-statement-excel.layout.ts`; nhãn phân loại dòng tiền ở `constants/cashflow-labels.ts`.
   - Clean DI Constructor: Inject 1 signature duy nhất, không overload, không union type.
@@ -500,3 +500,15 @@ src/modules/bank-statements/components/BankStatementsTab/
 - Export: cột chi nhánh hóa đơn liên kết nối tên bằng `string_agg`.
 - Kiểm tra nhất quán (chỉ đọc): `bun src/erp-invoices-core/scripts/audit-branch-consistency.ts <file.env>`.
 - Chưa làm: import file sao kê không có chi nhánh (`erp_bank_statement_file.branch_id` vẫn NOT NULL, `controller:327` vẫn bắt buộc `branchId`).
+
+## Thu tiền mặt từ sheet Cash-2026 → sổ quỹ & cấn trừ hóa đơn
+
+- Script: `src/bank-transactions-core/scripts/netoff-cash-sheet-invoices.ts` (dry-run mặc định; `--apply --confirm=<DB>` để ghi; `--rollback=<backup.csv>` để gỡ).
+- Util thuần: `utils/cash-sheet-reader.ts` (đọc cột B ngày, C biển số, D tiền thu; bỏ dòng không phải biển như "Số dư đầu kỳ") và `utils/cash-invoice-matcher.ts` (ghép 1-1, cùng biển, hóa đơn xuất từ ngày thu trở đi, |còn lại − tiền thu| < `--tolerance`, mặc định 10.000đ; hạng EXACT / NEAR / WIDE; AMBIGUOUS khi hai ứng viên cùng độ lệch).
+- Giao dịch tạo: `source_type='CASH'`, `credit_amount` = tiền thu, `reference_number = CASH2026-R<dòng sheet>` (idempotent), `cashflow_classification='OPERATING'`, `cashflow_purpose='CUSTOMER_PAYMENT'`, `import_batch_id` riêng cho mỗi lần chạy.
+- Cấn trừ: hóa đơn có MST và đối tác tồn tại → `InvoiceDebtsNetOffService.allocate`; còn lại → `TransactionAccountingService.linkInvoiceToTransaction` sau khi kiểm tra lại số dư.
+- Đã chạy 2026-10-28 trên `erp_greenway_production`: 177 giao dịch CASH, tổng 131.246.000đ; 177 dòng cấn trừ, tổng 131.183.792đ (phần 62.208đ chênh lệch nằm trên giao dịch). Không có giao dịch/hóa đơn nào do lần này gây âm số dư.
+- Quy ước thống nhất: **thu tiền mặt = `credit_amount`, chi = `debit_amount`** (cho mọi nguồn, kể cả import Excel và form web).
+- Parser sổ quỹ `parsers/cash.parser.ts`: header chứa "thu", "phát sinh nợ", "ghi nợ" → `creditAmount`; header chứa "chi", "phát sinh có", "ghi có" → `debitAmount`. Khóa nội bộ `receipt`/`payment`.
+- Hạn chế đã biết: so khớp header theo chuỗi con nên tiêu đề có chứa "chi" (ví dụ "Chi nhánh") có thể bị nhận nhầm là cột Chi. Chưa siết (ngoài phạm vi).
+- Form web đã sửa cùng quy ước (`receiptAmount` → `creditAmount`, `paymentAmount` → `debitAmount`).

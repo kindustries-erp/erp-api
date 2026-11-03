@@ -1,0 +1,28 @@
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { {{headerEntityName}} } from './entities/{{headerEntityKebab}}.entity';
+import { {{lineEntityName}} } from './entities/{{lineEntityKebab}}.entity';
+import { {{headerEntityName}}Controller } from './controllers/{{headerEntityKebab}}.controller';
+import { {{moduleClass}}Service } from './{{moduleName}}.service';
+import { {{headerEntityName}}CommandService } from './services/{{headerEntityKebab}}-command.service';
+import { {{headerEntityName}}QueryService } from './services/{{headerEntityKebab}}-query.service';
+import { GoodsReceiptsCoreModule } from '@/v2/core/goods-receipts/goods-receipts-core.module';
+
+@Module({
+  imports: [
+    TypeOrmModule.forFeature([
+      {{headerEntityName}},
+      {{lineEntityName}},
+    ]),
+    GoodsReceiptsCoreModule,
+  ],
+  controllers: [{{headerEntityName}}Controller],
+  providers: [
+    {{moduleClass}}Service,
+    {{headerEntityName}}QueryService,
+    {{headerEntityName}}CommandService,
+  ],
+  exports: [{{moduleClass}}Service],
+})
+export class {{moduleClass}}Module {}
+

@@ -11,7 +11,7 @@ describe('ErpInvoicesCronService', () => {
 
   beforeEach(() => {
     erpInvoicesCoreService = {
-      getPortalConfig: jest.fn(),
+      getInternalPortalConfig: jest.fn(),
       checkTokenValid: jest.fn(),
       autoReloginWithRetry: jest.fn(),
       syncFromPortal: jest.fn().mockResolvedValue({}),
@@ -69,6 +69,102 @@ describe('ErpInvoicesCronService', () => {
     });
   });
 
+  describe('autoSyncCurrentMonth - lookback & partial failures', () => {
+    beforeEach(() => {
+      jest.spyOn(cronUtil, 'isGdtInvoiceCronEnabled').mockReturnValue(true);
+      jest.spyOn(cronUtil, 'isWithinInvoiceSyncWindow').mockReturnValue(true);
+      erpInvoicesCoreService.getInternalPortalConfig.mockResolvedValue({
+        token: 'valid-token',
+        cookies: 'c',
+      });
+      erpInvoicesCoreService.checkTokenValid.mockResolvedValue(true);
+      jest.spyOn(global, 'setTimeout').mockImplementation((cb: any) => {
+        cb();
+        return {} as any;
+      });
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+      jest.restoreAllMocks();
+    });
+
+    it('looks back 35 days from today in Vietnam time, so a run at 01/10 09:15 covers 30/09', async () => {
+      // 2026-10-01 09:15 Việt Nam = 2026-10-01 02:15 UTC
+      jest.useFakeTimers({ doNotFake: ['setTimeout'] });
+      jest.setSystemTime(new Date('2026-10-01T02:15:00Z'));
+
+      await cronService.autoSyncCurrentMonth();
+
+      expect(erpInvoicesCoreService.syncFromPortal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'purchase',
+          dateFrom: '2026-08-27',
+          dateTo: '2026-10-01',
+        }),
+        undefined,
+        true,
+      );
+      expect(erpInvoicesCoreService.syncFromPortal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'sold',
+          dateFrom: '2026-08-27',
+          dateTo: '2026-10-01',
+        }),
+        undefined,
+        true,
+      );
+    });
+
+    it('still syncs sold invoices when purchase sync throws', async () => {
+      erpInvoicesCoreService.syncFromPortal
+        .mockRejectedValueOnce(new Error('GDT 500'))
+        .mockResolvedValueOnce({ failedSegments: [] });
+
+      await cronService.autoSyncCurrentMonth();
+
+      expect(erpInvoicesCoreService.syncFromPortal).toHaveBeenCalledTimes(2);
+      expect(erpInvoicesCoreService.syncFromPortal).toHaveBeenLastCalledWith(
+        expect.objectContaining({ type: 'sold' }),
+        undefined,
+        true,
+      );
+      expect(notificationsService.createForUser).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({
+          type: 'WARNING',
+          message: expect.stringContaining('lỗi: GDT 500'),
+        }),
+      );
+    });
+
+    it('notifies users when a sync reports failed segments or amount conflicts', async () => {
+      erpInvoicesCoreService.syncFromPortal
+        .mockResolvedValueOnce({
+          failedSegments: ['/query/invoices/purchase ngày 01/10/2026'],
+          identityConflicts: [
+            {
+              invoiceNo: '1',
+              serialNo: 'K26',
+              existingTotal: '1',
+              newTotal: '2',
+            },
+          ],
+        })
+        .mockResolvedValueOnce({ failedSegments: [] });
+
+      await cronService.autoSyncCurrentMonth();
+
+      expect(notificationsService.createForUser).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({
+          type: 'WARNING',
+          message: expect.stringContaining('mua vào: 1 phần lỗi'),
+        }),
+      );
+    });
+  });
+
   describe('autoSyncCurrentMonth', () => {
     beforeEach(() => {
       jest.spyOn(cronUtil, 'isGdtInvoiceCronEnabled').mockReturnValue(true);
@@ -76,7 +172,9 @@ describe('ErpInvoicesCronService', () => {
     });
 
     it('should attempt auto-relogin and notify if re-login fails for empty token', async () => {
-      erpInvoicesCoreService.getPortalConfig.mockResolvedValue({ token: '' });
+      erpInvoicesCoreService.getInternalPortalConfig.mockResolvedValue({
+        token: '',
+      });
       erpInvoicesCoreService.autoReloginWithRetry.mockResolvedValue(null);
 
       await cronService.autoSyncCurrentMonth();
@@ -90,7 +188,9 @@ describe('ErpInvoicesCronService', () => {
     });
 
     it('should attempt auto-relogin and proceed with sync if re-login succeeds for empty token', async () => {
-      erpInvoicesCoreService.getPortalConfig.mockResolvedValue({ token: '' });
+      erpInvoicesCoreService.getInternalPortalConfig.mockResolvedValue({
+        token: '',
+      });
       erpInvoicesCoreService.autoReloginWithRetry.mockResolvedValue({
         token: 'new-token',
         cookies: 'new-cookies',
@@ -120,7 +220,7 @@ describe('ErpInvoicesCronService', () => {
     });
 
     it('should pause cron and notify if auth error is thrown during auto-relogin', async () => {
-      erpInvoicesCoreService.getPortalConfig.mockResolvedValue({
+      erpInvoicesCoreService.getInternalPortalConfig.mockResolvedValue({
         token: 'invalid-token',
       });
       erpInvoicesCoreService.checkTokenValid.mockResolvedValue(false);
@@ -140,9 +240,11 @@ describe('ErpInvoicesCronService', () => {
       );
 
       // Verify subsequent runs are skipped
-      erpInvoicesCoreService.getPortalConfig.mockClear();
+      erpInvoicesCoreService.getInternalPortalConfig.mockClear();
       await cronService.autoSyncCurrentMonth();
-      expect(erpInvoicesCoreService.getPortalConfig).not.toHaveBeenCalled();
+      expect(
+        erpInvoicesCoreService.getInternalPortalConfig,
+      ).not.toHaveBeenCalled();
 
       // Verify resumeAfterPasswordUpdate restores it
       cronService.resumeAfterPasswordUpdate();
@@ -150,7 +252,7 @@ describe('ErpInvoicesCronService', () => {
     });
 
     it('should sync purchase and sold invoices sequentially with valid token without re-login', async () => {
-      erpInvoicesCoreService.getPortalConfig.mockResolvedValue({
+      erpInvoicesCoreService.getInternalPortalConfig.mockResolvedValue({
         token: 'valid-token',
         cookies: 'valid-cookies',
       });

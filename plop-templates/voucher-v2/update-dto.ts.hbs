@@ -1,0 +1,7 @@
+import { PartialType } from '@nestjs/swagger';
+import { Create{{headerEntityName}}Dto } from './create-{{headerEntityKebab}}.dto';
+
+export class Update{{headerEntityName}}Dto extends PartialType(
+  Create{{headerEntityName}}Dto,
+) {}
+

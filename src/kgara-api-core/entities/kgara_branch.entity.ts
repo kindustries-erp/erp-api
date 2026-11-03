@@ -7,14 +7,27 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
+/** Cùng một đơn vị Kgara có thể thuộc nhiều tài khoản (ví dụ CN2 ở MAIN và OJ) */
+@Index('UQ_kgara_branches_external_account', ['externalId', 'accountKey'], {
+  unique: true,
+})
 @Entity({ name: 'kgara_branches' })
 export class KgaraBranch {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Index({ unique: true })
   @Column({ type: 'varchar', length: 100, name: 'external_id' })
   externalId: string;
+
+  /** Account identifier ('MAIN', 'OJ', etc.) */
+  @Index()
+  @Column({
+    type: 'varchar',
+    length: 50,
+    name: 'account_key',
+    default: 'MAIN',
+  })
+  accountKey: string;
 
   @Column({ type: 'varchar', length: 100, name: 'code', nullable: true })
   code: string | null;

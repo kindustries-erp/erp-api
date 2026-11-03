@@ -1,5 +1,6 @@
 import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
+import type { InvoiceListRow } from '../services/invoice-query.service';
 import { CreateInvoiceDto } from '../dto/create-invoice.dto';
 import {
   InvoiceItemResponseDto,
@@ -57,6 +58,15 @@ export function toInvoiceResponse(
     items: items?.map(toInvoiceItemResponse),
     createdAt: entity.createdAt,
     updatedAt: entity.updatedAt,
+  };
+}
+
+/** Một dòng trong danh sách: response đầy đủ cột hóa đơn kèm số đã cấn trừ và còn lại. */
+export function toInvoiceListItem(row: InvoiceListRow): InvoiceResponseDto {
+  return {
+    ...toInvoiceResponse(row),
+    netOffAmount: row.netOffAmount,
+    remainingAmount: row.remainingAmount,
   };
 }
 

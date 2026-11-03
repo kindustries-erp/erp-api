@@ -3,6 +3,7 @@ import {
   extractNetPayableAmount,
   extractKgaraClassification,
   mapKgaraClassificationToErp,
+  resolveStoredRevenue,
 } from './kgara-parser.util';
 
 describe('kgara-parser.util', () => {
@@ -90,5 +91,29 @@ describe('kgara-parser.util', () => {
       expect(mapKgaraClassificationToErp('', '')).toBeNull();
       expect(mapKgaraClassificationToErp('   ', '   ')).toBeNull();
     });
+  });
+});
+
+describe('resolveStoredRevenue', () => {
+  const listRowWithoutDiscount = { TienCoThue: 6500000 };
+
+  it('keeps the stored net amount when the list row has no discount fields', () => {
+    expect(resolveStoredRevenue(5850000, listRowWithoutDiscount, 6500000)).toBe(
+      5850000,
+    );
+  });
+
+  it('uses the list amount for a new case (nothing stored yet)', () => {
+    expect(
+      resolveStoredRevenue(undefined, listRowWithoutDiscount, 6500000),
+    ).toBe(6500000);
+    expect(resolveStoredRevenue(null, listRowWithoutDiscount, 6500000)).toBe(
+      6500000,
+    );
+  });
+
+  it('uses the computed net amount when the list row carries discount fields', () => {
+    const row = { TienCoThue: 6500000, TienChietKhau: 650000 };
+    expect(resolveStoredRevenue(6500000, row, 5850000)).toBe(5850000);
   });
 });

@@ -15,13 +15,24 @@ import { SyncGrossProfitService } from './sync-gross-profit.service';
 import { GarageCaseForecastService } from './garage-case-forecast.service';
 import { GarageHubService } from '../hub/garage-hub.service';
 import { resolveCompletionDate } from '../helpers/kgara-completion-date.helper';
+import {
+  buildGuidMap,
+  KgaraReceivableRow,
+  resolveCaseGuid,
+} from '../helpers/kgara-case-identity.helper';
+import {
+  KgaraCaseLineInput,
+  reconcileCaseLines,
+} from '../helpers/kgara-case-lines-reconcile.helper';
 import { ErpModuleCategory } from '../../module-config/entities/erp_module_category.entity';
 import { GARAGE_CASE_SEMANTIC } from '../../module-config/registry/module-field-registry';
+import { KgaraAccountKey } from '../enums/kgara-account.enum';
 import {
   parseSafeDate,
   extractNetPayableAmount,
   extractKgaraClassification,
   mapKgaraClassificationToErp,
+  resolveStoredRevenue,
 } from '../utils/kgara-parser.util';
 
 @Injectable()
@@ -51,24 +62,28 @@ export class SyncCaseService {
     private readonly garageHub?: GarageHubService,
   ) {}
 
-  async syncBranches(): Promise<void> {
-    this.logger.log('Syncing Kgara branches...');
+  async syncBranches(
+    accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
+  ): Promise<void> {
+    this.logger.log(`Syncing Kgara branches for account: ${accountKey}...`);
     const run = await this.syncRunLogger.createSyncRun(
       null,
       '/api/v1/donvi/list',
       {},
       0,
+      accountKey,
     );
     try {
-      const branches = await this.client.getBranches();
+      const branches = await this.client.getBranches(accountKey);
       for (const b of branches) {
         let branch = await this.branchRepo.findOne({
-          where: { externalId: b.DonViID },
+          where: { externalId: b.DonViID, accountKey },
         });
         if (!branch) {
           branch = new KgaraBranch();
           branch.externalId = b.DonViID;
         }
+        branch.accountKey = accountKey;
         branch.code = b.MaSo;
         branch.name = b.TenDonVi;
         branch.parentId = b.ParentID || null;
@@ -81,7 +96,7 @@ export class SyncCaseService {
         undefined,
         200,
       );
-      this.logger.log('Finished syncing branches.');
+      this.logger.log(`Finished syncing branches for account: ${accountKey}.`);
     } catch (error: any) {
       await this.syncRunLogger.closeSyncRun(
         run,
@@ -98,11 +113,18 @@ export class SyncCaseService {
     from?: string,
     to?: string,
     updatedSince?: string,
+    accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
   ): Promise<{ deletedCount: number; withLinkedInvoices: string[] }> {
-    this.logger.log(`Syncing cases for branch ${branchExternalId}...`);
+    this.logger.log(
+      `Syncing cases for branch ${branchExternalId} (account: ${accountKey})...`,
+    );
     let page = 1;
     let totalPages = 1;
     let totalRows = 0;
+    let guidBySoChungTu = new Map<string, string>();
+    let guidMapLoaded = false;
+    let skippedCount = 0;
+    let conflictCount = 0;
 
     // Compute effective lookback date range (look back 2 months to catch cross-month ongoing service cases)
     let effectiveFrom: string | undefined = from;
@@ -142,6 +164,7 @@ export class SyncCaseService {
       '/api/v1/gr/cases/list',
       { from: effectiveFrom, to: effectiveTo, updatedSince },
       200,
+      accountKey,
     );
 
     try {
@@ -174,21 +197,50 @@ export class SyncCaseService {
           updatedSince,
           page,
           200,
+          accountKey,
         );
         const cases = response?.data || [];
         totalPages = response?.pagination?.totalPages || 1;
         const dataAsOf = response?.dataAsOf;
 
+        // Tài khoản OJ không trả HdPhieuDichVuID trong list: tra UUID qua receivables theo SoChungTu
+        if (!guidMapLoaded && cases.some((c) => !c.HdPhieuDichVuID)) {
+          guidBySoChungTu = await this.loadReceivableGuidMap(
+            branchExternalId,
+            effectiveFrom,
+            effectiveTo,
+            updatedSince,
+            accountKey,
+          );
+          guidMapLoaded = true;
+        }
+
         for (const c of cases) {
-          let gwCase = await this.caseRepo.findOne({
-            where: { hdPhieuDichVuId: c.HdPhieuDichVuID },
-          });
-          if (!gwCase) {
-            gwCase = new KgaraCase();
-            gwCase.hdPhieuDichVuId = c.HdPhieuDichVuID;
+          const caseGuid = resolveCaseGuid(c, guidBySoChungTu);
+          if (!caseGuid) {
+            skippedCount++;
+            this.logger.warn(
+              `Skip case ${c.SoChungTu} (account: ${accountKey}): no HdPhieuDichVuID`,
+            );
+            continue;
           }
 
-          syncedIds.add(c.HdPhieuDichVuID);
+          let gwCase = await this.caseRepo.findOne({
+            where: { hdPhieuDichVuId: caseGuid },
+          });
+          if (gwCase?.accountKey && gwCase.accountKey !== String(accountKey)) {
+            conflictCount++;
+            this.logger.warn(
+              `Skip case ${c.SoChungTu}: already owned by account ${gwCase.accountKey}, refusing to overwrite from ${accountKey}`,
+            );
+            continue;
+          }
+          if (!gwCase) {
+            gwCase = new KgaraCase();
+            gwCase.hdPhieuDichVuId = caseGuid;
+          }
+
+          syncedIds.add(caseGuid);
 
           // State transitions handling
           const previousStatus = gwCase.tinhTrangDichVu;
@@ -202,11 +254,15 @@ export class SyncCaseService {
           gwCase.khachHangName = c.KhachHangName || c.TenKhachHang;
           gwCase.tinhTrangDichVu = newStatus;
           gwCase.tenTinhTrangDichVu = c.TenTinhTrangDichVu;
-          gwCase.tienCoThue = netPayable;
+          gwCase.tienCoThue = resolveStoredRevenue(
+            gwCase.tienCoThue,
+            c,
+            netPayable,
+          );
           gwCase.tienDaThanhToan = c.TienDaThanhToan;
           gwCase.tienConPhaiThanhToan = Math.max(
             0,
-            netPayable - Number(c.TienDaThanhToan || 0),
+            Number(gwCase.tienCoThue) - Number(c.TienDaThanhToan || 0),
           );
 
           if (gwCase.id) {
@@ -231,7 +287,7 @@ export class SyncCaseService {
             gwCase.chiPhi = 0;
             gwCase.loiNhuan = 0;
             await this.grossProfitRepo.delete({
-              hdPhieuDichVuId: c.HdPhieuDichVuID,
+              hdPhieuDichVuId: caseGuid,
             });
 
             if (gwCase.id) {
@@ -253,7 +309,7 @@ export class SyncCaseService {
             gwCase.chiPhi = null;
             gwCase.loiNhuan = null;
             await this.grossProfitRepo.delete({
-              hdPhieuDichVuId: c.HdPhieuDichVuID,
+              hdPhieuDichVuId: caseGuid,
             });
             this.logger.log(
               `Case ${gwCase.soChungTu || gwCase.hdPhieuDichVuId} reverted from Completed (3) to In-Progress (${newStatus}). Gross profit reset.`,
@@ -289,42 +345,53 @@ export class SyncCaseService {
           }
 
           gwCase.branchExternalId = branchExternalId;
-          gwCase.rawData = c;
+          gwCase.accountKey = accountKey;
+          // Giữ các trường của payload chi tiết (ví dụ ListPhieuDichVuChiTiet) khi list ghi đè
+          gwCase.rawData = { ...(gwCase.rawData ?? {}), ...c };
 
-          // KGara Classification extraction & Zero-Overwrite auto-mapping
-          const { kgaraClassification, kgaraClassificationCode } =
-            extractKgaraClassification(c);
-          if (
-            kgaraClassification !== null ||
-            kgaraClassificationCode !== null
-          ) {
-            gwCase.kgaraClassification = kgaraClassification;
-            gwCase.kgaraClassificationCode = kgaraClassificationCode;
-            if (
-              (gwCase.classification === null ||
-                gwCase.classification === undefined) &&
-              !gwCase.classificationManuallyCleared
-            ) {
-              gwCase.classification = mapKgaraClassificationToErp(
-                kgaraClassificationCode,
-                kgaraClassification,
-              );
-              if (!gwCase.categoryId && gwCase.classification) {
-                gwCase.categoryId =
-                  categoryMap.get(gwCase.classification) || null;
-              }
-            }
-          }
-
-          if (
-            gwCase.classification === 'OJ' ||
-            gwCase.classification === 'OJ_NGOAI'
-          ) {
+          if (accountKey === KgaraAccountKey.OJ) {
             gwCase.classification = 'OJ';
             gwCase.excludeFromDebt = true;
             if (!gwCase.categoryId) {
               gwCase.categoryId =
                 categoryMap.get('OJ') || categoryMap.get('OJ_NGOAI') || null;
+            }
+          } else {
+            // KGara Classification extraction & Zero-Overwrite auto-mapping
+            const { kgaraClassification, kgaraClassificationCode } =
+              extractKgaraClassification(c);
+            if (
+              kgaraClassification !== null ||
+              kgaraClassificationCode !== null
+            ) {
+              gwCase.kgaraClassification = kgaraClassification;
+              gwCase.kgaraClassificationCode = kgaraClassificationCode;
+              if (
+                (gwCase.classification === null ||
+                  gwCase.classification === undefined) &&
+                !gwCase.classificationManuallyCleared
+              ) {
+                gwCase.classification = mapKgaraClassificationToErp(
+                  kgaraClassificationCode,
+                  kgaraClassification,
+                );
+                if (!gwCase.categoryId && gwCase.classification) {
+                  gwCase.categoryId =
+                    categoryMap.get(gwCase.classification) || null;
+                }
+              }
+            }
+
+            if (
+              gwCase.classification === 'OJ' ||
+              gwCase.classification === 'OJ_NGOAI'
+            ) {
+              gwCase.classification = 'OJ';
+              gwCase.excludeFromDebt = true;
+              if (!gwCase.categoryId) {
+                gwCase.categoryId =
+                  categoryMap.get('OJ') || categoryMap.get('OJ_NGOAI') || null;
+              }
             }
           }
 
@@ -423,6 +490,7 @@ export class SyncCaseService {
             branchExternalId,
             range.from,
             range.to,
+            accountKey,
           );
 
           const groups =
@@ -478,12 +546,18 @@ export class SyncCaseService {
         deletedCount: 0,
         withLinkedInvoices: [],
       };
-      if (from && to) {
+      // Hàng bị bỏ qua không nằm trong syncedIds; chạy phát hiện xóa lúc đó sẽ xóa nhầm
+      if (skippedCount > 0 || conflictCount > 0) {
+        this.logger.warn(
+          `Deletion detection skipped for branch ${branchExternalId} (account: ${accountKey}): skipped=${skippedCount}, conflicts=${conflictCount}`,
+        );
+      } else if (from && to) {
         deletionResult = await this.syncDeletion.detectAndMarkDeletedCases(
           branchExternalId,
           from,
           to,
           syncedIds,
+          accountKey,
         );
       }
 
@@ -499,7 +573,39 @@ export class SyncCaseService {
     }
   }
 
-  async syncCaseDetail(branchExternalId: string, caseId: string): Promise<any> {
+  /** Tải toàn bộ receivables của đơn vị để map SoChungTu → HdPhieuDichVuID */
+  private async loadReceivableGuidMap(
+    branchExternalId: string,
+    from: string | undefined,
+    to: string | undefined,
+    updatedSince: string | undefined,
+    accountKey: KgaraAccountKey,
+  ): Promise<Map<string, string>> {
+    const rows: KgaraReceivableRow[] = [];
+    let page = 1;
+    let totalPages = 1;
+    do {
+      const response = await this.client.getReceivables(
+        branchExternalId,
+        from,
+        to,
+        updatedSince,
+        page,
+        200,
+        accountKey,
+      );
+      rows.push(...(response?.data || []));
+      totalPages = response?.pagination?.totalPages || 1;
+      page++;
+    } while (page <= totalPages);
+    return buildGuidMap(rows);
+  }
+
+  async syncCaseDetail(
+    branchExternalId: string,
+    caseId: string,
+    accountKey?: KgaraAccountKey,
+  ): Promise<any> {
     this.logger.log(`Syncing detail for case ${caseId}...`);
 
     // Resolve targetCaseId and effectiveBranchId if an ERP internal UUID or soChungTu was passed
@@ -518,18 +624,24 @@ export class SyncCaseService {
     const targetCaseId = gwCase?.hdPhieuDichVuId || caseId;
     const effectiveBranchId =
       branchExternalId || gwCase?.branchExternalId || '';
+    const effectiveAccountKey =
+      accountKey ||
+      (gwCase?.accountKey as KgaraAccountKey) ||
+      KgaraAccountKey.MAIN;
 
     const run = await this.syncRunLogger.createSyncRun(
       effectiveBranchId,
       `/api/v1/gr/cases/detail/${targetCaseId}`,
       {},
       1,
+      effectiveAccountKey,
     );
 
     try {
       const response = await this.client.getCaseDetail(
         targetCaseId,
         effectiveBranchId,
+        effectiveAccountKey,
       );
       const caseData = response?.data;
       if (!caseData) {
@@ -634,6 +746,12 @@ export class SyncCaseService {
       gwCase.soKhung = caseData.SoKhung;
       gwCase.dataAsOf = parseSafeDate(response.dataAsOf);
       gwCase.rawData = caseData;
+      gwCase.accountKey = effectiveAccountKey;
+
+      if (effectiveAccountKey === KgaraAccountKey.OJ) {
+        gwCase.classification = 'OJ';
+        gwCase.excludeFromDebt = true;
+      }
 
       // KGara Classification extraction & Zero-Overwrite auto-mapping
       const {
@@ -747,6 +865,7 @@ export class SyncCaseService {
         caseData.PhieuDichVuChiTiet ||
         caseData.HoaDonChiTiet;
 
+      const lineInputs: KgaraCaseLineInput[] = [];
       if (rawLines && Array.isArray(rawLines)) {
         for (const s of rawLines) {
           const detailId =
@@ -757,14 +876,7 @@ export class SyncCaseService {
             s.Id;
           if (!detailId) continue;
 
-          let srv = await this.caseServiceRepo.findOne({
-            where: { hdPhieuDichVuChiTietId: detailId },
-          });
-          if (!srv) {
-            srv = new KgaraCaseService();
-            srv.hdPhieuDichVuChiTietId = detailId;
-            srv.hdPhieuDichVuId = targetCaseId;
-          }
+          const srv: Partial<KgaraCaseService> = {};
 
           srv.noiDungChiTiet =
             s.NoiDungChiTiet || s.TenSanPhamDichVu || s.noiDungChiTiet || null;
@@ -803,9 +915,25 @@ export class SyncCaseService {
           srv.tienPhuPhi = Number(s.TienPhuPhi ?? s.tienPhuPhi ?? 0);
 
           srv.rawData = s;
-          await this.caseServiceRepo.save(srv);
-          linesCount++;
+          lineInputs.push({ detailId, data: srv });
         }
+      }
+
+      // Thiếu mảng dòng trong payload thì reconcile không xóa gì; mảng hợp lệ (kể cả rỗng) thì đối soát đầy đủ
+      const linesResult = await this.caseServiceRepo.manager.transaction(
+        (manager) =>
+          reconcileCaseLines(
+            manager,
+            targetCaseId,
+            effectiveAccountKey,
+            Array.isArray(rawLines) ? lineInputs : undefined,
+          ),
+      );
+      linesCount = linesResult.upserted;
+      if (linesResult.conflicts.length > 0) {
+        this.logger.warn(
+          `Case ${targetCaseId}: ${linesResult.conflicts.length} line(s) belong to another case, not moved: ${linesResult.conflicts.join(', ')}`,
+        );
       }
 
       await this.syncRunLogger.closeSyncRun(
@@ -838,6 +966,7 @@ export class SyncCaseService {
       to?: string;
       force?: boolean;
       concurrency?: number;
+      accountKey?: KgaraAccountKey;
     },
   ): Promise<{
     totalCasesProcessed: number;
@@ -845,7 +974,7 @@ export class SyncCaseService {
     errorsCount: number;
   }> {
     this.logger.log(
-      `Starting batch sync case details for branch: ${branchExternalId}, from: ${options?.from}, to: ${options?.to}, force: ${options?.force}`,
+      `Starting batch sync case details for branch: ${branchExternalId}, from: ${options?.from}, to: ${options?.to}, force: ${options?.force}, account: ${options?.accountKey || 'ALL'}`,
     );
 
     const qb = this.caseRepo
@@ -860,6 +989,12 @@ export class SyncCaseService {
     ) {
       qb.andWhere('c.branchExternalId = :branchId', {
         branchId: branchExternalId.trim(),
+      });
+    }
+
+    if (options?.accountKey) {
+      qb.andWhere('c.accountKey = :accountKey', {
+        accountKey: options.accountKey,
       });
     }
 
@@ -916,9 +1051,12 @@ export class SyncCaseService {
           if (!c.hdPhieuDichVuId) return;
           const effBranchId = c.branchExternalId || branchExternalId || '';
           try {
+            const effAccountKey =
+              (c.accountKey as KgaraAccountKey) || options?.accountKey;
             const caseData = await this.syncCaseDetail(
               effBranchId,
               c.hdPhieuDichVuId,
+              effAccountKey,
             );
             totalCasesProcessed++;
             const rawList =

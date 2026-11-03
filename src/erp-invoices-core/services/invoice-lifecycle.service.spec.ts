@@ -13,6 +13,7 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
   beforeEach(() => {
     repository = {
       findOne: jest.fn(),
+      find: jest.fn().mockResolvedValue([]),
       merge: jest.fn((target: any, source: any) =>
         Object.assign(target, source),
       ),
@@ -381,6 +382,28 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
       );
     });
   });
+  describe('findOne - ambiguous invoice number lookup', () => {
+    it('rejects a bare invoice number that matches several invoices', async () => {
+      repository.find.mockResolvedValueOnce([
+        { invoiceNo: '8100897', serialNo: 'K26TAN' },
+        { invoiceNo: '8100897', serialNo: 'C26TGA' },
+      ]);
+
+      await expect(service.findOne('8100897')).rejects.toThrow(
+        /trùng số.*ký hiệu_số/,
+      );
+    });
+
+    it('returns the single invoice when a bare number matches exactly one', async () => {
+      const invoice = { id: 'inv-1', invoiceNo: '8100897', serialNo: 'K26TAN' };
+      repository.find.mockResolvedValueOnce([invoice]);
+
+      const result: any = await service.findOne('8100897');
+
+      expect(result.data.id).toBe('inv-1');
+    });
+  });
+
   describe('bulkSetBranch', () => {
     it('delegates to InvoiceBranchService and reports every touched invoice', async () => {
       const branchService = {

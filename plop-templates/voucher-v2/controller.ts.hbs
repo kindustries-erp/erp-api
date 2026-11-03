@@ -1,0 +1,136 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
+import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
+import { RequirePermissions } from '@/auth/decorators/require-permissions.decorator';
+import { ErpAction } from '@/rbac-core/enums/erp-action.enum';
+import { ErpResource } from '@/rbac-core/enums/erp-resource.enum';
+import { {{moduleClass}}Service } from '../{{moduleName}}.service';
+import { Create{{headerEntityName}}Dto } from '../dto/create-{{headerEntityKebab}}.dto';
+import { Query{{headerEntityName}}Dto } from '../dto/query-{{headerEntityKebab}}.dto';
+import { Update{{headerEntityName}}Dto } from '../dto/update-{{headerEntityKebab}}.dto';
+
+@ApiTags('{{routePath}}')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, CoreRbacGuard)
+@Controller('{{routePath}}')
+export class {{headerEntityName}}Controller {
+  constructor(private readonly service: {{moduleClass}}Service) {}
+
+  @RequirePermissions({
+    resource: ErpResource.{{resourceKey}},
+    action: ErpAction.READ,
+  })
+  @ApiOperation({ summary: 'Danh sách {{headerEntityName}}' })
+  @Get()
+  findAll(@Query() query: Query{{headerEntityName}}Dto) {
+    return this.service.findAll(query);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.{{resourceKey}},
+    action: ErpAction.READ,
+  })
+  @ApiOperation({ summary: 'Gợi ý giá trị cho bộ lọc cột' })
+  @Get('column-options')
+  columnOptions(
+    @Query('column') column: string,
+    @Query('search') search?: string,
+    @Query('page') page = '1',
+    @Query('pageSize') pageSize = '20',
+    @Query('filters') filters?: string,
+  ) {
+    return this.service.findColumnOptions(
+      column,
+      search,
+      Math.max(1, parseInt(page, 10) || 1),
+      Math.max(1, Math.min(200, parseInt(pageSize, 10) || 20)),
+      filters,
+    );
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.{{resourceKey}},
+    action: ErpAction.READ,
+  })
+  @ApiOperation({ summary: 'Sinh mã chứng từ tiếp theo theo ngày' })
+  @Get('next-code')
+  getNextCode(@Query('date') date?: string) {
+    return this.service.getNextCode(date);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.{{resourceKey}},
+    action: ErpAction.READ,
+  })
+  @ApiOperation({ summary: 'Chi tiết {{headerEntityName}} kèm dòng hàng' })
+  @Get(':id')
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
+    return this.service.findOne(id);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.{{resourceKey}},
+    action: ErpAction.CREATE,
+  })
+  @ApiOperation({ summary: 'Tạo mới {{headerEntityName}}' })
+  @Post()
+  create(@Body() dto: Create{{headerEntityName}}Dto) {
+    return this.service.create(dto);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.{{resourceKey}},
+    action: ErpAction.UPDATE,
+  })
+  @ApiOperation({ summary: 'Cập nhật {{headerEntityName}} ở trạng thái DRAFT' })
+  @Patch(':id')
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: Update{{headerEntityName}}Dto,
+  ) {
+    return this.service.update(id, dto);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.{{resourceKey}},
+    action: ErpAction.UPDATE,
+  })
+  @ApiOperation({ summary: 'Ghi sổ chứng từ (POSTED)' })
+  @Post(':id/post')
+  postReceipt(@Param('id', ParseUUIDPipe) id: string) {
+    return this.service.post(id);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.{{resourceKey}},
+    action: ErpAction.UPDATE,
+  })
+  @ApiOperation({ summary: 'Hủy chứng từ (CANCELLED)' })
+  @Post(':id/cancel')
+  cancelReceipt(@Param('id', ParseUUIDPipe) id: string) {
+    return this.service.cancel(id);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.{{resourceKey}},
+    action: ErpAction.DELETE,
+  })
+  @ApiOperation({ summary: 'Xóa mềm {{headerEntityName}} (DRAFT)' })
+  @Delete(':id')
+  remove(@Param('id', ParseUUIDPipe) id: string) {
+    return this.service.remove(id);
+  }
+}
+

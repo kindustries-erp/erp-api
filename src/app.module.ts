@@ -55,6 +55,8 @@ import { AppConfigModule } from './app-config/app-config.module';
 import { SystemOperationsCoreModule } from './system-operations-core/system-operations-core.module';
 import { AiHubCoreModule } from './ai-hub-core/ai-hub-core.module';
 import { InvoicesModule } from './v2/invoices/invoices.module'; // api-v2-module:invoices:app-imports
+import { AdminDashboardModule } from './v2/admin-dashboard-core/admin-dashboard.module';
+import { GarageGoodsReceiptsCoreModule } from './v2/modules/garage-goods-receipts/garage-goods-receipts-core.module'; // api-v2-module:garage-goods-receipts:app-imports
 // plop:api-v2-imports
 
 @Module({
@@ -168,6 +170,8 @@ import { InvoicesModule } from './v2/invoices/invoices.module'; // api-v2-module
     AppConfigModule,
     AiHubCoreModule,
     InvoicesModule, // api-v2-module:invoices:app-modules
+    AdminDashboardModule,
+    GarageGoodsReceiptsCoreModule, // api-v2-module:garage-goods-receipts:app-modules
     // plop:api-v2-modules
   ],
   controllers: [AppController],

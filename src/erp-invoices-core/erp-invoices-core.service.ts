@@ -250,6 +250,11 @@ export class ErpInvoicesCoreService {
     return this.portalService.getPortalConfig();
   }
 
+  /** Cấu hình thô (token/cookies đã giải mã) cho nội bộ server, không trả ra API */
+  getInternalPortalConfig() {
+    return this.portalService.getInternalPortalConfig();
+  }
+
   savePortalConfig(
     token: string,
     cookies?: string,

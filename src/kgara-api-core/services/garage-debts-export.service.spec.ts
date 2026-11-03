@@ -47,7 +47,7 @@ const supplierRow = {
 describe('GarageDebtsExportService', () => {
   const customersQuery = { getCustomersDebt: jest.fn() };
   const suppliers = { getSuppliersDebt: jest.fn() };
-  const branchRepo = { findOne: jest.fn() };
+  const branchRepo = { findOne: jest.fn(), find: jest.fn() };
   let service: GarageDebtsExportService;
 
   beforeEach(() => {
@@ -56,10 +56,9 @@ describe('GarageDebtsExportService', () => {
       data: [customerRow, secondCustomerRow],
     });
     suppliers.getSuppliersDebt.mockResolvedValue({ data: [supplierRow] });
-    branchRepo.findOne.mockResolvedValue({
-      externalId: 'CN1',
-      name: 'Chi nhánh Quận 7',
-    });
+    branchRepo.find.mockResolvedValue([
+      { externalId: 'CN1', accountKey: 'MAIN', name: 'Chi nhánh Quận 7' },
+    ]);
     service = new GarageDebtsExportService(
       customersQuery as any,
       suppliers as any,
@@ -267,7 +266,7 @@ describe('GarageDebtsExportService', () => {
   });
 
   it('tên chi nhánh lỗi tra cứu thì dùng mã chi nhánh', async () => {
-    branchRepo.findOne.mockRejectedValue(new Error('db down'));
+    branchRepo.find.mockRejectedValue(new Error('db down'));
     const wb = await loadWorkbook(
       await service.exportExcel('customers', 'CN9', {}),
     );

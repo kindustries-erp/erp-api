@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, SelectQueryBuilder } from 'typeorm';
 import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
 import { QueryInvoiceDto } from '../dto/query-invoice.dto';
@@ -13,79 +13,34 @@ import {
   findTableColumnOptions,
   parseFilterRecord,
   resolveTableColumn,
-  TableColumnMap,
   TableDateRange,
   TableFilterPayload,
   TableOperatorFilter,
   TableOptionsPage,
+  TABLE_BLANK_VALUE,
 } from '@/common/utils/table-query';
+import {
+  INVOICE_SEARCH_COLUMNS,
+  INVOICE_SUMMARY_COLUMNS,
+  INVOICE_TABLE_COLUMNS,
+} from '../helpers/invoice-table-columns';
+import {
+  applyNetOffJoin,
+  NET_OFF_SUM_SQL,
+  REMAINING_AMOUNT_SQL,
+} from '../helpers/invoice-netoff.helper';
 
-/** Cột lọc, sắp xếp và tổng (whitelist, không nhận biểu thức từ client). */
-const TABLE_COLUMNS: TableColumnMap = {
-  createdAt: { sql: 'e.createdAt', type: 'date' },
-  created_at: { sql: 'e.createdAt', type: 'date' },
-  invoiceNo: { sql: 'e.invoiceNo', type: 'text' },
-  invoice_no: { sql: 'e.invoiceNo', type: 'text' },
-  serialNo: { sql: 'e.serialNo', type: 'text' },
-  serial_no: { sql: 'e.serialNo', type: 'text' },
-  invoiceDate: { sql: 'e.invoiceDate', type: 'date' },
-  invoice_date: { sql: 'e.invoiceDate', type: 'date' },
-  direction: { sql: 'e.direction', type: 'text' },
-  status: { sql: 'e.status', type: 'text' },
-  sellerName: { sql: 'e.sellerName', type: 'text' },
-  seller_name: { sql: 'e.sellerName', type: 'text' },
-  sellerTaxCode: { sql: 'e.sellerTaxCode', type: 'text' },
-  seller_tax_code: { sql: 'e.sellerTaxCode', type: 'text' },
-  buyerName: { sql: 'e.buyerName', type: 'text' },
-  buyer_name: { sql: 'e.buyerName', type: 'text' },
-  buyerTaxCode: { sql: 'e.buyerTaxCode', type: 'text' },
-  buyer_tax_code: { sql: 'e.buyerTaxCode', type: 'text' },
-  description: { sql: 'e.description', type: 'text' },
-  invoiceType: { sql: 'e.invoiceType', type: 'text' },
-  invoice_type: { sql: 'e.invoiceType', type: 'text' },
-  invoiceCategory: { sql: 'e.invoiceCategory', type: 'text' },
-  invoice_category: { sql: 'e.invoiceCategory', type: 'text' },
-  preVatAmount: { sql: 'e.preVatAmount', type: 'number' },
-  pre_vat_amount: { sql: 'e.preVatAmount', type: 'number' },
-  vatRate: { sql: 'e.vatRate', type: 'number' },
-  vat_rate: { sql: 'e.vatRate', type: 'number' },
-  vatAmount: { sql: 'e.vatAmount', type: 'number' },
-  vat_amount: { sql: 'e.vatAmount', type: 'number' },
-  discountAmount: { sql: 'e.discountAmount', type: 'number' },
-  discount_amount: { sql: 'e.discountAmount', type: 'number' },
-  totalAmount: { sql: 'e.totalAmount', type: 'number' },
-  total_amount: { sql: 'e.totalAmount', type: 'number' },
-  notes: { sql: 'e.notes', type: 'text' },
+/** Hóa đơn kèm số đã cấn trừ và số còn lại (tính trong SQL, không lưu cột). */
+export type InvoiceListRow = Invoice & {
+  netOffAmount: number;
+  remainingAmount: number;
 };
 
-/** Cột số được cộng vào `summaries` (tổng toàn bộ dòng khớp bộ lọc). */
-const SUMMARY_COLUMNS: { key: string; sql: string }[] = [
-  { key: 'preVatAmount', sql: 'e.preVatAmount' },
-  { key: 'vatRate', sql: 'e.vatRate' },
-  { key: 'vatAmount', sql: 'e.vatAmount' },
-  { key: 'discountAmount', sql: 'e.discountAmount' },
-  { key: 'totalAmount', sql: 'e.totalAmount' },
-];
-
-/** Cột dùng cho ô tìm kiếm chung (ILIKE, nhiều từ khóa cách nhau bằng dấu `;`). */
-const SEARCH_COLUMNS: string[] = [
-  'e.invoiceNo',
-  'e.serialNo',
-  'e.invoiceDate',
-  'e.direction',
-  'e.status',
-  'e.sellerName',
-  'e.sellerTaxCode',
-  'e.buyerName',
-  'e.buyerTaxCode',
-  'e.description',
-  'e.invoiceType',
-  'e.invoiceCategory',
-  'e.notes',
-];
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface InvoicePageResult {
-  items: Invoice[];
+  items: InvoiceListRow[];
   total: number;
   page: number;
   pageSize: number;
@@ -108,16 +63,19 @@ export class InvoiceQueryService {
     const qb = this.baseQuery();
 
     const keyword = query.search?.trim();
-    if (keyword && SEARCH_COLUMNS.length > 0) {
+    if (keyword && INVOICE_SEARCH_COLUMNS.length > 0) {
       applyMultiKeywordMultiFieldFilter(
         qb,
-        SEARCH_COLUMNS,
+        INVOICE_SEARCH_COLUMNS,
         keyword,
         'global_search',
       );
     }
 
-    applyTableFilters(qb, this.readFilters(query), TABLE_COLUMNS, 'filter');
+    const filters = this.readFilters(query);
+    applyTableFilters(qb, filters, INVOICE_TABLE_COLUMNS, 'filter');
+    this.applyBranchFilter(qb, filters.columnFilters?.branchId);
+    this.applyDirectParams(qb, query);
     applyDateBounds(
       qb,
       'e.invoiceDate',
@@ -125,18 +83,32 @@ export class InvoiceQueryService {
       query.date_to,
       'legacy',
     );
-    applyTableSort(qb, query.sort, TABLE_COLUMNS, {
-      sql: 'e.createdAt',
+    applyTableSort(qb, query.sort, INVOICE_TABLE_COLUMNS, {
+      sql: 'e.invoiceDate',
       direction: 'DESC',
     });
 
     // Tổng tính trên toàn bộ dòng khớp, nên phải gọi trước khi phân trang
-    const summaries = await computeTableSummaries(qb, SUMMARY_COLUMNS);
+    const summaries = await computeTableSummaries(qb, INVOICE_SUMMARY_COLUMNS);
+    const total = await qb.clone().getCount();
 
-    const [items, total] = await qb
-      .skip((page - 1) * pageSize)
-      .take(pageSize)
-      .getManyAndCount();
+    // offset/limit thay cho skip/take: tránh subquery DISTINCT khi sắp xếp theo biểu thức cấn trừ
+    const { entities, raw } = await qb
+      .addSelect(NET_OFF_SUM_SQL, 'netOffAmount')
+      .addSelect(REMAINING_AMOUNT_SQL, 'remainingAmount')
+      .offset((page - 1) * pageSize)
+      .limit(pageSize)
+      .getRawAndEntities<Record<string, unknown>>();
+
+    // Cột raw của alias `e` có dạng `e_<tên cột DB>`, nên id là `e_id`
+    const extras = new Map(raw.map((row) => [String(row.e_id), row]));
+    const items = entities.map((entity) => {
+      const extra = extras.get(entity.id);
+      return Object.assign(entity, {
+        netOffAmount: Number(extra?.netOffAmount ?? 0),
+        remainingAmount: Number(extra?.remainingAmount ?? 0),
+      });
+    });
     return { items, total, page, pageSize, summaries };
   }
 
@@ -148,14 +120,14 @@ export class InvoiceQueryService {
     pageSize: number,
     filters: unknown,
   ): Promise<TableOptionsPage> {
-    const def = resolveTableColumn(TABLE_COLUMNS, column);
+    const def = resolveTableColumn(INVOICE_TABLE_COLUMNS, column);
     if (!def) return { items: [], total: 0, next: null };
 
     const qb = this.baseQuery();
     applyTableFilters(
       qb,
       this.toPayload(filters),
-      TABLE_COLUMNS,
+      INVOICE_TABLE_COLUMNS,
       'col_opt',
       column,
     );
@@ -187,10 +159,49 @@ export class InvoiceQueryService {
     return rows.map((row) => row.id);
   }
 
-  private baseQuery() {
-    return this.repo
+  private baseQuery(): SelectQueryBuilder<Invoice> {
+    const qb = this.repo
       .createQueryBuilder('e')
       .where('e.isDeleted = :isDeleted', { isDeleted: false });
+    return applyNetOffJoin(qb);
+  }
+
+  /**
+   * Lọc chi nhánh trên mảng `branch_ids`: khớp nếu hóa đơn thuộc một trong các chi nhánh đã chọn,
+   * hoặc chưa gán chi nhánh nào khi chọn `__BLANK__`.
+   */
+  private applyBranchFilter(
+    qb: SelectQueryBuilder<Invoice>,
+    values: string[] | undefined,
+  ): void {
+    if (!values?.length) return;
+    // Chỉ nhận id chi nhánh dạng UUID, giá trị khác bỏ qua để không lỗi cast `uuid[]`
+    const selected = values.filter((value) => UUID_PATTERN.test(value));
+    const conditions: string[] = [];
+    if (selected.length)
+      conditions.push('e.branchIds && CAST(:branchIds AS uuid[])');
+    if (values.includes(TABLE_BLANK_VALUE))
+      conditions.push('cardinality(e.branchIds) = 0');
+    if (conditions.length === 0) return;
+    qb.andWhere(`(${conditions.join(' OR ')})`, { branchIds: selected });
+  }
+
+  /** Tham số lọc đứng riêng: chiều hóa đơn, MST đối tác và thẻ (tag). */
+  private applyDirectParams(
+    qb: SelectQueryBuilder<Invoice>,
+    query: QueryInvoiceDto,
+  ): void {
+    if (query.direction)
+      qb.andWhere('e.direction = :direction', { direction: query.direction });
+    if (query.partner_tax_code)
+      qb.andWhere('(e.sellerTaxCode = :ptc OR e.buyerTaxCode = :ptc)', {
+        ptc: query.partner_tax_code,
+      });
+    if (query.tag_id)
+      qb.andWhere(
+        `e.id IN (SELECT entity_id FROM sys_entity_tags WHERE entity_type = 'erp_invoice' AND tag_id = :tagId)`,
+        { tagId: query.tag_id },
+      );
   }
 
   private readFilters(query: QueryInvoiceDto): TableFilterPayload {

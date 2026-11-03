@@ -25,10 +25,28 @@ graph LR
    - *Quy tắc Lập Plan (Zero Execution)*: Mã lệnh trong mục `Verification` chỉ là **ĐẶC TẢ VĂN BẢN (Text Specification)** để cam kết tiêu chí hoàn thành, **TUYỆT ĐỐI KHÔNG ĐƯỢC CHẠY** trong lúc lập Plan. Lệnh này CHỈ ĐƯỢC CHẠY ở Phase 5 sau khi User đã duyệt Plan.
    - *Test Runner Duy Nhất*: Trong `erp-api`, test runner duy nhất là **`jest`** (`bunx jest <spec>`, `bunx jest --findRelatedTests <file>`) hoặc `bunx tsc --noEmit`. **TUYỆT ĐỐI CẤM GÕ LỆNH `vitest` TRONG `erp-api`**.
    - *Atomic Task (`Z`)*: BẮT BUỘC dùng Scoped Test nhanh (< 5–10s). **TUYỆT ĐỐI CẤM** chạy full test suite (`bunx jest`, `bun run test`, `bun run check:ci`) ở từng task nhỏ để tránh nghẽn CPU.
-   - *Final Gate (Phase 3)*: Chỉ chạy `bun run verify:final` DUY NHẤT một lần ở Task 3.1.1, **sau khi đã commit và `git pull --rebase`** (script yêu cầu working tree sạch), rồi mới push `--no-verify`.
+   - *Final Gate (Phase 3)*: Commit (pre-commit chạy lint + `jest --findRelatedTests`) → `git pull --rebase` → `git push` (pre-push chạy `type:check`). Full test/build/check:ci chạy trên GitHub CI; xác nhận CI xanh ở Task 3.1.1. `bun run verify:final` là lệnh local tùy chọn.
 4. **Real-time Tracking & Test-First Tick**: Tại mỗi thời điểm **chỉ có duy nhất 1 task** ở trạng thái `[/] In Progress`. Tuyệt đối không tick `[x]` nếu lệnh kiểm thử chưa PASS 100%. Cập nhật tiến độ vào file `implementation_plan.md` ngay sau mỗi task.
 5. **Session Checkpoint Protocol (Pause & Resume)**: Hỗ trợ tạm dừng và tiếp tục mượt mà. Khi tạm dừng, bắt buộc ghi log vào mục `## ⏸️ Session Checkpoint`. Khi tiếp tục, Agent đọc lại Checkpoint để xác định chính xác task đang dang dở và bắt đầu làm tiếp ngay mà không phải hỏi lại từ đầu.
 6. **Knowledge-Sync Guard (Cập nhật Tri thức / Skill Liền Tay)**: Ngay sau khi hoàn thành task hoặc feature có thay đổi về Database schema, API contracts hoặc business logic cốt lõi, Agent **BẮT BUỘC cập nhật lại Module Skill** tương ứng (tại `erp/erp-api/.agents/skills/modules/<module>/SKILL.md`) hoặc chạy skill `/scan-module-knowledge` để tạo mới/đồng bộ tri thức. Tuyệt đối không để tri thức trong skill bị lỗi thời.
+
+---
+
+## 🧩 Tầng Cơ Chế Plan Theo Agent (`/plan` Bridge)
+
+Workflow này là chuẩn chung. Mỗi agent dùng cơ chế plan gốc của mình để chạy Giai đoạn 1–4, nhưng artifact đầu ra luôn giống nhau: `implementation_plan.md` và Task 3 cấp.
+
+| Agent | Cơ chế plan | Cách dùng |
+| :--- | :--- | :--- |
+| Claude Code | Plan mode gốc: `/plan` (tool `EnterPlanMode`) | Vào plan mode để khảo sát read-only và trình plan trong hội thoại. Sau khi user `OK` mới `ExitPlanMode`, lưu bản chốt vào `.agents/plans/<task-slug>/implementation_plan.md`, rồi chuyển sang Giai đoạn 5. |
+| Antigravity | `implementation_plan.md` + `walkthrough.md` (Brain) | Dùng trực tiếp mẫu trong workflow này. Hai file này là artifact chính. |
+| Codex, Copilot, Trae, agent khác | Không có plan mode tùy chỉnh | Trình plan trong chat, lưu bản chốt vào `.agents/plans/<task-slug>/implementation_plan.md` trong repo, chờ `OK`. |
+
+Quy tắc áp dụng cho mọi agent:
+- Cổng `OK` của user là bắt buộc. Plan mode chỉ thay thế bước khảo sát read-only, không thay thế cổng duyệt.
+- Giai đoạn plan không chạy test runner, không sửa code.
+- Sau `OK`: tạo task trên Plane (project KINDU) theo skill `plane-work-items`. Task ERP luôn có Story/Task.
+- Task mới phải đi qua chuỗi `/plan-and-task`. Đừng bỏ qua giai đoạn 4 chỉ vì agent có plan mode riêng.
 
 ---
 
@@ -78,12 +96,13 @@ Phân chia toàn bộ công việc theo hệ thống đánh số 3 cấp **`X.Y.
 | **Service Logic / Spec** | `bunx jest src/modules/<path>/<file>.spec.ts` | **CẤM gõ `vitest`** |
 | **File mã nguồn thay đổi** | `bunx jest --findRelatedTests src/modules/<path>/<file>.ts` | **CẤM gõ `vitest`** |
 | **Controller & RBAC** | `bunx jest src/modules/<path>/<file>.controller.spec.ts` | **CẤM gõ `vitest`** |
-| **Final Gate (Task 3.1.1)** | `bun run verify:final` | Chạy DUY NHẤT ở Phase 3 trên commit cuối |
+| **Final Gate (Task 3.1.1)** | CI GitHub xanh: job check, test, build | Xác nhận sau khi push trên commit cuối; `verify:final` local là tùy chọn |
 
 #### Cấu trúc một Task chuẩn:
 ```markdown
 - [ ] **Task X.Y.Z: [Tên Task súc tích, rõ hành động]**
   - **Phân hệ**: `Backend API` | **Ưu tiên**: `[P0 / P1 / P2]`
+  - **Runner**: `[Main Agent]` *(Mặc định là Main Agent cho mọi CLI đơn luồng như Codex/Claude. Chỉ ghi `Sub-agent (self)` khi Agent có hỗ trợ Sub-agent và task độc lập hoàn toàn)*
   - **Files**: `[NEW]` / `[MODIFY]` / `[DELETE]` [path/to/file](erp/erp-api/path/to/file)
   - **DoD**: Tiêu chí hoàn thành cụ thể (TypeScript pass, validation chặt chẽ, spec pass 100%).
   - **Verification**: `[Lệnh kiểm thử scoped cụ thể: bunx jest <spec> hoặc bunx tsc --noEmit]`
@@ -92,9 +111,30 @@ Phân chia toàn bộ công việc theo hệ thống đánh số 3 cấp **`X.Y.
 ---
 
 ### 🔹 GIAI ĐOẠN 4: Review, Alignment & Approval Gate (Duyệt Kế Hoạch)
+
+**Bước 0: Kiểm tra chéo (Consistency Check, read-only)**: làm trước khi hỏi `OK`.
+1. Mỗi tiêu chí chấp nhận (`AC-n`) ánh xạ tới ít nhất một task; mỗi task truy về ít nhất một AC. Không có task mồ côi, không có AC bị bỏ sót. Điền bảng truy vết AC → Task → Verification trong mục Spec.
+2. Verification của task thật sự kiểm được AC đó, không chỉ là type-check chung.
+3. Mọi mục `[CẦN LÀM RÕ]` đã được trả lời, hoặc nằm trong Open Questions chờ user quyết. Không để mơ hồ ngầm.
+4. Plan không mâu thuẫn với skill chuẩn liên quan (thứ tự DB → API → UI → QC, giới hạn 180 dòng, `erp-api-truth/references/security-baseline.md` khi đụng endpoint, auth, DTO, upload).
+5. Ghi một dòng kết quả trong plan: `Consistency Check: đạt` hoặc liệt kê chỗ lệch kèm cách xử lý.
+
 - Nêu rõ **Breaking Changes** và các **Open Questions** (Phương án A vs B).
 - Đặt cờ `RequestFeedback: true` trên `implementation_plan.md`.
 - **DỪNG LẠI (STOP) HOÀN TOÀN**: Khoanh tay chờ User phê duyệt (`OK` / `Confirm`). **TUYỆT ĐỐI KHÔNG tự ý thực thi task đầu tiên, KHÔNG chạy test runner, KHÔNG sửa file trước khi có xác nhận rõ ràng từ User.**
+
+---
+
+### 🔸 Sau `OK`: Xác nhận tích hợp Plane (`plane-work-items`)
+
+Ngay sau khi User trả lời `OK` / `Confirm`, Agent **PHẢI HỎI** trước khi làm gì trên Plane:
+
+> Bạn có muốn tôi tạo và theo dõi task này trên Plane (project KINDU, workspace k-industries) không? **Có / Không**
+
+- **Có**: load skill `plane-work-items`, tạo Module, Cycle, Story và Task theo mục 3 của skill, rồi ghi identifier (ví dụ `KINDU-12`) vào `implementation_plan.md`. Khi task đổi trạng thái thì cập nhật trên Plane.
+- **Không**: chỉ theo dõi trong `implementation_plan.md`, và ghi dòng `Plane: không theo dõi` vào plan.
+- Với task ERP, lựa chọn khuyến nghị là **Có**, theo quy tắc ERP trong `AGENTS.md`. Câu hỏi vẫn phải được hỏi.
+- Chưa có `OK` thì không tạo gì trên Plane. Không ghi plan hay task vào Trilium.
 
 ---
 
@@ -106,6 +146,19 @@ Phân chia toàn bộ công việc theo hệ thống đánh số 3 cấp **`X.Y.
   - Chỉ được đổi `[/]` thành `[x]` khi và chỉ khi lệnh trong mục `Verification` trả về kết quả **PASS 100%**.
   - Nếu test fail hoặc type error: giữ nguyên `[/]`, tiếp tục sửa code cho đến khi test pass.
 - **Live Sync**: Ngay khi hoàn tất một task, ghi nhận trạng thái vào `implementation_plan.md` ngay lập tức, không để dồn đến cuối mới tick.
+
+#### 1.1 Cơ chế Thực thi Thống nhất (Single-Agent vs Sub-agent Delegation)
+Để đảm bảo **bất kỳ AI Agent nào (Codex CLI, Claude Code, Gemini CLI, Antigravity) cũng đều thực thi và có hành động giống hệt nhau**, toàn bộ hệ thống tuân theo các nguyên tắc chuẩn hóa:
+- **Chuẩn Mặc Định Cho Mọi Agent (Single-Agent Baseline)**:
+  - Mọi Agent (dù đơn luồng hay đa nhiệm) đều có thể tự mình thực thi tuần tự từ trên xuống dưới (`[/]` ➔ sửa file ➔ chạy verification ➔ PASS ➔ tick `[x]`).
+  - Khi chạy trên các công cụ không có Sub-agent (Codex CLI, Claude Code), Agent chính tự làm 100% các task mà không yêu cầu thêm công cụ nào khác.
+- **Cơ Chế Ủy Quyền Sub-agent (Khi môi trường hỗ trợ, ví dụ Antigravity)**:
+  - **Điều kiện ủy quyền**: Chỉ kích hoạt khi Agent có công cụ `invoke_subagent` VÀ task thỏa mãn tính độc lập (ví dụ service độc lập, hoặc khi User chỉ định / dùng `/teamwork`).
+  - **Quy tắc Giao việc**: Agent chính gọi Sub-agent (`self`) bằng cách trích xuất chính xác: `Task X.Y.Z`, `Files được phép sửa`, `DoD`, và `Lệnh Verification`.
+  - **Quy tắc Thực thi của Sub-agent**: Sub-agent khi nhận task **BẮT BUỘC tuân thủ đúng DoD và Verification của task đó**, tuyệt đối không sửa lan man ngoài scope.
+  - **Nguyên tắc Gatekeeper (Trách nhiệm Người Giữ Cổng)**: Sub-agent **TUYỆT ĐỐI KHÔNG** tự ý tick `[x]` vào `implementation_plan.md`. Sub-agent chỉ thực thi, chạy verification, và báo cáo kết quả kèm bằng chứng test pass về cho Agent chính.
+  - **Nghiệm thu & Cập nhật**: Agent chính nhận kết quả, xác minh lại lệnh Scoped Verification thực sự PASS 100%, sau đó Agent chính mới chuyển task sang `[x]` trên `implementation_plan.md`.
+  - **Tính Nhất Quán**: Dù do Main Agent tự làm hay Sub-agent thực hiện, mã nguồn, commit log, test passing và tài liệu nghiệm thu (`walkthrough.md`) là **100% ĐỒNG NHẤT**.
 
 #### 2. Giao thức Tạm dừng (Pause Protocol)
 Khi người dùng yêu cầu tạm dừng, đổi context hoặc phiên làm việc bị ngắt quãng:
@@ -128,10 +181,10 @@ Khi bắt đầu lại phiên làm việc (User gõ `tiếp tục`, `continue`, 
 4. **Thực thi liền mạch**: Bắt tay làm tiếp ngay từ đúng bước trong checkpoint mà không làm lại từ đầu.
 
 #### 4. Nghiệm thu, Cập nhật Tri thức & Báo cáo (Walkthrough & Knowledge Sync)
-- **Nghiệm thu cuối cùng (Final Gate)**: Chạy `bun run verify:final` DUY NHẤT một lần ở cuối toàn bộ kế hoạch, sau khi commit và `git pull --rebase`; sau đó push bằng `--no-verify`.
+- **Nghiệm thu cuối cùng (Final Gate)**: Sau khi commit và `git pull --rebase`, push (pre-push chạy `type:check`) rồi xác nhận CI GitHub xanh trên commit cuối.
 - **Knowledge & Skill Sync (Bắt buộc kiểm tra & cập nhật liền sau khi xong task)**:
   - Nếu có thay đổi Schema, DTOs, endpoints, relations: cập nhật vào Module Skill (`erp/erp-api/.agents/skills/modules/<module-name>/SKILL.md`) hoặc chạy `/scan-module-knowledge`.
-  - Nếu là module hoàn toàn mới: tạo file skill mới tại `erp/erp-api/.agents/skills/modules/<module-name>/SKILL.md` và gắn link vào `erp-api-current-truth`.
+  - Nếu là module hoàn toàn mới: tạo file skill mới tại `erp/erp-api/.agents/skills/modules/<module-name>/SKILL.md` và gắn link vào `erp-api-truth`.
   - Tuyệt đối không để tri thức chỉ nằm trong commit hoặc đầu óc mà không ghi vào skill.
 - **Tạo Báo cáo Nghiệm thu**: Tạo file `walkthrough.md` đính kèm bằng chứng test logs và trạng thái đồng bộ skill.
 
@@ -144,12 +197,24 @@ Khi bắt đầu lại phiên làm việc (User gõ `tiếp tục`, `continue`, 
 
 Tóm tắt mục tiêu bài toán và giá trị mang lại.
 
+## 📝 Spec (Mục tiêu & Tiêu chí chấp nhận)
+- **Mục tiêu**: một hai câu nói rõ việc này giải quyết vấn đề gì cho ai.
+- **Phạm vi và ngoài phạm vi**: liệt kê rõ để tránh task lan ra ngoài yêu cầu.
+- **Tiêu chí chấp nhận** (mã `AC-1`, `AC-2`, ...; mỗi tiêu chí phải kiểm chứng được bằng test, lệnh hoặc quan sát cụ thể):
+  - [ ] `AC-1`: ...
+- **Bảng truy vết** (điền ở Giai đoạn 4 khi Consistency Check):
+
+| AC | Task | Verification |
+| :--- | :--- | :--- |
+| `AC-1` | `1.1.1` | ... |
+
 ## ⚠️ User Review Required
 > [!IMPORTANT]
 > - **Quyết định nghiệp vụ**: [Nội dung cần User xác nhận]
 > - **Breaking changes**: [Cảnh báo nếu có thay đổi hợp đồng API hoặc schema]
 
 ## ❓ Open Questions
+> Mỗi điểm mơ hồ ghi thành một mục gắn nhãn `[CẦN LÀM RÕ]`. Không tự giả định thay user; nếu user bỏ qua thì ghi giả định đã chọn vào đây.
 - [ ] **Câu hỏi 1**: [Phương án kỹ thuật A vs B?]
 
 ---
@@ -212,10 +277,10 @@ Tóm tắt mục tiêu bài toán và giá trị mang lại.
 
 ### Phase 3: QC & Knowledge Sync
 #### 3.1 Automated Tests & CI Check
-- [ ] **Task 3.1.1: Chạy Full Unit Test Suite & Pre-commit Check**
+- [ ] **Task 3.1.1: Xác nhận CI GitHub xanh trên commit cuối**
   - **Phân hệ**: `QC` | **Ưu tiên**: `P0`
-  - **DoD**: 100% test suites pass, không có lỗi ESLint, Prettier và TypeScript.
-  - **Verification**: `bun run verify:final`
+  - **DoD**: CI xanh (job check, test, build): 100% test pass, không lỗi ESLint, Prettier và TypeScript.
+  - **Verification**: CI GitHub của nhánh đích xanh; tùy chọn `bun run verify:final` local.
 
 #### 3.2 Knowledge & Skill Sync
 - [ ] **Task 3.2.1: Cập nhật Module Skill & Current-Truth**
@@ -253,5 +318,5 @@ Tóm tắt mục tiêu bài toán và giá trị mang lại.
 
 ## 🧠 Tri Thức & Skill Đồng Bộ (Knowledge Sync)
 - **Module Skill**: Đã cập nhật `[path/to/SKILL.md]` (hoặc: *Không có thay đổi schema/contract*).
-- **Current Truth**: Đã liên kết vào `erp-api-current-truth`.
+- **Current Truth**: Đã liên kết vào `erp-api-truth`.
 ```

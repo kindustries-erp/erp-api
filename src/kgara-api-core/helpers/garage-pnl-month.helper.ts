@@ -34,6 +34,8 @@ export interface PnlMonthRow {
   grossMarginRate: number;
   opexTotal: number;
   opexItems: PnlLineItem[];
+  financialTotal?: number;
+  financialItems?: PnlLineItem[];
   netBeforeCommission: number;
   /** Chi phí bán hàng (HHBH) đã trừ trong lợi nhuận ròng sau hoa hồng. */
   hhbhTotal: number;
@@ -95,6 +97,8 @@ export function toPnlMonthRow(ref: PnlMonthRef, report: any): PnlMonthRow {
     grossMarginRate: num(report?.grossMarginRate),
     opexTotal: num(report?.opex?.total),
     opexItems: mapItems(report?.opex?.items),
+    financialTotal: num(report?.financialExpenses?.total),
+    financialItems: mapItems(report?.financialExpenses?.items),
     netBeforeCommission: num(report?.netProfitBeforeCommission),
     hhbhTotal: num(
       (Array.isArray(report?.sellingExpenses?.items)

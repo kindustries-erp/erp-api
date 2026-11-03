@@ -1,0 +1,71 @@
+import { Reflector } from '@nestjs/core';
+import { ErpAction, ErpResource } from '@/rbac-core/enums';
+import { RBAC_PERMISSIONS_KEY } from '@/auth/decorators/require-permissions.decorator';
+import { {{moduleClass}}Service } from '../{{moduleName}}.service';
+import { {{headerEntityName}}Controller } from './{{headerEntityKebab}}.controller';
+
+describe('{{headerEntityName}}Controller', () => {
+  let service: {
+    findAll: jest.Mock;
+    findColumnOptions: jest.Mock;
+    getNextCode: jest.Mock;
+    findOne: jest.Mock;
+    create: jest.Mock;
+    update: jest.Mock;
+    post: jest.Mock;
+    cancel: jest.Mock;
+    remove: jest.Mock;
+  };
+  let controller: {{headerEntityName}}Controller;
+  const reflector = new Reflector();
+
+  beforeEach(() => {
+    service = {
+      findAll: jest.fn(),
+      findColumnOptions: jest.fn(),
+      getNextCode: jest.fn(),
+      findOne: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      post: jest.fn(),
+      cancel: jest.fn(),
+      remove: jest.fn(),
+    };
+    controller = new {{headerEntityName}}Controller(
+      service as unknown as {{moduleClass}}Service,
+    );
+  });
+
+  it('delegates list query to facade', async () => {
+    await controller.findAll({} as any);
+    expect(service.findAll).toHaveBeenCalled();
+  });
+
+  it('verifies all routes are protected with {{resourceKey}} resource', () => {
+    const endpoints = [
+      { handler: controller.findAll, action: ErpAction.READ },
+      { handler: controller.columnOptions, action: ErpAction.READ },
+      { handler: controller.getNextCode, action: ErpAction.READ },
+      { handler: controller.findOne, action: ErpAction.READ },
+      { handler: controller.create, action: ErpAction.CREATE },
+      { handler: controller.update, action: ErpAction.UPDATE },
+      { handler: controller.postReceipt, action: ErpAction.UPDATE },
+      { handler: controller.cancelReceipt, action: ErpAction.UPDATE },
+      { handler: controller.remove, action: ErpAction.DELETE },
+    ];
+
+    for (const ep of endpoints) {
+      const perms = reflector.get(RBAC_PERMISSIONS_KEY, ep.handler);
+      expect(perms).toBeDefined();
+      expect(perms).toEqual(
+        expect.arrayContaining([
+          {
+            resource: ErpResource.{{resourceKey}},
+            action: ep.action,
+          },
+        ]),
+      );
+    }
+  });
+});
+

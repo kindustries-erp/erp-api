@@ -6,9 +6,17 @@ const gdtLogger = new Logger('InvoiceGdtHelper');
 import { sleep } from '../../common/utils/delay.util';
 import { GDT_BROWSER_HEADERS, GDT_PORTAL_BASE_URL } from './gdt-session.helper';
 
+/** Token GDT hết hạn (HTTP 401/403). Không retry: caller phải đăng nhập lại. */
+export class GdtTokenExpiredError extends Error {
+  constructor() {
+    super('GDT_TOKEN_EXPIRED');
+    this.name = 'GdtTokenExpiredError';
+  }
+}
+
 /**
  * fetchWithRetry — wraps native fetch with timeout, GDT-compatible UA headers,
- * automatic retry on 429/5xx, and throws on 401/403 (token expired).
+ * automatic retry on 429/5xx, and throws GdtTokenExpiredError on 401/403 without retrying.
  */
 export async function fetchWithRetry(
   url: string | URL,
@@ -42,7 +50,7 @@ export async function fetchWithRetry(
       if (res.ok) return res;
 
       if (res.status === 401 || res.status === 403) {
-        throw new Error('GDT_TOKEN_EXPIRED');
+        throw new GdtTokenExpiredError();
       }
 
       if (res.status === 429 || (res.status >= 500 && res.status <= 599)) {
@@ -61,6 +69,7 @@ export async function fetchWithRetry(
 
       return res;
     } catch (err: any) {
+      if (err instanceof GdtTokenExpiredError) throw err;
       if (i < retries) {
         gdtLogger.warn(
           `GDT API fetch failed (${err.name}: ${err.message}) on ${url}, retrying ${i + 1}/${retries}...`,

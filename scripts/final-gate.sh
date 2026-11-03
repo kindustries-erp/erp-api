@@ -15,8 +15,4 @@ bun run build
 bun run check:style
 bunx jest --forceExit
 
-commit_hash="$(git rev-parse HEAD)"
-marker_dir="$repo_root/.git/erp-final-gate"
-mkdir -p "$marker_dir"
-touch "$marker_dir/$commit_hash"
-echo "Final Gate passed for $commit_hash"
+echo "Final Gate passed for $(git rev-parse HEAD)"
