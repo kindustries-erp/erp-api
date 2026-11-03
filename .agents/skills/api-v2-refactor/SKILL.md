@@ -115,11 +115,11 @@ bunx plop api-voucher-v2
 8. `permissionResourceInput`: Tên RBAC resource snake_case.
 9. `wireInput`: Nối tự động vào AppModule và DataSource (`true`/`false`).
 
-### Cấu trúc sinh ra:
-- **Entities**: Header (`@OneToMany`) và Line (`@ManyToOne`, cascade, FK, `isDeleted`).
-- **DTOs**: Create Header/Line DTOs, Update DTO (PartialType), Query DTO (`TableQueryDto`), Response DTOs.
+### Cấu trúc sinh ra (tại `src/v2/modules/<module-name>/`):
+- **Entities**: Header và Line kế thừa `BaseGoodsReceiptEntity` và `BaseGoodsReceiptLineEntity` từ `@/v2/core/goods-receipts/entities/`, tự động có sẵn các trường chuẩn chứng từ (`receiptNo`, `status`, `totalAmount`, timestamps, timestamps line, FK cascade).
+- **DTOs**: Create, Update, Query, Response DTOs kế thừa trực tiếp từ `@/v2/core/goods-receipts/dto/`, loại bỏ mã lặp class-validator & Swagger annotations.
 - **Helpers**: Mapper hai chiều Header + nested Lines (tự tính tổng dòng hàng).
-- **Core Engine Integration**: Tự động kết nối `BaseVoucherEngineService` (`src/v2/goods-receipts-core/`):
+- **Core Engine Integration**: Tự động kết nối `BaseVoucherEngineService` (`@/v2/core/goods-receipts`):
   - Sinh mã theo ngày: `generateDailyVoucherNo` (`PREFIX-YYYYMMDD-001`).
   - Kiểm tra trạng thái: `validateVoucherTransition` (`DRAFT` -> `POSTED` -> `CANCELLED`).
   - Xóa mềm: Chỉ cho phép xóa khi ở trạng thái `DRAFT`.

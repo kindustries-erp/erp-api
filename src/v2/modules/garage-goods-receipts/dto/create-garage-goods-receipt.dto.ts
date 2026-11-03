@@ -1,70 +1,19 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import {
-  IsArray,
-  IsDateString,
-  IsIn,
-  IsNumber,
-  IsOptional,
-  IsString,
-  ValidateNested,
-} from 'class-validator';
+import { IsArray, IsIn, IsOptional, ValidateNested } from 'class-validator';
+import { BaseCreateGoodsReceiptDto } from '@/v2/core/goods-receipts/dto/base-create-goods-receipt.dto';
 import { CreateGarageGoodsReceiptLineDto } from './create-garage-goods-receipt-line.dto';
 
-export class CreateGarageGoodsReceiptDto {
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  receiptNo?: string;
-
-  @ApiProperty()
-  @IsDateString()
-  receiptDate: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  supplierId?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  supplierName?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  branchId?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  branchName?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsNumber()
-  totalAmount?: number;
-
-  @ApiPropertyOptional({ default: 'DRAFT' })
-  @IsOptional()
-  @IsIn(['DRAFT', 'POSTED', 'CANCELLED'])
-  status?: string;
-
+export class CreateGarageGoodsReceiptDto extends BaseCreateGoodsReceiptDto {
   @ApiPropertyOptional({ default: 'UNPAID' })
   @IsOptional()
   @IsIn(['UNPAID', 'PARTIALLY_PAID', 'PAID'])
   paymentStatus?: string;
 
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  remarks?: string;
-
-  @ApiPropertyOptional({ type: [CreateGarageGoodsReceiptLineDto] })
+  @ApiPropertyOptional({ type: () => [CreateGarageGoodsReceiptLineDto] })
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CreateGarageGoodsReceiptLineDto)
-  lines?: CreateGarageGoodsReceiptLineDto[];
+  declare lines?: CreateGarageGoodsReceiptLineDto[];
 }

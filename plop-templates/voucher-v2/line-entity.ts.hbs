@@ -1,58 +1,23 @@
 import {
   Column,
-  CreateDateColumn,
   Entity,
   Index,
   JoinColumn,
   ManyToOne,
-  PrimaryGeneratedColumn,
-  UpdateDateColumn,
+  type Relation,
 } from 'typeorm';
+import { BaseGoodsReceiptLineEntity } from '@/v2/core/goods-receipts/entities/base-goods-receipt-line.entity';
 import { {{headerEntityName}} } from './{{headerEntityKebab}}.entity';
 
 @Entity('{{lineTableName}}')
-export class {{lineEntityName}} {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
-
+export class {{lineEntityName}} extends BaseGoodsReceiptLineEntity {
   @Index()
   @Column({ type: 'uuid', name: '{{snakeCase headerEntityName}}_id' })
   {{headerEntityCamel}}Id: string;
-
-  @Column({ type: 'int', name: 'line_no', default: 1 })
-  lineNo: number;
-
-  @Column({ type: 'varchar', length: 100, name: 'item_code', nullable: true })
-  itemCode: string | null;
-
-  @Column({ type: 'varchar', length: 255, name: 'item_name' })
-  itemName: string;
-
-  @Column({ type: 'varchar', length: 50, name: 'unit', default: 'Cái' })
-  unit: string;
-
-  @Column({ type: 'numeric', precision: 12, scale: 2, name: 'qty_received', default: 0 })
-  qtyReceived: string;
-
-  @Column({ type: 'numeric', precision: 15, scale: 2, name: 'unit_cost', default: 0 })
-  unitCost: string;
-
-  @Column({ type: 'numeric', precision: 15, scale: 2, name: 'amount', default: 0 })
-  amount: string;
-
-  @Column({ type: 'text', name: 'notes', nullable: true })
-  notes: string | null;
-
-  @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
-  createdAt: Date;
-
-  @UpdateDateColumn({ type: 'timestamptz', name: 'updated_at' })
-  updatedAt: Date;
 
   @ManyToOne(() => {{headerEntityName}}, (header) => header.lines, {
     onDelete: 'CASCADE',
   })
   @JoinColumn({ name: '{{snakeCase headerEntityName}}_id' })
-  {{headerEntityCamel}}: {{headerEntityName}};
+  {{headerEntityCamel}}: Relation<{{headerEntityName}}>;
 }
-

@@ -1,106 +1,26 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { IsArray, IsIn, IsOptional, ValidateNested } from 'class-validator';
 import {
-  IsArray,
-  IsDateString,
-  IsNumber,
-  IsOptional,
-  IsString,
-  ValidateNested,
-} from 'class-validator';
+  BaseCreateGoodsReceiptDto,
+  BaseCreateGoodsReceiptLineDto,
+} from '@/v2/core/goods-receipts/dto';
 
-export class Create{{lineEntityName}}Dto {
-  @ApiPropertyOptional({ description: 'Mã phụ tùng / SKU' })
-  @IsOptional()
-  @IsString()
-  itemCode?: string;
+export class Create{{lineEntityName}}Dto extends BaseCreateGoodsReceiptLineDto {}
 
-  @ApiProperty({ description: 'Tên phụ tùng / hàng hóa' })
-  @IsString()
-  itemName: string;
-
-  @ApiPropertyOptional({ description: 'Đơn vị tính', default: 'Cái' })
-  @IsOptional()
-  @IsString()
-  unit?: string;
-
-  @ApiProperty({ description: 'Số lượng nhập' })
-  @IsNumber()
-  qtyReceived: number;
-
-  @ApiProperty({ description: 'Đơn giá nhập' })
-  @IsNumber()
-  unitCost: number;
-
-  @ApiPropertyOptional({ description: 'Thành tiền (tự tính nếu bỏ qua)' })
-  @IsOptional()
-  @IsNumber()
-  amount?: number;
-
-  @ApiPropertyOptional({ description: 'Ghi chú dòng' })
-  @IsOptional()
-  @IsString()
-  notes?: string;
-}
-
-export class Create{{headerEntityName}}Dto {
-  @ApiPropertyOptional({ description: 'Mã số phiếu (tự sinh nếu bỏ trống)' })
-  @IsOptional()
-  @IsString()
-  receiptNo?: string;
-
-  @ApiProperty({ description: 'Ngày nhập kho (YYYY-MM-DD)' })
-  @IsDateString()
-  receiptDate: string;
-
-  @ApiPropertyOptional({ description: 'ID nhà cung cấp' })
-  @IsOptional()
-  @IsString()
-  supplierId?: string;
-
-  @ApiPropertyOptional({ description: 'Tên nhà cung cấp' })
-  @IsOptional()
-  @IsString()
-  supplierName?: string;
-
-  @ApiPropertyOptional({ description: 'ID chi nhánh nhận hàng' })
-  @IsOptional()
-  @IsString()
-  branchId?: string;
-
-  @ApiPropertyOptional({ description: 'Tên chi nhánh' })
-  @IsOptional()
-  @IsString()
-  branchName?: string;
-
-  @ApiPropertyOptional({ description: 'Tổng tiền phiếu' })
-  @IsOptional()
-  @IsNumber()
-  totalAmount?: number;
-
-  @ApiPropertyOptional({ description: 'Trạng thái phiếu', default: 'DRAFT' })
-  @IsOptional()
-  @IsString()
-  status?: string;
-
+export class Create{{headerEntityName}}Dto extends BaseCreateGoodsReceiptDto {
   @ApiPropertyOptional({ description: 'Trạng thái thanh toán', default: 'UNPAID' })
   @IsOptional()
-  @IsString()
+  @IsIn(['UNPAID', 'PARTIALLY_PAID', 'PAID'])
   paymentStatus?: string;
 
-  @ApiPropertyOptional({ description: 'Ghi chú phiếu' })
-  @IsOptional()
-  @IsString()
-  remarks?: string;
-
   @ApiPropertyOptional({
-    description: 'Danh sách dòng hàng chi tiết',
-    type: [Create{{lineEntityName}}Dto],
+    description: 'Danh sách mặt hàng chi tiết',
+    type: () => [Create{{lineEntityName}}Dto],
   })
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => Create{{lineEntityName}}Dto)
-  lines?: Create{{lineEntityName}}Dto[];
+  declare lines?: Create{{lineEntityName}}Dto[];
 }
-

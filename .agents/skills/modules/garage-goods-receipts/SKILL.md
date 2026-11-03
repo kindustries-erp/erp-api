@@ -21,6 +21,9 @@ Các nghiệp vụ trọng tâm:
 
 ## 2. Database Schema & Quan hệ Dữ liệu
 
+> [!NOTE]
+> Trong mã nguồn TypeScript, `GarageGoodsReceipt` kế thừa từ `BaseGoodsReceiptEntity` và `GarageGoodsReceiptLine` kế thừa từ `BaseGoodsReceiptLineEntity` (tại `@/v2/core/goods-receipts/entities/`), giúp tái sử dụng toàn bộ schema cột chung trong khi tên bảng PostgreSQL và index vẫn duy trì độc lập hoàn toàn.
+
 ### Bảng `erp_garage_goods_receipts` (Header)
 | Cột | Kiểu dữ liệu | Nullable | Default | Mô tả |
 | :--- | :--- | :--- | :--- | :--- |
@@ -113,6 +116,7 @@ Module `garage-goods-receipts` (`src/v2/modules/garage-goods-receipts/`) sử d�
 ### Phân quyền RBAC
 - **Migration**: `SeedGarageGoodsReceiptsPermissions20261103085000` tự động sao chép các quyền READ, CREATE, UPDATE, DELETE từ resource `garage` sang `garage_goods_receipts`.
 - **Backend Guard**: Controller được bảo vệ bởi `@UseGuards(JwtAuthGuard, CoreRbacGuard)` và `@RequirePermissions({ resource: ErpResource.GARAGE_GOODS_RECEIPTS, action: ... })`.
-- **Frontend RBAC**: Khai báo `garage_goods_receipts` trong `RBAC_COLLECTIONS` (nhóm "Garage & Xưởng dịch vụ") trên Web giúp quản trị viên phân quyền linh hoạt qua Role Drawer và Permission Matrix.
+- **Rbac Core Collections API**: Đã khai báo `{ resource: ErpResource.GARAGE_GOODS_RECEIPTS, label: 'Nhập kho Garage (Garage Goods Receipts)' }` trong `rbacCoreService.getAvailableResources()` (`GET /api/v1/rbac-core/collections`) để hiển thị trực tiếp trên ma trận phân quyền `ErpPermissionsCorePage`.
+- **Frontend RBAC**: Khai báo `garage_goods_receipts` trong `RBAC_COLLECTIONS` và `PERMISSION_RESOURCE_GROUPS` (nhóm "Garage & Xưởng dịch vụ") trên Web giúp quản trị viên phân quyền linh hoạt qua Role Drawer và Permission Matrix.
 
 

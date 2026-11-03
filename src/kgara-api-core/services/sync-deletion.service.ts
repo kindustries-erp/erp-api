@@ -42,11 +42,8 @@ export class SyncDeletionService {
       .andWhere('case.kgaraDeletedAt IS NULL');
 
     if (accountKey === KgaraAccountKey.OJ) {
-      // Scoped strictly to OJ cases
-      qb.andWhere(
-        '(case.accountKey = :accountKey OR COALESCE(cat.code, case.classification) IN (:...ojClasses))',
-        { accountKey: 'OJ', ojClasses: ['OJ', 'OJ_NGOAI'] },
-      );
+      // Phạm vi theo account nguồn, không theo nhãn: nhãn OJ có ở cả MAIN và OJ
+      qb.andWhere('case.accountKey = :accountKey', { accountKey: 'OJ' });
     } else {
       // Scoped to MAIN cases, excluding OJ cases
       qb.andWhere(

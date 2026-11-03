@@ -39,6 +39,7 @@ import {
 } from '../../common/scripts/load-script-env';
 import { withPgSession } from '../../common/scripts/script-db';
 import { KgaraAccountKey } from '../enums/kgara-account.enum';
+import { extractNetPayableAmount } from '../utils/kgara-parser.util';
 import {
   buildGuidMap,
   KgaraReceivableRow,
@@ -117,6 +118,7 @@ async function readDb(
          FROM kgara_case_services s
          JOIN kgara_cases c ON c.hd_phieu_dich_vu_id = s.hd_phieu_dich_vu_id
         WHERE c.account_key = $1
+          AND s.deleted_at IS NULL
           AND COALESCE(c.ngay_phat_sinh, c.ngay_tiep_nhan)::date BETWEEN $2::date AND $3::date`,
       [account, from, to],
     );
@@ -302,7 +304,8 @@ async function readKgara(
       result.cases.push({
         soChungTu: row.SoChungTu,
         hdPhieuDichVuId: guid,
-        tienCoThue: Number(data.TienCoThue ?? row.TienCoThue ?? 0),
+        // So cùng định nghĩa với DB: DB lưu số thanh toán ròng (sau chiết khấu)
+        tienCoThue: extractNetPayableAmount({ ...row, ...data }),
         lineIds: lines.map((l: any) => String(l.HdPhieuDichVuChiTietID)),
         lineSum: lines.reduce(
           (s: number, l: any) => s + Number(l.TienCoThue ?? 0),

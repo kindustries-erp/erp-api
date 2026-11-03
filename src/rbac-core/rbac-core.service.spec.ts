@@ -248,6 +248,7 @@ describe('RbacCoreService', () => {
       const resourceKeys = resources.map((r) => r.resource);
 
       expect(resourceKeys).toContain('garage');
+      expect(resourceKeys).toContain('garage_goods_receipts');
       expect(resourceKeys).toContain('bank_statements');
       expect(resourceKeys).toContain('cash_statements');
       expect(resourceKeys).not.toContain('cash_funds');

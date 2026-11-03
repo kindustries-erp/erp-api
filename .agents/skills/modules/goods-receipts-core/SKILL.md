@@ -11,11 +11,19 @@ Phân hệ `src/v2/core/goods-receipts/` đóng vai trò là **Nền tảng Xử
 
 Module cung cấp các giải pháp nền tảng cho mô hình **Master-Detail (Header + Detail Lines)**:
 - **Base Contracts & Interfaces**: Khung chuẩn cho Header (`IVoucherHeader`), Dòng hàng (`IVoucherLine`), và Chiến lược vận động kho (`IStockMovementStrategy`).
+- **Abstract Base Entities**:
+  - `BaseGoodsReceiptEntity`: Khai báo sẵn các cột chung của bảng Header (`receiptNo`, `receiptDate`, `supplierId`, `supplierName`, `branchId`, `branchName`, `totalAmount`, `status`, `remarks`, `createdBy`, `isDeleted`, `createdAt`, `updatedAt`).
+  - `BaseGoodsReceiptLineEntity`: Khai báo sẵn các cột của dòng hàng (`lineNo`, `itemCode`, `itemName`, `unit`, `qtyReceived`, `unitCost`, `amount`, `notes`, `createdAt`, `updatedAt`).
+- **Base DTOs**:
+  - `BaseCreateGoodsReceiptDto`, `BaseCreateGoodsReceiptLineDto`
+  - `BaseUpdateGoodsReceiptDto`
+  - `BaseQueryGoodsReceiptDto`
+  - `BaseGoodsReceiptResponseDto`, `BaseGoodsReceiptLineResponseDto`
 - **Base Voucher Engine (`BaseVoucherEngineService`)**:
   - `generateDailyVoucherNo`: Thuật toán sinh mã số chứng từ theo định dạng `{prefix}-{YYYYMMDD}-{sequence:000}`.
   - `validateVoucherTransition`: Máy trạng thái chứng từ (`DRAFT` ➔ `POSTED` ➔ `CANCELLED`).
   - `sumLineAmounts`: Tính tổng tiền tự động từ số lượng và đơn giá dòng hàng.
-- **Generator Tự Động Hóa (`api-voucher-v2`)**: Công cụ sinh toàn bộ mã nguồn V2 chuẩn cho mọi module dạng chứng từ.
+- **Generator Tự Động Hóa (`api-voucher-v2`)**: Công cụ sinh toàn bộ mã nguồn V2 chuẩn cho mọi module dạng chứng từ kế thừa trực tiếp từ Core.
 
 ---
 
