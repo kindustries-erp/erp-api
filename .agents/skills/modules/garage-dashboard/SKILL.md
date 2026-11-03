@@ -53,7 +53,7 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
             - **Badge Cột Hóa đơn & VAT**: Các phiếu không có hóa đơn và không phát sinh thuế GTGT hiển thị badge chuẩn hóa **`"Không VAT"`** (thay vì `"Chưa xuất HĐ (K.Thuế)"`), phong cách outline slate/neutral.
             - Khi ở Tab **Tất cả đối tượng** (`all`): Mỗi nhóm (Doanh nghiệp, Cá nhân, Bảo hiểm) chỉ chứa **1 TABLE TỔNG HỢP DUY NHẤT** (`categorized.all`), không chia nhỏ thành các sub-section hóa đơn.
             - Khi ở **3 Tab con** (`enterprise`, `individual`, `insurance`): Chia thành **3 DRAWER SECTION ĐỘC LẬP** riêng biệt (`Đã xuất hóa đơn`, `Chưa xuất hóa đơn - Có VAT`, `Không xuất hóa đơn`).
-          - **Chuẩn hóa Kiến trúc `/ui-atomic-refactor`**:
+          - **Chuẩn hóa Kiến trúc `/ui-structure`**:
             - `MonthInvoiceCaseRow.type.ts` (< 80 LoC), `MonthInvoiceCaseRow.helper.ts` (< 150 LoC kèm co-located test), `MonthInvoiceCaseTable.cells.tsx` (< 80 LoC), `MonthInvoiceCaseTable.columns.tsx` (< 165 LoC), `MonthInvoicePartnerTable.tsx` (< 170 LoC), `MonthPartnerCategorizedSection.tsx` (< 150 LoC).
             - Tuân thủ 100% No Blue Mandate và giới hạn cứng < 180 LoC.
         - **Alert Banner Cảnh báo VAT**: Tự động phát hiện và cảnh báo nổi bật các vụ việc có thuế GTGT (`tien_thue > 0`) nhưng chưa đính kèm / chưa xuất hóa đơn điện tử OUT (`vatWarning = true`) kèm số tiền thuế VAT đang treo.
@@ -65,7 +65,7 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
       2. Tab 2: **Phân loại theo đối tượng** (`TimeHorizonPartnerTab.tsx`): Ma trận 3 nhóm đối tượng (Doanh nghiệp, Cá nhân, Bảo hiểm) tích hợp công tắc Phải thu / Phải trả, click drilldown vào `GaragePartnerMonthDetailDrawer`.
       3. Tab 3: **Danh sách vụ việc** (`TimeHorizonCasesTab.tsx`): Bảng danh sách phiếu dịch vụ chi tiết với STT chuẩn 1-based, pagination server-side và mở chi tiết `GarageCaseStandaloneDrawer`.
     - **Cột phải (`TimeHorizonRightPanel.tsx`)**: Tích hợp cảnh báo hóa đơn VAT chưa xuất (`ReceivablesVatWarningSummary`), cơ cấu Thu KH vs Thu BH (`MonthPayerKpiGrid`), chi phí phát sinh & phải trả (`MonthCostPayableKpiCard`), và đánh giá rủi ro mốc thời gian.
-    - **Backend API mở rộng**: Endpoint `GET /garage-dashboard/monthly-receivables-breakdown` hỗ trợ nhận tham số query `horizon` (hoặc `date_from`, `date_to`), tự động tính toán trả về `trendItem` và phân loại chi tiết theo mốc tuổi nợ thông qua helper chuẩn `/api-service-refactor` (`garage-receivables-classification.helper.ts`).
+    - **Backend API mở rộng**: Endpoint `GET /garage-dashboard/monthly-receivables-breakdown` hỗ trợ nhận tham số query `horizon` (hoặc `date_from`, `date_to`), tự động tính toán trả về `trendItem` và phân loại chi tiết theo mốc tuổi nợ thông qua helper chuẩn `/api-structure` (`garage-receivables-classification.helper.ts`).
   - Phân tách chi tiết 2 nhóm hóa đơn: **Có HĐ** (`raw_data->>'TienThueKH' > 0` / `hd_phieu_dich_vu_id IS NOT NULL`) và **Không HĐ** trên cả cấp Tháng, nhóm Nghiệp vụ và từng Đối tượng HĐ.
   - Tích hợp đầy đủ từ điển đa ngôn ngữ i18n (`garage:progress`) cho cả tiếng Việt và tiếng Anh.
 - **Báo cáo Lợi nhuận P&L theo Tháng Đơn Lẻ (`getPnlReport` & `GaragePnlSection.tsx`)**:
@@ -75,7 +75,7 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
   - Combobox **Kỳ báo cáo (Tháng/Năm)** đặt bên trong Card Header (bên trái), đối xứng với nút **Xuất Excel** (bên phải), loại bỏ divider thừa.
   - **Switch Chế độ Xem Kép (PnlViewModeSwitch - Toàn bộ ⇄ Riêng OJ)**:
     - Bố trí trực tiếp trên Card Header của `GaragePnlSection`, nằm giữa bộ chọn kỳ tháng và nút Xuất Excel.
-    - Molecule độc lập `PnlViewModeSwitch.tsx` (< 180 LoC, folder-per-component) theo chuẩn `/ui-atomic-refactor`, tương đồng UX với switch ở card Phân Tích Xu Hướng & Cơ Cấu Chuyển Đổi.
+    - Molecule độc lập `PnlViewModeSwitch.tsx` (< 180 LoC, folder-per-component) theo chuẩn `/ui-structure`, tương đồng UX với switch ở card Phân Tích Xu Hướng & Cơ Cấu Chuyển Đổi.
     - Hai chế độ hiển thị:
       - **Toàn bộ** (`isOjOnly = false`, mặc định): Xem kết quả kinh doanh chung toàn xưởng; hiển thị các hàng phân cấp con `Trong đó: Phát sinh liên quan OJ` (1.1.1, 2.1.1, 3.1, 5.1.1, 6.1, 7.1.1, 8.1) để đối soát đóng góp của mảng OJ.
       - **Riêng OJ** (`isOjOnly = true`): Chỉ hiển thị kết quả kinh doanh của riêng mảng OJ. Hàng chính bind trực tiếp từ `report.oj`, `prevReport.oj`, `prev2Report.oj`. Tự động ẩn toàn bộ các dòng con `Trong đó: Phát sinh liên quan OJ`, lọc danh sách chi phí vận hành (OPEX) và chi phí trực tiếp nhập tay chỉ giữ lại các mục có phát sinh OJ (`ojAmount > 0`), có fallback hint thân thiện nếu kỳ chưa có chi phí phân bổ cho OJ.
@@ -103,7 +103,7 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
   - **Cơ chế Thu gọn / Mở rộng (Expand / Collapse)**:
     - **Từng mục Level 1**: Tích hợp nút `ChevronDown` / `ChevronRight` tại `PnlLevel1HeaderCell`, click để ẩn / hiện các dòng con cấp 2 và cấp 3 của riêng mục đó.
     - **Toàn cục (Global Toggle)**: Nút `ChevronsUpDown` trên Header cột Danh Mục cho phép 1-click **Thu gọn tất cả** (đưa bảng về 8 dòng số La Mã tổng quan) hoặc **Mở rộng tất cả** (bung toàn bộ chi tiết).
-  - **Chuẩn hóa Kiến trúc `/ui-atomic-refactor`**:
+  - **Chuẩn hóa Kiến trúc `/ui-structure`**:
     - `usePnlCollapseState.ts`: Hook quản lý map đóng/mở 8 sections.
     - `PnlLevel1HeaderCell.tsx`: Molecule chuẩn hóa hiển thị chevron, tiêu đề La Mã và icon bên phải.
     - `PnlOpexItemRow.tsx`: Molecule bóc tách từ `PnlOpexRows.tsx` để khống chế 100% files dưới 180 LoC.
@@ -276,7 +276,7 @@ Resource RBAC: `garage`
     - [`garageOpexApi.ts`](erp/erp-web/src/modules/garage/api/garageOpexApi.ts)
   - Custom Hook:
     - [`useGarageOpexList.ts`](erp/erp-web/src/modules/garage/hooks/useGarageOpexList.ts)
-  - Pages & Components (Chuẩn `/ui-atomic-refactor`):
+  - Pages & Components (Chuẩn `/ui-structure`):
     - [`pages/GarageDashboard/`](erp/erp-web/src/modules/garage/pages/GarageDashboard/) (Trang Dashboard chính: Page entry, DateFilterToolbar, useGarageDashboardLogic)
     - [`components/GarageStatsCards/`](erp/erp-web/src/modules/garage/components/GarageStatsCards/) (6 KPI Cards & Sparklines)
     - [`components/GaragePnlSection/`](erp/erp-web/src/modules/garage/components/GaragePnlSection/) (Section Báo cáo P&L dạng bảng phân cấp 8 tầng tài chính, bộ lọc Combobox Tháng/Năm, xuất Excel P&L)

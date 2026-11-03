@@ -1,7 +1,3 @@
----
-name: api-service-refactor
-description: Trợ lý giúp Agent/Developer chia tách các NestJS Controller (> 300 dòng) và Service (> 500 dòng) quá lớn trong erp-api thành cấu trúc Sub-Controllers, Sub-Services (Facade) và Helper/Query Engines chuẩn mực.
----
 
 # Kỹ Năng API Service & Controller Refactor (`erp-api`)
 
@@ -41,7 +37,7 @@ description: Trợ lý giúp Agent/Developer chia tách các NestJS Controller (
 Để kiểm tra nhanh danh sách các file vượt ngưỡng trong toàn bộ `src/`:
 
 ```bash
-bun .agents/skills/api-service-refactor/scripts/scan-oversized-files.ts   # thêm --path=<thư mục> | --json | --strict | --no-scripts
+bun .agents/skills/erp-api-structure/scripts/scan-oversized-files.ts   # thêm --path=<thư mục> | --json | --strict | --no-scripts
 ```
 
 Script sẽ phân loại theo mức độ 🔴 `CRITICAL` / 🟡 `WARN`, đếm số dòng và gợi ý pattern xử lý phù hợp.
@@ -254,7 +250,7 @@ src/ai-hub-core/
 
 Khi được giao nhiệm vụ refactor một file lớn:
 
-- [ ] **Bước 1: Quét và phân tích:** Chạy `bun .agents/skills/api-service-refactor/scripts/scan-oversized-files.ts` để nắm tổng quan.
+- [ ] **Bước 1: Quét và phân tích:** Chạy `bun .agents/skills/erp-api-structure/scripts/scan-oversized-files.ts` để nắm tổng quan.
 - [ ] **Bước 2: Lập danh sách Public Methods:** Liệt kê các method công khai của Service/Controller cần refactor và nhóm chúng theo từng Domain.
 - [ ] **Bước 3: Tạo thư mục & File con:** Tạo thư mục `services/`, `controllers/` hoặc `handlers/` tương ứng.
 - [ ] **Bước 4: Di chuyển Logic:** Chuyển từng nhóm method sang Sub-Service / Handler tương ứng kèm theo private helpers và imports.

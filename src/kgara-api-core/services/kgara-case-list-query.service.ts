@@ -51,7 +51,7 @@ export interface GrossProfitReportParams {
 
 /**
  * Sub-Service quản lý toàn bộ câu truy vấn Danh sách Vụ việc, Distinct Options & Báo cáo Lãi gộp
- * Tách biệt theo chuẩn /api-service-refactor để giải phóng Controller khỏi logic TypeORM QueryBuilder.
+ * Tách biệt theo chuẩn /api-structure để giải phóng Controller khỏi logic TypeORM QueryBuilder.
  */
 @Injectable()
 export class KgaraCaseListQueryService {

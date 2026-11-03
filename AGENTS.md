@@ -74,13 +74,12 @@ Global workflows in `./.agents/workflows/`:
 - `sync-agents.md` — sync `.agents` sang `.claude` và `.trae` bằng `sync-agents.sh`.
 - `routing.md` — workspace routing.
 - `plan-and-task.md` — plan, approval, execution, and checkpoint workflow.
+- `erp-continue.md` — resume an in-progress task: read the checkpoint, verify git/Plane, wait for confirmation.
 - `clean-brain.md` — session and plan cleanup.
 - `erp-git-workflow.md` — ERP master-first Git workflow.
-- `erp-web-v2-refactor.md` — ERP Web v2 migration workflow.
-- `api-service-refactor.md` — ERP API service/controller refactoring.
-- `api-v2-refactor.md` — ERP API v2 module architecture (plop `api-module-v2`, Facade + sub-services + spec).
+- `ui-structure.md` — ERP Web structure: Atomic 5 tầng (Phần A) và migrate V1 → V2 (Phần B).
+- `api-structure.md` — ERP API structure: tách Controller/Service lớn (Phần A) và module v2 (Phần B).
 - `standardize-table.md` — ERP table standardization.
-- `ui-atomic-refactor.md` — UI atomic refactoring.
 
 ERP workflows in `./erp/.agents/workflows/`:
 
@@ -99,7 +98,7 @@ Repo-level workflows (e.g. `erp/erp-web/.agents/workflows/standardize-drawer.md`
 ## 🚀 Quick Reference: Common Scenarios
 
 ### Scenario 1: Starting a New Feature / Refactor / Bugfix
-1. Trình plan trong hội thoại (Antigravity: `/plan-and-task`).
+1. Trình plan theo `/plan-and-task`, dùng cơ chế plan của agent (Claude Code: `/plan`; Antigravity: `implementation_plan.md`). Xem mục "Tầng Cơ Chế Plan Theo Agent" trong workflow.
 2. Execute **5 phases**: Discovery → Tech Plan → Task Breakdown (X.Y.Z) → Approval → Execution.
 3. Plan (DoD, lệnh verify) trình trong hội thoại; chỉ làm sau khi người dùng trả lời `OK`.
 4. Tạo Epic/Story/Task trên Plane (project KINDU) bằng skill `plane-work-items`.
@@ -125,7 +124,7 @@ Repo-level workflows (e.g. `erp/erp-web/.agents/workflows/standardize-drawer.md`
 3. Ensure form fields use proper validation and translation keys.
 
 ### Scenario 5: Refactoring Large Service (ERP API)
-1. Load `/api-service-refactor` workflow.
+1. Load `/api-structure` workflow.
 2. Scan file sizes: Controller >300 LoC, Service >500 LoC.
 3. Choose a pattern: Sub-Controllers, Sub-Services Facade, Pure Engine.
 4. Maintain 100% backward compatibility via the Facade pattern.
@@ -148,7 +147,7 @@ Repo-level workflows (e.g. `erp/erp-web/.agents/workflows/standardize-drawer.md`
 
 ## 📋 Planning & Tracking (Plane)
 
-- Plan trình trong hội thoại; chỉ làm sau khi người dùng trả lời `OK`.
+- Plan theo `/plan-and-task`; chỉ làm sau khi người dùng trả lời `OK`. Bản chốt lưu tại `.agents/plans/<task-slug>/implementation_plan.md`.
 - Task, story, epic theo dõi trên Plane (project KINDU) bằng skill `plane-work-items`. Không lưu plan/task trong Trilium.
 - Antigravity Brain (`implementation_plan.md` / `walkthrough.md`, `/clean-brain`) là bản phụ, chỉ dùng khi chạy trong Antigravity.
 - **Pause**: document current state in `## ⏸️ Session Checkpoint`.
@@ -221,9 +220,9 @@ Skills nằm ở `erp-api/.agents/skills/` và `erp-web/.agents/skills/`, đăng
 Workflow ERP nằm ở `./.agents/workflows/`:
 
 - `erp-branch-sync-workflow.md` — sync `erp-master` sang nhánh downstream.
-- `routing.md`, `clean-brain.md`, `erp-web-v2-refactor.md`.
+- `routing.md`, `clean-brain.md`, `api-structure.md`, `ui-structure.md`.
 
-Workflow global (`plan-and-task.md`, `erp-git-workflow.md`, `standardize-table.md`, `api-service-refactor.md`, `ui-atomic-refactor.md`, ...) xem catalog ở `../AGENTS.md`.
+Workflow global (`plan-and-task.md`, `erp-continue.md`, `erp-git-workflow.md`, `standardize-table.md`, `api-structure.md`, `ui-structure.md`, ...) xem catalog ở `../AGENTS.md`.
 
 Kế hoạch trình trong hội thoại và được `OK` trước khi làm; task theo dõi trên Plane (project KINDU) bằng skill `plane-work-items`. Antigravity Brain (`implementation_plan.md` -> `walkthrough.md`) là bản phụ khi chạy trong Antigravity.
 
@@ -241,7 +240,7 @@ Source of truth for this repo (`./erp-api`).
 
 ## Read order
 
-1. `.agents/skills/erp-api-current-truth/SKILL.md`
+1. `.agents/skills/erp-api-truth/SKILL.md`
 
 ## API Specific Agent Mandates
 
@@ -342,7 +341,7 @@ Source of truth for this repo (`./erp-api`).
 
 ### Required behavior
 
-- load `@.agents/skills/erp-api-current-truth/SKILL.md`
+- load `@.agents/skills/erp-api-truth/SKILL.md`
 - use repo-local context as default guidance
 - MUST use bun/bunx exclusively (do NOT use npm)
 - when debugging and testing API locally, always start dev on port 10010

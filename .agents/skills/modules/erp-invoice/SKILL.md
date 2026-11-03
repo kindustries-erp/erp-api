@@ -686,7 +686,7 @@ Phân hệ Hóa đơn trên frontend đã được hợp nhất vào một route
   5. `tab=out-lines`: **Chi tiết bán ra** (Lines Table chiều `OUT`, bộ lọc `subcat`).
   6. `tab=draft`: **Hóa đơn nháp** (`ErpInvoicesDraftPage` - Quản lý hóa đơn SInvoice Viettel nháp).
 
-### 8.2. Cấu trúc Source Code Atomic 3 Tầng (`ui-atomic-refactor`)
+### 8.2. Cấu trúc Source Code Atomic 3 Tầng (`ui-structure`)
 Toàn bộ source code frontend của module nằm tại `src/modules/erp-invoices-core/` và tuân thủ nghiêm ngặt chuẩn Atomic 3 tầng:
 
 ```text

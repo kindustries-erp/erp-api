@@ -1,11 +1,7 @@
----
-name: api-v2-refactor
-description: Playbook tạo và chuyển module erp-api sang kiến trúc API v2 (Facade + sub-services + mapper + response DTO + spec co-located) bằng plop api-module-v2; gồm quy ước, bẫy đã biết và checklist kiểm tra.
----
 
 # Kỹ Năng API v2 Refactor (`erp-api`)
 
-Workflow đầy đủ: [`../../workflows/api-v2-refactor.md`](../../workflows/api-v2-refactor.md). Skill này là checklist và quy ước để thực thi workflow.
+Workflow đầy đủ: [`../../../workflows/api-structure.md`](../../../workflows/api-structure.md). Skill này là checklist và quy ước để thực thi workflow.
 
 ## 0. Vị trí
 

@@ -32,6 +32,24 @@ graph LR
 
 ---
 
+## 🧩 Tầng Cơ Chế Plan Theo Agent (`/plan` Bridge)
+
+Workflow này là chuẩn chung. Mỗi agent dùng cơ chế plan gốc của mình để chạy Giai đoạn 1–4, nhưng artifact đầu ra luôn giống nhau: `implementation_plan.md` và Task 3 cấp.
+
+| Agent | Cơ chế plan | Cách dùng |
+| :--- | :--- | :--- |
+| Claude Code | Plan mode gốc: `/plan` (tool `EnterPlanMode`) | Vào plan mode để khảo sát read-only và trình plan trong hội thoại. Sau khi user `OK` mới `ExitPlanMode`, lưu bản chốt vào `.agents/plans/<task-slug>/implementation_plan.md`, rồi chuyển sang Giai đoạn 5. |
+| Antigravity | `implementation_plan.md` + `walkthrough.md` (Brain) | Dùng trực tiếp mẫu trong workflow này. Hai file này là artifact chính. |
+| Codex, Copilot, Trae, agent khác | Không có plan mode tùy chỉnh | Trình plan trong chat, lưu bản chốt vào `.agents/plans/<task-slug>/implementation_plan.md` trong repo, chờ `OK`. |
+
+Quy tắc áp dụng cho mọi agent:
+- Cổng `OK` của user là bắt buộc. Plan mode chỉ thay thế bước khảo sát read-only, không thay thế cổng duyệt.
+- Giai đoạn plan không chạy test runner, không sửa code.
+- Sau `OK`: tạo task trên Plane (project KINDU) theo skill `plane-work-items`. Task ERP luôn có Story/Task.
+- Task mới phải đi qua chuỗi `/plan-and-task`. Đừng bỏ qua giai đoạn 4 chỉ vì agent có plan mode riêng.
+
+---
+
 ## 🧭 Quy Trình 5 Giai Đoạn Chuẩn (5-Phase SOP)
 
 ### 🔹 GIAI ĐOẠN 1: Discovery & Deep Research (Khảo Sát & Ranh Giới)
@@ -99,6 +117,19 @@ Phân chia toàn bộ công việc theo hệ thống đánh số 3 cấp **`X.Y.
 
 ---
 
+### 🔸 Sau `OK`: Xác nhận tích hợp Plane (`plane-work-items`)
+
+Ngay sau khi User trả lời `OK` / `Confirm`, Agent **PHẢI HỎI** trước khi làm gì trên Plane:
+
+> Bạn có muốn tôi tạo và theo dõi task này trên Plane (project KINDU, workspace k-industries) không? **Có / Không**
+
+- **Có**: load skill `plane-work-items`, tạo Module, Cycle, Story và Task theo mục 3 của skill, rồi ghi identifier (ví dụ `KINDU-12`) vào `implementation_plan.md`. Khi task đổi trạng thái thì cập nhật trên Plane.
+- **Không**: chỉ theo dõi trong `implementation_plan.md`, và ghi dòng `Plane: không theo dõi` vào plan.
+- Với task ERP, lựa chọn khuyến nghị là **Có**, theo quy tắc ERP trong `AGENTS.md`. Câu hỏi vẫn phải được hỏi.
+- Chưa có `OK` thì không tạo gì trên Plane. Không ghi plan hay task vào Trilium.
+
+---
+
 ### 🔹 GIAI ĐOẠN 5: Real-time Execution, Pause/Resume & Walkthrough
 
 #### 1. Quy tắc Thực thi & Tick Done Thời Gian Thực (Real-time Tracking)
@@ -145,7 +176,7 @@ Khi bắt đầu lại phiên làm việc (User gõ `tiếp tục`, `continue`, 
 - **Nghiệm thu cuối cùng (Final Gate)**: Sau khi commit và `git pull --rebase`, push (pre-push chạy `type:check`) rồi xác nhận CI GitHub xanh trên commit cuối.
 - **Knowledge & Skill Sync (Bắt buộc kiểm tra & cập nhật liền sau khi xong task)**:
   - Nếu có thay đổi Schema, DTOs, endpoints, relations: cập nhật vào Module Skill (`erp/erp-api/.agents/skills/modules/<module-name>/SKILL.md`) hoặc chạy `/scan-module-knowledge`.
-  - Nếu là module hoàn toàn mới: tạo file skill mới tại `erp/erp-api/.agents/skills/modules/<module-name>/SKILL.md` và gắn link vào `erp-api-current-truth`.
+  - Nếu là module hoàn toàn mới: tạo file skill mới tại `erp/erp-api/.agents/skills/modules/<module-name>/SKILL.md` và gắn link vào `erp-api-truth`.
   - Tuyệt đối không để tri thức chỉ nằm trong commit hoặc đầu óc mà không ghi vào skill.
 - **Tạo Báo cáo Nghiệm thu**: Tạo file `walkthrough.md` đính kèm bằng chứng test logs và trạng thái đồng bộ skill.
 
@@ -267,5 +298,5 @@ Tóm tắt mục tiêu bài toán và giá trị mang lại.
 
 ## 🧠 Tri Thức & Skill Đồng Bộ (Knowledge Sync)
 - **Module Skill**: Đã cập nhật `[path/to/SKILL.md]` (hoặc: *Không có thay đổi schema/contract*).
-- **Current Truth**: Đã liên kết vào `erp-api-current-truth`.
+- **Current Truth**: Đã liên kết vào `erp-api-truth`.
 ```
