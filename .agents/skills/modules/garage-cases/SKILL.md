@@ -308,12 +308,12 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 | `GET` | `/cases/services` | `@BranchId()`, `page`, `pageSize`, `q`, `from`, `to`, `serviceType` (`ALL` \| `DV` \| `PT`), `filtersStr`, `sorts` | Lấy danh sách dòng chi tiết phụ tùng & công dịch vụ phân trang toàn hệ thống, lọc theo phân hệ `serviceType`, tính tổng cộng Grand Total và tổng lũy kế Cumulative |
 | `GET` | `/cases/services/column-options` | `@BranchId()`, `column`, `search`, `page`, `pageSize`, `filtersStr`, `serviceType` | Lấy danh sách options phân trang distinct cho bộ lọc cột của bảng Chi tiết dòng dịch vụ & Phụ tùng |
 | `GET` | `/cases/services/export/excel` | `branchId`, `from`, `to`, `serviceType`, `filtersStr`, `sorts`, `q` | Xuất file Excel bảng kê chi tiết phụ tùng và công thợ dịch vụ (`Chi_tiet_phieu_dich_vu_YYYYMMDD_HHmmss.xlsx`) |
-| `POST`| `/sync/case-details` | `@BranchId()`, Query/Body: `from`, `to`, `force`, `concurrency` | Kích hoạt tác vụ đồng bộ hàng loạt (Batch Sync) chi tiết dòng phụ tùng & công thợ cho toàn bộ các vụ việc từ KGara API về ERP |
+| `POST`| `/sync/case-details` | `@BranchId()`, Query/Body: `from`, `to`, `force`, `concurrency`, `account` (`MAIN`\|`OJ`, tùy chọn) | Kích hoạt tác vụ đồng bộ hàng loạt (Batch Sync) chi tiết dòng phụ tùng & công thợ cho toàn bộ các vụ việc từ KGara API về ERP. Không truyền `account` thì mỗi phiếu dùng account của chính nó |
 | `POST`| `/sync/all` | `@BranchId()`, Body: `{ branchId, from, to, includeDetails, forceDetails }` | Chạy chuỗi đồng bộ toàn diện All-in-One: Chi nhánh -> Vụ việc -> Lợi nhuận gộp -> Chi tiết vật tư phụ tùng & công thợ (tùy chọn) |
 | `POST`| `/sync/branches` | — | Đồng bộ danh mục chi nhánh từ KGara |
-| `POST`| `/sync/cases` | `@BranchId()`, Query/Body: `from`, `to` | Đồng bộ toàn bộ vụ việc trong khoảng ngày (hỗ trợ cả Query lẫn Body) và thực hiện kiểm đếm xóa mềm |
-| `POST`| `/sync/cases/incremental` | `@BranchId()` | Đồng bộ tăng dần các vụ việc thay đổi từ mốc watermark gần nhất |
-| `POST`| `/sync/cases/:id/detail`| `@BranchId()`, `id` (`hd_phieu_dich_vu_id` \| `case.id` \| `so_chung_tu`) | Đồng bộ chi tiết dòng dịch vụ/phụ tùng cho một vụ việc cụ thể (tự động phân giải ID và đảo đúng thứ tự tham số client) |
+| `POST`| `/sync/cases` | `@BranchId()`, Query/Body: `from`, `to`, `account` | Đồng bộ toàn bộ vụ việc trong khoảng ngày (hỗ trợ cả Query lẫn Body) và thực hiện kiểm đếm xóa mềm. Chi nhánh có hai tài khoản (CN2) bắt buộc `account`, thiếu thì trả lỗi |
+| `POST`| `/sync/cases/incremental` | `@BranchId()`, Query: `account` | Đồng bộ tăng dần các vụ việc thay đổi từ mốc watermark gần nhất. Chi nhánh hai tài khoản bắt buộc `account` |
+| `POST`| `/sync/cases/:id/detail`| `@BranchId()`, `id` (`hd_phieu_dich_vu_id` \| `case.id` \| `so_chung_tu`), Query: `account` (tùy chọn) | Đồng bộ chi tiết dòng dịch vụ/phụ tùng cho một vụ việc cụ thể (tự động phân giải ID và đảo đúng thứ tự tham số client). Không truyền `account` thì dùng account đã lưu trên phiếu |
 | `POST`| `/sync/receivables` | `@BranchId()`, Query/Body: `from`, `to` | Đồng bộ sổ công nợ phải thu từ KGara |
 | `POST`| `/sync/payables` | `@BranchId()`, Query/Body: `from`, `to` | Đồng bộ sổ công nợ phải trả theo TK 331 |
 | `GET` | `/sync-runs` | `@BranchId()`, `take` (mặc định 50) | Lấy lịch sử nhật ký các lần chạy đồng bộ gần nhất |
@@ -577,6 +577,8 @@ Cơ chế dùng chung `ExportJobRunner` (`src/common/export-jobs/export-job-runn
 - **Chặn ghi chéo**: nếu phiếu đã tồn tại với `account_key` khác thì không ghi đè, tăng `conflictCount` và log cảnh báo. Không "chuyển cha" dòng sang phiếu khác.
 - **Merge raw**: `rawData = { ...cũ, ...payload_list }` để giữ `ListPhieuDichVuChiTiet` đã có.
 - **Chi nhánh theo cặp**: `syncBranches` tra `{externalId, accountKey}`; mặc định `accountKey = MAIN` để giữ hợp đồng API cũ.
+- **Chọn account khi sync tay**: `resolveBranchAccount` (`helpers/kgara-branch-account.helper.ts`) dùng `account` tường minh nếu hợp lệ; chi nhánh có một hàng thì dùng hàng đó; chi nhánh có hai hàng mà thiếu `account` thì từ chối (không đoán). Giá trị `account` sai trả lỗi `không hợp lệ`.
+- **Sửa dữ liệu lệch đã có**: `helpers/kgara-reconcile-repair.helper.ts` (`planCorruptedRepairs`) phân loại hàng `GN-` hỏng: UUID thuộc list MAIN thì khôi phục về MAIN, UUID thuộc list OJ thì bỏ qua, còn lại chỉ báo cáo. Script `scripts/kgara-reconcile-cases.ts` dry-run mặc định; `--apply` cần `--confirm=<DB>` và migration đã chạy.
 - **Dòng dịch vụ**: `syncCaseDetail` ghi trong một transaction qua `reconcileCaseLines` (`helpers/kgara-case-lines-reconcile.helper.ts`): upsert theo `hd_phieu_dich_vu_chi_tiet_id`, gắn `account_key`, đặt `deleted_at = NULL`; dòng của phiếu này không còn trong Kgara thì xóa mềm. Chỉ xóa khi mảng `ListPhieuDichVuChiTiet` là mảng hợp lệ — thiếu mảng thì không xóa gì.
 - **Reader**: `kgara-case-services-query`, `kgara-completed-cases-export` và `kgara-reports` đều lọc `deleted_at IS NULL`.
 - **Ảnh hưởng doanh thu / chi phí**:
