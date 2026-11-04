@@ -255,7 +255,7 @@ describe('ReportsCoreService (Facade)', () => {
 
 #### 🔹 GIAI ĐOẠN 5: Zero-Regression Quality Gate & Verification
 
-> **Khi chạy cùng `/plan-and-task`**: các lệnh *full* dưới đây (`build`, `bunx jest --forceExit`, `check:ci`) chỉ chạy **một lần ở Final Gate (Task 4.x.1)**.
+> **Khi chạy cùng `/erp-plan`**: các lệnh *full* dưới đây (`build`, `bunx jest --forceExit`, `check:ci`) chỉ chạy **một lần ở Final Gate (Task 4.x.1)**.
 > Ở từng task nhỏ chỉ dùng lệnh scoped: `bunx tsc --noEmit`, `bunx jest <spec>` hoặc `bunx jest --findRelatedTests <file>`.
 > Khi chạy riêng lẻ (không qua plan) thì chạy đầy đủ như sau.
 

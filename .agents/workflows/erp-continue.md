@@ -4,7 +4,7 @@ description: Quy trình tiếp tục task erp-api đang dở - đọc Session Ch
 
 # ⏯️ ERP API Continue Workflow (`/erp-continue`) - Backend
 
-Workflow chuẩn khi người dùng muốn **tiếp tục một task `erp-api` đang dở** từ phiên trước, mà chưa muốn lập plan mới. Workflow này là điểm vào của Giao thức Tiếp tục (Resume Protocol) trong `/plan-and-task`.
+Workflow chuẩn khi người dùng muốn **tiếp tục một task `erp-api` đang dở** từ phiên trước, mà chưa muốn lập plan mới. Workflow này là điểm vào của Giao thức Tiếp tục (Resume Protocol) trong `/erp-plan`.
 
 ---
 
@@ -12,7 +12,7 @@ Workflow chuẩn khi người dùng muốn **tiếp tục một task `erp-api` �
 
 1. User gõ `/erp-continue`, `tiếp tục`, `continue`, hoặc hỏi "đang làm dở đến đâu rồi".
 2. Phiên trước kết thúc khi task còn `[/] In Progress` và có Session Checkpoint.
-3. Không kích hoạt khi chưa có plan nào. Khi đó chuyển sang `/plan-and-task`.
+3. Không kích hoạt khi chưa có plan nào. Khi đó chuyển sang `/erp-plan`.
 
 ---
 
@@ -35,7 +35,7 @@ graph LR
    - So checkpoint với `git status` của đúng repo `erp/erp-api` và với trạng thái task trên Plane (nếu task có identifier như `KINDU-12`).
    - Nếu lệch, nêu rõ chỗ lệch và đề xuất cách xử lý. Không tự chọn bản đúng.
 4. **✋ Chờ Xác Nhận**:
-   - Kết thúc bằng câu hỏi xác nhận. Chỉ chạy Giai đoạn 5 của `/plan-and-task` sau khi User trả lời `tiếp tục`.
+   - Kết thúc bằng câu hỏi xác nhận. Chỉ chạy Giai đoạn 5 của `/erp-plan` sau khi User trả lời `tiếp tục`.
 
 ---
 
@@ -45,7 +45,7 @@ graph LR
 - Quét `erp/erp-api/.agents/plans/*/implementation_plan.md`, lấy plan có task `[/] In Progress` hoặc task `[ ]` đầu tiên chưa xong.
 - Nếu có Antigravity Brain, kiểm tra thêm `implementation_plan.md` và `walkthrough.md` của phiên gần nhất làm bản phụ.
 - Có nhiều plan dở: liệt kê và hỏi User chọn plan nào. Không tự chọn.
-- Không có plan dở: báo "không có task dở" và gợi ý `/plan-and-task` hoặc `/erp-review`.
+- Không có plan dở: báo "không có task dở" và gợi ý `/erp-plan` hoặc `/erp-review`.
 
 ### Bước 2. Đọc checkpoint
 - Đọc mục `## ⏸️ Session Checkpoint (Tạm dừng lúc: ...)` mới nhất.
@@ -85,6 +85,6 @@ Trả lời `tiếp tục` để em chạy tiếp từ task trên. Hoặc nói r
 
 ## 🔗 Tham Chiếu
 
-- Giao thức Tiếp tục và mẫu Session Checkpoint: `/plan-and-task`, Giai đoạn 5.
+- Giao thức Tiếp tục và mẫu Session Checkpoint: `/erp-plan`, Giai đoạn 5.
 - Kiểm tra git và đẩy code: `/erp-git-workflow`.
 - Chỉ đọc, không lập plan: `/erp-review`.

@@ -5,7 +5,7 @@
 1. `AGENTS.md` (router gộp của repo này)
 2. `.agents/AGENTS.md`
 3. `.agents/skills/erp-api-truth/SKILL.md`
-4. Workflow liên quan trong `.agents/workflows/` (ví dụ `plan-and-task.md`)
+4. Workflow liên quan trong `.agents/workflows/` (ví dụ `erp-plan.md`)
 
 ## Working rules
 
