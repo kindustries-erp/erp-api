@@ -90,6 +90,10 @@ import {
 } from '@/v2/modules/finance-invoices/entities'; // api-v2-module:finance-invoices:entity-imports
 import { GarageGoodsReceipt } from '@/v2/modules/garage-goods-receipts/entities/garage-goods-receipt.entity'; // api-v2-module:garage-goods-receipts:entity-imports
 import { GarageGoodsReceiptLine } from '@/v2/modules/garage-goods-receipts/entities/garage-goods-receipt-line.entity';
+import { PurchaseOrder } from '@/v2/modules/purchase-orders/entities/purchase-order.entity'; // api-v2-module:purchase-orders:entity-imports
+import { PurchaseOrderLine } from '@/v2/modules/purchase-orders/entities/purchase-order-line.entity';
+import { GaragePurchaseOrder } from '@/v2/modules/garage-purchase-orders/entities/garage-purchase-order.entity'; // api-v2-module:garage-purchase-orders:entity-imports
+import { GaragePurchaseOrderLine } from '@/v2/modules/garage-purchase-orders/entities/garage-purchase-order-line.entity';
 import { GarageInventoryBalance } from '@/v2/modules/garage-goods-receipts/entities/garage-inventory-balance.entity';
 // plop:api-v2-entity-imports
 const entities = [
@@ -181,6 +185,10 @@ const entities = [
   FinanceInvoiceItem,
   GarageGoodsReceipt, // api-v2-module:garage-goods-receipts:entities
   GarageGoodsReceiptLine,
+  PurchaseOrder, // api-v2-module:purchase-orders:entities
+  PurchaseOrderLine,
+  GaragePurchaseOrder, // api-v2-module:garage-purchase-orders:entities
+  GaragePurchaseOrderLine,
   GarageInventoryBalance,
   // plop:api-v2-entities
 ];

@@ -57,6 +57,8 @@ import { AiHubCoreModule } from './ai-hub-core/ai-hub-core.module';
 import { FinanceInvoicesModule } from './v2/modules/finance-invoices/finance-invoices.module'; // api-v2-module:finance-invoices:app-imports
 import { AdminDashboardModule } from './v2/admin-dashboard-core/admin-dashboard.module';
 import { GarageGoodsReceiptsCoreModule } from './v2/modules/garage-goods-receipts/garage-goods-receipts-core.module'; // api-v2-module:garage-goods-receipts:app-imports
+import { PurchaseOrdersModule } from './v2/modules/purchase-orders/purchase-orders.module'; // api-v2-module:purchase-orders:app-imports
+import { GaragePurchaseOrdersModule } from './v2/modules/garage-purchase-orders/garage-purchase-orders.module'; // api-v2-module:garage-purchase-orders:app-imports
 // plop:api-v2-imports
 
 @Module({
@@ -172,6 +174,8 @@ import { GarageGoodsReceiptsCoreModule } from './v2/modules/garage-goods-receipt
     FinanceInvoicesModule, // api-v2-module:finance-invoices:app-modules
     AdminDashboardModule,
     GarageGoodsReceiptsCoreModule, // api-v2-module:garage-goods-receipts:app-modules
+    PurchaseOrdersModule, // api-v2-module:purchase-orders:app-modules
+    GaragePurchaseOrdersModule, // api-v2-module:garage-purchase-orders:app-modules
     // plop:api-v2-modules
   ],
   controllers: [AppController],

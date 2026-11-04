@@ -138,6 +138,13 @@ Các file trong `plop-helpers/` là hàm thuần: `apiV2Fields`, `apiV2Data`, `a
 | :--- | :--- | :--- |
 | `business-partners-core` | `src/v2/business-partners-core/` (route `/api/v2/business-partners`, alias v1 còn dùng bởi web V1) | Đã v2 (module mẫu). Đối chiếu với plop: khác biệt còn lại đều là nghiệp vụ viết tay |
 | `erp-invoices-core` (lõi: list/get/create/update/bulk/soft-delete) | `src/v2/core/invoices/` (Core Foundation) & `src/v2/modules/finance-invoices/` (route `/api/v2/invoices`, chạy song song) | Đang migrate. Tách Core (Abstract entities, Engine tính toán dùng chung, DTOs) và Business Module `finance-invoices` (kế thừa Core, Controller V2, Query/Command). Entity `FinanceInvoice`, `FinanceInvoiceItem` trỏ cùng bảng `erp_invoices` / `erp_invoice_items`, không migration. |
+| `purchase-orders-core` (lõi: list/detail/create/update/approve/confirm/cancel/soft-delete, next-no, column-options, receipts, connections, link/unlink hóa đơn) | `src/v2/modules/purchase-orders/` (route `/api/v2/purchase-orders`, chạy song song, dùng chung bảng `erp_purchase_orders`). Lõi `src/v2/core/purchase-orders/` (entity/service/DTO trừu tượng) được v1 kế thừa khi refactor. Giữ ở v1: Excel (range và từng phiếu), `/items`, `/supplier-stats`, `goods-receipts-core` ghi trạng thái PO | Đang migrate. Entity v2 trỏ cùng bảng, không migration. Đổi trạng thái qua action endpoint, không qua PATCH. Chưa có UI v2. |
+| Garage purchase orders (mới, không có ở v1) | `src/v2/modules/garage-purchase-orders/` (route `/api/v2/garage-purchase-orders`, bảng `erp_garage_purchase_orders`, quyền `garage_purchase_orders`) | Mới. Chưa nối phiếu nhập garage (`purchase_order_id` trên GR garage chưa có). |
+
+Module v2 PO (`purchase-orders`, `garage-purchase-orders`) không dùng plop, đã đối chiếu cả hai generator:
+- `api-voucher-v2` sinh code kế thừa `BaseGoodsReceipt*`, không hợp PO.
+- `api-module-v2` sinh cấu trúc Facade + sub-service + mapper + controller + wiring giống module đã dựng, nhưng sinh thêm entity, DTO và migration. Với PO, chạy nó sẽ tạo lại bảng `erp_purchase_orders` đã có và nhân bản logic thay vì kế thừa lõi `src/v2/core/purchase-orders/`.
+Vì vậy dựng tay theo đúng cấu trúc của `api-module-v2` (cùng tên marker `api-v2-module:<module>:<key>`), rồi kế thừa lõi. Khi làm module v2 mới không có lõi dùng chung và có bảng mới, nên dùng `api-module-v2`.
 
 Route v2: `GLOBAL_PREFIX_EXCLUDE` cho phép controller `api/v2/...` không mang prefix `api/v1`. Plop sinh `@Controller('<routePath>')` có prefix `api/v1`, nên module v2 mới cần đổi tay path sang `api/v2/...` và cập nhật `global-prefix.config.ts` nếu cần.
 
