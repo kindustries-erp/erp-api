@@ -1,0 +1,8 @@
+import { IsOptional, IsString } from 'class-validator';
+
+/** DTO tạo mới nền họ {{family}}. Module con extend để thêm trường nghiệp vụ. */
+export class {{baseCreateDto}} {
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}

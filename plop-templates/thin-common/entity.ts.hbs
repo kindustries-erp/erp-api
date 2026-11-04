@@ -1,0 +1,15 @@
+import { {{#each entityTypeormImports}}{{this}}{{#unless @last}}, {{/unless}}{{/each}} } from 'typeorm';
+import { {{baseEntity}} } from '{{coreBarrel}}';
+
+/**
+ * Entity {{moduleName}}: kế thừa lõi họ {{family}} (id, isDeleted, timestamps và cột lõi),
+ * chỉ khai báo bảng và cột riêng của module.
+ */
+@Entity('{{tableName}}')
+export class {{entityName}} extends {{baseEntity}} {
+{{#each customFields}}
+  {{{this.entityColumn}}}
+  {{this.name}}{{{this.nullableMark}}}: {{{this.tsType}}};
+
+{{/each}}
+}

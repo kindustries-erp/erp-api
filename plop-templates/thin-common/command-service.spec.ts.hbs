@@ -1,0 +1,37 @@
+import { Repository } from 'typeorm';
+import { {{entityName}} } from '../entities/{{entityKebab}}.entity';
+import { Create{{entityName}}Dto } from '../dto/create-{{entityKebab}}.dto';
+import { {{entityName}}CommandService } from './{{entityKebab}}-command.service';
+
+describe('{{entityName}}CommandService', () => {
+  let repo: { create: jest.Mock; save: jest.Mock };
+  let service: {{entityName}}CommandService;
+
+  beforeEach(() => {
+    repo = {
+      create: jest.fn((value: object) => value),
+      save: jest.fn((value: object) => Promise.resolve(value)),
+    };
+    service = new {{entityName}}CommandService(repo as unknown as Repository<{{entityName}}>);
+  });
+
+  it('creates an active row from the DTO', async () => {
+    const dto = {
+{{#each customFields}}
+      {{this.name}}: {{{this.dtoFixture}}},
+{{/each}}
+    } as unknown as Create{{entityName}}Dto;
+
+    const saved = await service.create(dto);
+
+    expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ isDeleted: false }));
+    expect(repo.save).toHaveBeenCalledTimes(1);
+    expect(saved).toMatchObject({ isDeleted: false });
+  });
+
+  it('soft-deletes by flagging isDeleted', async () => {
+    const entity = { isDeleted: false } as {{entityName}};
+    const removed = await service.softDelete(entity);
+    expect(removed.isDeleted).toBe(true);
+  });
+});

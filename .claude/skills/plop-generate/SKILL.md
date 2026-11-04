@@ -1,6 +1,6 @@
 ---
 name: plop-generate
-description: "Fast boilerplate code generator for ERP Web and ERP API using PlopJS. Generates standardized Table Pages, Drawers, Modals, Table Sections, NestJS API Modules, and Migrations with 1 command."
+description: "Fast boilerplate code generator for ERP API (erp-api) using PlopJS. Generates V2 core families, thin V2 modules wired into app.module and data-source, V2 facade modules, legacy V1 NestJS modules and TypeORM migrations."
 ---
 
 <!-- GENERATED FILE - DO NOT EDIT. Nguồn canonical: .agents/skills/plop-generate/SKILL.md -->
