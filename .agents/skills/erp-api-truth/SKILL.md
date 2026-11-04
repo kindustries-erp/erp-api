@@ -56,7 +56,7 @@ Backend contract, auth, DTO, persistence, business rule, bằng chứng build/te
 
 ## 7. Quy tắc làm việc
 
-- Plan theo `/plan-and-task` (cơ chế plan của agent). Chỉ làm sau khi user xác nhận `OK`. Theo dõi task trên Plane bằng skill `plane-work-items`.
+- Plan theo `/erp-plan` (cơ chế plan của agent). Chỉ làm sau khi user xác nhận `OK`. Theo dõi task trên Plane bằng skill `plane-work-items`.
 - Module NestJS mới phải được import trong `src/app.module.ts`, nếu không endpoint sẽ 404.
 - Mỗi thay đổi service, controller hoặc logic quan trọng phải có `.spec.ts` đi kèm (Auto-TDD, theo `.agents/AGENTS.md`).
 - Dùng `must` cho chuẩn đã được enforce trong repo, `prefer` cho hướng đi mục tiêu.
@@ -75,7 +75,7 @@ Tài liệu chi tiết của từng module nằm tại `.agents/skills/modules/<
 
 - **Sản xuất & BOM**: `production-core`, `bom-core`
 - **Bán hàng & sau bán hàng**: `erp-sales-orders`, `sales-report-dashboard`, `after-sales`
-- **Mua hàng & nhà cung cấp**: `purchasing`, `purchasing-report-dashboard`, `erp-suppliers`
+- **Mua hàng & nhà cung cấp**: `purchasing`, `purchasing-report-dashboard`, `erp-suppliers`, `purchase-orders-v2` (API v2 chạy song song với v1, lõi dùng chung `src/v2/core/purchase-orders/`), `garage-purchase-orders` (PO garage, bảng riêng)
 - **Kho & tồn kho**: `inventory-dashboard`, `erp-inventory-items`, `erp-inventory-stock`, `erp-inventory-tracking`, `erp-inventory-transactions`, `erp-inventory-adjustments`, `erp-inventory-vouchers`, `goods-receipts-core`
 - **Tài chính, dòng tiền, hóa đơn**: `bank-statement`, `cashflow-dashboard`, `erp-invoice`, `invoice-netoff`, `invoice-dashboard`, `invoice-debts`, `journal-entry`, `settings-accounts`
 - **Garage**: `garage-cases`, `garage-customers`, `garage-dashboard`, `garage-cashflow`, `garage-bank-reconciliation`, `garage-invoice-reconciliation`, `garage-goods-receipts`, `garage-opex`, `operating-expenses`

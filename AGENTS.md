@@ -67,13 +67,13 @@ git push github-industries [target-branch]
 
 ## 📋 Workflow Catalog (single source of truth)
 
-Each workflow is a slash command (e.g. `/plan-and-task`, `/erp-git-workflow`). Claude command stubs in `.claude/commands/` are generated from the canonical file; only edit the originals in `.agents/workflows/`. After changing anything in `.agents/`, run `/sync-agents`.
+Each workflow is a slash command (e.g. `/erp-plan`, `/erp-git-workflow`). Claude command stubs in `.claude/commands/` are generated from the canonical file; only edit the originals in `.agents/workflows/`. After changing anything in `.agents/`, run `/sync-agents`.
 
 Global workflows in `./.agents/workflows/`:
 
 - `sync-agents.md` — sync `.agents` sang `.claude` và `.trae` bằng `sync-agents.sh`.
 - `routing.md` — workspace routing.
-- `plan-and-task.md` — plan, approval, execution, and checkpoint workflow.
+- `erp-plan.md` — plan, approval, execution, and checkpoint workflow.
 - `erp-continue.md` — resume an in-progress task: read the checkpoint, verify git/Plane, wait for confirmation.
 - `clean-brain.md` — session and plan cleanup.
 - `erp-git-workflow.md` — ERP master-first Git workflow.
@@ -98,7 +98,7 @@ Repo-level workflows (e.g. `erp/erp-web/.agents/workflows/standardize-drawer.md`
 ## 🚀 Quick Reference: Common Scenarios
 
 ### Scenario 1: Starting a New Feature / Refactor / Bugfix
-1. Trình plan theo `/plan-and-task`, dùng cơ chế plan của agent (Claude Code: `/plan`; Antigravity: `implementation_plan.md`). Xem mục "Tầng Cơ Chế Plan Theo Agent" trong workflow.
+1. Trình plan theo `/erp-plan`, dùng cơ chế plan của agent (Claude Code: `/plan`; Antigravity: `implementation_plan.md`). Xem mục "Tầng Cơ Chế Plan Theo Agent" trong workflow.
 2. Execute **5 phases**: Discovery → Tech Plan → Task Breakdown (X.Y.Z) → Approval → Execution.
 3. Plan (DoD, lệnh verify) trình trong hội thoại; chỉ làm sau khi người dùng trả lời `OK`.
 4. Tạo Epic/Story/Task trên Plane (project KINDU) bằng skill `plane-work-items`.
@@ -147,7 +147,7 @@ Repo-level workflows (e.g. `erp/erp-web/.agents/workflows/standardize-drawer.md`
 
 ## 📋 Planning & Tracking (Plane)
 
-- Plan theo `/plan-and-task`; chỉ làm sau khi người dùng trả lời `OK`. Bản chốt lưu tại `.agents/plans/<task-slug>/implementation_plan.md`.
+- Plan theo `/erp-plan`; chỉ làm sau khi người dùng trả lời `OK`. Bản chốt lưu tại `.agents/plans/<task-slug>/implementation_plan.md`.
 - Task, story, epic theo dõi trên Plane (project KINDU) bằng skill `plane-work-items`. Không lưu plan/task trong Trilium.
 - Antigravity Brain (`implementation_plan.md` / `walkthrough.md`, `/clean-brain`) là bản phụ, chỉ dùng khi chạy trong Antigravity.
 - **Pause**: document current state in `## ⏸️ Session Checkpoint`.
@@ -222,7 +222,7 @@ Workflow ERP nằm ở `./.agents/workflows/`:
 - `erp-branch-sync-workflow.md` — sync `erp-master` sang nhánh downstream.
 - `routing.md`, `clean-brain.md`, `api-structure.md`, `ui-structure.md`.
 
-Workflow global (`plan-and-task.md`, `erp-continue.md`, `erp-git-workflow.md`, `standardize-table.md`, `api-structure.md`, `ui-structure.md`, ...) xem catalog ở `../AGENTS.md`.
+Workflow global (`erp-plan.md`, `erp-continue.md`, `erp-git-workflow.md`, `standardize-table.md`, `api-structure.md`, `ui-structure.md`, ...) xem catalog ở `../AGENTS.md`.
 
 Kế hoạch trình trong hội thoại và được `OK` trước khi làm; task theo dõi trên Plane (project KINDU) bằng skill `plane-work-items`. Antigravity Brain (`implementation_plan.md` -> `walkthrough.md`) là bản phụ khi chạy trong Antigravity.
 

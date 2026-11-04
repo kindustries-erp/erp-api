@@ -255,7 +255,7 @@ describe('ReportsCoreService (Facade)', () => {
 
 #### 🔹 GIAI ĐOẠN 5: Zero-Regression Quality Gate & Verification
 
-> **Khi chạy cùng `/plan-and-task`**: các lệnh *full* dưới đây (`build`, `bunx jest --forceExit`, `check:ci`) chỉ chạy **một lần ở Final Gate (Task 4.x.1)**.
+> **Khi chạy cùng `/erp-plan`**: các lệnh *full* dưới đây (`build`, `bunx jest --forceExit`, `check:ci`) chỉ chạy **một lần ở Final Gate (Task 4.x.1)**.
 > Ở từng task nhỏ chỉ dùng lệnh scoped: `bunx tsc --noEmit`, `bunx jest <spec>` hoặc `bunx jest --findRelatedTests <file>`.
 > Khi chạy riêng lẻ (không qua plan) thì chạy đầy đủ như sau.
 
@@ -363,12 +363,24 @@ Workflow này định nghĩa **API v2** trong `erp-api`: không đổi route, kh
 Skill đi kèm (quy ước, bẫy, checklist): [`./../skills/erp-api-structure/references/v2-module.md`](../skills/erp-api-structure/references/v2-module.md)
 Generator: `api-module-v2` (xem [`plop-generate`](../skills/plop-generate/SKILL.md), mục Generator 3)
 
+#### Chọn generator (đồng bộ với `ui-structure` Phần B)
+
+| Tình huống | Generator | Kết quả |
+| :--- | :--- | :--- |
+| Họ nghiệp vụ mới, chưa có lõi | `api-core` (chọn `engine` hoặc `abstract-services`) | `src/v2/core/<họ>/` kèm `core.manifest.json` |
+| Module thuộc họ đã có lõi | `api-thin-module` (chọn lõi, nhập module, entity, trường riêng, bật wire) | `src/v2/modules/<module>/`: entity và create DTO kế thừa Base của lõi; facade, query/command, mapper, controller, RBAC, spec (cùng pipeline `api-module-v2`); khi wire tự nối `app.module.ts` và `data-source.ts`. Trường riêng trùng cột của lõi bị từ chối. Sinh thử: `bunx plop api-thin-module` |
+| Entity đơn lẻ, không thuộc họ chứng từ | `api-module-v2` | `src/v2/modules/<module>/` đầy đủ Facade + sub-services |
+| Chứng từ Header + Lines (không có lõi) | `api-voucher-v2` | Cảnh báo nếu họ đã có lõi; nên dùng `api-thin-module` |
+| Module V1 cũ | `api-module` | `[LEGACY-V1]`, chỉ giữ để tham khảo |
+
+Quy tắc: lõi (`src/v2/core/<họ>`) chứa nghiệp vụ dùng chung, module (`src/v2/modules/<module>`) chỉ chứa phần riêng. Không sinh lại Base entity hay engine của một họ đã có lõi.
+
 ---
 
 ### 🎯 Định nghĩa API v2
 
 ```
-src/v2/<module>-core/
+src/v2/modules/<module>/
   entities/<entity>.entity.ts              # TypeORM, cột snake_case, cờ isDeleted
   dto/create-<e>.dto.ts                    # validation (class-validator)
   dto/update-<e>.dto.ts                    # PartialType(Create)
@@ -408,7 +420,7 @@ bunx plop api-module-v2 <module-core> <Entity> "<fieldSpec>" "<tableName>" "<rou
 - `fieldSpec`: `name:type[:required],...`, type ∈ `string | text | number | decimal | boolean | date | status`. `createdAt` được sinh tự động.
 - `wire = true`: nối module vào `src/app.module.ts` và entity vào `src/db/data-source.ts`. Resource RBAC **luôn** được thêm vào `erp-resource.enum.ts`.
 - Input sai sẽ dừng trước khi ghi file nào.
-- Sau khi sinh: `bunx prettier --write "src/v2/<module>-core/**/*.ts"`.
+- Sau khi sinh: `bunx prettier --write "src/v2/modules/<module>/**/*.ts"`.
 
 #### Giai đoạn 3: Nghiệp vụ (làm tay, có test)
 Code sinh ra là CRUD hoàn chỉnh nhưng **chưa có nghiệp vụ**. Bổ sung ở đúng lớp:
@@ -431,8 +443,8 @@ Code sinh ra là CRUD hoàn chỉnh nhưng **chưa có nghiệp vụ**. Bổ sun
 Chạy theo phạm vi thu hẹp trong lúc làm, rồi một lần duy nhất ở commit cuối:
 ```bash
 bun run type:check                                 # tsc --noEmit
-bunx jest src/v2/<module>-core --forceExit            # spec của module
-bunx eslint "src/v2/<module>-core/**/*.ts" --max-warnings=0
+bunx jest src/v2/modules/<module> --forceExit         # spec của module
+bunx eslint "src/v2/modules/<module>/**/*.ts" --max-warnings=0
 bun run verify:final                               # tùy chọn local; full QC chạy trên CI sau push
 ```
 - Test generator (chỉ khi sửa `plop-helpers/`): `bun test plop-helpers` (jest không chạy các file này vì `rootDir` là `src`).

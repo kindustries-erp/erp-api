@@ -26,11 +26,11 @@ Các nghiệp vụ trọng tâm:
 | Cột | Kiểu dữ liệu | Nullable | Default | Mô tả / Ràng buộc |
 | :--- | :--- | :--- | :--- | :--- |
 | `id` | `uuid` | NO | `gen_random_uuid()` | Khóa chính (PK) |
-| `po_no` | `varchar(255)` | NO | — | Mã đơn mua hàng (Unique Index, định dạng `PO-YYYYMM-xxx`) |
+| `po_no` | `varchar(255)` | NO | — | Mã đơn mua hàng (Unique Index, định dạng `PO-YYYYMMDD-xxx`, xem 5.1) |
 | `supplier_id` | `uuid` | YES | `NULL` | FK tham chiếu `erp_business_partners.id` |
 | `order_date` | `timestamptz` | NO | — | Ngày lập đơn mua hàng |
 | `expected_date` | `timestamptz` | YES | `NULL` | Ngày dự kiến nhận hàng |
-| `status` | `varchar(255)` | NO | `'ACTIVE'` | Trạng thái: `DRAFT`, `APPROVED`, `PARTIAL_RECEIVED`, `RECEIVED`, `FULLY_RECEIVED`, `CANCELLED` |
+| `status` | `varchar(255)` | NO | Entity v2: `'DRAFT'` (xác minh default thực tế bằng `\d erp_purchase_orders`) | Trạng thái thực tế: `DRAFT` → `APPROVED` / `CONFIRMED` (có thể `DRAFT` → `CONFIRMED` trực tiếp) → `PARTIAL_RECEIVED` ⇄ `RECEIVED`; `CANCELLED` từ các trạng thái đã duyệt chưa nhận đủ. `FULLY_RECEIVED` và `ACTIVE` chỉ là giá trị đọc được từ dữ liệu cũ |
 | `payment_status` | `varchar(255)` | NO | `'UNPAID'` | Trạng thái thanh toán: `UNPAID`, `PARTIAL_PAID`, `PAID` |
 | `remarks` | `text` | YES | `NULL` | Ghi chú đơn hàng |
 | `supplier_invoice_no` | `varchar(128)`| YES | `NULL` | Số hóa đơn / số chứng từ của NCC |
@@ -158,13 +158,14 @@ Guards: `@UseGuards(JwtAuthGuard, CoreRbacGuard)`
 
 ## 5. Logic Nghiệp vụ Trọng tâm
 
-### 5.1. Thuật Toán Sinh Mã Số `PO-YYYYMM-xxx`
-- Tiền tố `PO-` kết hợp `YYYYMM-` theo ngày của đơn (`orderDate`).
-- Tìm số hiệu lớn nhất đang có trong cơ sở dữ liệu có cùng tiền tố:
+### 5.1. Thuật Toán Sinh Mã Số `PO-YYYYMMDD-xxx`
+- Tiền tố `PO-` kết hợp `YYYYMMDD-` theo ngày của đơn (`orderDate`), tính theo múi giờ `Asia/Ho_Chi_Minh`.
+- Trong transaction, lấy khóa advisory `pg_advisory_xact_lock(hashtext(prefix))` rồi tìm số lớn nhất cùng tiền tố (v2: `PurchaseOrderNumberingService.nextNo`, lõi `src/v2/core/purchase-orders/`):
   ```sql
-  SELECT po_no FROM erp_purchase_orders WHERE po_no LIKE 'PO-202602-%' ORDER BY po_no DESC LIMIT 1;
+  SELECT po_no FROM erp_purchase_orders WHERE po_no LIKE 'PO-20261104-%' ORDER BY po_no DESC LIMIT 1;
   ```
-- Tăng sequence lên 1 đơn vị và pad số 3 chữ số (`001`, `002`, ...).
+- Tăng sequence lên 1 đơn vị và pad số 3 chữ số (`001`, `002`, ...). Ngày không hợp lệ thì dùng thời điểm hiện tại.
+- v1 (`purchase-orders-core`) vẫn dùng cách sinh cũ không khóa; đã ghi nhận trong review, chưa sửa ở v1.
 
 ### 5.2. Đồng Bộ Hóa Dòng Sản Phẩm (`lines`) Khi Cập Nhật
 - Thực hiện bên trong TypeORM database transaction (`dataSource.transaction`).
@@ -176,6 +177,7 @@ Guards: `@UseGuards(JwtAuthGuard, CoreRbacGuard)`
 ### 5.3. Ràng Buộc Vòng Đời Trạng Thái (Lifecycle State Machine)
 - Không cho phép chuyển một đơn hàng đã rời `DRAFT` quay trở lại `DRAFT`.
 - Không cho phép hủy hoặc thay đổi trạng thái nếu đơn đã ở trạng thái `RECEIVED` hoặc `FULLY_RECEIVED`.
+- **API v2 (`/api/v2/purchase-orders`)**: đổi trạng thái chỉ qua `POST :id/approve`, `:id/confirm`, `:id/cancel` (engine kiểm tra bảng chuyển trạng thái). `PATCH` không nhận `status`. Hủy `DRAFT` bị chặn (dùng xóa). Xóa mềm chỉ khi `DRAFT`.
 - Khi hủy hoặc xóa đơn: Bắt buộc gọi `documentDependenciesCoreService.checkDependencies('purchase_orders', id)` để đảm bảo không bị mồ côi dữ liệu chứng từ liên quan.
 
 ### 5.4. Lọc Nâng Cao Đơn Hàng Có Thể Nhập Kho (`only_receivable`)

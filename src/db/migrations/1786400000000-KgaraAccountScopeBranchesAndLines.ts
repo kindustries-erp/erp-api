@@ -10,10 +10,24 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 export class KgaraAccountScopeBranchesAndLines1786400000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
+      `ALTER TABLE "kgara_branches" ADD COLUMN IF NOT EXISTS "account_key" varchar(50) NOT NULL DEFAULT 'MAIN'`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS "IDX_kgara_branches_account_key" ON "kgara_branches" ("account_key")`,
+    );
+
+    await queryRunner.query(
       `DROP INDEX IF EXISTS "IDX_0b4e59743700570a7ecb1ebf61"`,
     );
     await queryRunner.query(
       `CREATE UNIQUE INDEX IF NOT EXISTS "UQ_kgara_branches_external_account" ON "kgara_branches" ("external_id", "account_key")`,
+    );
+
+    await queryRunner.query(
+      `ALTER TABLE "kgara_cases" ADD COLUMN IF NOT EXISTS "account_key" varchar(50) NOT NULL DEFAULT 'MAIN'`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS "IDX_kgara_cases_account_key" ON "kgara_cases" ("account_key")`,
     );
 
     await queryRunner.query(

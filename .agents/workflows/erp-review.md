@@ -32,7 +32,7 @@ graph LR
 2. **🛑 Zero Premature Plan**:
    - **KHÔNG TỰ Ý** tạo `implementation_plan.md`, `walkthrough.md` hay danh sách task chi tiết (`X.Y.Z`).
    - Trả lời thẳng vào câu hỏi hoặc vấn đề được nêu ra.
-   - Chỉ chuyển sang lập kế hoạch khi người dùng yêu cầu rõ ràng (ví dụ: *"OK, lên plan đi"* hoặc gõ `/plan-and-task`).
+   - Chỉ chuyển sang lập kế hoạch khi người dùng yêu cầu rõ ràng (ví dụ: *"OK, lên plan đi"* hoặc gõ `/erp-plan`).
 3. **📌 Dẫn Chứng Trực Tiếp Từ Mã Nguồn (Evidence-First)**:
    - Luôn trích dẫn chính xác file và dòng code (ví dụ `[src/modules/...#L40-L60]`).
    - Kiểm tra `DATABASE_URL` trong `.env` và schema PostgreSQL thực tế khi cần làm rõ quan hệ bảng.

@@ -84,10 +84,16 @@ import { ErpSystemOperation } from '../system-operations-core/entities/erp_syste
 import { ErpAiConfig } from '../ai-hub-core/entities/erp-ai-config.entity';
 import { ErpAiLog } from '../ai-hub-core/entities/erp-ai-log.entity';
 import { ErpAiPromptTemplate } from '../ai-hub-core/entities/erp-ai-prompt-template.entity';
-import { Invoice } from '@/v2/invoices/entities/invoice.entity'; // api-v2-module:invoices:entity-imports
-import { InvoiceItem } from '@/v2/invoices/entities/invoice-item.entity';
+import {
+  FinanceInvoice,
+  FinanceInvoiceItem,
+} from '@/v2/modules/finance-invoices/entities'; // api-v2-module:finance-invoices:entity-imports
 import { GarageGoodsReceipt } from '@/v2/modules/garage-goods-receipts/entities/garage-goods-receipt.entity'; // api-v2-module:garage-goods-receipts:entity-imports
 import { GarageGoodsReceiptLine } from '@/v2/modules/garage-goods-receipts/entities/garage-goods-receipt-line.entity';
+import { PurchaseOrder } from '@/v2/modules/purchase-orders/entities/purchase-order.entity'; // api-v2-module:purchase-orders:entity-imports
+import { PurchaseOrderLine } from '@/v2/modules/purchase-orders/entities/purchase-order-line.entity';
+import { GaragePurchaseOrder } from '@/v2/modules/garage-purchase-orders/entities/garage-purchase-order.entity'; // api-v2-module:garage-purchase-orders:entity-imports
+import { GaragePurchaseOrderLine } from '@/v2/modules/garage-purchase-orders/entities/garage-purchase-order-line.entity';
 import { GarageInventoryBalance } from '@/v2/modules/garage-goods-receipts/entities/garage-inventory-balance.entity';
 // plop:api-v2-entity-imports
 const entities = [
@@ -175,10 +181,14 @@ const entities = [
   ErpEmailAttachment,
   VinfastPartsCatalog,
   VinfastPartsLedger,
-  Invoice, // api-v2-module:invoices:entities
-  InvoiceItem,
+  FinanceInvoice, // api-v2-module:finance-invoices:entities
+  FinanceInvoiceItem,
   GarageGoodsReceipt, // api-v2-module:garage-goods-receipts:entities
   GarageGoodsReceiptLine,
+  PurchaseOrder, // api-v2-module:purchase-orders:entities
+  PurchaseOrderLine,
+  GaragePurchaseOrder, // api-v2-module:garage-purchase-orders:entities
+  GaragePurchaseOrderLine,
   GarageInventoryBalance,
   // plop:api-v2-entities
 ];
