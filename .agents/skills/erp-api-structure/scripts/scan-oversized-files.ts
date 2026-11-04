@@ -273,7 +273,7 @@ async function main() {
 
   console.log('\n' + line);
   console.log(' 💡 Đây là báo cáo CẢNH BÁO, script KHÔNG tự sửa code. Quy chuẩn: .agents/workflows/api-structure.md');
-  console.log(' 💡 Khi chạy dưới /plan-and-task: chỉ chạy test scoped ở từng task, full suite ở Final Gate.');
+  console.log(' 💡 Khi chạy dưới /erp-plan: chỉ chạy test scoped ở từng task, full suite ở Final Gate.');
   console.log(line + '\n');
 
   if (strict && di.length > 0) process.exit(1);
