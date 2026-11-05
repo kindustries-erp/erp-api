@@ -69,10 +69,24 @@ export class GarageProcurementOrderController {
     resource: ErpResource.GARAGE_PROCUREMENT_ORDERS,
     action: ErpAction.READ,
   })
-  @ApiOperation({ summary: 'Cột có thể lọc và sắp xếp trên lưới' })
+  @ApiOperation({
+    summary: 'Gợi ý giá trị của một cột, áp dụng bộ lọc các cột khác',
+  })
   @Get('column-options')
-  columnOptions() {
-    return this.service.columnOptions();
+  columnOptions(
+    @Query('column') column: string,
+    @Query('search') search?: string,
+    @Query('page') page = '1',
+    @Query('pageSize') pageSize = '20',
+    @Query('filters') filters?: string,
+  ) {
+    return this.service.findColumnOptions(
+      column,
+      search,
+      Math.max(1, parseInt(page, 10) || 1),
+      Math.max(1, Math.min(200, parseInt(pageSize, 10) || 20)),
+      filters,
+    );
   }
 
   @RequirePermissions({

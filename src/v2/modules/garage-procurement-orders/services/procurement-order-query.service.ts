@@ -7,6 +7,22 @@ import { GarageProcurementOrder } from '../entities/procurement-order.entity';
 import { GarageProcurementOrderLine } from '../entities/procurement-order-line.entity';
 import { GarageProcurementOrderAcceptance } from '../entities/procurement-order-acceptance.entity';
 import { GARAGE_PROCUREMENT_ORDER_PREFIX } from '../garage-procurement-orders.constants';
+import { CoreUser } from '../../../../users/entities/core-user.entity';
+import { resolveCreatedByEmails } from '../helpers/resolve-created-by-email';
+import {
+  applyTableFilters,
+  applyTableSort,
+  findTableColumnOptions,
+  parseFilterRecord,
+  resolveTableColumn,
+  TableDateRange,
+  TableOperatorFilter,
+  TableOptionsPage,
+} from '@/common/utils/table-query';
+import {
+  TABLE_COLUMNS,
+  toFilterPayload,
+} from '../constants/procurement-order-table.constants';
 
 /** Mã loại chứng từ của họ Garage trong nhật ký duyệt. Khớp với docType của command. */
 const DOC_TYPE = 'GARAGE_PROCUREMENT_ORDER';
@@ -20,19 +36,12 @@ export interface GarageProcurementOrderFilter {
   dateFrom?: string;
   dateTo?: string;
   search?: string;
+  sort?: string;
+  column_filters?: unknown;
+  column_search?: unknown;
+  column_operators?: unknown;
+  date_ranges?: unknown;
 }
-
-/** Cột có thể lọc/sắp xếp trên lưới. Khóa là mã kỹ thuật, nhãn dịch ở web. */
-export const GARAGE_PROCUREMENT_ORDER_COLUMNS = [
-  { key: 'orderNo', type: 'text', sortable: true },
-  { key: 'orderDate', type: 'date', sortable: true },
-  { key: 'supplierName', type: 'text', sortable: true },
-  { key: 'status', type: 'enum', sortable: true },
-  { key: 'fulfillmentStatus', type: 'enum', sortable: true },
-  { key: 'totalAmount', type: 'number', sortable: true },
-  { key: 'paymentStatus', type: 'enum', sortable: true },
-  { key: 'supplierInvoiceNo', type: 'text', sortable: false },
-] as const;
 
 @Injectable()
 export class GarageProcurementOrderQueryService {
@@ -46,6 +55,8 @@ export class GarageProcurementOrderQueryService {
     private readonly acceptances: Repository<GarageProcurementOrderAcceptance>,
     @InjectRepository(ApprovalEvent)
     private readonly events: Repository<ApprovalEvent>,
+    @InjectRepository(CoreUser)
+    private readonly users: Repository<CoreUser>,
   ) {}
 
   /** Nhật ký duyệt của một đơn mua Garage, theo thứ tự thời gian. */
@@ -82,12 +93,69 @@ export class GarageProcurementOrderQueryService {
         q: `%${filter.search}%`,
       });
     }
+    applyTableFilters(
+      qb,
+      {
+        columnFilters: parseFilterRecord<Record<string, string[]>>(
+          filter.column_filters,
+        ),
+        columnSearch: parseFilterRecord<Record<string, string>>(
+          filter.column_search,
+        ),
+        columnOperators: parseFilterRecord<Record<string, TableOperatorFilter>>(
+          filter.column_operators,
+        ),
+        dateRanges: parseFilterRecord<Record<string, TableDateRange>>(
+          filter.date_ranges,
+        ),
+      },
+      TABLE_COLUMNS,
+      'filter',
+    );
+    applyTableSort(qb, filter.sort, TABLE_COLUMNS, {
+      sql: 'h.createdAt',
+      direction: 'DESC',
+    });
     const [rows, total] = await qb
-      .orderBy('h.createdAt', 'DESC')
       .skip((filter.page - 1) * filter.pageSize)
       .take(filter.pageSize)
       .getManyAndCount();
-    return { rows, total, page: filter.page, pageSize: filter.pageSize };
+    const createdByEmails = await resolveCreatedByEmails(
+      this.users,
+      rows.map((row) => row.createdBy),
+    );
+    return {
+      rows,
+      total,
+      page: filter.page,
+      pageSize: filter.pageSize,
+      createdByEmails,
+    };
+  }
+
+  /** Gợi ý giá trị của một cột, áp dụng bộ lọc của các cột khác (Popover Filter V2). */
+  async findColumnOptions(
+    column: string,
+    search: string | undefined,
+    page: number,
+    pageSize: number,
+    filters: unknown,
+  ): Promise<TableOptionsPage> {
+    const def = resolveTableColumn(TABLE_COLUMNS, column);
+    if (!def) return { items: [], total: 0, next: null };
+
+    const qb = this.headers
+      .createQueryBuilder('h')
+      .where('h.isDeleted = :notDeleted', { notDeleted: false });
+
+    applyTableFilters(
+      qb,
+      toFilterPayload(filters),
+      TABLE_COLUMNS,
+      'col_opt',
+      column,
+    );
+    return findTableColumnOptions(qb, def, search, page, pageSize);
   }
 
   /** Số đơn kế tiếp theo ngày (xem trước, chưa giữ số). */
@@ -101,10 +169,6 @@ export class GarageProcurementOrderQueryService {
         date,
       ),
     );
-  }
-
-  columnOptions() {
-    return { columns: GARAGE_PROCUREMENT_ORDER_COLUMNS };
   }
 
   async findOne(id: string) {

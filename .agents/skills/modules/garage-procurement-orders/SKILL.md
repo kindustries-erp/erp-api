@@ -73,3 +73,10 @@ Quyền resource: `garage_procurement_orders`. Seed từ `garage_purchase_orders
 - `DELETE /api/v2/garage-procurement-orders/:id`: xóa mềm nháp, trả SL giữ về PR nguồn. Quyền `DELETE`.
 - `DELETE /api/v2/garage-procurement-orders/:id/permanent`: xóa cứng nháp, trả SL giữ về PR nguồn trước khi xóa. Quyền `PURGE` (chỉ admin). Chặn khi còn phiếu nhập tham chiếu, kể cả phiếu đã hủy (khóa ngoại RESTRICT). Xóa dòng rồi đầu đơn; nghiệm thu đi theo dòng (CASCADE); lịch sử duyệt được giữ.
 - Chính sách và điều kiện chung: `.agents/workflows/api-structure.md` mục "Chính sách xóa".
+
+## 11. Lọc cột và gợi ý giá trị (2026-11-05)
+
+- `GET /api/v2/garage-procurement-orders/column-options?column&search&page&pageSize&filters`: trả `{ items, total, next }` (cùng contract với `garage-procurement-requests`). Cột ngoài whitelist trả rỗng. Nguồn cột: `constants/procurement-order-table.constants.ts` (`TABLE_COLUMNS`), khớp `key` của `procurementOrderColumns` phía web.
+- `GET /` nhận thêm `sort`, `column_filters`, `column_search`, `column_operators`, `date_ranges` (từ `TableQueryDto`). Sắp xếp mặc định `createdAt DESC`.
+- Lỗi đã sửa: endpoint trước đây trả `{ columns }`, khiến web crash `reading 'value'` khi mở popup lọc cột.
+- `createdBy` (uuid) được lọc, sắp xếp và gợi ý theo **email** từ `core_users` (subquery trong `TABLE_COLUMNS`). Danh sách trả thêm `createdByEmail` (tra một lần cho cả trang qua `helpers/resolve-created-by-email.ts`). Chi tiết (`findOne`) không có `createdByEmail`. Không đổi schema.

@@ -59,10 +59,21 @@ export class GarageProcurementOrdersService {
       dateFrom: dto.dateFrom,
       dateTo: dto.dateTo,
       search: dto.search,
+      sort: dto.sort,
+      column_filters: dto.column_filters,
+      column_search: dto.column_search,
+      column_operators: dto.column_operators,
+      date_ranges: dto.date_ranges,
     });
+    const { createdByEmails, ...page } = out;
     return {
-      ...out,
-      rows: out.rows.map((h) => toGarageProcurementOrderResponse(h, [], [])),
+      ...page,
+      rows: out.rows.map((h) => ({
+        ...toGarageProcurementOrderResponse(h, [], []),
+        createdByEmail: h.createdBy
+          ? (createdByEmails.get(h.createdBy) ?? null)
+          : null,
+      })),
     };
   }
 
@@ -70,8 +81,20 @@ export class GarageProcurementOrdersService {
     return { nextNo: await this.query.nextNo(date) };
   }
 
-  columnOptions() {
-    return this.query.columnOptions();
+  findColumnOptions(
+    column: string,
+    search: string | undefined,
+    page: number,
+    pageSize: number,
+    filters: unknown,
+  ) {
+    return this.query.findColumnOptions(
+      column,
+      search,
+      page,
+      pageSize,
+      filters,
+    );
   }
 
   async findOne(id: string): Promise<GarageProcurementOrderResponseDto> {

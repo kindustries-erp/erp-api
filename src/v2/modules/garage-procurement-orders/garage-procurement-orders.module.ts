@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { RbacCoreModule } from '@/v2/core/rbac';
 import { ApprovalEvent } from '@/v2/core/approval/entities/approval-event.entity';
 import { ApprovalEventService } from '@/v2/core/approval/approval-event.service';
+import { CoreUser } from '@/users/entities/core-user.entity';
 import { GarageProcurementRequestsModule } from '@/v2/modules/garage-procurement-requests/garage-procurement-requests.module';
 import { GarageProcurementOrder } from './entities/procurement-order.entity';
 import { GarageProcurementOrderLine } from './entities/procurement-order-line.entity';
@@ -25,6 +26,7 @@ import {
       GarageProcurementOrderLine,
       GarageProcurementOrderAcceptance,
       ApprovalEvent,
+      CoreUser,
     ]),
     RbacCoreModule,
     GarageProcurementRequestsModule,

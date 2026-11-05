@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { TableQueryDto } from '@/common/dto/table-query.dto';
 import {
   ArrayMinSize,
   IsArray,
@@ -143,17 +144,11 @@ export class UpdateProcurementOrderHeaderDto {
   supplierInvoiceNo?: string | null;
 }
 
-export class ListProcurementOrdersDto {
+export class ListProcurementOrdersDto extends TableQueryDto {
   @ApiPropertyOptional({ description: 'Lọc theo chi nhánh' })
   @IsOptional()
   @IsUUID()
   branchId?: string;
-
-  @ApiPropertyOptional({ description: 'Lọc theo trạng thái duyệt' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(32)
-  status?: string;
 
   @ApiPropertyOptional({ description: 'Lọc theo nhà cung cấp' })
   @IsOptional()
@@ -169,12 +164,6 @@ export class ListProcurementOrdersDto {
   @IsOptional()
   @IsDateString()
   dateTo?: string;
-
-  @ApiPropertyOptional({ description: 'Tìm theo số đơn hoặc tên NCC' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  search?: string;
 
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
