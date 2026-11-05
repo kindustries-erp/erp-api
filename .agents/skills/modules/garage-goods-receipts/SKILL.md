@@ -132,4 +132,4 @@ Module `garage-goods-receipts` (`src/v2/modules/garage-goods-receipts/`) sử d�
 - `post`/`cancel` khóa phiếu bằng `pessimistic_write` rồi mới kiểm trạng thái, nên post lặp hoặc post song song cùng phiếu bị chặn (400 từ lần sau).
 - Tồn được cập nhật qua `GarageInventoryBalanceService`: khóa từng mặt hàng theo `itemCode` tăng dần; dòng tồn mới tạo bằng `INSERT ... ON CONFLICT DO NOTHING` theo hai partial unique index (`UQ_garage_inv_bal_branch_item`, `UQ_garage_inv_bal_null_branch_item`, migration `20261105105500`).
 - Thứ tự khóa: phiếu GR → đầu đơn PO → dòng PO → dòng tồn (theo itemCode). Không đảo thứ tự.
-- Còn mở: `update` phiếu nháp chưa khóa phiếu (không ảnh hưởng post vì post khóa lại và đọc dòng từ DB).
+- Đã đóng: `update` phiếu nháp khóa phiếu bằng `pessimistic_write` trong transaction, kiểm trạng thái trên bản đã khóa rồi mới ghi dòng. Một lần post đồng thời không thể bị sửa dòng chồng lên.

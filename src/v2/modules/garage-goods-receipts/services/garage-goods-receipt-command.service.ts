@@ -101,23 +101,28 @@ export class GarageGoodsReceiptCommandService {
     });
   }
 
+  /**
+   * Sửa phiếu nháp. Khóa phiếu (pessimistic_write) rồi mới kiểm trạng thái trên bản đã khóa,
+   * để không sửa dòng sau khi một lần post đồng thời đã chuyển phiếu sang POSTED.
+   */
   async update(
     entity: GarageGoodsReceipt,
     dto: UpdateGarageGoodsReceiptDto,
   ): Promise<GarageGoodsReceipt> {
-    this.voucherEngine.validateVoucherTransition(entity.status, 'update');
-
     return this.dataSource.transaction(async (manager) => {
+      const receipt = await this.lockReceipt(manager, entity.id);
+      this.voucherEngine.validateVoucherTransition(receipt.status, 'update');
+
       const receiptRepo = manager.getRepository(GarageGoodsReceipt);
       const lineRepo = manager.getRepository(GarageGoodsReceiptLine);
 
       const { lines, ...headerDto } = dto;
       const entityFields = toGarageGoodsReceiptEntityFields(headerDto);
-      Object.assign(entity, entityFields);
+      Object.assign(receipt, entityFields);
 
       if (lines !== undefined) {
         // Xóa các lines cũ và chèn lại
-        await lineRepo.delete({ garageGoodsReceiptId: entity.id });
+        await lineRepo.delete({ garageGoodsReceiptId: receipt.id });
 
         const lineEntities: GarageGoodsReceiptLine[] = [];
         let lineNo = 1;
@@ -128,7 +133,7 @@ export class GarageGoodsReceiptCommandService {
           const amount = l.amount !== undefined ? Number(l.amount) : qty * cost;
 
           const line = lineRepo.create({
-            garageGoodsReceiptId: entity.id,
+            garageGoodsReceiptId: receipt.id,
             lineNo: lineNo++,
             itemCode: l.itemCode ?? undefined,
             itemName: l.itemName,
@@ -143,14 +148,14 @@ export class GarageGoodsReceiptCommandService {
         }
 
         if (dto.totalAmount === undefined) {
-          entity.totalAmount = String(
+          receipt.totalAmount = String(
             this.voucherEngine.sumLineAmounts(lineEntities),
           );
         }
-        entity.lines = lineEntities;
+        receipt.lines = lineEntities;
       }
 
-      return receiptRepo.save(entity);
+      return receiptRepo.save(receipt);
     });
   }
 

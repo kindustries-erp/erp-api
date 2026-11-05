@@ -111,10 +111,20 @@ describe('GarageGoodsReceiptCommandService', () => {
       isDeleted: false,
     } as GarageGoodsReceipt;
 
+    lockedReceipt = { ...entity } as GarageGoodsReceipt;
+
     await service.update(entity, {});
 
     expect(dataSource.transaction).toHaveBeenCalledTimes(1);
     expect(repo.save).toHaveBeenCalledWith(entity);
+  });
+
+  it('update kiểm trạng thái trên bản đã khóa (DRAFT trong entity, POSTED trong DB) và không ghi gì', async () => {
+    const entity = { id: 'id-1', status: 'DRAFT' } as GarageGoodsReceipt;
+    lockedReceipt = { ...entity, status: 'POSTED' } as GarageGoodsReceipt;
+
+    await expect(service.update(entity, {})).rejects.toThrow();
+    expect(repo.save).not.toHaveBeenCalled();
   });
 
   it('posts goods receipt and updates stock balance', async () => {
