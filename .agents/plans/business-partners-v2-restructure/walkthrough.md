@@ -101,3 +101,4 @@ $ bun .agents/skills/erp-api-structure/scripts/scan-oversized-files.ts --strict 
 - Đã cập nhật `.agents/skills/modules/business-partners-core/SKILL.md`.
 - Đã cập nhật `.agents/skills/erp-api-truth/SKILL.md`.
 - Đã cập nhật `.agents/skills/erp-api-structure/references/v2-module.md`.
+
