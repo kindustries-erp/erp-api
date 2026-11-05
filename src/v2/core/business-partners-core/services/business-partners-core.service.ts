@@ -1,18 +1,18 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { ErpBusinessPartner } from './entities/erp_business_partner.entity';
-import { CreateErpBusinessPartnerDto } from './dto/create-erp-business-partner.dto';
-import { QueryErpBusinessPartnerDto } from './dto/query-erp-business-partner.dto';
-import { UpdateErpBusinessPartnerDto } from './dto/update-erp-business-partner.dto';
-import { toErpBusinessPartnerResponse } from './helpers/erp-business-partner.mapper';
+import { ErpBusinessPartner } from '../entities/erp_business_partner.entity';
+import { CreateErpBusinessPartnerDto } from '../dto/create-erp-business-partner.dto';
+import { QueryErpBusinessPartnerDto } from '../dto/query-erp-business-partner.dto';
+import { UpdateErpBusinessPartnerDto } from '../dto/update-erp-business-partner.dto';
+import { toErpBusinessPartnerResponse } from '../helpers/erp-business-partner.mapper';
 import {
   nextPartnerCode,
   normalizePartnerCode,
-} from './helpers/erp-business-partner-code.helper';
-import { ErpBusinessPartnerCommandService } from './services/erp-business-partner-command.service';
-import { ErpBusinessPartnerQueryService } from './services/erp-business-partner-query.service';
-import { ErpBusinessPartnerInvoiceSyncService } from './services/erp-business-partner-invoice-sync.service';
-import { ErpBusinessPartnerOptionsService } from './services/erp-business-partner-options.service';
-import { QueryErpBusinessPartnerOptionsDto } from './dto/query-erp-business-partner-options.dto';
+} from '../helpers/erp-business-partner-code.helper';
+import { ErpBusinessPartnerCommandService } from './erp-business-partner-command.service';
+import { ErpBusinessPartnerQueryService } from './erp-business-partner-query.service';
+import { ErpBusinessPartnerInvoiceSyncService } from './erp-business-partner-invoice-sync.service';
+import { ErpBusinessPartnerOptionsService } from './erp-business-partner-options.service';
+import { QueryErpBusinessPartnerOptionsDto } from '../dto/query-erp-business-partner-options.dto';
 import { normalizeTaxCode } from '@/common/utils/invoice-partner-key.util';
 
 /** Facade của module: điều phối query/command, sinh mã và luôn trả response DTO, không lộ entity. */

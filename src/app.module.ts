@@ -12,7 +12,7 @@ import { CoreRole } from '@/v2/core/rbac/entities/core-role.entity';
 import { CorePermission } from '@/v2/core/rbac/entities/core-permission.entity';
 import { CoreUserRole } from '@/v2/core/rbac/entities/core-user-role.entity';
 import { EmployeesCoreModule } from './employees-core/employees-core.module';
-import { BusinessPartnersCoreModule } from './v2/business-partners-core/business-partners-core.module';
+import { BusinessPartnersManagementModule } from './v2/modules/business-partners-management/business-partners-management.module';
 import { InventoryCoreModule } from './inventory-core/inventory-core.module';
 import { BomCoreModule } from './bom-core/bom-core.module';
 import { ModuleConfigModule } from './module-config/module-config.module';
@@ -137,7 +137,7 @@ import { GarageProcurementOrdersModule } from './v2/modules/garage-procurement-o
     }),
     AuthModule,
     EmployeesCoreModule,
-    BusinessPartnersCoreModule,
+    BusinessPartnersManagementModule,
     InventoryCoreModule,
     ErpInvoicesCoreModule,
     ErpAttachmentsCoreModule,

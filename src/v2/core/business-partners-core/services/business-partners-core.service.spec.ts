@@ -1,11 +1,11 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { BusinessPartnersCoreService } from './business-partners-core.service';
-import { CreateErpBusinessPartnerDto } from './dto/create-erp-business-partner.dto';
-import { ErpBusinessPartnerCommandService } from './services/erp-business-partner-command.service';
-import { ErpBusinessPartnerQueryService } from './services/erp-business-partner-query.service';
-import { ErpBusinessPartnerInvoiceSyncService } from './services/erp-business-partner-invoice-sync.service';
-import { ErpBusinessPartnerOptionsService } from './services/erp-business-partner-options.service';
-import { toErpBusinessPartnerResponse } from './helpers/erp-business-partner.mapper';
+import { CreateErpBusinessPartnerDto } from '../dto/create-erp-business-partner.dto';
+import { ErpBusinessPartnerCommandService } from './erp-business-partner-command.service';
+import { ErpBusinessPartnerQueryService } from './erp-business-partner-query.service';
+import { ErpBusinessPartnerInvoiceSyncService } from './erp-business-partner-invoice-sync.service';
+import { ErpBusinessPartnerOptionsService } from './erp-business-partner-options.service';
+import { toErpBusinessPartnerResponse } from '../helpers/erp-business-partner.mapper';
 
 describe('BusinessPartnersCoreService', () => {
   const createdAt = new Date('2026-01-01T00:00:00.000Z');

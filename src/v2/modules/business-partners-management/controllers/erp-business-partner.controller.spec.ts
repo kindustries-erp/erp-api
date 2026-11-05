@@ -1,7 +1,9 @@
-import { BusinessPartnersCoreService } from '../business-partners-core.service';
-import { CreateErpBusinessPartnerDto } from '../dto/create-erp-business-partner.dto';
-import { QueryErpBusinessPartnerDto } from '../dto/query-erp-business-partner.dto';
-import { UpdateErpBusinessPartnerDto } from '../dto/update-erp-business-partner.dto';
+import { BusinessPartnersManagementService } from '../business-partners-management.service';
+import {
+  CreateErpBusinessPartnerDto,
+  QueryErpBusinessPartnerDto,
+  UpdateErpBusinessPartnerDto,
+} from '@/v2/core/business-partners-core';
 import { ErpBusinessPartnerController } from './erp-business-partner.controller';
 
 describe('ErpBusinessPartnerController', () => {
@@ -27,7 +29,7 @@ describe('ErpBusinessPartnerController', () => {
       remove: jest.fn(),
     };
     controller = new ErpBusinessPartnerController(
-      service as unknown as BusinessPartnersCoreService,
+      service as unknown as BusinessPartnersManagementService,
     );
   });
 
@@ -59,24 +61,37 @@ describe('ErpBusinessPartnerController', () => {
     );
   });
 
-  it('delegates next-code with the partner type', async () => {
+  it('delegates next-code with partnerType query', async () => {
     await controller.getNextCode('CUSTOMER');
 
     expect(service.getNextCode).toHaveBeenCalledWith('CUSTOMER');
   });
 
-  it('delegates detail, create, update and remove with the id and DTO', async () => {
-    const createDto = {} as CreateErpBusinessPartnerDto;
-    const updateDto = {} as UpdateErpBusinessPartnerDto;
-
+  it('delegates detail lookup', async () => {
     await controller.findOne('id-1');
-    await controller.create(createDto);
-    await controller.update('id-1', updateDto);
-    await controller.remove('id-1');
 
     expect(service.findOne).toHaveBeenCalledWith('id-1');
-    expect(service.create).toHaveBeenCalledWith(createDto);
-    expect(service.update).toHaveBeenCalledWith('id-1', updateDto);
+  });
+
+  it('delegates create', async () => {
+    const dto = {} as CreateErpBusinessPartnerDto;
+
+    await controller.create(dto);
+
+    expect(service.create).toHaveBeenCalledWith(dto);
+  });
+
+  it('delegates update', async () => {
+    const dto = {} as UpdateErpBusinessPartnerDto;
+
+    await controller.update('id-1', dto);
+
+    expect(service.update).toHaveBeenCalledWith('id-1', dto);
+  });
+
+  it('delegates remove', async () => {
+    await controller.remove('id-1');
+
     expect(service.remove).toHaveBeenCalledWith('id-1');
   });
 });

@@ -18,12 +18,14 @@ import {
   RequirePermissions,
 } from '@/auth/decorators/require-permissions.decorator';
 import { ErpAction, ErpResource } from '@/v2/core/rbac';
-import { BusinessPartnersCoreService } from '../business-partners-core.service';
-import { CreateErpBusinessPartnerDto } from '../dto/create-erp-business-partner.dto';
-import { QueryErpBusinessPartnerDto } from '../dto/query-erp-business-partner.dto';
-import { UpdateErpBusinessPartnerDto } from '../dto/update-erp-business-partner.dto';
-import { QueryErpBusinessPartnerOptionsDto } from '../dto/query-erp-business-partner-options.dto';
-import { SyncErpBusinessPartnersFromInvoicesDto } from '../dto/sync-erp-business-partners-from-invoices.dto';
+import {
+  CreateErpBusinessPartnerDto,
+  QueryErpBusinessPartnerDto,
+  QueryErpBusinessPartnerOptionsDto,
+  SyncErpBusinessPartnersFromInvoicesDto,
+  UpdateErpBusinessPartnerDto,
+} from '@/v2/core/business-partners-core';
+import { BusinessPartnersManagementService } from '../business-partners-management.service';
 
 @ApiTags('business-partners')
 @ApiBearerAuth()
@@ -31,7 +33,7 @@ import { SyncErpBusinessPartnersFromInvoicesDto } from '../dto/sync-erp-business
 // `api/v2/...` là route chính. `business-partners` (nhận prefix `api/v1`) giữ cho web V1 đang gọi.
 @Controller(['api/v2/business-partners', 'business-partners'])
 export class ErpBusinessPartnerController {
-  constructor(private readonly service: BusinessPartnersCoreService) {}
+  constructor(private readonly service: BusinessPartnersManagementService) {}
 
   @RequirePermissions({
     resource: ErpResource.BUSINESS_PARTNERS,

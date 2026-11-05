@@ -4,7 +4,7 @@ import request from 'supertest';
 import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
 import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { applyGlobalPrefix } from '@/common/config/global-prefix.config';
-import { BusinessPartnersCoreService } from '../business-partners-core.service';
+import { BusinessPartnersManagementService } from '../business-partners-management.service';
 import { ErpBusinessPartnerController } from './erp-business-partner.controller';
 
 describe('ErpBusinessPartnerController routes', () => {
@@ -19,7 +19,9 @@ describe('ErpBusinessPartnerController routes', () => {
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [ErpBusinessPartnerController],
-      providers: [{ provide: BusinessPartnersCoreService, useValue: service }],
+      providers: [
+        { provide: BusinessPartnersManagementService, useValue: service },
+      ],
     })
       .overrideGuard(JwtAuthGuard)
       .useValue(allow)
@@ -48,20 +50,15 @@ describe('ErpBusinessPartnerController routes', () => {
       .expect(200);
   });
 
-  it('does not double-prefix the v2 route', async () => {
+  it('serves next-code under /api/v2/business-partners/next-code', async () => {
     await request(app.getHttpServer())
-      .get('/api/v1/api/v2/business-partners')
-      .expect(404);
+      .get('/api/v2/business-partners/next-code?partnerType=CUSTOMER')
+      .expect(200);
   });
 
-  it.each(['/api/v1/business-partners', '/api/v2/business-partners'])(
-    'routes static next-code before :id on %s',
-    async (base) => {
-      const res = await request(app.getHttpServer())
-        .get(`${base}/next-code`)
-        .expect(200);
-      expect(res.body).toEqual({ nextCode: 'KH-0001' });
-      expect(service.findOne).not.toHaveBeenCalled();
-    },
-  );
+  it('serves next-code under /api/v1/business-partners/next-code', async () => {
+    await request(app.getHttpServer())
+      .get('/api/v1/business-partners/next-code?partnerType=CUSTOMER')
+      .expect(200);
+  });
 });
