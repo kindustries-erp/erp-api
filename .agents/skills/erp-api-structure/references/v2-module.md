@@ -156,3 +156,20 @@ Knowledge-Sync: mỗi lần migrate xong, thêm/đổi dòng ở bảng này và
 - Không kiểm tra trùng route hay trùng `ErpResource` lúc sinh. Lỗi trùng sẽ lộ khi `tsc` (enum) hoặc lúc chạy (route).
 - Scope theo loại (ví dụ `partnerType` của BP) không có trong template: thêm tay vào query service và controller (xem `business-partners-core`).
 - Trùng `code` với bản ghi đã xóa mềm: index unique DB không lọc `is_deleted`, nên mã cũ không dùng lại được (lỗi 500). Đây là hành vi V1, cần migration (partial unique index) để sửa.
+
+## 4. Họ workflow (`abstract-services`) và module chứng từ
+
+Dùng cho chứng từ có vòng đời trạng thái (ví dụ đơn mua, phiếu nhập). Họ CRUD dùng `api-core` kiểu `engine` và `api-thin-module`.
+
+1. **`api-core`** với style `abstract-services` sinh khung lõi trong `src/v2/core/<họ>/`:
+   - `contracts/<họ>.contract.ts`: kiểu `<Entity>Action` và bảng `<ENTITY>_TRANSITIONS` (mặc định rỗng).
+   - `entities/base-*.entity.ts`: cột `id`, `isDeleted`, `status` (mặc định `DRAFT`), `createdBy`, timestamp.
+   - `services/abstract-*-command.service.ts`: `transition()` và `createDraft()` chạy trong transaction, khóa `pessimistic_write`, ghi nhật ký `ApprovalEvent`. Hook rỗng đánh dấu `// CUSTOM`: `initialStatus`, `beforeTransition`, `applyFields`.
+2. **`api-workflow-module`** (chỉ nhận họ `abstract-services`) sinh module trong `src/v2/modules/<module>/`: entity con, DTO tạo, command con (điền `headerEntity`, `docType`), controller `POST /` và `POST /:id/transition/:action`, module, spec tối thiểu, và RBAC (`ErpResource`). Wiring `app.module.ts` và `data-source.ts` chỉ khi bật `wireInput`.
+
+Quy ước "điền chỗ trống":
+- Nghiệp vụ riêng viết ở các hook `// CUSTOM` của command con hoặc lõi, không sửa template.
+- Bảng chuyển trạng thái điền trong `contracts/<họ>.contract.ts`, kèm khai báo kiểu `<Entity>Action`.
+- Trường trùng với lõi (`status`, `createdBy`, `isDeleted`, `id`) bị từ chối khi sinh.
+- Module workflow không có đọc danh sách/chi tiết: dev thêm query service và endpoint `GET` theo nhu cầu.
+- Generator không ghi đè file đã có. Đổi mẫu về sau không tự cập nhật các họ/module đã sinh.

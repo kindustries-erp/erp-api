@@ -1,5 +1,5 @@
 ---
-description: Quy trình chuẩn tổ chức cấu trúc erp-api (NestJS). Phần A tách Controller/Service vượt ngưỡng (Sub-Controllers, Sub-Services Facade, Pure Engines, Clean DI, Zero-Regression). Phần B tạo hoặc chuyển module sang kiến trúc v2 (Facade + sub-services + helpers + response DTO + spec, bằng plop api-module-v2)
+description: Quy trình chuẩn tổ chức cấu trúc erp-api (NestJS). Phần A tách Controller/Service vượt ngưỡng (Sub-Controllers, Sub-Services Facade, Pure Engines, Clean DI, Zero-Regression). Phần B tạo hoặc chuyển module sang kiến trúc v2 (bằng plop: api-core, api-thin-module, api-workflow-module hoặc api-module-v2)
 ---
 
 # 🏗️ ERP API Structure Workflow (`/api-structure`)
@@ -367,8 +367,10 @@ Generator: `api-module-v2` (xem [`plop-generate`](../skills/plop-generate/SKILL.
 
 | Tình huống | Generator | Kết quả |
 | :--- | :--- | :--- |
-| Họ nghiệp vụ mới, chưa có lõi | `api-core` (chọn `engine` hoặc `abstract-services`) | `src/v2/core/<họ>/` kèm `core.manifest.json` |
-| Module thuộc họ đã có lõi | `api-thin-module` (chọn lõi, nhập module, entity, trường riêng, bật wire) | `src/v2/modules/<module>/`: entity và create DTO kế thừa Base của lõi; facade, query/command, mapper, controller, RBAC, spec (cùng pipeline `api-module-v2`); khi wire tự nối `app.module.ts` và `data-source.ts`. Trường riêng trùng cột của lõi bị từ chối. Sinh thử: `bunx plop api-thin-module` |
+| Họ nghiệp vụ mới, CRUD (không có trạng thái) | `api-core` (chọn `engine`) | `src/v2/core/<họ>/` kèm `core.manifest.json` |
+| Họ chứng từ có vòng đời trạng thái mới | `api-core` (chọn `abstract-services`) | `src/v2/core/<họ>/`: contract với `<Entity>Action` và bảng `<ENTITY>_TRANSITIONS` (rỗng), entity có `status`/`createdBy`, command abstract có `transition()`/`createDraft()` và hook `// CUSTOM` |
+| Module CRUD thuộc họ đã có lõi `engine` | `api-thin-module` (chọn lõi, nhập module, entity, trường riêng, bật wire) | `src/v2/modules/<module>/`: entity và create DTO kế thừa Base của lõi; facade, query/command, mapper, controller, RBAC, spec (cùng pipeline `api-module-v2`); khi wire tự nối `app.module.ts` và `data-source.ts`. Trường riêng trùng cột của lõi bị từ chối. Sinh thử: `bunx plop api-thin-module` |
+| Module chứng từ thuộc họ `abstract-services` | `api-workflow-module` (chỉ nhận họ `abstract-services`) | `src/v2/modules/<module>/`: entity con, DTO tạo, command con (điền `headerEntity`, `docType`), controller `POST /` và `POST /:id/transition/:action`, module, spec tối thiểu, RBAC; khi wire tự nối `app.module.ts` và `data-source.ts`. Nghiệp vụ điền ở hook `// CUSTOM` và bảng transition của lõi. Chưa có endpoint đọc: dev tự thêm. Sinh thử: `bunx plop api-workflow-module` |
 | Entity đơn lẻ, không thuộc họ chứng từ | `api-module-v2` | `src/v2/modules/<module>/` đầy đủ Facade + sub-services |
 | Chứng từ Header + Lines (không có lõi) | `api-voucher-v2` | Cảnh báo nếu họ đã có lõi; nên dùng `api-thin-module` |
 | Module V1 cũ | `api-module` | `[LEGACY-V1]`, chỉ giữ để tham khảo |

@@ -22,7 +22,7 @@ describe('buildApiCoreData', () => {
     const data = buildApiCoreData(abstractAnswers);
     expect(data.serviceClass).toBe('AbstractPurchaseOrderCommandService');
     expect(data.serviceFile).toBe('abstract-purchase-order-command.service');
-    expect(data.serviceTemplateDir).toBe('core-abstract');
+    expect(data.serviceTemplateDir).toBe('workflow-common');
     // Lớp abstract không được đăng ký làm provider (Nest không khởi tạo được)
     expect(data.moduleProviders).toBe('');
   });
@@ -59,7 +59,8 @@ describe('coreFileMap', () => {
     const engine = coreFileMap(buildApiCoreData(engineAnswers)).map((f) => f.template);
     const abstract = coreFileMap(buildApiCoreData(abstractAnswers)).map((f) => f.template);
     expect(engine).toContain('core-engine/service.ts.hbs');
-    expect(abstract).toContain('core-abstract/service.ts.hbs');
+    expect(abstract).toContain('workflow-common/service.ts.hbs');
+    expect(abstract).toContain('workflow-common/contract.ts.hbs');
     expect(abstract).not.toContain('core-engine/service.ts.hbs');
   });
 });

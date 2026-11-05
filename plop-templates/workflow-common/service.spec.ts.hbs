@@ -1,7 +1,8 @@
 import { {{serviceClass}} } from './{{serviceFile}}';
 
 describe('{{serviceClass}}', () => {
-  it('được khai báo', () => {
+  it('được khai báo và có hàm chuyển trạng thái', () => {
     expect({{serviceClass}}).toBeDefined();
+    expect(typeof {{serviceClass}}.prototype.transition).toBe('function');
   });
 });
