@@ -2,7 +2,7 @@ import { toApprovalEventResponse } from '@/v2/core/approval/helpers/approval-eve
 import { ApprovalEventResponseDto } from '@/v2/core/approval/dto/approval-event-response.dto';
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import { RbacCoreService } from '@/rbac-core/rbac-core.service';
+import { RbacCoreService } from '@/v2/core/rbac';
 import { toProcurementOrderResponse } from '@/v2/core/procurement-orders/helpers/procurement-order.mapper';
 import { ProcurementOrderAction } from '@/v2/core/procurement-orders/contracts/procurement-orders.contract';
 import { ProcurementOrderResponseDto } from '@/v2/core/procurement-orders/dto/procurement-order-response.dto';

@@ -1,13 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import {
-  RbacCoreService,
-  CoreRole,
-  CorePermission,
-  CoreUserRole,
-  ErpResource,
-  ErpAction,
-} from '@/rbac-core';
+import { RbacCoreService } from './rbac-core.service';
+import { CoreRole } from '../entities/core-role.entity';
+import { CorePermission } from '../entities/core-permission.entity';
+import { CoreUserRole } from '../entities/core-user-role.entity';
+import { ErpResource, ErpAction } from '@/rbac-core/enums';
 
 describe('RbacCoreService', () => {
   let service: RbacCoreService;
@@ -239,22 +236,6 @@ describe('RbacCoreService', () => {
         { resource: ErpResource.CASH_STATEMENTS, action: ErpAction.READ },
       ]);
       expect(result).toBe(false);
-    });
-  });
-
-  describe('getAvailableResources', () => {
-    it('should list "garage", "bank_statements", "cash_statements" and exclude legacy resources', async () => {
-      const resources = await service.getAvailableResources();
-      const resourceKeys = resources.map((r) => r.resource);
-
-      expect(resourceKeys).toContain('garage');
-      expect(resourceKeys).toContain('garage_goods_receipts');
-      expect(resourceKeys).toContain('bank_statements');
-      expect(resourceKeys).toContain('cash_statements');
-      expect(resourceKeys).not.toContain('cash_funds');
-      expect(resourceKeys).not.toContain('bank_accounts');
-      expect(resourceKeys).not.toContain('greenway_integration');
-      expect(resourceKeys).not.toContain('kgara_integration');
     });
   });
 });

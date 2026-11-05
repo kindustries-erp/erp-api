@@ -2,9 +2,9 @@ import 'dotenv/config';
 import { DataSource } from 'typeorm';
 import dataSource from './db/data-source';
 import { CoreUser } from './users/entities/core-user.entity';
-import { CoreRole } from './rbac-core/entities/core-role.entity';
-import { CorePermission } from './rbac-core/entities/core-permission.entity';
-import { CoreUserRole } from './rbac-core/entities/core-user-role.entity';
+import { CoreRole } from '@/v2/core/rbac/entities/core-role.entity';
+import { CorePermission } from '@/v2/core/rbac/entities/core-permission.entity';
+import { CoreUserRole } from '@/v2/core/rbac/entities/core-user-role.entity';
 
 async function seed() {
   await dataSource.initialize();

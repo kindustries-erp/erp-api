@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import { RbacCoreService } from '@/rbac-core/rbac-core.service';
+import { RbacCoreService } from '@/v2/core/rbac';
 import { ErpResource, ErpAction } from '@/rbac-core/enums';
 import {
   TraceabilityGraphDto,

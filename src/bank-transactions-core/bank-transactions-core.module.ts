@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { RbacCoreModule } from '../rbac-core/rbac-core.module';
+import { RbacCoreModule } from '@/v2/core/rbac';
 import { BankTransactionsCoreService } from './bank-transactions-core.service';
 import { BankTransactionsCoreController } from './bank-transactions-core.controller';
 import { ErpBankAccount } from './entities/erp_bank_account.entity';

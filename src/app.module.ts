@@ -8,9 +8,9 @@ import { AuthModule } from './auth/auth.module';
 import { CoreUser } from './users/entities/core-user.entity';
 import { CoreUserPreference } from './users/entities/core-user-preference.entity';
 import { CoreUserTablePreference } from './users/entities/core-user-table-preference.entity';
-import { CoreRole } from './rbac-core/entities/core-role.entity';
-import { CorePermission } from './rbac-core/entities/core-permission.entity';
-import { CoreUserRole } from './rbac-core/entities/core-user-role.entity';
+import { CoreRole } from '@/v2/core/rbac/entities/core-role.entity';
+import { CorePermission } from '@/v2/core/rbac/entities/core-permission.entity';
+import { CoreUserRole } from '@/v2/core/rbac/entities/core-user-role.entity';
 import { EmployeesCoreModule } from './employees-core/employees-core.module';
 import { BusinessPartnersCoreModule } from './v2/business-partners-core/business-partners-core.module';
 import { InventoryCoreModule } from './inventory-core/inventory-core.module';
@@ -30,7 +30,8 @@ import { AuditCoreModule } from './audit-core/audit-core.module';
 import { UsersAdminModule } from './users-admin/users-admin.module';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { GlobalAuditInterceptor } from './audit-core/interceptors/global-audit.interceptor';
-import { RbacCoreModule } from './rbac-core/rbac-core.module';
+import { RbacCoreModule } from '@/v2/core/rbac';
+import { RbacRolesModule } from './v2/modules/rbac-roles/rbac-roles.module';
 import { BasicMastersCoreModule } from './basic-masters-core/basic-masters-core.module';
 import { DocumentDependenciesCoreModule } from './document-dependencies-core/document-dependencies-core.module';
 import { ErpInvoicesCoreModule } from './erp-invoices-core/erp-invoices-core.module';
@@ -156,6 +157,7 @@ import { GarageProcurementOrdersModule } from './v2/modules/garage-procurement-o
     AuditCoreModule,
     UsersAdminModule,
     RbacCoreModule,
+    RbacRolesModule,
     BasicMastersCoreModule,
     DocumentDependenciesCoreModule,
     ErpInvoicesCoreModule,

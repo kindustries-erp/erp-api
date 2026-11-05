@@ -8,7 +8,7 @@ import {
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import type { CoreRole } from './core-role.entity';
-import type { CoreUser } from '../../users/entities/core-user.entity';
+import type { CoreUser } from '@/users/entities/core-user.entity';
 
 @Entity({ name: 'core_user_roles' })
 @Index(['userId', 'roleId'], { unique: true })

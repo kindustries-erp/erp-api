@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { RbacCoreService } from '@/rbac-core/rbac-core.service';
+import { RbacCoreService } from '@/v2/core/rbac';
 import { toPurchaseRequestResponse } from '@/v2/core/procurement-requests/helpers/procurement-request.mapper';
 import {
   PurchaseRequestAction,

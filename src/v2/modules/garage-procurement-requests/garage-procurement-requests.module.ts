@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { RbacCoreModule } from '@/rbac-core/rbac-core.module';
+import { RbacCoreModule } from '@/v2/core/rbac';
 import { ApprovalEvent } from '@/v2/core/approval/entities/approval-event.entity';
 import { ApprovalEventService } from '@/v2/core/approval/approval-event.service';
 import { GarageProcurementRequest } from './entities/procurement-request.entity';
