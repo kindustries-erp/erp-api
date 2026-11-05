@@ -1,4 +1,4 @@
-import { ErpResource } from '@/rbac-core/enums';
+import { ErpResource } from '@/v2/core/rbac';
 
 /** Danh sách resource RBAC hiển thị cho UI gán quyền. Dữ liệu tĩnh (không tính ngưỡng kích thước). */
 export const AVAILABLE_RBAC_RESOURCES: { resource: string; label: string }[] = [

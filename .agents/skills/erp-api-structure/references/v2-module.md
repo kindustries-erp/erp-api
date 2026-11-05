@@ -23,7 +23,7 @@ Kiến trúc API V2 được tổ chức phân cấp tương tự Web V2 (`erp-w
 | Facade | `<module>.service.ts` | Điều phối, `NotFoundException`, luôn trả response DTO |
 | Controller | `controllers/*.controller.ts` | `@RequirePermissions({ resource: ErpResource.X, action: ErpAction.READ\|CREATE\|UPDATE\|DELETE\|PURGE })`; xóa cứng dùng `PURGE` và route `:id/permanent` |
 
-Enum quyền: `src/rbac-core/enums/erp-action.enum.ts` (`ErpAction`), `src/rbac-core/enums/erp-resource.enum.ts` (`ErpResource`). Không dùng chuỗi literal cho quyền.
+Enum quyền: `src/v2/core/rbac/enums/erp-action.enum.ts` (`ErpAction`), `src/v2/core/rbac/enums/erp-resource.enum.ts` (`ErpResource`), xuất qua `@/v2/core/rbac`. Không dùng chuỗi literal cho quyền.
 
 ## 2. Kiểu trường (`fieldSpec`)
 
@@ -140,7 +140,7 @@ Các file trong `plop-helpers/` là hàm thuần: `apiV2Fields`, `apiV2Data`, `a
 | `erp-invoices-core` (lõi: list/get/create/update/bulk/soft-delete) | `src/v2/core/invoices/` (Core Foundation) & `src/v2/modules/finance-invoices/` (route `/api/v2/invoices`, chạy song song) | Đang migrate. Tách Core (Abstract entities, Engine tính toán dùng chung, DTOs) và Business Module `finance-invoices` (kế thừa Core, Controller V2, Query/Command). Entity `FinanceInvoice`, `FinanceInvoiceItem` trỏ cùng bảng `erp_invoices` / `erp_invoice_items`, không migration. |
 | `purchase-orders-core` (lõi: list/detail/create/update/approve/confirm/cancel/soft-delete, next-no, column-options, receipts, connections, link/unlink hóa đơn) | `src/v2/modules/purchase-orders/` (route `/api/v2/purchase-orders`, chạy song song, dùng chung bảng `erp_purchase_orders`). Lõi `src/v2/core/purchase-orders/` (entity/service/DTO trừu tượng) được v1 kế thừa khi refactor. Giữ ở v1: Excel (range và từng phiếu), `/items`, `/supplier-stats`, `goods-receipts-core` ghi trạng thái PO | Đang migrate. Entity v2 trỏ cùng bảng, không migration. Đổi trạng thái qua action endpoint, không qua PATCH. Chưa có UI v2. |
 | Garage purchase orders (mới, không có ở v1) | `src/v2/modules/garage-purchase-orders/` (route `/api/v2/garage-purchase-orders`, bảng `erp_garage_purchase_orders`, quyền `garage_purchase_orders`) | Mới. Chưa nối phiếu nhập garage (`purchase_order_id` trên GR garage chưa có). |
-| `rbac-core` (kiểm quyền dùng chung + quản trị role) | Lõi `src/v2/core/rbac/` (entity `CoreRole`/`CorePermission`/`CoreUserRole`, `RbacCoreService` 5 method kiểm quyền, `@Global`); module `src/v2/modules/rbac-roles/` (route vẫn `/api/v1/rbac-core`, chung UI). `enums/` giữ ở `src/rbac-core/enums/` | Đã v2, giữ nguyên hợp đồng v1. Khác biệt có chủ đích: `GET roles/:roleId/users` chỉ trả `{id, email}`; id/roleId sai UUID trả 400 (trước đây 500). Xóa role vẫn là xóa cứng (bảng `core_roles` không có `isDeleted`). |
+| `rbac-core` (kiểm quyền dùng chung + quản trị role) | Lõi `src/v2/core/rbac/` (entity `CoreRole`/`CorePermission`/`CoreUserRole`, `RbacCoreService` 5 method kiểm quyền, `enums/` xuất qua `@/v2/core/rbac`, `@Global`); module `src/v2/modules/rbac-roles/` (route vẫn `/api/v1/rbac-core`, chung UI). Đã xóa sạch `src/rbac-core`. | Đã v2, giữ nguyên hợp đồng v1. Khác biệt có chủ đích: `GET roles/:roleId/users` chỉ trả `{id, email}`; id/roleId sai UUID trả 400 (trước đây 500). Xóa role vẫn là xóa cứng (bảng `core_roles` không có `isDeleted`). |
 
 Module v2 PO (`purchase-orders`, `garage-purchase-orders`) không dùng plop, đã đối chiếu cả hai generator:
 - `api-voucher-v2` sinh code kế thừa `BaseGoodsReceipt*`, không hợp PO.

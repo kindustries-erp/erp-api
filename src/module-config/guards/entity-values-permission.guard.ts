@@ -4,8 +4,7 @@ import {
   ForbiddenException,
   Injectable,
 } from '@nestjs/common';
-import { RbacCoreService } from '@/v2/core/rbac';
-import { ErpAction, ErpResource } from '../../rbac-core/enums';
+import { RbacCoreService, ErpAction, ErpResource } from '@/v2/core/rbac';
 
 /** entityType (EAV) → resource RBAC của module sở hữu thực thể. */
 export const ENTITY_TYPE_RESOURCE: Readonly<Record<string, ErpResource>> = {

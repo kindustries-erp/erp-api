@@ -4,7 +4,7 @@ import { RbacCoreService } from './rbac-core.service';
 import { CoreRole } from '../entities/core-role.entity';
 import { CorePermission } from '../entities/core-permission.entity';
 import { CoreUserRole } from '../entities/core-user-role.entity';
-import { ErpResource, ErpAction } from '@/rbac-core/enums';
+import { ErpResource, ErpAction } from '../enums';
 
 describe('RbacCoreService', () => {
   let service: RbacCoreService;

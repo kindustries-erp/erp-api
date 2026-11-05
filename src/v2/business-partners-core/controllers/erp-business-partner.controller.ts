@@ -17,8 +17,7 @@ import {
   RequireAnyPermissions,
   RequirePermissions,
 } from '@/auth/decorators/require-permissions.decorator';
-import { ErpAction } from '@/rbac-core/enums/erp-action.enum';
-import { ErpResource } from '@/rbac-core/enums/erp-resource.enum';
+import { ErpAction, ErpResource } from '@/v2/core/rbac';
 import { BusinessPartnersCoreService } from '../business-partners-core.service';
 import { CreateErpBusinessPartnerDto } from '../dto/create-erp-business-partner.dto';
 import { QueryErpBusinessPartnerDto } from '../dto/query-erp-business-partner.dto';

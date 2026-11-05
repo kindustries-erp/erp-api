@@ -18,7 +18,7 @@ import { buildGarageCaseExportFileName } from '../helpers/kgara-excel-style.help
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
-import { ErpResource, ErpAction } from '@/rbac-core/enums';
+import { ErpResource, ErpAction } from '@/v2/core/rbac';
 import { BranchId } from '../decorators/branch-id.decorator';
 import { KgaraCaseConfigService } from '../services/kgara-case-config.service';
 import { UpdateCaseConfigDto } from '../dto/update-case-config.dto';

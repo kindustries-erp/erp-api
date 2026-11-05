@@ -69,9 +69,13 @@ erDiagram
 ## 3. Cấu trúc Source Code
 
 ### 3.1. Backend (kiến trúc v2)
-Lõi kiểm quyền và module quản trị tách riêng. Enums vẫn ở `src/rbac-core/enums/` (dùng chung toàn repo).
+Lõi kiểm quyền và module quản trị tách riêng. Enums nằm tại `src/v2/core/rbac/enums/` và được export trực tiếp qua `@/v2/core/rbac`. Thư mục cũ `src/rbac-core` đã được xóa bỏ hoàn toàn.
 ```text
 erp-api/src/v2/core/rbac/                       # Lõi họ rbac (@Global)
+├── enums/
+│   ├── erp-action.enum.ts            # ErpAction (READ, CREATE, UPDATE, DELETE, PURGE...)
+│   ├── erp-resource.enum.ts          # ErpResource (tất cả resources hệ thống)
+│   └── index.ts                      # Barrel export enums
 ├── entities/
 │   ├── core-role.entity.ts           # Entity bảng core_roles (xóa cứng, không có is_deleted)
 │   ├── core-permission.entity.ts     # Entity bảng core_permissions
@@ -81,7 +85,7 @@ erp-api/src/v2/core/rbac/                       # Lõi họ rbac (@Global)
 ├── services/
 │   └── rbac-core.service.ts          # RbacCoreService: hasPermission, hasAny/AllPermissions, getUserPermissions, getUserRoleNames
 ├── rbac-core.module.ts               # RbacCoreModule (@Global), export RbacCoreService
-└── core.manifest.json, index.ts
+└── core.manifest.json, index.ts      # index.ts export toàn bộ enums, entities, helper, service, module
 
 erp-api/src/v2/modules/rbac-roles/              # Module quản trị role (API /api/v1/rbac-core)
 ├── controllers/rbac-roles.controller.ts        # 10 route, RBAC ADMIN_USERS/MANAGE, ParseUUIDPipe cho id/roleId
@@ -101,7 +105,7 @@ erp-api/src/v2/modules/rbac-roles/              # Module quản trị role (API 
 └── rbac-roles.module.ts
 ```
 
-Enums: `erp-api/src/rbac-core/enums/` (`erp-resource.enum.ts`, `erp-action.enum.ts`, `index.ts`).
+Enums: `erp-api/src/v2/core/rbac/enums/` (`erp-resource.enum.ts`, `erp-action.enum.ts`, `index.ts`), import qua `@/v2/core/rbac`.
 
 ### 3.2. Guards & Decorators Tích hợp (`erp-api/src/auth/`)
 ```text

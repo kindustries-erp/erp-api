@@ -16,7 +16,7 @@ import type { Response } from 'express';
 import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
-import { ErpAction, ErpResource } from '@/rbac-core/enums';
+import { ErpAction, ErpResource } from '@/v2/core/rbac';
 import { GarageOpexExportDto } from '../dto/garage-opex-export.dto';
 import { GarageExportJobsService } from '../services/garage-export-jobs.service';
 import {

@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { CoreUserRole } from '../entities/core-user-role.entity';
 import { CorePermission } from '../entities/core-permission.entity';
 import { checkPermissionMatch } from '../helpers/permission-match.helper';
-import { ErpResource, ErpAction } from '@/rbac-core/enums';
+import { ErpResource, ErpAction } from '../enums';
 
 /**
  * Engine kiểm quyền dùng chung toàn hệ thống (lõi họ rbac).

@@ -1,7 +1,6 @@
 import { DataSource } from 'typeorm';
 import { RBAC_PERMISSIONS_KEY } from '@/auth/decorators/require-permissions.decorator';
-import { ErpAction } from '@/rbac-core/enums/erp-action.enum';
-import { ErpResource } from '@/rbac-core/enums/erp-resource.enum';
+import { ErpAction, ErpResource } from '@/v2/core/rbac';
 import { GaragePurchaseOrderController } from './controllers/garage-purchase-order.controller';
 import { GaragePurchaseOrder } from './entities/garage-purchase-order.entity';
 import { GaragePurchaseOrderLine } from './entities/garage-purchase-order-line.entity';

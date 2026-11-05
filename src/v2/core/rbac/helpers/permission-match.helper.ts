@@ -1,4 +1,4 @@
-import { ErpAction, ErpResource } from '@/rbac-core/enums';
+import { ErpAction, ErpResource } from '../enums';
 import type { CorePermission } from '../entities/core-permission.entity';
 
 /**

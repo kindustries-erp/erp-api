@@ -22,7 +22,7 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
-import { ErpResource, ErpAction } from '@/rbac-core/enums';
+import { ErpResource, ErpAction } from '@/v2/core/rbac';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ErpAttachmentsCoreService } from './erp-attachments-core.service';
 import type { Response } from 'express';
