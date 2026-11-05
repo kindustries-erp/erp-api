@@ -16,6 +16,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { TableQueryDto } from '@/common/dto/table-query.dto';
 
 export class GarageProcurementRequestLineDto {
   @ApiProperty({ enum: ['GOODS', 'SERVICE'] })
@@ -83,26 +84,11 @@ export class ReplaceRequestLinesDto {
   lines: GarageProcurementRequestLineDto[];
 }
 
-export class ListProcurementRequestsDto {
+export class ListProcurementRequestsDto extends TableQueryDto {
   @ApiPropertyOptional({ description: 'Lọc theo chi nhánh' })
   @IsOptional()
   @IsUUID()
   branchId?: string;
-
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page?: number = 1;
-
-  @ApiPropertyOptional({ default: 20 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(200)
-  pageSize?: number = 20;
 }
 
 export class ReasonBodyDto {

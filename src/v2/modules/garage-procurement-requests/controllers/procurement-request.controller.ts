@@ -63,6 +63,30 @@ export class GarageProcurementRequestController {
     resource: ErpResource.GARAGE_PROCUREMENT_REQUESTS,
     action: ErpAction.READ,
   })
+  @ApiOperation({
+    summary: 'Gợi ý giá trị của một cột, áp dụng bộ lọc các cột khác',
+  })
+  @Get('column-options')
+  columnOptions(
+    @Query('column') column: string,
+    @Query('search') search?: string,
+    @Query('page') page = '1',
+    @Query('pageSize') pageSize = '20',
+    @Query('filters') filters?: string,
+  ) {
+    return this.service.findColumnOptions(
+      column,
+      search,
+      Math.max(1, parseInt(page, 10) || 1),
+      Math.max(1, Math.min(200, parseInt(pageSize, 10) || 20)),
+      filters,
+    );
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_PROCUREMENT_REQUESTS,
+    action: ErpAction.READ,
+  })
   @Get(':id')
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.findOne(id);

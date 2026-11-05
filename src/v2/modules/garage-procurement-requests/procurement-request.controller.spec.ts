@@ -29,6 +29,7 @@ describe('GarageProcurementRequestController RBAC', () => {
   it('tạo cần CREATE, đọc cần READ, gửi và hủy cần UPDATE', () => {
     expect(perm(c.create as never)[0].action).toBe(ErpAction.CREATE);
     expect(perm(c.list as never)[0].action).toBe(ErpAction.READ);
+    expect(perm(c.columnOptions as never)[0].action).toBe(ErpAction.READ);
     expect(perm(c.findOne as never)[0].action).toBe(ErpAction.READ);
     expect(perm(c.submit as never)[0].action).toBe(ErpAction.UPDATE);
     expect(perm(c.cancel as never)[0].action).toBe(ErpAction.UPDATE);

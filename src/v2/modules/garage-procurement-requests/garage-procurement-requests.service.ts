@@ -44,13 +44,27 @@ export class GarageProcurementRequestsService {
   }
 
   async list(dto: ListProcurementRequestsDto) {
-    const page = dto.page ?? 1;
-    const pageSize = dto.pageSize ?? 20;
-    const out = await this.query.list(page, pageSize, dto.branchId);
+    const out = await this.query.list(dto);
     return {
       ...out,
       rows: out.rows.map((h) => toPurchaseRequestResponse(h, [])),
     };
+  }
+
+  findColumnOptions(
+    column: string,
+    search: string | undefined,
+    page: number,
+    pageSize: number,
+    filters?: string,
+  ) {
+    return this.query.findColumnOptions(
+      column,
+      search,
+      page,
+      pageSize,
+      filters,
+    );
   }
 
   async findOne(id: string): Promise<PurchaseRequestResponseDto> {
