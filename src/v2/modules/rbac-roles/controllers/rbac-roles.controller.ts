@@ -76,6 +76,15 @@ export class RbacRolesController {
     resource: ErpResource.ADMIN_USERS,
     action: ErpAction.MANAGE,
   })
+  @Get('roles/:id')
+  async getRole(@Param('id', ParseUUIDPipe) id: string) {
+    return this.rbacRolesService.getRoleById(id);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.ADMIN_USERS,
+    action: ErpAction.MANAGE,
+  })
   @Patch('roles/:id')
   async updateRole(
     @Param('id', ParseUUIDPipe) id: string,

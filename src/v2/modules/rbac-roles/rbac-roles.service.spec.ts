@@ -16,6 +16,10 @@ const makeFacade = () => {
       total: 0,
       next: null,
     })),
+    getRoleById: jest.fn<(...args: any[]) => Promise<any>>(async () => ({
+      id: 'r1',
+      name: 'Role 1',
+    })),
   };
   const command = {
     createRole: jest.fn<(...args: any[]) => Promise<any>>(async () => ({
@@ -56,7 +60,9 @@ describe('RbacRolesService (Facade)', () => {
     const { facade, query } = makeFacade();
     await facade.getRolesPaginated({ page: 2 } as any);
     await facade.getColumnOptions('name', 'a', 1, 20, '{}');
+    await facade.getRoleById('r1');
     expect(query.getRolesPaginated).toHaveBeenCalledWith({ page: 2 });
+    expect(query.getRoleById).toHaveBeenCalledWith('r1');
     expect(query.getColumnOptions).toHaveBeenCalledWith(
       'name',
       'a',

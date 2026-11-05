@@ -35,6 +35,10 @@ export class RbacRolesService {
     return this.queryService.getRolesPaginated(query);
   }
 
+  getRoleById(id: string): Promise<RoleResponse> {
+    return this.queryService.getRoleById(id);
+  }
+
   getColumnOptions(
     column: string,
     search?: string,

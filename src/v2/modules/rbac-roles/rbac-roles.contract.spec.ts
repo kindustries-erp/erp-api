@@ -27,6 +27,7 @@ const ROUTES: Array<{
   },
   { method: 'getRoles', http: RequestMethod.GET, path: 'roles' },
   { method: 'createRole', http: RequestMethod.POST, path: 'roles' },
+  { method: 'getRole', http: RequestMethod.GET, path: 'roles/:id' },
   { method: 'updateRole', http: RequestMethod.PATCH, path: 'roles/:id' },
   { method: 'deleteRole', http: RequestMethod.DELETE, path: 'roles/:id' },
   {

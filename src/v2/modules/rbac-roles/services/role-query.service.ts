@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CoreRole } from '@/v2/core/rbac/entities/core-role.entity';
@@ -7,6 +7,7 @@ import { ListCoreRolesDto } from '../dto/rbac-core.dto';
 import type {
   RoleListResponse,
   RoleListItemResponse,
+  RoleResponse,
 } from '../dto/rbac-response.dto';
 import {
   applyRoleColumnFilters,
@@ -17,7 +18,7 @@ import {
   applyRoleSorts,
   mapRoleColumnToSqlField,
 } from '../helpers/role-table-filter.helper';
-import { toRoleListItem } from '../helpers/rbac-role.mapper';
+import { toRoleListItem, toRoleResponse } from '../helpers/rbac-role.mapper';
 
 export interface RoleColumnOptionsResponse {
   items: { label: string; value: string }[];
@@ -111,5 +112,13 @@ export class RoleQueryService {
 
     const next = page * pageSize < total ? page + 1 : null;
     return { items, total, next };
+  }
+
+  async getRoleById(id: string): Promise<RoleResponse> {
+    const role = await this.roleRepository.findOne({ where: { id } });
+    if (!role) {
+      throw new NotFoundException(`Role with id ${id} not found`);
+    }
+    return toRoleResponse(role);
   }
 }
