@@ -1,11 +1,11 @@
 import 'dotenv/config';
 import { DataSource } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
-import dataSource from './db/data-source';
-import { CoreUser } from './users/entities/core-user.entity';
-import { CoreRole } from '@/v2/core/rbac/entities/core-role.entity';
-import { CorePermission } from '@/v2/core/rbac/entities/core-permission.entity';
-import { CoreUserRole } from '@/v2/core/rbac/entities/core-user-role.entity';
+import dataSource from '../src/db/data-source';
+import { CoreUser } from '../src/users/entities/core-user.entity';
+import { CoreRole } from '../src/v2/core/rbac/entities/core-role.entity';
+import { CorePermission } from '../src/v2/core/rbac/entities/core-permission.entity';
+import { CoreUserRole } from '../src/v2/core/rbac/entities/core-user-role.entity';
 
 async function seedAdminFull() {
   await dataSource.initialize();
@@ -97,3 +97,4 @@ seedAdminFull().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
