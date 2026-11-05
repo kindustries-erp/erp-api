@@ -62,3 +62,8 @@ PO không import module này. Cổng `RequestLinkPort` do `ProcurementRequestLin
 - Module Garage tương ứng: [`garage-procurement-requests`](../garage-procurement-requests/SKILL.md)
 - PO thường: [`erp-procurement-orders`](../erp-procurement-orders/SKILL.md)
 - Nhật ký duyệt dùng chung: `src/v2/core/approval/`
+
+## 9. Cập nhật 2026-11-05: PR không tự đóng
+
+- Lõi `AbstractPurchaseRequestOrderingService` chỉ ghi `orderingStatus`. Đặt đủ không đổi `status`; `CLOSED` chỉ do Đóng thủ công (có lý do).
+- Migration `20261105105000` đưa PR tự đóng cũ (`CLOSED`, `close_reason IS NULL`, `ordering_status = FULL`) về `APPROVED`.

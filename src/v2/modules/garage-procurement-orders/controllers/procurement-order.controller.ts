@@ -22,7 +22,6 @@ import {
   AcceptServicesDto,
   CreateProcurementOrderDto,
   ListProcurementOrdersDto,
-  ReceiveGoodsDto,
   ReplaceOrderLinesDto,
   UpdateProcurementOrderHeaderDto,
 } from '../dto/procurement-order.dto';
@@ -227,19 +226,6 @@ export class GarageProcurementOrderController {
       req.user?.sub ?? '',
       dto.reason,
     );
-  }
-
-  @RequirePermissions({
-    resource: ErpResource.GARAGE_PROCUREMENT_ORDERS,
-    action: ErpAction.UPDATE,
-  })
-  @ApiOperation({ summary: 'Nhận hàng GOODS đã phát hành' })
-  @Post(':id/receipts')
-  receive(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: ReceiveGoodsDto,
-  ) {
-    return this.service.receiveGoods(id, dto);
   }
 
   @RequirePermissions({

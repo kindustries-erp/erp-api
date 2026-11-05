@@ -13,7 +13,6 @@ import {
   AcceptServicesDto,
   CreateProcurementOrderDto,
   ListProcurementOrdersDto,
-  ReceiveGoodsDto,
   ReplaceOrderLinesDto,
   UpdateProcurementOrderHeaderDto,
 } from './dto/procurement-order.dto';
@@ -113,17 +112,6 @@ export class GarageProcurementOrdersService {
       action,
       { id: actorId, roles: await this.roles(actorId) },
       reason,
-    );
-    return this.findOne(id);
-  }
-
-  /** Nhận hàng GOODS: lệnh này được gọi từ phiếu nhập kho, trong cùng transaction. */
-  async receiveGoods(
-    id: string,
-    dto: ReceiveGoodsDto,
-  ): Promise<GarageProcurementOrderResponseDto> {
-    await this.dataSource.transaction((m) =>
-      this.fulfilment.applyGoodsReceipt(m, id, dto.items),
     );
     return this.findOne(id);
   }

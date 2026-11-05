@@ -160,7 +160,7 @@ describe('AbstractPurchaseRequestCommandService.transition', () => {
 });
 
 describe('AbstractPurchaseRequestOrderingService', () => {
-  it('đặt đủ toàn bộ thì PR tự CLOSED, closeReason để null', async () => {
+  it('đặt đủ toàn bộ thì PR giữ APPROVED, chỉ orderingStatus thành FULL', async () => {
     const header = makeHeader({ status: 'APPROVED' });
     const lines = [makeLine({ id: 'l1', qtyRequested: '10', qtyOrdered: '4' })];
     const { manager, saved } = fakeManager(header, lines);
@@ -172,7 +172,8 @@ describe('AbstractPurchaseRequestOrderingService', () => {
 
     const savedHeader = saved.find((v) => v instanceof Header) as Header;
     expect(savedHeader.orderingStatus).toBe('FULL');
-    expect(savedHeader.status).toBe('CLOSED');
+    expect(savedHeader.status).toBe('APPROVED');
+    expect(savedHeader.closedAt).toBeNull();
     expect(lines[0].qtyOrdered).toBe('10');
   });
 
@@ -187,12 +188,8 @@ describe('AbstractPurchaseRequestOrderingService', () => {
     ).rejects.toThrow(ConflictException);
   });
 
-  it('trả lại số lượng khi đã tự đóng thì mở lại về APPROVED', async () => {
-    const header = makeHeader({
-      status: 'CLOSED',
-      orderingStatus: 'FULL',
-      closeReason: null,
-    });
+  it('trả lại số lượng thì orderingStatus về PARTIAL, status không đổi', async () => {
+    const header = makeHeader({ status: 'APPROVED', orderingStatus: 'FULL' });
     const lines = [makeLine({ qtyRequested: '10', qtyOrdered: '10' })];
     const { manager, saved } = fakeManager(header, lines);
     await new TestOrdering().release(manager as never, 'h1', [
@@ -201,6 +198,21 @@ describe('AbstractPurchaseRequestOrderingService', () => {
     const savedHeader = saved.find((v) => v instanceof Header) as Header;
     expect(savedHeader.status).toBe('APPROVED');
     expect(savedHeader.orderingStatus).toBe('PARTIAL');
+  });
+
+  it('trả hết số lượng thì orderingStatus về NONE', async () => {
+    const header = makeHeader({
+      status: 'APPROVED',
+      orderingStatus: 'PARTIAL',
+    });
+    const lines = [makeLine({ qtyRequested: '10', qtyOrdered: '4' })];
+    const { manager, saved } = fakeManager(header, lines);
+    await new TestOrdering().release(manager as never, 'h1', [
+      { requestLineId: 'l1', qty: 4 },
+    ]);
+    const savedHeader = saved.find((v) => v instanceof Header) as Header;
+    expect(savedHeader.orderingStatus).toBe('NONE');
+    expect(savedHeader.status).toBe('APPROVED');
   });
 });
 

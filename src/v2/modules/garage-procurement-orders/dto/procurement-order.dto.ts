@@ -86,24 +86,6 @@ export class ReplaceOrderLinesDto {
   lines: GarageProcurementOrderLineDto[];
 }
 
-export class ReceiveGoodsItemDto {
-  @ApiProperty() @IsUUID() orderLineId: string;
-
-  @ApiProperty()
-  @IsNumber({ maxDecimalPlaces: 3 })
-  @Min(0.001)
-  qty: number;
-}
-
-export class ReceiveGoodsDto {
-  @ApiProperty({ type: [ReceiveGoodsItemDto] })
-  @IsArray()
-  @ArrayMinSize(1)
-  @ValidateNested({ each: true })
-  @Type(() => ReceiveGoodsItemDto)
-  items: ReceiveGoodsItemDto[];
-}
-
 export class AcceptServiceItemDto {
   @ApiProperty() @IsUUID() orderLineId: string;
 

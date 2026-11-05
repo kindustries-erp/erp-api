@@ -61,3 +61,9 @@ Quyền resource: `garage_procurement_orders`. Seed từ `garage_purchase_orders
 - Quyền duyệt: `approve`/`reject` đã seed cho vai trò có `update` trên `garage_procurement_orders` (migration `20261105104000-SeedGarageProcurementApprovalPermissions`).
 - Phiếu nhập kho Garage nối PO: `GarageGoodsReceiptCommandService.post` gọi `applyGoodsReceipt`, `cancel` gọi `revertGoodsReceipt` trong cùng transaction. Xem [`garage-goods-receipts`](../garage-goods-receipts/SKILL.md) mục nối PO.
 - Rủi ro còn lại: `POST :id/receipts` vẫn cộng số đã nhận. Dùng song song với phiếu nhập có thể cộng trùng. Chưa chặn.
+
+## 9. Cập nhật 2026-11-05: bỏ nhận hàng trực tiếp trên PO
+
+- Đã gỡ `POST /api/v2/garage-procurement-orders/:id/receipts` và `ReceiveGoodsDto`. Nhận hàng GOODS chỉ qua phiếu nhập kho (GR) `post`; hủy GR đã post hoàn số đã nhận.
+- Nghiệm thu dịch vụ (`acceptances`) không đổi.
+- `erp-procurement-orders` (luồng thường) vẫn giữ `receipts` vì chưa nối GR.

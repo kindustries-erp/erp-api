@@ -2,10 +2,7 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { EntityManager, EntityTarget, FindOptionsWhere } from 'typeorm';
 import { BasePurchaseRequestEntity } from '../entities/base-purchase-request.entity';
 import { BasePurchaseRequestLineEntity } from '../entities/base-purchase-request-line.entity';
-import {
-  PURCHASE_REQUEST_STATUS,
-  PurchaseRequestStatus,
-} from '../contracts/procurement-requests.contract';
+import { PurchaseRequestStatus } from '../contracts/procurement-requests.contract';
 import {
   assertOrderable,
   orderingStatusOf,
@@ -59,7 +56,7 @@ export abstract class AbstractPurchaseRequestOrderingService<
       line.qtyOrdered = toQty(Number(line.qtyOrdered) + item.qty);
     }
     await manager.save(this.lineEntity, lines);
-    await this.refreshHeader(manager, header, lines, true);
+    await this.refreshHeader(manager, header, lines);
   }
 
   /** Trả lại số lượng khi hủy PO hoặc xóa PO nháp. */
@@ -76,7 +73,7 @@ export abstract class AbstractPurchaseRequestOrderingService<
       line.qtyOrdered = toQty(Math.max(0, Number(line.qtyOrdered) - item.qty));
     }
     await manager.save(this.lineEntity, lines);
-    await this.refreshHeader(manager, header, lines, false);
+    await this.refreshHeader(manager, header, lines);
   }
 
   protected async lockHeader(manager: EntityManager, id: string): Promise<H> {
@@ -106,40 +103,20 @@ export abstract class AbstractPurchaseRequestOrderingService<
   }
 
   /**
-   * Tính lại tiến độ. Đủ số lượng thì tự đóng; khi trả lại số lượng thì mở lại,
-   * nhưng chỉ mở lại nếu việc đóng là tự động (closeReason = null).
+   * Tính lại tiến độ đặt hàng. Chỉ ghi orderingStatus: PR không tự đổi status.
+   * Đóng PR là thao tác thủ công (có lý do), không suy ra từ số lượng đã đặt.
    */
   private async refreshHeader(
     manager: EntityManager,
     header: H,
     lines: L[],
-    reserving: boolean,
   ): Promise<void> {
-    const status = orderingStatusOf(
+    header.orderingStatus = orderingStatusOf(
       lines.map((l) => ({
         qtyRequested: Number(l.qtyRequested),
         qtyOrdered: Number(l.qtyOrdered),
       })),
     );
-    header.orderingStatus = status;
-
-    if (
-      reserving &&
-      status === 'FULL' &&
-      header.status === PURCHASE_REQUEST_STATUS.APPROVED
-    ) {
-      header.status = PURCHASE_REQUEST_STATUS.CLOSED;
-      header.closedAt = new Date();
-      header.closeReason = null;
-    } else if (
-      !reserving &&
-      header.status === PURCHASE_REQUEST_STATUS.CLOSED &&
-      header.closeReason === null &&
-      status !== 'FULL'
-    ) {
-      header.status = PURCHASE_REQUEST_STATUS.APPROVED;
-      header.closedAt = null;
-    }
     await manager.save(this.headerEntity, header);
   }
 }

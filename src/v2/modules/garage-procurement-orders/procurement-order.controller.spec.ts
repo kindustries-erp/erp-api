@@ -27,11 +27,7 @@ describe('GarageProcurementOrderController RBAC', () => {
     ]);
   });
 
-  it('nhận hàng và nghiệm thu đều cần UPDATE trên đúng resource PO', () => {
-    expect(perm(c.receive as never)[0]).toMatchObject({
-      resource: ErpResource.GARAGE_PROCUREMENT_ORDERS,
-      action: ErpAction.UPDATE,
-    });
+  it('nghiệm thu và hủy nghiệm thu cần UPDATE trên đúng resource PO', () => {
     expect(perm(c.accept as never)[0]).toMatchObject({
       resource: ErpResource.GARAGE_PROCUREMENT_ORDERS,
       action: ErpAction.UPDATE,
