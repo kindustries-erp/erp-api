@@ -86,18 +86,79 @@ export class ReplaceOrderLinesDto {
   lines: GarageProcurementOrderLineDto[];
 }
 
+export class ReceiveGoodsItemDto {
+  @ApiProperty() @IsUUID() orderLineId: string;
+
+  @ApiProperty()
+  @IsNumber({ maxDecimalPlaces: 3 })
+  @Min(0.001)
+  qty: number;
+}
+
 export class ReceiveGoodsDto {
-  @ApiProperty({ type: [Object], description: '[{orderLineId, qty}]' })
+  @ApiProperty({ type: [ReceiveGoodsItemDto] })
   @IsArray()
   @ArrayMinSize(1)
-  items: Array<{ orderLineId: string; qty: number }>;
+  @ValidateNested({ each: true })
+  @Type(() => ReceiveGoodsItemDto)
+  items: ReceiveGoodsItemDto[];
+}
+
+export class AcceptServiceItemDto {
+  @ApiProperty() @IsUUID() orderLineId: string;
+
+  @ApiProperty()
+  @IsNumber({ maxDecimalPlaces: 3 })
+  @Min(0.001)
+  qty: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  note?: string;
 }
 
 export class AcceptServicesDto {
-  @ApiProperty({ type: [Object], description: '[{orderLineId, qty, note?}]' })
+  @ApiProperty({ type: [AcceptServiceItemDto] })
   @IsArray()
   @ArrayMinSize(1)
-  items: Array<{ orderLineId: string; qty: number; note?: string }>;
+  @ValidateNested({ each: true })
+  @Type(() => AcceptServiceItemDto)
+  items: AcceptServiceItemDto[];
+}
+
+/** Sửa đầu đơn khi còn nháp. Mọi trường đều tùy chọn; chỉ trường được gửi mới được ghi. */
+export class UpdateProcurementOrderHeaderDto {
+  @ApiPropertyOptional() @IsOptional() @IsDateString() orderDate?: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsDateString()
+  expectedDate?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsUUID()
+  supplierId?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  supplierName?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  remarks?: string | null;
+
+  @ApiPropertyOptional({ nullable: true, description: 'Số hóa đơn của NCC' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  supplierInvoiceNo?: string | null;
 }
 
 export class ListProcurementOrdersDto {
@@ -105,6 +166,33 @@ export class ListProcurementOrdersDto {
   @IsOptional()
   @IsUUID()
   branchId?: string;
+
+  @ApiPropertyOptional({ description: 'Lọc theo trạng thái duyệt' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  status?: string;
+
+  @ApiPropertyOptional({ description: 'Lọc theo nhà cung cấp' })
+  @IsOptional()
+  @IsUUID()
+  supplierId?: string;
+
+  @ApiPropertyOptional({ description: 'Ngày lập từ (YYYY-MM-DD)' })
+  @IsOptional()
+  @IsDateString()
+  dateFrom?: string;
+
+  @ApiPropertyOptional({ description: 'Ngày lập đến (YYYY-MM-DD)' })
+  @IsOptional()
+  @IsDateString()
+  dateTo?: string;
+
+  @ApiPropertyOptional({ description: 'Tìm theo số đơn hoặc tên NCC' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  search?: string;
 
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()

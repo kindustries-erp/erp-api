@@ -42,6 +42,9 @@ import {
     GarageProcurementOrderQueryService,
     GarageProcurementOrdersService,
   ],
-  exports: [GarageProcurementOrdersService],
+  exports: [
+    GarageProcurementOrdersService,
+    GarageProcurementOrderFulfilmentService,
+  ],
 })
 export class GarageProcurementOrdersModule {}

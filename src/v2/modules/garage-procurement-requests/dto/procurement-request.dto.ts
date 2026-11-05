@@ -112,3 +112,25 @@ export class ReasonBodyDto {
   @MaxLength(500)
   reason: string;
 }
+
+/** Sửa đầu đề khi còn nháp. Mọi trường tùy chọn; chỉ trường được gửi mới được ghi. Không đổi chi nhánh. */
+export class UpdateProcurementRequestHeaderDto {
+  @ApiPropertyOptional() @IsOptional() @IsDateString() requestDate?: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsDateString()
+  neededDate?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  title?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  remarks?: string | null;
+}

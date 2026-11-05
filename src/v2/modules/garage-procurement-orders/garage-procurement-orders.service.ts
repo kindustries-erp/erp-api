@@ -1,18 +1,24 @@
 import { toApprovalEventResponse } from '@/v2/core/approval/helpers/approval-event.mapper';
 import { ApprovalEventResponseDto } from '@/v2/core/approval/dto/approval-event-response.dto';
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import { GarageProcurementRequest } from '../garage-procurement-requests/entities/procurement-request.entity';
 import { RbacCoreService } from '@/v2/core/rbac';
-import { toProcurementOrderResponse } from '@/v2/core/procurement-orders/helpers/procurement-order.mapper';
 import { ProcurementOrderAction } from '@/v2/core/procurement-orders/contracts/procurement-orders.contract';
-import { ProcurementOrderResponseDto } from '@/v2/core/procurement-orders/dto/procurement-order-response.dto';
 import {
   AcceptServicesDto,
   CreateProcurementOrderDto,
   ListProcurementOrdersDto,
   ReceiveGoodsDto,
   ReplaceOrderLinesDto,
+  UpdateProcurementOrderHeaderDto,
 } from './dto/procurement-order.dto';
+import { GarageProcurementOrderResponseDto } from './dto/garage-procurement-order-response.dto';
+import { toGarageProcurementOrderResponse } from './helpers/garage-procurement-order.mapper';
 import { GarageProcurementOrderCommandService } from './services/procurement-order-command.service';
 import { GarageProcurementOrderFulfilmentService } from './services/procurement-order-fulfilment.service';
 import { GarageProcurementOrderQueryService } from './services/procurement-order-query.service';
@@ -31,8 +37,11 @@ export class GarageProcurementOrdersService {
   async create(
     dto: CreateProcurementOrderDto,
     actorId: string,
-  ): Promise<ProcurementOrderResponseDto> {
+  ): Promise<GarageProcurementOrderResponseDto> {
     const { lines, ...header } = dto;
+    if (header.requestId) {
+      await this.assertRequestSameBranch(header.requestId, header.branchId);
+    }
     const saved = await this.command.createDraft(
       { id: actorId, roles: await this.roles(actorId) },
       header,
@@ -42,26 +51,53 @@ export class GarageProcurementOrdersService {
   }
 
   async list(dto: ListProcurementOrdersDto) {
-    const out = await this.query.list(
-      dto.page ?? 1,
-      dto.pageSize ?? 20,
-      dto.branchId,
-    );
+    const out = await this.query.list({
+      page: dto.page ?? 1,
+      pageSize: dto.pageSize ?? 20,
+      branchId: dto.branchId,
+      status: dto.status,
+      supplierId: dto.supplierId,
+      dateFrom: dto.dateFrom,
+      dateTo: dto.dateTo,
+      search: dto.search,
+    });
     return {
       ...out,
-      rows: out.rows.map((h) => toProcurementOrderResponse(h, [])),
+      rows: out.rows.map((h) => toGarageProcurementOrderResponse(h, [], [])),
     };
   }
 
-  async findOne(id: string): Promise<ProcurementOrderResponseDto> {
-    const { header, lines } = await this.query.findOne(id);
-    return toProcurementOrderResponse(header, lines);
+  async nextNo(date?: string) {
+    return { nextNo: await this.query.nextNo(date) };
+  }
+
+  columnOptions() {
+    return this.query.columnOptions();
+  }
+
+  async findOne(id: string): Promise<GarageProcurementOrderResponseDto> {
+    const { header, lines, acceptances } = await this.query.findOne(id);
+    return toGarageProcurementOrderResponse(header, lines, acceptances);
+  }
+
+  async updateHeader(
+    id: string,
+    dto: UpdateProcurementOrderHeaderDto,
+  ): Promise<GarageProcurementOrderResponseDto> {
+    await this.command.updateHeader(id, dto);
+    return this.findOne(id);
+  }
+
+  /** Xóa mềm đơn nháp và trả số lượng đã giữ trên PR. */
+  async softDelete(id: string): Promise<{ id: string }> {
+    await this.command.softDeleteDraft(id);
+    return { id };
   }
 
   async replaceLines(
     id: string,
     dto: ReplaceOrderLinesDto,
-  ): Promise<ProcurementOrderResponseDto> {
+  ): Promise<GarageProcurementOrderResponseDto> {
     await this.command.replaceDraftLines(id, dto.lines);
     return this.findOne(id);
   }
@@ -71,7 +107,7 @@ export class GarageProcurementOrdersService {
     action: ProcurementOrderAction,
     actorId: string,
     reason?: string,
-  ): Promise<ProcurementOrderResponseDto> {
+  ): Promise<GarageProcurementOrderResponseDto> {
     await this.command.transition(
       id,
       action,
@@ -85,7 +121,7 @@ export class GarageProcurementOrdersService {
   async receiveGoods(
     id: string,
     dto: ReceiveGoodsDto,
-  ): Promise<ProcurementOrderResponseDto> {
+  ): Promise<GarageProcurementOrderResponseDto> {
     await this.dataSource.transaction((m) =>
       this.fulfilment.applyGoodsReceipt(m, id, dto.items),
     );
@@ -96,7 +132,7 @@ export class GarageProcurementOrdersService {
     id: string,
     dto: AcceptServicesDto,
     actorId: string,
-  ): Promise<ProcurementOrderResponseDto> {
+  ): Promise<GarageProcurementOrderResponseDto> {
     await this.dataSource.transaction((m) =>
       this.fulfilment.accept(m, id, actorId, dto.items),
     );
@@ -108,7 +144,7 @@ export class GarageProcurementOrdersService {
     acceptanceId: string,
     actorId: string,
     reason: string,
-  ): Promise<ProcurementOrderResponseDto> {
+  ): Promise<GarageProcurementOrderResponseDto> {
     await this.dataSource.transaction((m) =>
       this.fulfilment.voidAcceptance(m, id, acceptanceId, actorId, reason),
     );
@@ -119,6 +155,22 @@ export class GarageProcurementOrdersService {
     await this.query.findOne(id);
     const events = await this.query.approvalEvents(id);
     return events.map(toApprovalEventResponse);
+  }
+
+  /** Đơn mua và đề nghị mua nguồn phải cùng chi nhánh. */
+  private async assertRequestSameBranch(
+    requestId: string,
+    branchId: string,
+  ): Promise<void> {
+    const request = await this.dataSource
+      .getRepository(GarageProcurementRequest)
+      .findOne({ where: { id: requestId } });
+    if (!request) throw new NotFoundException('Không tìm thấy đề nghị mua');
+    if (request.branchId !== branchId) {
+      throw new BadRequestException(
+        'Đơn mua phải cùng chi nhánh với đề nghị mua nguồn',
+      );
+    }
   }
 
   private roles(userId: string): Promise<string[]> {

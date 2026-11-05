@@ -51,3 +51,13 @@ Quyền resource: `garage_procurement_orders`. Seed từ `garage_purchase_orders
 
 - Đề nghị Garage: [`garage-procurement-requests`](../garage-procurement-requests/SKILL.md)
 - Họ thường: [`erp-procurement-orders`](../erp-procurement-orders/SKILL.md)
+
+## 8. Cập nhật 2026-11-05: sửa nháp, xóa, thanh toán, GR
+
+- Migration `20261105103000-AddPaymentFieldsToGarageProcOrders`: `payment_status varchar(50) NOT NULL DEFAULT 'UNPAID'` (có chỉ mục) và `supplier_invoice_no varchar(100) NULL`. Chưa có luồng ghi `payment_status`; chỉ hiển thị.
+- Endpoint mới: `PATCH /:id` (sửa đầu đơn khi DRAFT, `UpdateProcurementOrderHeaderDto`), `DELETE /:id` (xóa mềm nháp, trả số lượng đã giữ trên PR), `GET /next-no`, `GET /column-options`.
+- `GET /` lọc thêm `status`, `supplierId`, `dateFrom`, `dateTo`, `search` (số đơn hoặc tên NCC).
+- Response có `branchId`, `branchName`, `paymentStatus`, `supplierInvoiceNo`, `createdBy`, `issuedAt`, `acceptances`.
+- Quyền duyệt: `approve`/`reject` đã seed cho vai trò có `update` trên `garage_procurement_orders` (migration `20261105104000-SeedGarageProcurementApprovalPermissions`).
+- Phiếu nhập kho Garage nối PO: `GarageGoodsReceiptCommandService.post` gọi `applyGoodsReceipt`, `cancel` gọi `revertGoodsReceipt` trong cùng transaction. Xem [`garage-goods-receipts`](../garage-goods-receipts/SKILL.md) mục nối PO.
+- Rủi ro còn lại: `POST :id/receipts` vẫn cộng số đã nhận. Dùng song song với phiếu nhập có thể cộng trùng. Chưa chặn.

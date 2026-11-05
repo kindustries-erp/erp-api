@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -11,7 +12,12 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiExcludeController,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
 import { RequirePermissions } from '@/auth/decorators/require-permissions.decorator';
@@ -35,6 +41,11 @@ interface RequestWithUser {
  * API v2 PO garage, quyền riêng `garage_purchase_orders`.
  * Route tĩnh khai báo trước `:id`.
  */
+/**
+ * DEPRECATED: thay bằng garage-procurement-orders (PR → PO, duyệt RBAC, nhận hàng qua phiếu nhập).
+ * Giữ để client cũ không gãy trong lúc chuyển đổi; sẽ gỡ sau khi đếm dữ liệu.
+ */
+@ApiExcludeController()
 @ApiTags('garage-purchase-orders-v2')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
@@ -47,6 +58,7 @@ export class GaragePurchaseOrderController {
     action: ErpAction.CREATE,
   })
   @ApiOperation({ summary: 'Tạo đơn mua hàng garage (DRAFT)' })
+  @Header('Deprecation', 'true')
   @Post()
   create(
     @Body() dto: CreateGaragePurchaseOrderDto,
@@ -60,6 +72,7 @@ export class GaragePurchaseOrderController {
     action: ErpAction.READ,
   })
   @ApiOperation({ summary: 'Danh sách đơn mua hàng garage' })
+  @Header('Deprecation', 'true')
   @Get()
   findAll(@Query() query: QueryGaragePurchaseOrdersDto) {
     return this.service.list(query);
@@ -70,6 +83,7 @@ export class GaragePurchaseOrderController {
     action: ErpAction.READ,
   })
   @ApiOperation({ summary: 'Số đơn mua hàng garage kế tiếp (xem trước)' })
+  @Header('Deprecation', 'true')
   @Get('next-no')
   nextNo(@Query() query: BaseNextPurchaseOrderNoQueryDto) {
     return this.service.nextNo(query.date);
@@ -80,6 +94,7 @@ export class GaragePurchaseOrderController {
     action: ErpAction.READ,
   })
   @ApiOperation({ summary: 'Giá trị gợi ý của một cột' })
+  @Header('Deprecation', 'true')
   @Get('column-options')
   columnOptions(@Query() query: QueryGaragePurchaseOrderColumnOptionsDto) {
     return this.service.columnOptions(query);
@@ -89,6 +104,7 @@ export class GaragePurchaseOrderController {
     resource: ErpResource.GARAGE_PURCHASE_ORDERS,
     action: ErpAction.READ,
   })
+  @Header('Deprecation', 'true')
   @Get(':id')
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.findOne(id);
@@ -99,6 +115,7 @@ export class GaragePurchaseOrderController {
     action: ErpAction.UPDATE,
   })
   @ApiOperation({ summary: 'Sửa header/dòng (không đổi trạng thái)' })
+  @Header('Deprecation', 'true')
   @Patch(':id')
   update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -112,6 +129,7 @@ export class GaragePurchaseOrderController {
     action: ErpAction.DELETE,
   })
   @ApiOperation({ summary: 'Xóa mềm (chỉ khi DRAFT)' })
+  @Header('Deprecation', 'true')
   @Delete(':id')
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.remove(id);
@@ -121,6 +139,7 @@ export class GaragePurchaseOrderController {
     resource: ErpResource.GARAGE_PURCHASE_ORDERS,
     action: ErpAction.UPDATE,
   })
+  @Header('Deprecation', 'true')
   @Post(':id/approve')
   approve(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.approve(id);
@@ -130,6 +149,7 @@ export class GaragePurchaseOrderController {
     resource: ErpResource.GARAGE_PURCHASE_ORDERS,
     action: ErpAction.UPDATE,
   })
+  @Header('Deprecation', 'true')
   @Post(':id/confirm')
   confirm(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.confirm(id);
@@ -139,6 +159,7 @@ export class GaragePurchaseOrderController {
     resource: ErpResource.GARAGE_PURCHASE_ORDERS,
     action: ErpAction.UPDATE,
   })
+  @Header('Deprecation', 'true')
   @Post(':id/cancel')
   cancel(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.cancel(id);

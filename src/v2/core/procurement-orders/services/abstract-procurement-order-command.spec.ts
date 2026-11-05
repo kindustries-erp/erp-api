@@ -77,6 +77,52 @@ function setup(header: Header, lines: Line[]) {
 }
 
 describe('AbstractProcurementOrderCommandService', () => {
+  it('sửa đầu đơn khi DRAFT chỉ ghi các trường được truyền, bỏ qua undefined', async () => {
+    const { svc, manager } = setup(makeHeader({ remarks: 'cu' }), []);
+    const saved = (await svc.updateHeader('o1', {
+      supplierId: 's2',
+      remarks: undefined,
+    })) as Header;
+    expect(saved.supplierId).toBe('s2');
+    expect(saved.remarks).toBe('cu');
+    expect(manager.save).toHaveBeenCalled();
+  });
+
+  it('không cho sửa đầu đơn khi không còn DRAFT', async () => {
+    const { svc, manager } = setup(makeHeader({ status: 'ISSUED' }), []);
+    await expect(svc.updateHeader('o1', { supplierId: 's2' })).rejects.toThrow(
+      ConflictException,
+    );
+    expect(manager.save).not.toHaveBeenCalled();
+  });
+
+  it('xóa nháp có PR nguồn thì trả số lượng về PR và đánh dấu isDeleted', async () => {
+    const { svc, link } = setup(makeHeader({ requestId: 'pr1' }), [
+      makeLine({ requestLineId: 'rl1', qtyOrdered: '5' }),
+    ]);
+    const deleted = (await svc.softDeleteDraft('o1')) as Header;
+    expect(deleted.isDeleted).toBe(true);
+    expect(link.release).toHaveBeenCalledWith(expect.anything(), 'pr1', [
+      expect.objectContaining({ requestLineId: 'rl1', qty: 5 }),
+    ]);
+  });
+
+  it('xóa nháp không có PR thì không gọi cổng PR', async () => {
+    const { svc, link } = setup(makeHeader(), [makeLine()]);
+    await svc.softDeleteDraft('o1');
+    expect(link.release).not.toHaveBeenCalled();
+  });
+
+  it('không xóa đơn đã duyệt bằng softDeleteDraft', async () => {
+    const { svc, link, manager } = setup(
+      makeHeader({ status: 'APPROVED', requestId: 'pr1' }),
+      [makeLine()],
+    );
+    await expect(svc.softDeleteDraft('o1')).rejects.toThrow(ConflictException);
+    expect(link.release).not.toHaveBeenCalled();
+    expect(manager.save).not.toHaveBeenCalled();
+  });
+
   it('gửi duyệt cần NCC và đơn giá, sau đó ghi nhật ký', async () => {
     const { svc, events } = setup(makeHeader(), [makeLine()]);
     const out = await svc.transition('o1', 'submit', {

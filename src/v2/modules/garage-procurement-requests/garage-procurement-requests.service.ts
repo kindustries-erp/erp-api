@@ -16,6 +16,7 @@ import {
   CreateProcurementRequestDto,
   ListProcurementRequestsDto,
   ReplaceRequestLinesDto,
+  UpdateProcurementRequestHeaderDto,
 } from './dto/procurement-request.dto';
 import { GarageProcurementRequestCommandService } from './services/procurement-request-command.service';
 import { GarageProcurementRequestQueryService } from './services/procurement-request-query.service';
@@ -55,6 +56,14 @@ export class GarageProcurementRequestsService {
   async findOne(id: string): Promise<PurchaseRequestResponseDto> {
     const { header, lines } = await this.query.findOne(id);
     return toPurchaseRequestResponse(header, lines);
+  }
+
+  async updateHeader(
+    id: string,
+    dto: UpdateProcurementRequestHeaderDto,
+  ): Promise<PurchaseRequestResponseDto> {
+    await this.command.updateHeader(id, dto);
+    return this.findOne(id);
   }
 
   async replaceLines(

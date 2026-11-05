@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, EntityManager, IsNull, Repository } from 'typeorm';
 import { GarageGoodsReceipt } from '../entities/garage-goods-receipt.entity';
 import { GarageGoodsReceiptLine } from '../entities/garage-goods-receipt-line.entity';
 import { GarageInventoryBalance } from '../entities/garage-inventory-balance.entity';
@@ -8,6 +8,8 @@ import { CreateGarageGoodsReceiptDto } from '../dto/create-garage-goods-receipt.
 import { UpdateGarageGoodsReceiptDto } from '../dto/update-garage-goods-receipt.dto';
 import { toGarageGoodsReceiptEntityFields } from '../helpers/garage-goods-receipt.mapper';
 import { BaseVoucherEngineService } from '@/v2/core/goods-receipts/services/base-voucher-engine.service';
+import { GarageProcurementOrder } from '@/v2/modules/garage-procurement-orders/entities/procurement-order.entity';
+import { GarageProcurementOrderFulfilmentService } from '@/v2/modules/garage-procurement-orders/services/procurement-order-fulfilment.service';
 
 @Injectable()
 export class GarageGoodsReceiptCommandService {
@@ -16,6 +18,7 @@ export class GarageGoodsReceiptCommandService {
     @InjectRepository(GarageGoodsReceipt)
     private readonly repo: Repository<GarageGoodsReceipt>,
     private readonly voucherEngine: BaseVoucherEngineService,
+    private readonly procurementFulfilment: GarageProcurementOrderFulfilmentService,
   ) {}
 
   async generateDailyReceiptNo(orderDate?: string): Promise<string> {
@@ -61,6 +64,7 @@ export class GarageGoodsReceiptCommandService {
           unitCost: String(cost),
           amount: String(amount),
           notes: l.notes ?? undefined,
+          procurementOrderLineId: l.procurementOrderLineId ?? null,
         });
         lineEntities.push(line);
       }
@@ -125,6 +129,7 @@ export class GarageGoodsReceiptCommandService {
             unitCost: String(cost),
             amount: String(amount),
             notes: l.notes ?? undefined,
+            procurementOrderLineId: l.procurementOrderLineId ?? null,
           });
           lineEntities.push(await lineRepo.save(line));
         }
@@ -160,12 +165,21 @@ export class GarageGoodsReceiptCommandService {
         throw new BadRequestException('Phiếu nhập kho chưa có mặt hàng nào');
       }
 
+      if (entity.garageProcurementOrderId) {
+        await this.assertMatchesOrder(manager, entity, lines);
+        await this.procurementFulfilment.applyGoodsReceipt(
+          manager,
+          entity.garageProcurementOrderId,
+          this.toFulfilmentItems(lines),
+        );
+      }
+
       // Update inventory balances for garage
       for (const line of lines) {
         const itemCode = line.itemCode || line.itemName;
         let balance = await balanceRepo.findOne({
           where: {
-            branchId: entity.branchId ?? undefined,
+            branchId: this.balanceBranch(entity.branchId),
             itemCode,
           },
         });
@@ -213,11 +227,19 @@ export class GarageGoodsReceiptCommandService {
             where: { garageGoodsReceiptId: entity.id },
           }));
 
+        if (entity.garageProcurementOrderId) {
+          await this.procurementFulfilment.revertGoodsReceipt(
+            manager,
+            entity.garageProcurementOrderId,
+            this.toFulfilmentItems(lines),
+          );
+        }
+
         for (const line of lines) {
           const itemCode = line.itemCode || line.itemName;
           const balance = await balanceRepo.findOne({
             where: {
-              branchId: entity.branchId ?? undefined,
+              branchId: this.balanceBranch(entity.branchId),
               itemCode,
             },
           });
@@ -240,5 +262,48 @@ export class GarageGoodsReceiptCommandService {
     this.voucherEngine.validateVoucherTransition(entity.status, 'delete');
     entity.isDeleted = true;
     return this.repo.save(entity);
+  }
+  /** Chi nhánh null phải khớp IS NULL; TypeORM bỏ qua điều kiện undefined nên sẽ khớp nhầm mọi chi nhánh. */
+  private balanceBranch(branchId: string | null | undefined) {
+    return branchId ? branchId : IsNull();
+  }
+
+  /** Dòng phiếu nhập gắn đơn mua phải có dòng đơn mua tương ứng và cùng chi nhánh, NCC với đơn. */
+  private async assertMatchesOrder(
+    manager: EntityManager,
+    receipt: GarageGoodsReceipt,
+    lines: GarageGoodsReceiptLine[],
+  ): Promise<void> {
+    const order = await manager.findOne(GarageProcurementOrder, {
+      where: {
+        id: receipt.garageProcurementOrderId as string,
+        isDeleted: false,
+      },
+    });
+    if (!order) {
+      throw new BadRequestException('Không tìm thấy đơn mua garage liên kết');
+    }
+    if ((receipt.branchId ?? null) !== (order.branchId ?? null)) {
+      throw new BadRequestException('Phiếu nhập khác chi nhánh với đơn mua');
+    }
+    if ((receipt.supplierId ?? null) !== (order.supplierId ?? null)) {
+      throw new BadRequestException('Phiếu nhập khác nhà cung cấp với đơn mua');
+    }
+    this.toFulfilmentItems(lines);
+  }
+
+  /** Mỗi dòng phiếu nhập phải trỏ tới một dòng đơn mua. */
+  private toFulfilmentItems(lines: GarageGoodsReceiptLine[]) {
+    return lines.map((line) => {
+      if (!line.procurementOrderLineId) {
+        throw new BadRequestException(
+          `Dòng ${line.lineNo} chưa gắn dòng đơn mua`,
+        );
+      }
+      return {
+        orderLineId: line.procurementOrderLineId,
+        qty: Number(line.qtyReceived || 0),
+      };
+    });
   }
 }

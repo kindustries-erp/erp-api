@@ -48,3 +48,9 @@ Quyền resource: `garage_procurement_requests`. Seed từ `garage_purchase_orde
 
 - PO Garage: [`garage-procurement-orders`](../garage-procurement-orders/SKILL.md)
 - Họ thường: [`erp-procurement-requests`](../erp-procurement-requests/SKILL.md)
+
+## 8. Cập nhật 2026-11-05: sửa đầu đề nháp
+
+- `PATCH /api/v2/garage-procurement-requests/:id`: sửa `requestDate`, `neededDate`, `title`, `remarks` khi còn DRAFT (lõi `updateHeader`, khóa header, `assertLinesEditable`). Chi nhánh không nằm trong patch, vì PO đã liên kết có thể dùng chi nhánh cũ.
+- DTO: `UpdateProcurementRequestHeaderDto`. Spec: `core/procurement-requests/services/abstract-purchase-request-header.spec.ts`.
+- `GET /:id/po-draft` trả phần còn lại chưa đặt (`qtyRemaining`) để điền sẵn PO. Web dùng khi "Tạo PO từ PR".

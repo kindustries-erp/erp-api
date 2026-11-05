@@ -39,6 +39,11 @@ export interface DraftHeaderInput {
   remarks?: string | null;
 }
 
+/** Các trường đầu đề sửa được khi nháp (không gồm chi nhánh, số phiếu, trạng thái). */
+export type DraftHeaderPatch = Partial<
+  Pick<DraftHeaderInput, 'requestDate' | 'neededDate' | 'title' | 'remarks'>
+>;
+
 export interface DraftLineFields {
   itemId?: string | null;
   itemCode?: string | null;
@@ -142,6 +147,22 @@ export abstract class AbstractPurchaseRequestCommandService<
       const saved = await manager.save(this.headerEntity, header);
       await this.writeLines(manager, saved.id, lines);
       return saved;
+    });
+  }
+
+  /**
+   * Sửa đầu đề khi còn DRAFT. Chỉ các trường được truyền (khác undefined) mới được ghi.
+   * Chi nhánh không nằm trong patch vì PO đã liên kết có thể đang dùng chi nhánh cũ.
+   */
+  async updateHeader(id: string, patch: DraftHeaderPatch): Promise<H> {
+    return this.dataSource.transaction(async (manager) => {
+      const header = await this.lockHeader(manager, id);
+      assertLinesEditable(header.status as PurchaseRequestStatus);
+      const changes = Object.fromEntries(
+        Object.entries(patch).filter(([, value]) => value !== undefined),
+      );
+      Object.assign(header, changes);
+      return manager.save(this.headerEntity, header);
     });
   }
 

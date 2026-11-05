@@ -8,6 +8,7 @@ import { GarageGoodsReceiptsCoreService } from './garage-goods-receipts-core.ser
 import { GarageGoodsReceiptCommandService } from './services/garage-goods-receipt-command.service';
 import { GarageGoodsReceiptQueryService } from './services/garage-goods-receipt-query.service';
 import { GoodsReceiptsCoreModule } from '@/v2/core/goods-receipts/goods-receipts-core.module';
+import { GarageProcurementOrdersModule } from '@/v2/modules/garage-procurement-orders/garage-procurement-orders.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { GoodsReceiptsCoreModule } from '@/v2/core/goods-receipts/goods-receipts
       GarageInventoryBalance,
     ]),
     GoodsReceiptsCoreModule,
+    GarageProcurementOrdersModule,
   ],
   controllers: [GarageGoodsReceiptController],
   providers: [

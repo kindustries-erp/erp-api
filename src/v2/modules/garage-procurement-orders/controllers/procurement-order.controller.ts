@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -23,6 +24,7 @@ import {
   ListProcurementOrdersDto,
   ReceiveGoodsDto,
   ReplaceOrderLinesDto,
+  UpdateProcurementOrderHeaderDto,
 } from '../dto/procurement-order.dto';
 import { GarageProcurementOrdersService } from '../garage-procurement-orders.service';
 
@@ -59,9 +61,54 @@ export class GarageProcurementOrderController {
     resource: ErpResource.GARAGE_PROCUREMENT_ORDERS,
     action: ErpAction.READ,
   })
+  @ApiOperation({ summary: 'Số đơn kế tiếp theo ngày (xem trước)' })
+  @Get('next-no')
+  nextNo(@Query('date') date?: string) {
+    return this.service.nextNo(date);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_PROCUREMENT_ORDERS,
+    action: ErpAction.READ,
+  })
+  @ApiOperation({ summary: 'Cột có thể lọc và sắp xếp trên lưới' })
+  @Get('column-options')
+  columnOptions() {
+    return this.service.columnOptions();
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_PROCUREMENT_ORDERS,
+    action: ErpAction.READ,
+  })
   @Get(':id')
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.findOne(id);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_PROCUREMENT_ORDERS,
+    action: ErpAction.UPDATE,
+  })
+  @ApiOperation({ summary: 'Sửa đầu đơn khi còn nháp' })
+  @Patch(':id')
+  updateHeader(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateProcurementOrderHeaderDto,
+  ) {
+    return this.service.updateHeader(id, dto);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_PROCUREMENT_ORDERS,
+    action: ErpAction.DELETE,
+  })
+  @ApiOperation({
+    summary: 'Xóa mềm đơn nháp (trả số lượng đã giữ trên PR)',
+  })
+  @Delete(':id')
+  remove(@Param('id', ParseUUIDPipe) id: string) {
+    return this.service.softDelete(id);
   }
 
   @RequirePermissions({

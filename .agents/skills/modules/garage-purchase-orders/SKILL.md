@@ -48,3 +48,9 @@ Trạng thái và bảng chuyển trạng thái giống PO core (xem `purchase-o
 - Cột `total_amount` chỉ module garage ghi. Không sửa tay.
 - Khi nối phiếu nhập garage sau này: gọi `applyReceiptProgress(manager, headerId, receivedByLineId)` của lệnh ghi trong cùng transaction phiếu nhập, để khóa header và cập nhật `qty_received` đúng cách.
 - Spec: `garage-purchase-orders.contract.spec.ts` (route, quyền, facade), `services/garage-purchase-order-command.service.spec.ts` (tiền tố, trường chi nhánh, tổng tiền).
+
+## 9. Trạng thái: đã thay thế (2026-11-05)
+
+- Đơn mua Garage được thay bằng [`garage-procurement-orders`](../garage-procurement-orders/SKILL.md) (luồng PR → PO → GR).
+- Controller GPO đánh dấu deprecated (`@ApiExcludeController`, header `Deprecation: true`), chưa xóa. Web đã gỡ module GPO v2 và chuyển route, menu sang PR/PO mới.
+- Chưa làm: migrate dữ liệu, drop bảng `erp_garage_purchase_orders` và quyền `garage_purchase_orders`. Cần đếm dữ liệu trên từng DB và xác nhận trước khi drop.

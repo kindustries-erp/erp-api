@@ -9,4 +9,22 @@ export class GarageProcurementOrder extends BaseProcurementOrderEntity {
 
   @Column({ type: 'varchar', length: 255, name: 'branch_name', nullable: true })
   branchName: string | null;
+
+  /** Trạng thái thanh toán: chỉ lưu, luồng DNTT sẽ ghi sau. */
+  @Index()
+  @Column({
+    type: 'varchar',
+    length: 50,
+    name: 'payment_status',
+    default: 'UNPAID',
+  })
+  paymentStatus: string;
+
+  @Column({
+    type: 'varchar',
+    length: 100,
+    name: 'supplier_invoice_no',
+    nullable: true,
+  })
+  supplierInvoiceNo: string | null;
 }

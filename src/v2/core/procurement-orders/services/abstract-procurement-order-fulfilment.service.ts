@@ -67,6 +67,36 @@ export abstract class AbstractProcurementOrderFulfilmentService<
     await this.refreshHeader(manager, header, lines);
   }
 
+  /**
+   * Hoàn số lượng GOODS đã nhận (khi hủy phiếu nhập đã post). Chỉ khi đơn còn ISSUED,
+   * hoặc đã tự đóng do đủ hàng (closeReason = null). Không hoàn quá số đã nhận.
+   */
+  async revertGoodsReceipt(
+    manager: EntityManager,
+    orderId: string,
+    items: FulfilmentItem[],
+  ): Promise<void> {
+    const header = await this.lockHeader(manager, orderId);
+    this.assertReversible(header);
+    const lines = await this.lockLines(manager, orderId);
+
+    for (const item of items) {
+      const line = this.findLine(lines, item.orderLineId);
+      if (line.lineType !== 'GOODS') {
+        throw new ConflictException('Dòng dịch vụ không có phiếu nhập kho');
+      }
+      const next = Number(line.qtyFulfilled) - item.qty;
+      if (!(item.qty > 0) || next < -1e-9) {
+        throw new ConflictException(
+          `Không hoàn ${item.qty} được, dòng mới nhận ${Number(line.qtyFulfilled)}`,
+        );
+      }
+      line.qtyFulfilled = toQty(Math.max(0, next));
+    }
+    await manager.save(this.lineEntity, lines);
+    await this.refreshHeader(manager, header, lines);
+  }
+
   /** Nghiệm thu dịch vụ. Từ chối dòng GOODS và vượt phần còn lại. */
   async accept(
     manager: EntityManager,
@@ -160,6 +190,17 @@ export abstract class AbstractProcurementOrderFulfilmentService<
       where: { [this.lineForeignKey]: orderId } as FindOptionsWhere<L>,
       lock: { mode: 'pessimistic_write' },
     });
+  }
+
+  private assertReversible(header: H): void {
+    const autoClosed =
+      header.status === PROCUREMENT_ORDER_STATUS.CLOSED &&
+      header.closeReason === null;
+    if (header.status !== PROCUREMENT_ORDER_STATUS.ISSUED && !autoClosed) {
+      throw new ConflictException(
+        `Không hoàn nhận hàng khi đơn đang ở trạng thái ${header.status}`,
+      );
+    }
   }
 
   private assertIssued(status: ProcurementOrderStatus): void {

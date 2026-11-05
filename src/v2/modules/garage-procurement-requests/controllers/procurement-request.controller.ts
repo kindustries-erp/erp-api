@@ -21,6 +21,7 @@ import {
   CreateProcurementRequestDto,
   ListProcurementRequestsDto,
   ReplaceRequestLinesDto,
+  UpdateProcurementRequestHeaderDto,
   ReasonBodyDto,
 } from '../dto/procurement-request.dto';
 import { GarageProcurementRequestsService } from '../garage-procurement-requests.service';
@@ -85,6 +86,19 @@ export class GarageProcurementRequestController {
   @Get(':id/po-draft')
   poDraft(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.poDraft(id);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_PROCUREMENT_REQUESTS,
+    action: ErpAction.UPDATE,
+  })
+  @ApiOperation({ summary: 'Sửa đầu đề khi còn nháp (không đổi chi nhánh)' })
+  @Patch(':id')
+  updateHeader(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateProcurementRequestHeaderDto,
+  ) {
+    return this.service.updateHeader(id, dto);
   }
 
   @RequirePermissions({

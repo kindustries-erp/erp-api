@@ -49,6 +49,14 @@ export interface OrderDraftLineFields {
   description?: string | null;
 }
 
+/** Các trường đầu đơn được phép sửa khi DRAFT (không gồm requestId, status, số phiếu). */
+export type OrderHeaderPatch = Partial<
+  Pick<
+    OrderDraftHeaderInput,
+    'orderDate' | 'expectedDate' | 'supplierId' | 'supplierName' | 'remarks'
+  >
+>;
+
 export interface OrderActor {
   id: string;
   roles: string[];
@@ -213,6 +221,43 @@ export abstract class AbstractProcurementOrderCommandService<
         );
       }
       return header;
+    });
+  }
+
+  /** Sửa thông tin đầu đơn khi còn DRAFT. Chỉ các trường được truyền mới bị ghi đè. */
+  async updateHeader<P extends OrderHeaderPatch>(
+    id: string,
+    patch: P,
+  ): Promise<H> {
+    return this.dataSource.transaction(async (manager) => {
+      const header = await this.lockHeader(manager, id);
+      assertEditable(header.status as ProcurementOrderStatus);
+      const changes = Object.fromEntries(
+        Object.entries(patch).filter(([, value]) => value !== undefined),
+      );
+      Object.assign(header, changes);
+      return manager.save(this.headerEntity, header);
+    });
+  }
+
+  /**
+   * Xóa mềm đơn nháp và trả số lượng đã giữ trên PR nguồn (nếu có) trong cùng transaction.
+   * Chỉ áp dụng cho DRAFT; đơn đã duyệt phải hủy qua transition 'cancel'.
+   */
+  async softDeleteDraft(id: string): Promise<H> {
+    return this.dataSource.transaction(async (manager) => {
+      const header = await this.lockHeader(manager, id);
+      assertEditable(header.status as ProcurementOrderStatus);
+      if (header.requestId) {
+        const lines = await this.loadLines(manager, id);
+        await this.requestLink.release(
+          manager,
+          header.requestId,
+          this.toRequestItems(lines.map((l) => this.asInput(l))),
+        );
+      }
+      header.isDeleted = true;
+      return manager.save(this.headerEntity, header);
     });
   }
 

@@ -57,6 +57,7 @@ describe('GarageGoodsReceiptCommandService', () => {
       dataSource as unknown as DataSource,
       repo as unknown as Repository<GarageGoodsReceipt>,
       voucherEngine,
+      { applyGoodsReceipt: jest.fn(), revertGoodsReceipt: jest.fn() } as never,
     );
   });
 

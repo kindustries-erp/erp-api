@@ -73,6 +73,38 @@ describe('AbstractProcurementOrderFulfilmentService', () => {
     expect(out.closeReason).toBeNull();
   });
 
+  it('hoàn nhận hàng trừ số đã nhận, đơn tự đóng được mở lại', async () => {
+    const l = line({ qtyOrdered: '10', qtyFulfilled: '10' });
+    const h = header({
+      status: 'CLOSED',
+      closeReason: null,
+      closedAt: new Date(),
+    });
+    const { m } = manager(h, [l]);
+    await new Svc({} as never).revertGoodsReceipt(m as never, 'o1', [
+      { orderLineId: 'l1', qty: 4 },
+    ]);
+    expect(l.qtyFulfilled).toBe('6');
+    expect(h.status).toBe('ISSUED');
+  });
+
+  it('không hoàn quá số đã nhận hoặc khi đơn đã hủy', async () => {
+    const l = line({ qtyOrdered: '10', qtyFulfilled: '2' });
+    const { m } = manager(header(), [l]);
+    await expect(
+      new Svc({} as never).revertGoodsReceipt(m as never, 'o1', [
+        { orderLineId: 'l1', qty: 3 },
+      ]),
+    ).rejects.toThrow(ConflictException);
+
+    const cancelled = manager(header({ status: 'CANCELLED' }), [l]);
+    await expect(
+      new Svc({} as never).revertGoodsReceipt(cancelled.m as never, 'o1', [
+        { orderLineId: 'l1', qty: 1 },
+      ]),
+    ).rejects.toThrow(ConflictException);
+  });
+
   it('nhập kho dòng SERVICE bị từ chối', async () => {
     const { m } = manager(header(), [line({ lineType: 'SERVICE' })]);
     await expect(
