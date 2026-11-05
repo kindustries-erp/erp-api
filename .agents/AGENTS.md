@@ -72,6 +72,7 @@ Source of truth for this repo (`./erp-api`).
 - extend/adapt before forking parallel patterns
 - cancel or delete actions must have modal confirm (on UI side)
 - delete operations must be soft delete with `isDeleted` flag
+  - Ngoại lệ có điều kiện: xóa cứng chứng từ nháp (PO/PR garage) qua quyền `PURGE`, chỉ admin, chặn khi còn bản ghi phụ thuộc. Chi tiết: `.agents/workflows/api-structure.md` mục "Chính sách xóa".
 - **NEVER** leave ad-hoc `.ts` files at the repo root (they bypass `tsconfig.build.json` and shift `dist/` output structure from `dist/main.js` to `dist/src/main.js`, crashing the container). Root-level `.ts` files that are not `src/` code must be added to `.gitignore` or deleted before commit.
 - After `bun run build`, verify `dist/main.js` exists (not `dist/src/main.js`) before declaring build PASS.
 

@@ -60,3 +60,9 @@ Quyền resource: `garage_procurement_requests`. Seed từ `garage_purchase_orde
 - Đặt đủ số lượng chỉ ghi `orderingStatus = FULL`; PR giữ `status = APPROVED`. Không còn tự chuyển `CLOSED`, không còn tự mở lại khi trả số lượng.
 - `CLOSED` chỉ do người dùng bấm Đóng (bắt buộc lý do). Hủy hoặc xóa nháp PO trả số lượng: `orderingStatus` về `PARTIAL`/`NONE`, `status` không đổi.
 - Web: ẩn "Tạo PO" khi `APPROVED` và `FULL`; nút Đóng vẫn có. Migration `20261105105000` đưa các PR tự đóng cũ về `APPROVED`.
+
+## 10. Xóa mềm và xóa cứng (2026-11-05)
+
+- `DELETE /api/v2/garage-procurement-requests/:id`: xóa mềm nháp. Quyền `DELETE`. Chặn khi không phải `DRAFT` hoặc còn số lượng đang được đơn mua giữ.
+- `DELETE /api/v2/garage-procurement-requests/:id/permanent`: xóa cứng nháp. Quyền `PURGE` (chỉ admin). Chặn khi còn đơn mua tham chiếu, kể cả đơn đã xóa mềm (khóa ngoại RESTRICT). Xóa dòng rồi đầu đề; lịch sử duyệt được giữ.
+- Chính sách và điều kiện chung: `.agents/workflows/api-structure.md` mục "Chính sách xóa".

@@ -34,4 +34,19 @@ describe('GarageProcurementOrderController RBAC', () => {
     });
     expect(perm(c.voidAcceptance as never)[0].action).toBe(ErpAction.UPDATE);
   });
+
+  it('xóa mềm dùng DELETE, xóa cứng dùng PURGE trên cùng resource PO', () => {
+    expect(perm(c.remove as never)).toEqual([
+      {
+        resource: ErpResource.GARAGE_PROCUREMENT_ORDERS,
+        action: ErpAction.DELETE,
+      },
+    ]);
+    expect(perm(c.hardRemove as never)).toEqual([
+      {
+        resource: ErpResource.GARAGE_PROCUREMENT_ORDERS,
+        action: ErpAction.PURGE,
+      },
+    ]);
+  });
 });

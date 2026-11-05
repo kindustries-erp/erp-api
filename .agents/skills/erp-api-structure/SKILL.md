@@ -65,7 +65,7 @@ Cấu trúc chuẩn (vd: `src/v2/modules/<module>/`):
 | DTO ra | `dto/*-response.dto.ts` | Không trả entity ra ngoài |
 | Mapper | `helpers/*.mapper.ts` | Hàm thuần, hai chiều, bỏ `undefined` khi map DTO → entity |
 | Đọc | `services/*-query.service.ts` | Chỉ đọc, lọc `isDeleted = false` |
-| Ghi | `services/*-command.service.ts` | create / update / softDelete |
+| Ghi | `services/*-command.service.ts` | create / update / softDelete / hardDelete (có điều kiện, xem `api-structure` Phần B mục "Chính sách xóa") |
 | Facade | `<module>.service.ts` | Điều phối, throw `NotFoundException`, luôn trả response DTO |
 | Controller | `controllers/*.controller.ts` | `@RequirePermissions({ resource: ErpResource.X, action: ErpAction.* })` |
 

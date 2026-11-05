@@ -248,17 +248,52 @@ export abstract class AbstractProcurementOrderCommandService<
     return this.dataSource.transaction(async (manager) => {
       const header = await this.lockHeader(manager, id);
       assertEditable(header.status as ProcurementOrderStatus);
-      if (header.requestId) {
-        const lines = await this.loadLines(manager, id);
-        await this.requestLink.release(
-          manager,
-          header.requestId,
-          this.toRequestItems(lines.map((l) => this.asInput(l))),
-        );
-      }
+      await this.releaseHeldQty(manager, header);
       header.isDeleted = true;
       return manager.save(this.headerEntity, header);
     });
+  }
+
+  /**
+   * Xóa cứng đơn nháp cùng dòng, sau khi trả số lượng đã giữ trên PR nguồn.
+   * Chặn khi còn chứng từ phụ thuộc (lớp con kiểm qua assertNoDependentReceipts).
+   */
+  async hardDeleteDraft(id: string): Promise<void> {
+    return this.dataSource.transaction(async (manager) => {
+      const header = await this.lockHeader(manager, id);
+      assertEditable(header.status as ProcurementOrderStatus);
+      await this.assertNoDependentReceipts(manager, id);
+      await this.releaseHeldQty(manager, header);
+      await manager.delete(this.lineEntity, {
+        [this.lineForeignKey]: id,
+      } as never);
+      await manager.delete(this.headerEntity, id);
+    });
+  }
+
+  /**
+   * Chặn xóa cứng khi có chứng từ nhận hàng tham chiếu. Lớp con ghi đè bằng entity phiếu nhập của mình.
+   * Lớp cơ sở không biết entity phiếu nhập nên không kiểm gì.
+   */
+  protected async assertNoDependentReceipts(
+    manager: EntityManager,
+    id: string,
+  ): Promise<void> {
+    await Promise.resolve([manager, id]);
+  }
+
+  /** Trả số lượng đã giữ trên PR nguồn về PR, nếu đơn có liên kết. */
+  private async releaseHeldQty(
+    manager: EntityManager,
+    header: H,
+  ): Promise<void> {
+    if (!header.requestId) return;
+    const lines = await this.loadLines(manager, header.id);
+    await this.requestLink.release(
+      manager,
+      header.requestId,
+      this.toRequestItems(lines.map((l) => this.asInput(l))),
+    );
   }
 
   private async writeLines(

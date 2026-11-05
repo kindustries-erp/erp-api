@@ -112,6 +112,18 @@ export class GarageProcurementOrderController {
 
   @RequirePermissions({
     resource: ErpResource.GARAGE_PROCUREMENT_ORDERS,
+    action: ErpAction.PURGE,
+  })
+  @ApiOperation({
+    summary: 'Xóa cứng đơn nháp (chỉ quyền PURGE, chặn khi còn phiếu nhập)',
+  })
+  @Delete(':id/permanent')
+  hardRemove(@Param('id', ParseUUIDPipe) id: string) {
+    return this.service.hardDelete(id);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_PROCUREMENT_ORDERS,
     action: ErpAction.UPDATE,
   })
   @ApiOperation({

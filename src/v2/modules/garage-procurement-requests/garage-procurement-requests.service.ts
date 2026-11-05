@@ -89,6 +89,18 @@ export class GarageProcurementRequestsService {
     return this.findOne(id);
   }
 
+  /** Xóa mềm đề nghị nháp. */
+  async softDelete(id: string): Promise<{ id: string }> {
+    await this.command.softDeleteDraft(id);
+    return { id };
+  }
+
+  /** Xóa cứng đề nghị nháp (chỉ admin, qua quyền PURGE). */
+  async hardDelete(id: string): Promise<{ id: string }> {
+    await this.command.hardDeleteDraft(id);
+    return { id };
+  }
+
   async approvalEvents(id: string): Promise<ApprovalEventResponseDto[]> {
     await this.query.findOne(id);
     const events = await this.query.approvalEvents(id);

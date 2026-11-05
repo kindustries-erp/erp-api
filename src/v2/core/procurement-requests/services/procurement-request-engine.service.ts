@@ -48,6 +48,16 @@ export function assertCanCancel(lines: RequestLineQty[]): void {
   }
 }
 
+/** Xóa đề nghị chỉ khi chưa có đơn mua nào giữ số lượng. */
+export function assertNoHeldQty(lines: RequestLineQty[]): void {
+  const held = lines.some((l) => l.qtyOrdered > EPS);
+  if (held) {
+    throw new ConflictException(
+      'Không xóa được đề nghị đã có đơn mua giữ số lượng',
+    );
+  }
+}
+
 /** Chỉ tạo PO từ PR đã duyệt và còn số lượng chưa đặt. */
 export function assertOrderable(
   status: PurchaseRequestStatus,

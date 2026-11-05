@@ -93,6 +93,12 @@ export class GarageProcurementOrdersService {
     return { id };
   }
 
+  /** Xóa cứng đơn nháp (chỉ admin, qua quyền PURGE). */
+  async hardDelete(id: string): Promise<{ id: string }> {
+    await this.command.hardDeleteDraft(id);
+    return { id };
+  }
+
   async replaceLines(
     id: string,
     dto: ReplaceOrderLinesDto,

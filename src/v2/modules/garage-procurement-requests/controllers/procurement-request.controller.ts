@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -112,6 +113,28 @@ export class GarageProcurementRequestController {
     @Body() dto: ReplaceRequestLinesDto,
   ) {
     return this.service.replaceLines(id, dto);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_PROCUREMENT_REQUESTS,
+    action: ErpAction.DELETE,
+  })
+  @ApiOperation({ summary: 'Xóa mềm đề nghị nháp' })
+  @Delete(':id')
+  softDelete(@Param('id', ParseUUIDPipe) id: string) {
+    return this.service.softDelete(id);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_PROCUREMENT_REQUESTS,
+    action: ErpAction.PURGE,
+  })
+  @ApiOperation({
+    summary: 'Xóa cứng đề nghị nháp (chỉ quyền PURGE, chặn khi còn đơn mua)',
+  })
+  @Delete(':id/permanent')
+  hardDelete(@Param('id', ParseUUIDPipe) id: string) {
+    return this.service.hardDelete(id);
   }
 
   @RequirePermissions({

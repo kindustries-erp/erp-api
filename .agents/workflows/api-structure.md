@@ -470,3 +470,24 @@ Không tự động migrate. Chỉ làm khi người dùng ra lệnh cho từng 
 - Generator không sinh nghiệp vụ, phân quyền theo dữ liệu, hay audit log: phải làm ở Giai đoạn 3.
 - Generator không gán quyền cho vai trò trong RBAC. Thêm resource vào enum chỉ đăng ký khả năng, quyền cấp cho vai trò quản lý ở module RBAC.
 - Mô hình xóa dùng cờ `isDeleted` (đúng quy ước repo), không dùng `DeleteDateColumn`. Template `api-module` cũ dùng `deletedAt` và không nên dùng cho module mới.
+
+---
+
+### 🗑️ Chính sách xóa (module v2)
+
+Mặc định là **xóa mềm** (`isDeleted = true`), theo `.agents/AGENTS.md`. **Xóa cứng** là ngoại lệ, chỉ dùng khi người dùng yêu cầu rõ và thỏa đủ các điều kiện dưới đây.
+
+| Thao tác | Route | Quyền (`ErpAction`) | Điều kiện | Hành vi |
+| :--- | :--- | :--- | :--- | :--- |
+| Xóa mềm | `DELETE /:id` | `DELETE` | Chỉ `DRAFT`; không có số lượng đang được chứng từ khác giữ | `isDeleted = true`, không xóa dòng, không xóa lịch sử duyệt |
+| Xóa cứng | `DELETE /:id/permanent` | `PURGE` (chỉ cấp cho vai trò admin) | Chỉ `DRAFT`; không còn bản ghi phụ thuộc (kể cả đã xóa mềm) | Trả số lượng giữ về chứng từ nguồn, xóa dòng rồi xóa đầu đề, giữ lịch sử duyệt |
+
+Quy tắc bắt buộc:
+- **Kiểm phụ thuộc ở tầng service trước khi xóa.** Khóa ngoại từ chứng từ con tới chứng từ cha là `RESTRICT` (ví dụ đơn mua tới đề nghị, phiếu nhập tới đơn mua). Đếm bản ghi phụ thuộc trong cùng transaction, ghi lớp con ghi đè hook `assertNoDependent…`. Trả 409 có thông điệp rõ, không để DB báo lỗi thô.
+- **Đếm cả bản ghi đã xóa mềm.** Khóa ngoại không phụ thuộc cờ `isDeleted`.
+- **Dòng con xóa cùng transaction.** Khi quan hệ là `CASCADE` (dòng đề nghị, dòng và nghiệm thu đơn mua), vẫn xóa tường minh để không phụ thuộc cấu hình DB.
+- **Không xóa lịch sử duyệt** (`erp_approval_events`). Bảng này không có khóa ngoại, lưu theo `doc_id`, nên bản ghi cũ vẫn còn để kiểm toán.
+- **Quyền riêng:** xóa cứng dùng `ErpAction.PURGE`, không gộp vào `DELETE`. Action là chuỗi (`varchar`), không cần migration; vai trò có `*` hoặc `SUPER_ADMIN` tự khớp.
+- **Route riêng:** `:id/permanent` tách khỏi `:id` để không nhầm với xóa mềm. Spec RBAC kiểm cả hai route.
+- **UI:** thao tác xóa cứng và xóa mềm phải có modal xác nhận (theo `.agents/AGENTS.md`).
+- **Test bắt buộc:** nhánh thành công, nhánh bị chặn do trạng thái, nhánh bị chặn do phụ thuộc, và RBAC của từng route.

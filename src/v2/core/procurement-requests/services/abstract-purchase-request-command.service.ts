@@ -25,6 +25,7 @@ import { BasePurchaseRequestLineEntity } from '../entities/base-purchase-request
 import {
   assertCanCancel,
   assertLinesEditable,
+  assertNoHeldQty,
   assertValidDraftLines,
   DraftLineInput,
   estimatedTotalOf,
@@ -183,6 +184,47 @@ export abstract class AbstractPurchaseRequestCommandService<
       await manager.save(this.headerEntity, header);
       return header;
     });
+  }
+
+  /**
+   * Xóa mềm đề nghị nháp. Chặn khi không còn DRAFT hoặc khi đã có số lượng được đơn mua giữ.
+   */
+  async softDeleteDraft(id: string): Promise<H> {
+    return this.dataSource.transaction(async (manager) => {
+      const header = await this.lockHeader(manager, id);
+      assertLinesEditable(header.status as PurchaseRequestStatus);
+      assertNoHeldQty(await this.loadLineQty(manager, id));
+      header.isDeleted = true;
+      return manager.save(this.headerEntity, header);
+    });
+  }
+
+  /**
+   * Xóa cứng đề nghị nháp cùng dòng. Chặn khi còn đơn mua tham chiếu (kể cả đơn đã xóa mềm),
+   * vì khóa ngoại từ đơn mua tới đề nghị là RESTRICT.
+   */
+  async hardDeleteDraft(id: string): Promise<void> {
+    return this.dataSource.transaction(async (manager) => {
+      const header = await this.lockHeader(manager, id);
+      assertLinesEditable(header.status as PurchaseRequestStatus);
+      assertNoHeldQty(await this.loadLineQty(manager, id));
+      await this.assertNoDependentOrders(manager, id);
+      await manager.delete(this.lineEntity, {
+        [this.lineForeignKey]: id,
+      } as never);
+      await manager.delete(this.headerEntity, id);
+    });
+  }
+
+  /**
+   * Chặn xóa cứng khi có đơn mua tham chiếu. Lớp con ghi đè bằng entity đơn mua của mình.
+   * Lớp cơ sở không biết entity đơn mua nên không kiểm gì.
+   */
+  protected async assertNoDependentOrders(
+    manager: EntityManager,
+    id: string,
+  ): Promise<void> {
+    await Promise.resolve([manager, id]);
   }
 
   private async writeLines(
