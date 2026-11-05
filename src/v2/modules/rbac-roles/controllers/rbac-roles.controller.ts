@@ -8,6 +8,7 @@ import {
   Body,
   Query,
   UseGuards,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
@@ -76,7 +77,10 @@ export class RbacRolesController {
     action: ErpAction.MANAGE,
   })
   @Patch('roles/:id')
-  async updateRole(@Param('id') id: string, @Body() dto: UpdateCoreRoleDto) {
+  async updateRole(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateCoreRoleDto,
+  ) {
     return this.rbacRolesService.updateRole(id, dto);
   }
 
@@ -85,7 +89,7 @@ export class RbacRolesController {
     action: ErpAction.MANAGE,
   })
   @Delete('roles/:id')
-  async deleteRole(@Param('id') id: string) {
+  async deleteRole(@Param('id', ParseUUIDPipe) id: string) {
     return this.rbacRolesService.deleteRole(id);
   }
 
@@ -94,7 +98,7 @@ export class RbacRolesController {
     action: ErpAction.MANAGE,
   })
   @Get('roles/:roleId/permissions')
-  async getRolePermissions(@Param('roleId') roleId: string) {
+  async getRolePermissions(@Param('roleId', ParseUUIDPipe) roleId: string) {
     const permissions = await this.rbacRolesService.getRolePermissions(roleId);
     return { permissions };
   }
@@ -105,7 +109,7 @@ export class RbacRolesController {
   })
   @Patch('roles/:roleId/permissions')
   async updateRolePermissions(
-    @Param('roleId') roleId: string,
+    @Param('roleId', ParseUUIDPipe) roleId: string,
     @Body() dto: UpdateCoreRolePermissionsDto,
   ) {
     return this.rbacRolesService.updateRolePermissions(roleId, dto);
@@ -116,7 +120,7 @@ export class RbacRolesController {
     action: ErpAction.MANAGE,
   })
   @Get('roles/:roleId/users')
-  async getRoleUsers(@Param('roleId') roleId: string) {
+  async getRoleUsers(@Param('roleId', ParseUUIDPipe) roleId: string) {
     const users = await this.rbacRolesService.getRoleUsers(roleId);
     return { users };
   }
@@ -127,7 +131,7 @@ export class RbacRolesController {
   })
   @Patch('roles/:roleId/users')
   async updateRoleUsers(
-    @Param('roleId') roleId: string,
+    @Param('roleId', ParseUUIDPipe) roleId: string,
     @Body() dto: UpdateCoreRoleUsersDto,
   ) {
     return this.rbacRolesService.updateRoleUsers(roleId, dto);
