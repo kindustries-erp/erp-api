@@ -86,6 +86,18 @@ export class RbacCoreService {
     );
   }
 
+  /** Tên các role đang hoạt động của người dùng, dùng để ghi nhật ký duyệt. */
+  async getUserRoleNames(userId: string): Promise<string[]> {
+    const userRoles = await this.userRoleRepository.find({
+      where: { userId },
+      relations: ['role'],
+    });
+    return userRoles
+      .map((ur) => ur.role)
+      .filter((role) => role?.isActive)
+      .map((role) => role.name);
+  }
+
   async getUserPermissions(userId: string): Promise<CorePermission[]> {
     const userRoles = await this.userRoleRepository.find({
       where: { userId },
@@ -523,6 +535,22 @@ export class RbacCoreService {
       {
         resource: 'purchase_requests',
         label: 'Purchase Requests / Yêu cầu mua hàng',
+      },
+      {
+        resource: 'procurement_requests',
+        label: 'Đề nghị mua hàng (Procurement Requests)',
+      },
+      {
+        resource: 'procurement_orders',
+        label: 'Đơn mua hàng mới (Procurement Orders)',
+      },
+      {
+        resource: 'garage_procurement_requests',
+        label: 'Đề nghị mua hàng Garage (Garage Procurement Requests)',
+      },
+      {
+        resource: 'garage_procurement_orders',
+        label: 'Đơn mua hàng Garage mới (Garage Procurement Orders)',
       },
       { resource: 'vehicles', label: 'Vehicles / Xe cộ' },
       {

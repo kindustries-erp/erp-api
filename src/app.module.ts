@@ -59,6 +59,10 @@ import { AdminDashboardModule } from './v2/admin-dashboard-core/admin-dashboard.
 import { GarageGoodsReceiptsCoreModule } from './v2/modules/garage-goods-receipts/garage-goods-receipts-core.module'; // api-v2-module:garage-goods-receipts:app-imports
 import { PurchaseOrdersModule } from './v2/modules/purchase-orders/purchase-orders.module'; // api-v2-module:purchase-orders:app-imports
 import { GaragePurchaseOrdersModule } from './v2/modules/garage-purchase-orders/garage-purchase-orders.module'; // api-v2-module:garage-purchase-orders:app-imports
+import { ErpProcurementRequestsModule } from './v2/modules/erp-procurement-requests/erp-procurement-requests.module'; // procurement:pr-module
+import { ErpProcurementOrdersModule } from './v2/modules/erp-procurement-orders/erp-procurement-orders.module'; // procurement:po-module
+import { GarageProcurementRequestsModule } from './v2/modules/garage-procurement-requests/garage-procurement-requests.module'; // procurement:garage-pr-module
+import { GarageProcurementOrdersModule } from './v2/modules/garage-procurement-orders/garage-procurement-orders.module'; // procurement:garage-po-module
 // plop:api-v2-imports
 
 @Module({
@@ -176,6 +180,10 @@ import { GaragePurchaseOrdersModule } from './v2/modules/garage-purchase-orders/
     GarageGoodsReceiptsCoreModule, // api-v2-module:garage-goods-receipts:app-modules
     PurchaseOrdersModule, // api-v2-module:purchase-orders:app-modules
     GaragePurchaseOrdersModule, // api-v2-module:garage-purchase-orders:app-modules
+    ErpProcurementRequestsModule, // procurement:pr-module-register
+    ErpProcurementOrdersModule, // procurement:po-module-register
+    GarageProcurementRequestsModule, // procurement:garage-pr-module-register
+    GarageProcurementOrdersModule, // procurement:garage-po-module-register
     // plop:api-v2-modules
   ],
   controllers: [AppController],

@@ -95,8 +95,30 @@ import { PurchaseOrderLine } from '@/v2/modules/purchase-orders/entities/purchas
 import { GaragePurchaseOrder } from '@/v2/modules/garage-purchase-orders/entities/garage-purchase-order.entity'; // api-v2-module:garage-purchase-orders:entity-imports
 import { GaragePurchaseOrderLine } from '@/v2/modules/garage-purchase-orders/entities/garage-purchase-order-line.entity';
 import { GarageInventoryBalance } from '@/v2/modules/garage-goods-receipts/entities/garage-inventory-balance.entity';
+import { ApprovalEvent } from '@/v2/core/approval/entities/approval-event.entity';
+import { ProcurementRequest } from '@/v2/modules/erp-procurement-requests/entities/procurement-request.entity';
+import { ProcurementRequestLine } from '@/v2/modules/erp-procurement-requests/entities/procurement-request-line.entity';
+import { ProcurementOrder } from '@/v2/modules/erp-procurement-orders/entities/procurement-order.entity';
+import { ProcurementOrderLine } from '@/v2/modules/erp-procurement-orders/entities/procurement-order-line.entity';
+import { ProcurementOrderAcceptance } from '@/v2/modules/erp-procurement-orders/entities/procurement-order-acceptance.entity';
+import { GarageProcurementRequest } from '@/v2/modules/garage-procurement-requests/entities/procurement-request.entity';
+import { GarageProcurementRequestLine } from '@/v2/modules/garage-procurement-requests/entities/procurement-request-line.entity';
+import { GarageProcurementOrder } from '@/v2/modules/garage-procurement-orders/entities/procurement-order.entity';
+import { GarageProcurementOrderLine } from '@/v2/modules/garage-procurement-orders/entities/procurement-order-line.entity';
+import { GarageProcurementOrderAcceptance } from '@/v2/modules/garage-procurement-orders/entities/procurement-order-acceptance.entity';
 // plop:api-v2-entity-imports
 const entities = [
+  ApprovalEvent,
+  ProcurementRequest,
+  ProcurementRequestLine,
+  ProcurementOrder,
+  ProcurementOrderLine,
+  ProcurementOrderAcceptance,
+  GarageProcurementRequest,
+  GarageProcurementRequestLine,
+  GarageProcurementOrder,
+  GarageProcurementOrderLine,
+  GarageProcurementOrderAcceptance,
   CoreUser,
   CoreUserPreference,
   CoreUserTablePreference,

@@ -34,5 +34,9 @@ export enum ErpResource {
   CUSTOM_FIELDS = 'custom_fields',
   GARAGE_GOODS_RECEIPTS = 'garage_goods_receipts', // api-v2-module:garage-goods-receipts-core:rbac-resource
   GARAGE_PURCHASE_ORDERS = 'garage_purchase_orders', // api-v2-module:garage-purchase-orders:rbac-resource
+  PROCUREMENT_REQUESTS = 'procurement_requests',
+  PROCUREMENT_ORDERS = 'procurement_orders',
+  GARAGE_PROCUREMENT_REQUESTS = 'garage_procurement_requests',
+  GARAGE_PROCUREMENT_ORDERS = 'garage_procurement_orders',
   // plop:api-v2-resources
 }

@@ -5,4 +5,6 @@ export enum ErpAction {
   UPDATE = 'update',
   DELETE = 'delete',
   MANAGE = 'manage',
+  APPROVE = 'approve',
+  REJECT = 'reject',
 }
