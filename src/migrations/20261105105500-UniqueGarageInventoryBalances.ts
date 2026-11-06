@@ -27,12 +27,12 @@ export class UniqueGarageInventoryBalances20261105105500 implements MigrationInt
     }
 
     await queryRunner.query(
-      `CREATE UNIQUE INDEX "UQ_garage_inv_bal_branch_item"
+      `CREATE UNIQUE INDEX IF NOT EXISTS "UQ_garage_inv_bal_branch_item"
        ON "erp_garage_inventory_balances" ("branch_id", "item_code")
        WHERE "branch_id" IS NOT NULL`,
     );
     await queryRunner.query(
-      `CREATE UNIQUE INDEX "UQ_garage_inv_bal_null_branch_item"
+      `CREATE UNIQUE INDEX IF NOT EXISTS "UQ_garage_inv_bal_null_branch_item"
        ON "erp_garage_inventory_balances" ("item_code")
        WHERE "branch_id" IS NULL`,
     );

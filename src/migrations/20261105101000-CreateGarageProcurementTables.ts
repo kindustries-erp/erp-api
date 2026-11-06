@@ -10,7 +10,7 @@ export class CreateGarageProcurementTables20261105101000 implements MigrationInt
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TABLE "erp_garage_proc_requests" (
+      CREATE TABLE IF NOT EXISTS "erp_garage_proc_requests" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "request_no" varchar(255) NOT NULL,
         "request_date" date NOT NULL,
@@ -37,20 +37,20 @@ export class CreateGarageProcurementTables20261105101000 implements MigrationInt
       )
     `);
     await queryRunner.query(
-      `CREATE INDEX "IDX_erp_garage_proc_requests_status" ON "erp_garage_proc_requests" ("status")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_erp_garage_proc_requests_status" ON "erp_garage_proc_requests" ("status")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_erp_garage_proc_requests_ordering" ON "erp_garage_proc_requests" ("ordering_status")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_erp_garage_proc_requests_ordering" ON "erp_garage_proc_requests" ("ordering_status")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_erp_garage_proc_requests_deleted" ON "erp_garage_proc_requests" ("is_deleted")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_erp_garage_proc_requests_deleted" ON "erp_garage_proc_requests" ("is_deleted")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_erp_garage_proc_requests_branch" ON "erp_garage_proc_requests" ("branch_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_erp_garage_proc_requests_branch" ON "erp_garage_proc_requests" ("branch_id")`,
     );
 
     await queryRunner.query(`
-      CREATE TABLE "erp_garage_proc_request_lines" (
+      CREATE TABLE IF NOT EXISTS "erp_garage_proc_request_lines" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "request_id" uuid NOT NULL,
         "line_no" int NOT NULL,
@@ -73,14 +73,14 @@ export class CreateGarageProcurementTables20261105101000 implements MigrationInt
       )
     `);
     await queryRunner.query(
-      `CREATE INDEX "IDX_erp_garage_proc_request_lines_request" ON "erp_garage_proc_request_lines" ("request_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_erp_garage_proc_request_lines_request" ON "erp_garage_proc_request_lines" ("request_id")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_erp_garage_proc_request_lines_item" ON "erp_garage_proc_request_lines" ("item_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_erp_garage_proc_request_lines_item" ON "erp_garage_proc_request_lines" ("item_id")`,
     );
 
     await queryRunner.query(`
-      CREATE TABLE "erp_garage_proc_orders" (
+      CREATE TABLE IF NOT EXISTS "erp_garage_proc_orders" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "order_no" varchar(255) NOT NULL,
         "order_date" date NOT NULL,
@@ -113,26 +113,26 @@ export class CreateGarageProcurementTables20261105101000 implements MigrationInt
       )
     `);
     await queryRunner.query(
-      `CREATE INDEX "IDX_erp_garage_proc_orders_status" ON "erp_garage_proc_orders" ("status")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_erp_garage_proc_orders_status" ON "erp_garage_proc_orders" ("status")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_erp_garage_proc_orders_fulfillment" ON "erp_garage_proc_orders" ("fulfillment_status")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_erp_garage_proc_orders_fulfillment" ON "erp_garage_proc_orders" ("fulfillment_status")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_erp_garage_proc_orders_supplier" ON "erp_garage_proc_orders" ("supplier_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_erp_garage_proc_orders_supplier" ON "erp_garage_proc_orders" ("supplier_id")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_erp_garage_proc_orders_request" ON "erp_garage_proc_orders" ("request_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_erp_garage_proc_orders_request" ON "erp_garage_proc_orders" ("request_id")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_erp_garage_proc_orders_deleted" ON "erp_garage_proc_orders" ("is_deleted")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_erp_garage_proc_orders_deleted" ON "erp_garage_proc_orders" ("is_deleted")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_erp_garage_proc_orders_branch" ON "erp_garage_proc_orders" ("branch_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_erp_garage_proc_orders_branch" ON "erp_garage_proc_orders" ("branch_id")`,
     );
 
     await queryRunner.query(`
-      CREATE TABLE "erp_garage_proc_order_lines" (
+      CREATE TABLE IF NOT EXISTS "erp_garage_proc_order_lines" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "order_id" uuid NOT NULL,
         "line_no" int NOT NULL,
@@ -156,17 +156,17 @@ export class CreateGarageProcurementTables20261105101000 implements MigrationInt
       )
     `);
     await queryRunner.query(
-      `CREATE INDEX "IDX_erp_garage_proc_order_lines_order" ON "erp_garage_proc_order_lines" ("order_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_erp_garage_proc_order_lines_order" ON "erp_garage_proc_order_lines" ("order_id")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_erp_garage_proc_order_lines_item" ON "erp_garage_proc_order_lines" ("item_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_erp_garage_proc_order_lines_item" ON "erp_garage_proc_order_lines" ("item_id")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_erp_garage_proc_order_lines_request_line" ON "erp_garage_proc_order_lines" ("request_line_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_erp_garage_proc_order_lines_request_line" ON "erp_garage_proc_order_lines" ("request_line_id")`,
     );
 
     await queryRunner.query(`
-      CREATE TABLE "erp_garage_proc_order_acceptances" (
+      CREATE TABLE IF NOT EXISTS "erp_garage_proc_order_acceptances" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "order_id" uuid NOT NULL,
         "order_line_id" uuid NOT NULL,
@@ -184,10 +184,10 @@ export class CreateGarageProcurementTables20261105101000 implements MigrationInt
       )
     `);
     await queryRunner.query(
-      `CREATE INDEX "IDX_erp_garage_proc_acc_order" ON "erp_garage_proc_order_acceptances" ("order_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_erp_garage_proc_acc_order" ON "erp_garage_proc_order_acceptances" ("order_id")`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_erp_garage_proc_acc_line" ON "erp_garage_proc_order_acceptances" ("order_line_id")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_erp_garage_proc_acc_line" ON "erp_garage_proc_order_acceptances" ("order_line_id")`,
     );
   }
 
