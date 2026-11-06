@@ -17,7 +17,7 @@ import {
   RequirePermissions,
   RequireAnyPermissions,
 } from '../../auth/decorators/require-permissions.decorator';
-import { ErpResource, ErpAction } from '@/v2/core/rbac';
+import { ErpResource, ErpAction } from '@/v2/core/rbac-core';
 import { GarageCashflowService } from '../services/garage-cashflow.service';
 import { GaragePnlService } from '../services/garage-pnl.service';
 import {

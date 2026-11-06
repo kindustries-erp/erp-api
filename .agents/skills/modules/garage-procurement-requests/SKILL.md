@@ -5,7 +5,7 @@ description: Module tri thức Đề nghị mua (Purchase Request) họ Garage t
 
 # Module Tri Thức: Đề nghị mua (Garage)
 
-Module `src/v2/modules/garage-procurement-requests`. Dùng chung lõi `src/v2/core/procurement-requests` với họ thường. Khác biệt chỉ nằm ở bảng, quyền, tiền tố số, chi nhánh và route.
+Module `src/v2/modules/procurement-requests-garage`. Dùng chung lõi `src/v2/core/procurement-requests-core` với họ thường. Khác biệt chỉ nằm ở bảng, quyền, tiền tố số, chi nhánh và route.
 
 ## 1. Database
 

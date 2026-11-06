@@ -1,13 +1,13 @@
 ---
 name: garage-goods-receipts
-description: Module tri thức Quản lý Nhập kho và Quản lý kho Garage (Garage Goods Receipts & Inventory) trong erp-api (v2/modules/garage-goods-receipts) và erp-web. Chứa database schema (erp_garage_goods_receipts, erp_garage_goods_receipt_lines, erp_garage_inventory_balances), DTOs, API endpoints, logic ghi sổ POSTED (tăng tồn kho), logic hủy CANCELLED (giảm hoàn tồn kho), và kiến trúc Web V2 theo chuẩn Atomic Design.
+description: Module tri thức Quản lý Nhập kho và Quản lý kho Garage (Garage Goods Receipts & Inventory) trong erp-api (v2/modules/goods-receipts-garage) và erp-web. Chứa database schema (erp_garage_goods_receipts, erp_garage_goods_receipt_lines, erp_garage_inventory_balances), DTOs, API endpoints, logic ghi sổ POSTED (tăng tồn kho), logic hủy CANCELLED (giảm hoàn tồn kho), và kiến trúc Web V2 theo chuẩn Atomic Design.
 ---
 
 # 🏬 Module Tri Thức: Nhập Kho & Quản Lý Kho Garage (Garage Goods Receipts & Inventory)
 
 ## 1. Tổng quan Nghiệp vụ
 
-Phân hệ Nhập kho và Quản lý kho Garage (`src/v2/modules/garage-goods-receipts` trên Backend và `src/v2/modules/garage-goods-receipts` trên Frontend) phục vụ nhập vật tư, phụ tùng thay thế và linh kiện phục vụ sửa chữa xe tại xưởng dịch vụ/garage.
+Phân hệ Nhập kho và Quản lý kho Garage (`src/v2/modules/goods-receipts-garage` trên Backend và `src/v2/modules/goods-receipts-garage` trên Frontend) phục vụ nhập vật tư, phụ tùng thay thế và linh kiện phục vụ sửa chữa xe tại xưởng dịch vụ/garage.
 
 Các nghiệp vụ trọng tâm:
 - **Lập phiếu nhập kho Garage**: Nhập thông tin nhà cung cấp, ngày nhập kho, chi nhánh tiếp nhận, ghi chú và danh sách phụ tùng chi tiết (Mã SKU, tên phụ tùng, đơn vị tính, số lượng, đơn giá, thành tiền).
@@ -22,7 +22,7 @@ Các nghiệp vụ trọng tâm:
 ## 2. Database Schema & Quan hệ Dữ liệu
 
 > [!NOTE]
-> Trong mã nguồn TypeScript, `GarageGoodsReceipt` kế thừa từ `BaseGoodsReceiptEntity` và `GarageGoodsReceiptLine` kế thừa từ `BaseGoodsReceiptLineEntity` (tại `@/v2/core/goods-receipts/entities/`), giúp tái sử dụng toàn bộ schema cột chung trong khi tên bảng PostgreSQL và index vẫn duy trì độc lập hoàn toàn.
+> Trong mã nguồn TypeScript, `GarageGoodsReceipt` kế thừa từ `BaseGoodsReceiptEntity` và `GarageGoodsReceiptLine` kế thừa từ `BaseGoodsReceiptLineEntity` (tại `@/v2/core/goods-receipts-core/entities/`), giúp tái sử dụng toàn bộ schema cột chung trong khi tên bảng PostgreSQL và index vẫn duy trì độc lập hoàn toàn.
 
 ### Bảng `erp_garage_goods_receipts` (Header)
 | Cột | Kiểu dữ liệu | Nullable | Default | Mô tả |
@@ -90,7 +90,7 @@ Các nghiệp vụ trọng tâm:
 
 ## 4. Frontend Web V2 Architecture
 
-- **Thư mục module**: `erp/erp-web/src/v2/modules/garage-goods-receipts/`
+- **Thư mục module**: `erp/erp-web/src/v2/modules/goods-receipts-garage/`
 - **Routing URL**: `/garage-goods-receipts`
 - **Cấu trúc Atomic Design**:
   - `domain/entities/`: Entity interfaces & Form contracts.
@@ -105,9 +105,9 @@ Các nghiệp vụ trọng tâm:
 ## 5. Kiến Trúc Kế Thừa V2 Core & Phân Quyền RBAC
 
 ### Kế thừa V2 Core Base Voucher Engine
-Module `garage-goods-receipts` (`src/v2/modules/garage-goods-receipts/`) sử dụng cơ chế **Mô hình 2 (Bảng DB riêng biệt, Kế thừa Engine ở Tầng Code)**:
+Module `garage-goods-receipts` (`src/v2/modules/goods-receipts-garage/`) sử dụng cơ chế **Mô hình 2 (Bảng DB riêng biệt, Kế thừa Engine ở Tầng Code)**:
 - **DB riêng biệt**: Dùng các bảng `erp_garage_goods_receipts`, `erp_garage_goods_receipt_lines` và `erp_garage_inventory_balances`.
-- **Tái sử dụng Engine từ V2 Core**: Inject `BaseVoucherEngineService` từ `src/v2/core/goods-receipts/`:
+- **Tái sử dụng Engine từ V2 Core**: Inject `BaseVoucherEngineService` từ `src/v2/core/goods-receipts-core/`:
   - `generateDailyReceiptNo`: Tự động sinh mã `GGR-YYYYMMDD-XXX`.
   - `sumLineAmounts`: Tính tổng tiền chi tiết từ các dòng hàng.
   - `validateVoucherTransition`: Xác thực chuyển trạng thái DRAFT -> POSTED -> CANCELLED và chặn sửa/xóa khi không hợp lệ.

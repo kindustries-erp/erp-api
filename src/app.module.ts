@@ -8,9 +8,9 @@ import { AuthModule } from './auth/auth.module';
 import { CoreUser } from './users/entities/core-user.entity';
 import { CoreUserPreference } from './users/entities/core-user-preference.entity';
 import { CoreUserTablePreference } from './users/entities/core-user-table-preference.entity';
-import { CoreRole } from '@/v2/core/rbac/entities/core-role.entity';
-import { CorePermission } from '@/v2/core/rbac/entities/core-permission.entity';
-import { CoreUserRole } from '@/v2/core/rbac/entities/core-user-role.entity';
+import { CoreRole } from '@/v2/core/rbac-core/entities/core-role.entity';
+import { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.entity';
+import { CoreUserRole } from '@/v2/core/rbac-core/entities/core-user-role.entity';
 import { EmployeesCoreModule } from './employees-core/employees-core.module';
 import { BusinessPartnersManagementModule } from './v2/modules/business-partners-management/business-partners-management.module';
 import { InventoryCoreModule } from './inventory-core/inventory-core.module';
@@ -30,7 +30,7 @@ import { AuditCoreModule } from './audit-core/audit-core.module';
 import { UsersAdminModule } from './users-admin/users-admin.module';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { GlobalAuditInterceptor } from './audit-core/interceptors/global-audit.interceptor';
-import { RbacCoreModule } from '@/v2/core/rbac';
+import { RbacCoreModule } from '@/v2/core/rbac-core';
 import { RbacRolesModule } from './v2/modules/rbac-roles/rbac-roles.module';
 import { BasicMastersCoreModule } from './basic-masters-core/basic-masters-core.module';
 import { DocumentDependenciesCoreModule } from './document-dependencies-core/document-dependencies-core.module';
@@ -55,14 +55,13 @@ import { VinfastPartsModule } from './vinfast-parts/vinfast-parts.module';
 import { AppConfigModule } from './app-config/app-config.module';
 import { SystemOperationsCoreModule } from './system-operations-core/system-operations-core.module';
 import { AiHubCoreModule } from './ai-hub-core/ai-hub-core.module';
-import { FinanceInvoicesModule } from './v2/modules/finance-invoices/finance-invoices.module'; // api-v2-module:finance-invoices:app-imports
+import { FinanceInvoicesModule } from './v2/modules/invoices-finance/invoices-finance.module'; // api-v2-module:invoices-finance:app-imports
 import { AdminDashboardModule } from './v2/admin-dashboard-core/admin-dashboard.module';
-import { GarageGoodsReceiptsCoreModule } from './v2/modules/garage-goods-receipts/garage-goods-receipts-core.module'; // api-v2-module:garage-goods-receipts:app-imports
-import { PurchaseOrdersModule } from './v2/modules/purchase-orders/purchase-orders.module'; // api-v2-module:purchase-orders:app-imports
-import { ErpProcurementRequestsModule } from './v2/modules/erp-procurement-requests/erp-procurement-requests.module'; // procurement:pr-module
-import { ErpProcurementOrdersModule } from './v2/modules/erp-procurement-orders/erp-procurement-orders.module'; // procurement:po-module
-import { GarageProcurementRequestsModule } from './v2/modules/garage-procurement-requests/garage-procurement-requests.module'; // procurement:garage-pr-module
-import { GarageProcurementOrdersModule } from './v2/modules/garage-procurement-orders/garage-procurement-orders.module'; // procurement:garage-po-module
+import { GarageGoodsReceiptsCoreModule } from './v2/modules/goods-receipts-garage/goods-receipts-garage-core.module'; // api-v2-module:goods-receipts-garage:app-imports
+import { ErpProcurementRequestsModule } from './v2/modules/procurement-requests-erp/procurement-requests-erp.module'; // procurement:pr-module
+import { ErpProcurementOrdersModule } from './v2/modules/procurement-orders-erp/procurement-orders-erp.module'; // procurement:po-module
+import { GarageProcurementRequestsModule } from './v2/modules/procurement-requests-garage/procurement-requests-garage.module'; // procurement:garage-pr-module
+import { GarageProcurementOrdersModule } from './v2/modules/procurement-orders-garage/procurement-orders-garage.module'; // procurement:garage-po-module
 // plop:api-v2-imports
 
 @Module({
@@ -176,10 +175,9 @@ import { GarageProcurementOrdersModule } from './v2/modules/garage-procurement-o
     VinfastPartsModule,
     AppConfigModule,
     AiHubCoreModule,
-    FinanceInvoicesModule, // api-v2-module:finance-invoices:app-modules
+    FinanceInvoicesModule, // api-v2-module:invoices-finance:app-modules
     AdminDashboardModule,
-    GarageGoodsReceiptsCoreModule, // api-v2-module:garage-goods-receipts:app-modules
-    PurchaseOrdersModule, // api-v2-module:purchase-orders:app-modules
+    GarageGoodsReceiptsCoreModule, // api-v2-module:goods-receipts-garage:app-modules
     ErpProcurementRequestsModule, // procurement:pr-module-register
     ErpProcurementOrdersModule, // procurement:po-module-register
     GarageProcurementRequestsModule, // procurement:garage-pr-module-register

@@ -9,8 +9,8 @@ import { Repository, In } from 'typeorm';
 import { sleep } from '../common/utils/delay.util';
 import { ErpInvoicesCoreService } from './erp-invoices-core.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { CorePermission } from '@/v2/core/rbac/entities/core-permission.entity';
-import { CoreUserRole } from '@/v2/core/rbac/entities/core-user-role.entity';
+import { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.entity';
+import { CoreUserRole } from '@/v2/core/rbac-core/entities/core-user-role.entity';
 import {
   isAuthError,
   isGdtInvoiceCronEnabled,

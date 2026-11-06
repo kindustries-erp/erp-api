@@ -3,7 +3,7 @@ import {
   applyMultiKeywordFilter,
   applyMultiKeywordMultiFieldFilter,
 } from '@/common/utils/query-builder.util';
-import type { CoreRole } from '@/v2/core/rbac/entities/core-role.entity';
+import type { CoreRole } from '@/v2/core/rbac-core/entities/core-role.entity';
 
 /**
  * Helper lọc, tìm kiếm và sắp xếp bảng role.

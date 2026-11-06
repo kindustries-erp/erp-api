@@ -5,7 +5,7 @@ description: Module tri thức Đơn mua (Procurement Order, PO) họ Garage tro
 
 # Module Tri Thức: Đơn mua (Garage)
 
-Module `src/v2/modules/garage-procurement-orders`. Dùng chung lõi `src/v2/core/procurement-orders` với họ thường. Khác biệt: bảng, quyền, tiền tố `GDMH`, chi nhánh, route, và cổng liên kết PR Garage.
+Module `src/v2/modules/procurement-orders-garage`. Dùng chung lõi `src/v2/core/procurement-orders-core` với họ thường. Khác biệt: bảng, quyền, tiền tố `GDMH`, chi nhánh, route, và cổng liên kết PR Garage.
 
 ## 1. Database
 

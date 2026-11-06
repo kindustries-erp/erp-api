@@ -1,6 +1,6 @@
 import { Reflector } from '@nestjs/core';
 import { ErpAttachmentsCoreController } from './erp-attachments-core.controller';
-import { ErpResource, ErpAction } from '@/v2/core/rbac';
+import { ErpResource, ErpAction } from '@/v2/core/rbac-core';
 import { RBAC_PERMISSIONS_KEY } from '../auth/decorators/require-permissions.decorator';
 
 describe('ErpAttachmentsCoreController', () => {

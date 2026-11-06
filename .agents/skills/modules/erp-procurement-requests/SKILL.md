@@ -5,7 +5,7 @@ description: Module tri thức Đề nghị mua (Purchase Request) họ ERP thư
 
 # Module Tri Thức: Đề nghị mua (ERP thường)
 
-Module `src/v2/modules/erp-procurement-requests`. Lõi nghiệp vụ dùng chung ở `src/v2/core/procurement-requests` (contract, engine thuần, lớp abstract command/ordering). Module chỉ gắn bảng, quyền, route và facade.
+Module `src/v2/modules/procurement-requests-erp`. Lõi nghiệp vụ dùng chung ở `src/v2/core/procurement-requests-core` (contract, engine thuần, lớp abstract command/ordering). Module chỉ gắn bảng, quyền, route và facade.
 
 ## 1. Database
 
@@ -55,13 +55,13 @@ PO không import module này. Cổng `RequestLinkPort` do `ProcurementRequestLin
 
 ## 6. Tests
 
-`procurement-request.controller.spec.ts` (RBAC metadata), `procurement-requests.service.spec.ts` (facade dùng `getUserRoleNames`). Lõi có spec riêng ở `src/v2/core/procurement-requests/`.
+`procurement-request.controller.spec.ts` (RBAC metadata), `procurement-requests.service.spec.ts` (facade dùng `getUserRoleNames`). Lõi có spec riêng ở `src/v2/core/procurement-requests-core/`.
 
 ## Liên quan
 
 - Module Garage tương ứng: [`garage-procurement-requests`](../garage-procurement-requests/SKILL.md)
 - PO thường: [`erp-procurement-orders`](../erp-procurement-orders/SKILL.md)
-- Nhật ký duyệt dùng chung: `src/v2/core/approval/`
+- Nhật ký duyệt dùng chung: `src/v2/core/approval-core/`
 
 ## 9. Cập nhật 2026-11-05: PR không tự đóng
 

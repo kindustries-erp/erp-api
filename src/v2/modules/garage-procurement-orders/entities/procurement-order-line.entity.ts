@@ -1,9 +1,0 @@
-import { Column, Entity, Index } from 'typeorm';
-import { BaseProcurementOrderLineEntity } from '@/v2/core/procurement-orders/entities/base-procurement-order-line.entity';
-
-@Entity('erp_garage_proc_order_lines')
-export class GarageProcurementOrderLine extends BaseProcurementOrderLineEntity {
-  @Index()
-  @Column({ type: 'uuid', name: 'order_id' })
-  orderId: string;
-}

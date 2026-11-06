@@ -6,7 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { RbacCoreService } from '@/v2/core/rbac';
+import { RbacCoreService } from '@/v2/core/rbac-core';
 import {
   RequiredPermission,
   RBAC_PERMISSIONS_KEY,

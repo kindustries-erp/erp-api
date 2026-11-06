@@ -27,7 +27,7 @@ import {
   RequirePermissions,
   RequireAnyPermissions,
 } from '../auth/decorators/require-permissions.decorator';
-import { ErpResource, ErpAction } from '@/v2/core/rbac';
+import { ErpResource, ErpAction } from '@/v2/core/rbac-core';
 import { BankTransactionsCoreService } from './bank-transactions-core.service';
 import { DocumentTraceabilityService } from '../common/services/document-traceability.service';
 import {

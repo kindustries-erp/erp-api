@@ -1,5 +1,5 @@
 import { SetMetadata } from '@nestjs/common';
-import { ErpResource, ErpAction } from '@/v2/core/rbac';
+import { ErpResource, ErpAction } from '@/v2/core/rbac-core';
 
 export const RBAC_PERMISSIONS_KEY = 'rbac_permissions';
 export const RBAC_ANY_PERMISSIONS_KEY = 'rbac_any_permissions';

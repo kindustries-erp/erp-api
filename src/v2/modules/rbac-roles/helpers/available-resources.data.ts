@@ -1,4 +1,4 @@
-import { ErpAction, ErpResource } from '@/v2/core/rbac';
+import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
 
 export interface AvailableRbacResource {
   resource: string;

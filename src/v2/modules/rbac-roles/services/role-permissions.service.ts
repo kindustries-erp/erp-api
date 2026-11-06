@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { CorePermission } from '@/v2/core/rbac/entities/core-permission.entity';
+import { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.entity';
 import { UpdateCoreRolePermissionsDto } from '../dto/rbac-core.dto';
 import type { PermissionResponse } from '../dto/rbac-response.dto';
 import { toPermissionResponse } from '../helpers/rbac-role.mapper';

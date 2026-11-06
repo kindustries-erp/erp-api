@@ -8,7 +8,7 @@ import {
 import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
 import { RequirePermissions } from '@/auth/decorators/require-permissions.decorator';
-import { ErpAction, ErpResource } from '@/v2/core/rbac';
+import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
 import { AdminDashboardStatsService } from './services/admin-dashboard-stats.service';
 import {
   AdminDashboardQueryDto,

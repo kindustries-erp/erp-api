@@ -278,12 +278,12 @@ src/erp-invoices-core/
 
 ## 4. Danh sách API Endpoints & RBAC Contract
 
-### 4.0. API v2 lõi (`/api/v2/invoices`, Core `src/v2/core/invoices/`, Module `src/v2/modules/finance-invoices/`)
+### 4.0. API v2 lõi (`/api/v2/invoices`, Core `src/v2/core/invoices-core/`, Module `src/v2/modules/invoices-finance/`)
 
 Chạy song song với v1 trên cùng bảng `erp_invoices`, không đổi schema. URL v2 dùng `api/v2` nhờ `GLOBAL_PREFIX_EXCLUDE` (`src/common/config/global-prefix.config.ts`); các route khác vẫn `/api/v1`.
 Kiến trúc phân tách theo chuẩn:
-- **Core Foundation (`src/v2/core/invoices/`)**: Chứa Contracts (`invoice.contract.ts`), Abstract Base Entities (`BaseInvoiceEntity`, `BaseInvoiceItemEntity`), Base DTOs và `BaseInvoiceEngineService` (tính tổng, chuẩn hóa số HĐ, metadata, uom, state validator) được export qua `InvoicesCoreModule`.
-- **Business Module (`src/v2/modules/finance-invoices/`)**: Chứa Concrete Entities (`FinanceInvoice`, `FinanceInvoiceItem` gắn `@Entity`), REST Controller `@Controller('api/v2/invoices')`, Command/Query Services và Facade `FinanceInvoicesService` (export qua `FinanceInvoicesModule`).
+- **Core Foundation (`src/v2/core/invoices-core/`)**: Chứa Contracts (`invoice.contract.ts`), Abstract Base Entities (`BaseInvoiceEntity`, `BaseInvoiceItemEntity`), Base DTOs và `BaseInvoiceEngineService` (tính tổng, chuẩn hóa số HĐ, metadata, uom, state validator) được export qua `InvoicesCoreModule`.
+- **Business Module (`src/v2/modules/invoices-finance/`)**: Chứa Concrete Entities (`FinanceInvoice`, `FinanceInvoiceItem` gắn `@Entity`), REST Controller `@Controller('api/v2/invoices')`, Command/Query Services và Facade `FinanceInvoicesService` (export qua `FinanceInvoicesModule`).
 
 | Method | Endpoint | Resource | Action | Ghi chú |
 | :--- | :--- | :--- | :--- | :--- |
@@ -306,9 +306,9 @@ Quy tắc:
 - Hóa đơn POSTED không đổi được chi nhánh trong v2 (`INVOICE_BRANCH_LOCKED_POSTED`) cho tới khi có accounting-core v2 (UC2 chưa port).
 - `invoice_no_normalized` do v2 tự tính khi ghi (`normalizeInvoiceNo`). v1 không ghi cột này nên một số dòng cũ đang NULL.
 - Metadata: `settlement_order`, `license_plate` được trích từ diễn giải/ghi chú/dòng hàng (ghi đè khi có khớp).
-- v2 không import bất cứ thứ gì từ `erp-invoices-core`. Helper được quản lý tại `src/v2/core/invoices/` và `src/v2/modules/finance-invoices/helpers/`.
+- v2 không import bất cứ thứ gì từ `erp-invoices-core`. Helper được quản lý tại `src/v2/core/invoices-core/` và `src/v2/modules/invoices-finance/helpers/`.
 
-`message` là mã (`src/v2/modules/finance-invoices/finance-invoice-messages.ts`): `INVOICE_FETCHED`, `INVOICE_CREATED`, `INVOICE_UPDATED`, `INVOICE_DELETED`, `INVOICE_NOT_FOUND`, `INVOICE_DELETE_NOT_DRAFT`, `INVOICE_BRANCH_NOT_FOUND`, `INVOICE_BRANCH_LOCKED_POSTED`, `INVOICE_BULK_UPDATED`. Web map mã sang translation key.
+`message` là mã (`src/v2/modules/invoices-finance/finance-invoice-messages.ts`): `INVOICE_FETCHED`, `INVOICE_CREATED`, `INVOICE_UPDATED`, `INVOICE_DELETED`, `INVOICE_NOT_FOUND`, `INVOICE_DELETE_NOT_DRAFT`, `INVOICE_BRANCH_NOT_FOUND`, `INVOICE_BRANCH_LOCKED_POSTED`, `INVOICE_BULK_UPDATED`. Web map mã sang translation key.
 
 Chưa port (còn ở v1): attributes, stats, danh sách/export items, netoff, post/unpost/cancel/validate/category, portal GDT, import XML, files/PDF, dashboard, debts, UC2.
 
