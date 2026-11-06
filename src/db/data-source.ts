@@ -92,8 +92,6 @@ import { GarageGoodsReceipt } from '@/v2/modules/garage-goods-receipts/entities/
 import { GarageGoodsReceiptLine } from '@/v2/modules/garage-goods-receipts/entities/garage-goods-receipt-line.entity';
 import { PurchaseOrder } from '@/v2/modules/purchase-orders/entities/purchase-order.entity'; // api-v2-module:purchase-orders:entity-imports
 import { PurchaseOrderLine } from '@/v2/modules/purchase-orders/entities/purchase-order-line.entity';
-import { GaragePurchaseOrder } from '@/v2/modules/garage-purchase-orders/entities/garage-purchase-order.entity'; // api-v2-module:garage-purchase-orders:entity-imports
-import { GaragePurchaseOrderLine } from '@/v2/modules/garage-purchase-orders/entities/garage-purchase-order-line.entity';
 import { GarageInventoryBalance } from '@/v2/modules/garage-goods-receipts/entities/garage-inventory-balance.entity';
 import { ApprovalEvent } from '@/v2/core/approval/entities/approval-event.entity';
 import { ProcurementRequest } from '@/v2/modules/erp-procurement-requests/entities/procurement-request.entity';
@@ -209,8 +207,6 @@ const entities = [
   GarageGoodsReceiptLine,
   PurchaseOrder, // api-v2-module:purchase-orders:entities
   PurchaseOrderLine,
-  GaragePurchaseOrder, // api-v2-module:garage-purchase-orders:entities
-  GaragePurchaseOrderLine,
   GarageInventoryBalance,
   // plop:api-v2-entities
 ];

@@ -41,7 +41,7 @@ Giống họ thường: DRAFT, PENDING_APPROVAL, APPROVED, ISSUED, CLOSED, CANCE
 
 Cùng bộ endpoint họ thường: `POST /`, `GET /`, `GET /:id`, `GET /:id/approval-events`, `PATCH /:id/lines`, `POST` cho submit, recall, approve, reject, issue, cancel, close, receipts, acceptances, và void.
 
-Quyền resource: `garage_procurement_orders`. Seed từ `garage_purchase_orders`.
+Quyền resource: `garage_procurement_orders`. Seed từ `garage_purchase_orders` (quyền cũ đã gỡ ở migration `20261106100000`).
 
 ## 7. Tests
 

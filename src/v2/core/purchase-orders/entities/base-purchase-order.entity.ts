@@ -8,8 +8,8 @@ import {
 
 /**
  * Base Entity cho header Đơn mua hàng (lõi PO v2).
- * KHÔNG gắn @Entity(): module con khai báo bảng riêng (erp_purchase_orders,
- * erp_garage_purchase_orders). Các cột bên dưới khớp 1-1 13 cột của
+ * KHÔNG gắn @Entity(): module con khai báo bảng riêng (erp_purchase_orders).
+ * Các cột bên dưới khớp 1-1 13 cột của
  * erp_purchase_orders đã kiểm tra trên DB. Lớp con thêm cột riêng nếu cần.
  */
 export abstract class BasePurchaseOrderEntity {

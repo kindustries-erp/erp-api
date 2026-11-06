@@ -26,10 +26,6 @@ export const AVAILABLE_RBAC_RESOURCES: { resource: string; label: string }[] = [
     label: 'Nhập kho Garage (Garage Goods Receipts)',
   },
   {
-    resource: ErpResource.GARAGE_PURCHASE_ORDERS,
-    label: 'Đơn mua hàng Garage (Garage Purchase Orders)',
-  },
-  {
     resource: 'accounting_configs',
     label: 'Accounting Configs (Cấu hình kế toán)',
   },

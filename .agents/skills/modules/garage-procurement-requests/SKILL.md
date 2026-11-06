@@ -33,7 +33,7 @@ Giống hệt họ thường: `DRAFT → PENDING_APPROVAL → APPROVED → CLOSE
 
 Cùng bộ endpoint với họ thường: `POST /`, `GET /`, `GET /:id`, `GET /:id/approval-events`, `GET /:id/po-draft`, `PATCH /:id/lines`, `POST /:id/submit|recall|approve|reject|cancel|close`.
 
-Quyền resource: `garage_procurement_requests`. Seed từ `garage_purchase_orders` (read/create/update/delete).
+Quyền resource: `garage_procurement_requests`. Seed từ `garage_purchase_orders` (read/create/update/delete; quyền cũ đã gỡ ở migration `20261106100000`).
 
 ## 5. Liên kết với PO Garage
 
