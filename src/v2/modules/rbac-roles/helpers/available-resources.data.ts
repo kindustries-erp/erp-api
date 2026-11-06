@@ -35,6 +35,18 @@ export const AVAILABLE_RBAC_RESOURCES: AvailableRbacResource[] = [
     label: 'Nhập kho Garage (Garage Goods Receipts)',
   },
   {
+    resource: ErpResource.GARAGE_STOCK_RECEIPTS,
+    label: 'Nhập kho Garage (phiếu nhập mới)',
+  },
+  {
+    resource: ErpResource.GARAGE_STOCK_ISSUES,
+    label: 'Xuất kho Garage',
+  },
+  {
+    resource: ErpResource.GARAGE_STOCK_ADJUSTMENTS,
+    label: 'Điều chỉnh kho Garage',
+  },
+  {
     resource: 'accounting_configs',
     label: 'Accounting Configs (Cấu hình kế toán)',
   },

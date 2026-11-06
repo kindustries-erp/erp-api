@@ -1,7 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { DataSource, DeepPartial, EntityManager, EntityTarget } from 'typeorm';
-import { ApprovalEventService } from '../../approval/approval-event.service';
-import { resolveTransition } from '../../approval/approval.engine';
+import { ApprovalEventService } from '@/v2/core/approval-core/approval-event.service';
+import { resolveTransition } from '@/v2/core/approval-core/approval.engine';
 import { {{entityUpperSnake}}_TRANSITIONS, {{entity}}Action } from '../contracts/{{family}}.contract';
 import { {{baseEntity}} } from '../entities/base-{{entityKebab}}.entity';
 

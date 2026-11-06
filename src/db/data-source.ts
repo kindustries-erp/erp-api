@@ -103,6 +103,15 @@ import { GarageProcurementRequestLine } from '@/v2/modules/procurement-requests-
 import { GarageProcurementOrder } from '@/v2/modules/procurement-orders-garage/entities/procurement-order.entity';
 import { GarageProcurementOrderLine } from '@/v2/modules/procurement-orders-garage/entities/procurement-order-line.entity';
 import { GarageProcurementOrderAcceptance } from '@/v2/modules/procurement-orders-garage/entities/procurement-order-acceptance.entity';
+import { InventoryMovementsGarageReceiptLine } from '@/v2/modules/inventory-movements-garage-receipts/entities/inventory-movements-garage-receipt-line.entity';
+import { InventoryMovementsGarageIssueLine } from '@/v2/modules/inventory-movements-garage-issues/entities/inventory-movements-garage-issue-line.entity';
+import { InventoryMovementsGarageAdjustmentLine } from '@/v2/modules/inventory-movements-garage-adjustments/entities/inventory-movements-garage-adjustment-line.entity';
+import { InventoryMovementsGarageBalance } from '@/v2/modules/inventory-movements-garage-ledger/entities/inventory-movements-garage-balance.entity';
+import { InventoryMovementsGarageTransaction } from '@/v2/modules/inventory-movements-garage-ledger/entities/inventory-movements-garage-transaction.entity';
+import { InventoryMovementsGarageCostLayer } from '@/v2/modules/inventory-movements-garage-ledger/entities/inventory-movements-garage-cost-layer.entity';
+import { InventoryMovementsGarageReceipt } from '@/v2/modules/inventory-movements-garage-receipts/entities/inventory-movements-garage-receipt.entity'; // api-v2-module:inventory-movements-garage-receipts:entity-imports
+import { InventoryMovementsGarageIssue } from '@/v2/modules/inventory-movements-garage-issues/entities/inventory-movements-garage-issue.entity'; // api-v2-module:inventory-movements-garage-issues:entity-imports
+import { InventoryMovementsGarageAdjustment } from '@/v2/modules/inventory-movements-garage-adjustments/entities/inventory-movements-garage-adjustment.entity'; // api-v2-module:inventory-movements-garage-adjustments:entity-imports
 // plop:api-v2-entity-imports
 const entities = [
   ApprovalEvent,
@@ -206,6 +215,15 @@ const entities = [
   GarageGoodsReceipt, // api-v2-module:goods-receipts-garage:entities
   GarageGoodsReceiptLine,
   GarageInventoryBalance,
+  InventoryMovementsGarageReceiptLine,
+  InventoryMovementsGarageIssueLine,
+  InventoryMovementsGarageAdjustmentLine,
+  InventoryMovementsGarageBalance,
+  InventoryMovementsGarageTransaction,
+  InventoryMovementsGarageCostLayer,
+  InventoryMovementsGarageReceipt, // api-v2-module:inventory-movements-garage-receipts:entities
+  InventoryMovementsGarageIssue, // api-v2-module:inventory-movements-garage-issues:entities
+  InventoryMovementsGarageAdjustment, // api-v2-module:inventory-movements-garage-adjustments:entities
   // plop:api-v2-entities
 ];
 

@@ -37,5 +37,8 @@ export enum ErpResource {
   PROCUREMENT_ORDERS = 'procurement_orders',
   GARAGE_PROCUREMENT_REQUESTS = 'garage_procurement_requests',
   GARAGE_PROCUREMENT_ORDERS = 'garage_procurement_orders',
+  GARAGE_STOCK_RECEIPTS = 'garage_stock_receipts', // api-v2-module:inventory-movements-garage-receipts:rbac-resource
+  GARAGE_STOCK_ISSUES = 'garage_stock_issues', // api-v2-module:inventory-movements-garage-issues:rbac-resource
+  GARAGE_STOCK_ADJUSTMENTS = 'garage_stock_adjustments', // api-v2-module:inventory-movements-garage-adjustments:rbac-resource
   // plop:api-v2-resources
 }
