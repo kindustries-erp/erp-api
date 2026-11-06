@@ -99,4 +99,14 @@ describe('GarageGoodsReceipt mapper', () => {
       remarks: 'Sample',
     });
   });
+
+  it('giữ branchId = null khi bỏ trống chi nhánh (không bị lọc như undefined)', () => {
+    const fields = toGarageGoodsReceiptEntityFields({ branchId: null });
+    expect(fields).toHaveProperty('branchId', null);
+  });
+
+  it('không ghi đè branchId khi DTO không gửi chi nhánh', () => {
+    const fields = toGarageGoodsReceiptEntityFields({ remarks: 'x' });
+    expect(fields).not.toHaveProperty('branchId');
+  });
 });

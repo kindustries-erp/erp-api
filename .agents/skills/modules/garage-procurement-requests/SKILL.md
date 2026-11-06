@@ -26,7 +26,8 @@ Giống hệt họ thường: `DRAFT → PENDING_APPROVAL → APPROVED → CLOSE
 
 ## 3. Chi nhánh
 
-- `POST` bắt buộc `branchId` (UUID). `branchName` tùy chọn.
+- `POST`: `branchId` (UUID) **tùy chọn**, có thể bỏ trống (`null`/không gửi). `branchName` tùy chọn.
+- Chi nhánh là một giá trị (không mảng). Cột `branch_id` nullable từ đầu, không cần migration khi đổi sang tùy chọn.
 - `GET /` lọc theo `branchId` nếu có. `findOne` không lọc chi nhánh, chỉ theo `id` và `is_deleted = false`.
 
 ## 4. Endpoint (`/api/v2/garage-procurement-requests`)
@@ -51,7 +52,8 @@ Quyền resource: `garage_procurement_requests`. Seed từ `garage_purchase_orde
 
 ## 8. Cập nhật 2026-11-05: sửa đầu đề nháp
 
-- `PATCH /api/v2/garage-procurement-requests/:id`: sửa `requestDate`, `neededDate`, `title`, `remarks` khi còn DRAFT (lõi `updateHeader`, khóa header, `assertLinesEditable`). Chi nhánh không nằm trong patch, vì PO đã liên kết có thể dùng chi nhánh cũ.
+- `PATCH /api/v2/garage-procurement-requests/:id`: sửa `requestDate`, `neededDate`, `title`, `remarks` khi còn DRAFT (lõi `updateHeader`, khóa header, `assertLinesEditable`).
+- Chi nhánh (`branchId`, `branchName`, đều nullable) sửa được khi DRAFT, gửi `null` để bỏ trống. Override `updateHeader` trong `procurement-request-command.service.ts`: nếu chi nhánh thực sự đổi và đề nghị đã có đơn mua tham chiếu (kể cả đơn đã xóa mềm) thì trả `409 Conflict`. Không đổi thì không kiểm tra.
 - DTO: `UpdateProcurementRequestHeaderDto`. Spec: `core/procurement-requests/services/abstract-purchase-request-header.spec.ts`.
 - `GET /:id/po-draft` trả phần còn lại chưa đặt (`qtyRemaining`) để điền sẵn PO. Web dùng khi "Tạo PO từ PR".
 

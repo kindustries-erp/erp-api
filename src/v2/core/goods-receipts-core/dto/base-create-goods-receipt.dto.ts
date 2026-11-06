@@ -31,10 +31,13 @@ export class BaseCreateGoodsReceiptDto {
   @IsString()
   supplierName?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Chi nhánh (null = bỏ trống)',
+  })
   @IsOptional()
   @IsString()
-  branchId?: string;
+  branchId?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()

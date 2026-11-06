@@ -32,7 +32,7 @@ Các nghiệp vụ trọng tâm:
 | `receipt_date` | `date` | NO | — | Ngày nhập hàng thực tế |
 | `supplier_id` | `varchar(100)` | YES | `NULL` | ID nhà cung cấp |
 | `supplier_name` | `varchar(255)` | YES | `NULL` | Tên nhà cung cấp |
-| `branch_id` | `varchar(100)` | YES | `NULL` | ID chi nhánh nhận hàng |
+| `branch_id` | `varchar(100)` | YES | `NULL` | ID chi nhánh nhận hàng; tối đa 1 chi nhánh, `NULL` = nhóm không chi nhánh |
 | `branch_name` | `varchar(255)` | YES | `NULL` | Tên chi nhánh nhận hàng |
 | `total_amount` | `numeric(15,2)` | NO | `0` | Tổng giá trị hàng nhập |
 | `status` | `varchar(50)` | NO | `'DRAFT'` | Trạng thái (`DRAFT`, `POSTED`, `CANCELLED`) |
@@ -133,3 +133,11 @@ Module `garage-goods-receipts` (`src/v2/modules/goods-receipts-garage/`) sử d�
 - Tồn được cập nhật qua `GarageInventoryBalanceService`: khóa từng mặt hàng theo `itemCode` tăng dần; dòng tồn mới tạo bằng `INSERT ... ON CONFLICT DO NOTHING` theo hai partial unique index (`UQ_garage_inv_bal_branch_item`, `UQ_garage_inv_bal_null_branch_item`, migration `20261105105500`).
 - Thứ tự khóa: phiếu GR → đầu đơn PO → dòng PO → dòng tồn (theo itemCode). Không đảo thứ tự.
 - Đã đóng: `update` phiếu nháp khóa phiếu bằng `pessimistic_write` trong transaction, kiểm trạng thái trên bản đã khóa rồi mới ghi dòng. Một lần post đồng thời không thể bị sửa dòng chồng lên.
+
+## 10. Cập nhật 2026-11-06: chi nhánh tùy chọn
+
+- `branch_id` nullable từ đầu, không đổi schema. Một phiếu chọn tối đa 1 chi nhánh hoặc để trống (`NULL`).
+- DTO tạo/sửa: `branchId` và `branchName` nhận `null`. Web gửi `null` khi người dùng bỏ trống, để `PUT`/`PATCH` xóa được chi nhánh cũ. Mapper (`toGarageGoodsReceiptEntityFields`) giữ `null` và chỉ bỏ `undefined`.
+- Tồn kho khi post: `branch_id = NULL` cộng vào nhóm không chi nhánh (`UQ_garage_inv_bal_null_branch_item`). Không đổi logic tồn kho.
+- Kiểm tra cùng chi nhánh với PO (`garage-goods-receipt-command.service.ts`): so sánh có xử lý null, hai bên cùng trống thì hợp lệ.
+- Spec: `garage-goods-receipt.mapper.spec.ts` (giữ `null`, không ghi đè khi thiếu).

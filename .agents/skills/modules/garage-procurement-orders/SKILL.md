@@ -30,7 +30,9 @@ Giống họ thường: DRAFT, PENDING_APPROVAL, APPROVED, ISSUED, CLOSED, CANCE
 
 ## 4. Chi nhánh
 
-- `POST` bắt buộc `branchId`. `GET /` lọc theo `branchId` nếu có.
+- `POST`: `branchId` **tùy chọn** (bỏ trống được). `GET /` lọc theo `branchId` nếu có.
+- Đơn có PR nguồn (`request_id`): chi nhánh đơn phải khớp chi nhánh PR, kể cả cùng trống. Kiểm tra ở `POST` (`assertRequestSameBranch`, so sánh có xử lý null) và ở `PATCH` khi có đổi `branchId`.
+- `PATCH /:id` nhận `branchId` (nullable) và `branchName` (nullable) khi còn DRAFT. Gửi `null` để bỏ trống.
 
 ## 5. Liên kết PR Garage
 

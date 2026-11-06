@@ -106,6 +106,12 @@ export class GarageProcurementOrdersService {
     id: string,
     dto: UpdateProcurementOrderHeaderDto,
   ): Promise<GarageProcurementOrderResponseDto> {
+    if (dto.branchId !== undefined) {
+      const { header } = await this.query.findOne(id);
+      if (header.requestId) {
+        await this.assertRequestSameBranch(header.requestId, dto.branchId);
+      }
+    }
     await this.command.updateHeader(id, dto);
     return this.findOne(id);
   }
@@ -174,16 +180,19 @@ export class GarageProcurementOrdersService {
     return events.map(toApprovalEventResponse);
   }
 
-  /** Đơn mua và đề nghị mua nguồn phải cùng chi nhánh. */
+  /**
+   * Đơn mua và đề nghị mua nguồn phải cùng chi nhánh. Chi nhánh trống (null/undefined)
+   * được coi là trống, nên hai bên cùng trống vẫn hợp lệ.
+   */
   private async assertRequestSameBranch(
     requestId: string,
-    branchId: string,
+    branchId: string | null | undefined,
   ): Promise<void> {
     const request = await this.dataSource
       .getRepository(GarageProcurementRequest)
       .findOne({ where: { id: requestId } });
     if (!request) throw new NotFoundException('Không tìm thấy đề nghị mua');
-    if (request.branchId !== branchId) {
+    if ((request.branchId ?? null) !== (branchId ?? null)) {
       throw new BadRequestException(
         'Đơn mua phải cùng chi nhánh với đề nghị mua nguồn',
       );

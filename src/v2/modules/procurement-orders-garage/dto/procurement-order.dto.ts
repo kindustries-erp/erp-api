@@ -53,7 +53,10 @@ export class GarageProcurementOrderLineDto {
 }
 
 export class CreateProcurementOrderDto {
-  @ApiProperty({ description: 'Chi nhánh' }) @IsUUID() branchId: string;
+  @ApiPropertyOptional({ description: 'Chi nhánh (có thể để trống)' })
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -113,6 +116,20 @@ export class AcceptServicesDto {
 
 /** Sửa đầu đơn khi còn nháp. Mọi trường đều tùy chọn; chỉ trường được gửi mới được ghi. */
 export class UpdateProcurementOrderHeaderDto {
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Chi nhánh (null = bỏ trống). Chỉ khi DRAFT.',
+  })
+  @IsOptional()
+  @IsUUID()
+  branchId?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  branchName?: string | null;
+
   @ApiPropertyOptional() @IsOptional() @IsDateString() orderDate?: string;
 
   @ApiPropertyOptional({ nullable: true })
