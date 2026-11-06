@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ErpResource, RbacCoreModule } from '@/v2/core/rbac-core';
 import { ApprovalEvent } from '@/v2/core/approval-core/entities/approval-event.entity';
 import { ApprovalEventService } from '@/v2/core/approval-core/approval-event.service';
+import { ApprovalActorService } from '@/v2/core/approval-core/approval-actor.service';
 import { ApprovalSetting } from '@/v2/core/approval-core/entities/approval-setting.entity';
 import { ApprovalSettingsService } from '@/v2/core/approval-core/approval-settings.service';
 import { ApproverDirectoryService } from '@/v2/core/approval-core/approver-directory.service';
@@ -50,6 +51,7 @@ const GarageProcurementOrderApprovalConfigController =
   ],
   providers: [
     ApprovalEventService,
+    ApprovalActorService,
     ApprovalSettingsService,
     ApproverDirectoryService,
     GarageProcurementRequestLinkAdapter,

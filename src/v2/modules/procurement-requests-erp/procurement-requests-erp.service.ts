@@ -9,8 +9,10 @@ import {
   PurchaseRequestPoDraftDto,
   PurchaseRequestResponseDto,
 } from '@/v2/core/procurement-requests-core/dto/procurement-request-response.dto';
+import { resolvePurchaseRequestPeople } from '@/v2/core/procurement-requests-core/helpers/procurement-request-people';
 import { remainingPoDraftLinesOf } from '@/v2/core/procurement-requests-core/services/procurement-request-engine.service';
 import { toApprovalEventResponse } from '@/v2/core/approval-core/helpers/approval-event.mapper';
+import { ApprovalActorService } from '@/v2/core/approval-core/approval-actor.service';
 import { ApprovalEventResponseDto } from '@/v2/core/approval-core/dto/approval-event-response.dto';
 import {
   CreateProcurementRequestDto,
@@ -27,6 +29,7 @@ export class ErpProcurementRequestsService {
     private readonly command: ProcurementRequestCommandService,
     private readonly query: ProcurementRequestQueryService,
     private readonly rbac: RbacCoreService,
+    private readonly actors: ApprovalActorService,
   ) {}
 
   async create(
@@ -46,15 +49,19 @@ export class ErpProcurementRequestsService {
     const page = dto.page ?? 1;
     const pageSize = dto.pageSize ?? 20;
     const out = await this.query.list(page, pageSize);
+    const people = await resolvePurchaseRequestPeople(this.actors, out.rows);
     return {
       ...out,
-      rows: out.rows.map((h) => toPurchaseRequestResponse(h, [])),
+      rows: out.rows.map((h) =>
+        toPurchaseRequestResponse(h, [], people.get(h.id)),
+      ),
     };
   }
 
   async findOne(id: string): Promise<PurchaseRequestResponseDto> {
     const { header, lines } = await this.query.findOne(id);
-    return toPurchaseRequestResponse(header, lines);
+    const people = await resolvePurchaseRequestPeople(this.actors, [header]);
+    return toPurchaseRequestResponse(header, lines, people.get(header.id));
   }
 
   async replaceLines(
@@ -83,7 +90,8 @@ export class ErpProcurementRequestsService {
   async approvalEvents(id: string): Promise<ApprovalEventResponseDto[]> {
     await this.query.findOne(id);
     const events = await this.query.approvalEvents(id);
-    return events.map(toApprovalEventResponse);
+    const actors = await this.actors.resolve(events.map((e) => e.actorId));
+    return events.map((e) => toApprovalEventResponse(e, actors.get(e.actorId)));
   }
 
   /** Điền sẵn PO từ phần còn lại của PR đã duyệt. Chỉ đọc, không ghi DB. */

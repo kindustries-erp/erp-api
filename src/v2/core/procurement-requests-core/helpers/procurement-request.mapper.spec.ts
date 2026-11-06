@@ -71,4 +71,15 @@ describe('toPurchaseRequestResponse', () => {
     expect(out).not.toHaveProperty('isDeleted');
     expect(out).not.toHaveProperty('createdBy');
   });
+  it('gắn email người tạo và người duyệt khi có people, mặc định null', () => {
+    const withPeople = toPurchaseRequestResponse({ ...header } as never, [], {
+      createdByEmail: 'a@x.vn',
+      approverEmail: 'b@x.vn',
+    });
+    expect(withPeople.createdByEmail).toBe('a@x.vn');
+    expect(withPeople.approverEmail).toBe('b@x.vn');
+    const without = toPurchaseRequestResponse({ ...header } as never, []);
+    expect(without.createdByEmail).toBeNull();
+    expect(without.approverEmail).toBeNull();
+  });
 });

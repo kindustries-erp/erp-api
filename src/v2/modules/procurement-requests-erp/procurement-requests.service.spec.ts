@@ -36,6 +36,7 @@ describe('ErpProcurementRequestsService (facade)', () => {
       command as never,
       query as never,
       rbac as never,
+      { resolve: jest.fn().mockResolvedValue(new Map()) } as never,
     );
     const out = await svc.transition('h1', 'approve', 'boss');
 

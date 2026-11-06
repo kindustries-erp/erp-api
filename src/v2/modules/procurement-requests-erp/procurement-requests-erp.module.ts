@@ -3,6 +3,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { RbacCoreModule } from '@/v2/core/rbac-core';
 import { ApprovalEvent } from '@/v2/core/approval-core/entities/approval-event.entity';
 import { ApprovalEventService } from '@/v2/core/approval-core/approval-event.service';
+import { ApprovalActorService } from '@/v2/core/approval-core/approval-actor.service';
+import { CoreUser } from '@/users/entities/core-user.entity';
 import { ProcurementRequest } from './entities/procurement-request.entity';
 import { ProcurementRequestLine } from './entities/procurement-request-line.entity';
 import { ErpProcurementRequestController } from './controllers/procurement-request.controller';
@@ -18,12 +20,14 @@ import { ProcurementRequestOrderingService } from './services/procurement-reques
       ProcurementRequest,
       ProcurementRequestLine,
       ApprovalEvent,
+      CoreUser,
     ]),
     RbacCoreModule,
   ],
   controllers: [ErpProcurementRequestController],
   providers: [
     ApprovalEventService,
+    ApprovalActorService,
     ProcurementRequestCommandService,
     ProcurementRequestQueryService,
     ErpProcurementRequestsService,

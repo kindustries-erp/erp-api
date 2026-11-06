@@ -1,4 +1,5 @@
 import { toApprovalEventResponse } from '@/v2/core/approval-core/helpers/approval-event.mapper';
+import { ApprovalActorService } from '@/v2/core/approval-core/approval-actor.service';
 import { ApprovalEventResponseDto } from '@/v2/core/approval-core/dto/approval-event-response.dto';
 import {
   BadRequestException,
@@ -31,6 +32,7 @@ export class GarageProcurementOrdersService {
     private readonly fulfilment: GarageProcurementOrderFulfilmentService,
     private readonly query: GarageProcurementOrderQueryService,
     private readonly rbac: RbacCoreService,
+    private readonly actors: ApprovalActorService,
     private readonly dataSource: DataSource,
     private readonly approvers: ApproverDirectoryService,
   ) {}
@@ -188,7 +190,8 @@ export class GarageProcurementOrdersService {
   async approvalEvents(id: string): Promise<ApprovalEventResponseDto[]> {
     await this.query.findOne(id);
     const events = await this.query.approvalEvents(id);
-    return events.map(toApprovalEventResponse);
+    const actors = await this.actors.resolve(events.map((e) => e.actorId));
+    return events.map((e) => toApprovalEventResponse(e, actors.get(e.actorId)));
   }
 
   /**

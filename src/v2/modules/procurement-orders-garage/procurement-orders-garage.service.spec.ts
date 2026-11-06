@@ -24,6 +24,7 @@ function makeService(requestBranch: string | null | 'missing') {
     {} as never,
     query as never,
     rbac as never,
+    { resolve: jest.fn().mockResolvedValue(new Map()) } as never,
     dataSource as never,
     { assertEligible: jest.fn() } as never,
   );
@@ -83,6 +84,7 @@ function makeUpdateService(
     {} as never,
     query as never,
     { getUserRoleNames: jest.fn().mockResolvedValue([]) } as never,
+    { resolve: jest.fn().mockResolvedValue(new Map()) } as never,
     dataSource as never,
     { assertEligible: jest.fn() } as never,
   );

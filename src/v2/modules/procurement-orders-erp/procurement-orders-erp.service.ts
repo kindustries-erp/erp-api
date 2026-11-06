@@ -1,4 +1,5 @@
 import { toApprovalEventResponse } from '@/v2/core/approval-core/helpers/approval-event.mapper';
+import { ApprovalActorService } from '@/v2/core/approval-core/approval-actor.service';
 import { ApprovalEventResponseDto } from '@/v2/core/approval-core/dto/approval-event-response.dto';
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
@@ -25,6 +26,7 @@ export class ErpProcurementOrdersService {
     private readonly fulfilment: ProcurementOrderFulfilmentService,
     private readonly query: ProcurementOrderQueryService,
     private readonly rbac: RbacCoreService,
+    private readonly actors: ApprovalActorService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -114,7 +116,8 @@ export class ErpProcurementOrdersService {
   async approvalEvents(id: string): Promise<ApprovalEventResponseDto[]> {
     await this.query.findOne(id);
     const events = await this.query.approvalEvents(id);
-    return events.map(toApprovalEventResponse);
+    const actors = await this.actors.resolve(events.map((e) => e.actorId));
+    return events.map((e) => toApprovalEventResponse(e, actors.get(e.actorId)));
   }
 
   private roles(userId: string): Promise<string[]> {

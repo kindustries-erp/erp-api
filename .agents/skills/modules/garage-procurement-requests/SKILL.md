@@ -34,6 +34,12 @@ Giống hệt họ thường: `DRAFT → PENDING_APPROVAL → APPROVED → CLOSE
 
 Cùng bộ endpoint với họ thường: `POST /`, `GET /`, `GET /:id`, `GET /:id/approval-events`, `GET /:id/po-draft`, `PATCH /:id/lines`, `POST /:id/submit|recall|approve|reject|cancel|close`.
 
+**Response & nhật ký (cập nhật 2026-11-07)**:
+- `PurchaseRequestResponseDto` có thêm `createdByEmail` và `approverEmail` (nullable; resolve theo lô qua `resolvePurchaseRequestPeople`). `approverEmail` = người đã duyệt, chưa duyệt thì người được giao (`COALESCE(approvedBy, approverId)`). Không trả UUID `createdBy` ra API.
+- `ApprovalEventResponseDto` (`GET /:id/approval-events`) có thêm `actorName` (họ tên nhân viên) và `actorEmail`, resolve bởi `ApprovalActorService`. Không có `id` nội bộ của nhật ký.
+- `TABLE_COLUMNS` (`procurement-request-table.constants.ts`): `createdBy`/`created_by` và `approver` lọc, sắp xếp và liệt kê option theo email (subselect `core_users.email`), không theo UUID.
+- Module đăng ký `CoreUser` trong `TypeOrmModule.forFeature` để `ApprovalActorService` inject được (xem `approval-actor-wiring.spec.ts`).
+
 Quyền resource: `garage_procurement_requests`. Seed từ `garage_purchase_orders` (read/create/update/delete; quyền cũ đã gỡ ở migration `20261106100000`).
 
 ## 5. Liên kết với PO Garage

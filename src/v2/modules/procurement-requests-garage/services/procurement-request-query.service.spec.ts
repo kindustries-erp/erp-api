@@ -104,7 +104,7 @@ describe('GarageProcurementRequestQueryService', () => {
     expect(result.pageSize).toBe(50);
   });
 
-  it('gợi ý giá trị cho cột UUID createdBy sử dụng CAST TEXT an toàn', async () => {
+  it('gợi ý giá trị cho cột createdBy là email người tạo (không phải UUID)', async () => {
     const fakeQb: any = {
       where: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
@@ -115,9 +115,7 @@ describe('GarageProcurementRequestQueryService', () => {
       offset: jest.fn().mockReturnThis(),
       limit: jest.fn().mockReturnThis(),
       getRawOne: jest.fn().mockResolvedValue({ total: '1' }),
-      getRawMany: jest
-        .fn()
-        .mockResolvedValue([{ value: '11111111-2222-3333-4444-555555555555' }]),
+      getRawMany: jest.fn().mockResolvedValue([{ value: 'nguoi.tao@x.vn' }]),
     };
     fakeQb.clone.mockReturnValue(fakeQb);
     headersRepo.createQueryBuilder.mockReturnValue(fakeQb);
@@ -132,12 +130,12 @@ describe('GarageProcurementRequestQueryService', () => {
 
     expect(result.items).toEqual([
       {
-        label: '11111111-2222-3333-4444-555555555555',
-        value: '11111111-2222-3333-4444-555555555555',
+        label: 'nguoi.tao@x.vn',
+        value: 'nguoi.tao@x.vn',
       },
     ]);
     expect(fakeQb.andWhere).toHaveBeenCalledWith(
-      "CAST(h.createdBy AS TEXT) IS NOT NULL AND CAST(h.createdBy AS TEXT) != ''",
+      expect.stringContaining('core_users'),
     );
   });
 });

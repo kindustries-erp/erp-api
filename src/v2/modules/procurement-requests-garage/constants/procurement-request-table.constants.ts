@@ -4,6 +4,12 @@ import {
   TableFilterPayload,
 } from '@/common/utils/table-query';
 
+const CREATED_BY_EMAIL_SQL =
+  '(SELECT cu.email FROM core_users cu WHERE cu.id = h.createdBy)';
+/** Người duyệt hiển thị: người đã duyệt, chưa duyệt thì người được giao. */
+const APPROVER_EMAIL_SQL =
+  '(SELECT cu.email FROM core_users cu WHERE cu.id = COALESCE(h.approvedBy, h.approverId))';
+
 export const TABLE_COLUMNS: TableColumnMap = {
   createdAt: { sql: 'h.createdAt', type: 'date' },
   created_at: { sql: 'h.createdAt', type: 'date' },
@@ -21,8 +27,10 @@ export const TABLE_COLUMNS: TableColumnMap = {
   status: { sql: 'h.status', type: 'status' },
   orderingStatus: { sql: 'h.orderingStatus', type: 'status' },
   ordering_status: { sql: 'h.orderingStatus', type: 'status' },
-  createdBy: { sql: 'CAST(h.createdBy AS TEXT)', type: 'text' },
-  created_by: { sql: 'CAST(h.createdBy AS TEXT)', type: 'text' },
+  // Lọc, sắp xếp và danh sách option theo email (không theo UUID).
+  createdBy: { sql: CREATED_BY_EMAIL_SQL, type: 'text' },
+  created_by: { sql: CREATED_BY_EMAIL_SQL, type: 'text' },
+  approver: { sql: APPROVER_EMAIL_SQL, type: 'text' },
 };
 
 export const SEARCH_COLUMNS = ['h.requestNo', 'h.title', 'h.branchName'];
