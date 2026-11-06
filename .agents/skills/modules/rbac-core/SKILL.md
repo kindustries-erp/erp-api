@@ -157,7 +157,9 @@ Tất cả các endpoint dưới đây đều được bảo vệ bởi `JwtAuth
 | `PATCH` | `/api/v1/rbac-core/roles/:roleId/permissions` | Lưu ma trận quyền của vai trò (`permissions: [{ resource, action, conditions }]`) |
 | `GET` | `/api/v1/rbac-core/roles/:roleId/users` | Lấy danh sách người dùng được gán vào vai trò |
 | `PATCH` | `/api/v1/rbac-core/roles/:roleId/users` | Cập nhật danh sách người dùng gán vào vai trò (`userIds: string[]`) |
-| `GET` | `/api/v1/rbac-core/collections` | Lấy danh sách toàn bộ tài nguyên (resources) khả dụng trong hệ thống |
+| `GET` | `/api/v1/rbac-core/collections` | Lấy danh sách toàn bộ tài nguyên (resources) khả dụng trong hệ thống; resource có action bổ sung trả kèm `actions` (hiện: `approve`, `reject` cho 4 resource procurement). |
+
+> **Lưu ý ngữ nghĩa lưu quyền:** `PATCH .../permissions` thay toàn bộ quyền của vai trò (xóa rồi ghi lại). Client phải gửi đủ mọi dòng cần giữ, kể cả action UI không hiển thị (ví dụ `purge`, `manage`, `conditions`). Web V2 đã làm việc này từ bản sửa phân quyền Duyệt/Từ chối.
 
 ---
 

@@ -111,5 +111,22 @@ describe('RbacRolesService (Facade)', () => {
       expect(keys).not.toContain('greenway_integration');
       expect(keys).not.toContain('kgara_integration');
     });
+
+    it('4 resource procurement có actions approve/reject; resource khác không có actions', async () => {
+      const { facade } = makeFacade();
+      const resources = await facade.getAvailableResources();
+      const byKey = new Map(resources.map((r) => [r.resource, r]));
+
+      for (const key of [
+        'procurement_requests',
+        'procurement_orders',
+        'garage_procurement_requests',
+        'garage_procurement_orders',
+      ]) {
+        expect(byKey.get(key)?.actions).toEqual(['approve', 'reject']);
+      }
+      expect(byKey.get('garage')?.actions).toBeUndefined();
+      expect(byKey.get('purchase_orders')?.actions).toBeUndefined();
+    });
   });
 });

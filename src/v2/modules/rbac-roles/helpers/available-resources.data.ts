@@ -1,7 +1,16 @@
-import { ErpResource } from '@/v2/core/rbac';
+import { ErpAction, ErpResource } from '@/v2/core/rbac';
+
+export interface AvailableRbacResource {
+  resource: string;
+  label: string;
+  /** Action bổ sung ngoài CRUD mà resource này hỗ trợ (ví dụ approve/reject). */
+  actions?: string[];
+}
+
+const PROCUREMENT_APPROVAL_ACTIONS = [ErpAction.APPROVE, ErpAction.REJECT];
 
 /** Danh sách resource RBAC hiển thị cho UI gán quyền. Dữ liệu tĩnh (không tính ngưỡng kích thước). */
-export const AVAILABLE_RBAC_RESOURCES: { resource: string; label: string }[] = [
+export const AVAILABLE_RBAC_RESOURCES: AvailableRbacResource[] = [
   { resource: '*', label: 'All Resources (Super Admin)' },
   { resource: 'admin_users', label: 'Admin Users' },
   { resource: 'employees', label: 'Employees' },
@@ -52,18 +61,22 @@ export const AVAILABLE_RBAC_RESOURCES: { resource: string; label: string }[] = [
   {
     resource: 'procurement_requests',
     label: 'Đề nghị mua hàng (Procurement Requests)',
+    actions: PROCUREMENT_APPROVAL_ACTIONS,
   },
   {
     resource: 'procurement_orders',
     label: 'Đơn mua hàng mới (Procurement Orders)',
+    actions: PROCUREMENT_APPROVAL_ACTIONS,
   },
   {
     resource: 'garage_procurement_requests',
     label: 'Đề nghị mua hàng Garage (Garage Procurement Requests)',
+    actions: PROCUREMENT_APPROVAL_ACTIONS,
   },
   {
     resource: 'garage_procurement_orders',
     label: 'Đơn mua hàng Garage mới (Garage Procurement Orders)',
+    actions: PROCUREMENT_APPROVAL_ACTIONS,
   },
   { resource: 'vehicles', label: 'Vehicles / Xe cộ' },
   {

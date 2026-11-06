@@ -6,7 +6,10 @@ import {
 import { RoleCommandService } from './services/role-command.service';
 import { RolePermissionsService } from './services/role-permissions.service';
 import { RoleUsersService } from './services/role-users.service';
-import { AVAILABLE_RBAC_RESOURCES } from './helpers/available-resources.data';
+import {
+  AVAILABLE_RBAC_RESOURCES,
+  type AvailableRbacResource,
+} from './helpers/available-resources.data';
 import {
   ListCoreRolesDto,
   CreateCoreRoleDto,
@@ -89,7 +92,7 @@ export class RbacRolesService {
     return this.usersService.updateRoleUsers(roleId, dto);
   }
 
-  getAvailableResources(): Promise<{ resource: string; label: string }[]> {
+  getAvailableResources(): Promise<AvailableRbacResource[]> {
     return Promise.resolve(AVAILABLE_RBAC_RESOURCES);
   }
 }
