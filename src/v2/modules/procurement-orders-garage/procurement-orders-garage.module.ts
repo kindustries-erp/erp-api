@@ -1,8 +1,12 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { RbacCoreModule } from '@/v2/core/rbac-core';
+import { ErpResource, RbacCoreModule } from '@/v2/core/rbac-core';
 import { ApprovalEvent } from '@/v2/core/approval-core/entities/approval-event.entity';
 import { ApprovalEventService } from '@/v2/core/approval-core/approval-event.service';
+import { ApprovalSetting } from '@/v2/core/approval-core/entities/approval-setting.entity';
+import { ApprovalSettingsService } from '@/v2/core/approval-core/approval-settings.service';
+import { ApproverDirectoryService } from '@/v2/core/approval-core/approver-directory.service';
+import { createApprovalConfigController } from '@/v2/core/approval-core/approval-config.controller';
 import { CoreUser } from '@/users/entities/core-user.entity';
 import { GarageProcurementRequestsModule } from '@/v2/modules/procurement-requests-garage/procurement-requests-garage.module';
 import { GarageProcurementOrder } from './entities/procurement-order.entity';
@@ -18,6 +22,14 @@ import {
   GarageProcurementRequestLinkAdapter,
 } from './services/garage-procurement-request-link.adapter';
 
+const GarageProcurementOrderApprovalConfigController =
+  createApprovalConfigController({
+    path: 'api/v2/approval-config/garage-procurement-orders',
+    docType: 'GARAGE_PROCUREMENT_ORDER',
+    resource: ErpResource.GARAGE_PROCUREMENT_ORDERS,
+    tag: 'procurement_orders',
+  });
+
 /** Module đơn mua thường (bảng erp_garage_proc_orders). Lõi nằm ở src/v2/core/procurement-orders. */
 @Module({
   imports: [
@@ -26,14 +38,20 @@ import {
       GarageProcurementOrderLine,
       GarageProcurementOrderAcceptance,
       ApprovalEvent,
+      ApprovalSetting,
       CoreUser,
     ]),
     RbacCoreModule,
     GarageProcurementRequestsModule,
   ],
-  controllers: [GarageProcurementOrderController],
+  controllers: [
+    GarageProcurementOrderController,
+    GarageProcurementOrderApprovalConfigController,
+  ],
   providers: [
     ApprovalEventService,
+    ApprovalSettingsService,
+    ApproverDirectoryService,
     GarageProcurementRequestLinkAdapter,
     {
       provide: GARAGE_PROCUREMENT_REQUEST_LINK,

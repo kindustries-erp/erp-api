@@ -92,6 +92,7 @@ import { GarageGoodsReceipt } from '@/v2/modules/goods-receipts-garage/entities/
 import { GarageGoodsReceiptLine } from '@/v2/modules/goods-receipts-garage/entities/garage-goods-receipt-line.entity';
 import { GarageInventoryBalance } from '@/v2/modules/goods-receipts-garage/entities/garage-inventory-balance.entity';
 import { ApprovalEvent } from '@/v2/core/approval-core/entities/approval-event.entity';
+import { ApprovalSetting } from '@/v2/core/approval-core/entities/approval-setting.entity';
 import { ProcurementRequest } from '@/v2/modules/procurement-requests-erp/entities/procurement-request.entity';
 import { ProcurementRequestLine } from '@/v2/modules/procurement-requests-erp/entities/procurement-request-line.entity';
 import { ProcurementOrder } from '@/v2/modules/procurement-orders-erp/entities/procurement-order.entity';
@@ -105,6 +106,7 @@ import { GarageProcurementOrderAcceptance } from '@/v2/modules/procurement-order
 // plop:api-v2-entity-imports
 const entities = [
   ApprovalEvent,
+  ApprovalSetting,
   ProcurementRequest,
   ProcurementRequestLine,
   ProcurementOrder,

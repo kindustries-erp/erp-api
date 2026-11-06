@@ -13,6 +13,7 @@ const header = {
   remarks: null,
   submittedBy: null,
   approvedBy: null,
+  approverId: null,
   rejectedBy: null,
   rejectReason: null,
   cancelReason: null,

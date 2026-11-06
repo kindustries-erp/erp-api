@@ -54,6 +54,14 @@ Quyền resource: `garage_procurement_orders`. Seed từ `garage_purchase_orders
 - Đề nghị Garage: [`garage-procurement-requests`](../garage-procurement-requests/SKILL.md)
 - Họ thường: [`erp-procurement-orders`](../erp-procurement-orders/SKILL.md)
 
+## 12. Khóa duyệt và chọn người duyệt (2026-11-06)
+
+- Khóa BE, không có UI, `doc_type = GARAGE_PROCUREMENT_ORDER`, mặc định **tắt** (migration `20261106120000-SetGarageProcurementOrderApprovalOff`). Đọc: `GET /api/v2/approval-config/garage-procurement-orders/setting`. Đổi: `PATCH` cùng path (quyền `admin_users:update`).
+- Khóa **tắt**: submit tự duyệt (`AUTO_APPROVED`) và vẫn chốt `approved_total`. Người dùng không chọn người duyệt.
+- Khóa **bật**: `POST /:id/submit` nhận `{ approverId }` bắt buộc; chỉ người đó approve/reject (403 nếu khác); lưu `approver_id` trên `erp_garage_proc_orders`. Quy tắc giống đề nghị Garage (mục 11 bên đó).
+- Danh sách người duyệt: `GET /api/v2/approval-config/garage-procurement-orders/approvers`.
+- Migration bật khóa: `20261106110000-AddApprovalSettingsAndApprover.ts`; đổi mặc định PO: `20261106120000-SetGarageProcurementOrderApprovalOff.ts`.
+
 ## 8. Cập nhật 2026-11-05: sửa nháp, xóa, thanh toán, GR
 
 - Migration `20261105103000-AddPaymentFieldsToGarageProcOrders`: `payment_status varchar(50) NOT NULL DEFAULT 'UNPAID'` (có chỉ mục) và `supplier_invoice_no varchar(100) NULL`. Chưa có luồng ghi `payment_status`; chỉ hiển thị.

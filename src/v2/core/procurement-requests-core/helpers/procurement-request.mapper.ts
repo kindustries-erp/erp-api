@@ -17,6 +17,7 @@ export interface RequestHeaderLike {
   remarks: string | null;
   submittedBy: string | null;
   approvedBy: string | null;
+  approverId: string | null;
   rejectedBy: string | null;
   rejectReason: string | null;
   cancelReason: string | null;
@@ -58,6 +59,7 @@ export function toPurchaseRequestResponse(
     remarks: header.remarks,
     submittedBy: header.submittedBy,
     approvedBy: header.approvedBy,
+    approverId: header.approverId,
     rejectedBy: header.rejectedBy,
     rejectReason: header.rejectReason,
     cancelReason: header.cancelReason,

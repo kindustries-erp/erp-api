@@ -17,6 +17,7 @@ interface GarageHeaderLike {
   fulfillmentStatus: string;
   totalAmount: string;
   approvedTotal: string | null;
+  approverId: string | null;
   remarks: string | null;
   rejectReason: string | null;
   cancelReason: string | null;

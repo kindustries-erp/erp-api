@@ -30,6 +30,7 @@ export class ProcurementOrderResponseDto {
   @ApiProperty() fulfillmentStatus: string;
   @ApiProperty() totalAmount: number;
   @ApiProperty({ nullable: true }) approvedTotal: number | null;
+  @ApiProperty({ nullable: true }) approverId: string | null;
   @ApiProperty({ nullable: true }) remarks: string | null;
   @ApiProperty({ nullable: true }) rejectReason: string | null;
   @ApiProperty({ nullable: true }) cancelReason: string | null;

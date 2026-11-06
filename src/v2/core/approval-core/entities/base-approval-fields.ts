@@ -26,4 +26,8 @@ export abstract class BaseApprovalFields {
 
   @Column({ type: 'text', name: 'reject_reason', nullable: true })
   rejectReason: string | null;
+
+  /** Người duyệt được chỉ định lúc gửi duyệt. Chỉ có ý nghĩa khi khóa duyệt đang bật. */
+  @Column({ type: 'uuid', name: 'approver_id', nullable: true })
+  approverId: string | null;
 }

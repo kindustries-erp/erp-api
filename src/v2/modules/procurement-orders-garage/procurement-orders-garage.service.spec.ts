@@ -25,6 +25,7 @@ function makeService(requestBranch: string | null | 'missing') {
     query as never,
     rbac as never,
     dataSource as never,
+    { assertEligible: jest.fn() } as never,
   );
   return { svc, command };
 }
@@ -83,6 +84,7 @@ function makeUpdateService(
     query as never,
     { getUserRoleNames: jest.fn().mockResolvedValue([]) } as never,
     dataSource as never,
+    { assertEligible: jest.fn() } as never,
   );
   return { svc, command };
 }

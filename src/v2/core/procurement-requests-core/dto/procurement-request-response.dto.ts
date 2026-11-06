@@ -28,6 +28,7 @@ export class PurchaseRequestResponseDto {
   @ApiProperty({ nullable: true }) remarks: string | null;
   @ApiProperty({ nullable: true }) submittedBy: string | null;
   @ApiProperty({ nullable: true }) approvedBy: string | null;
+  @ApiProperty({ nullable: true }) approverId: string | null;
   @ApiProperty({ nullable: true }) rejectedBy: string | null;
   @ApiProperty({ nullable: true }) rejectReason: string | null;
   @ApiProperty({ nullable: true }) cancelReason: string | null;

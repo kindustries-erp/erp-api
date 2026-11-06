@@ -32,6 +32,7 @@ Ràng buộc CHECK: `line_type IN ('GOODS','SERVICE')`; `0 <= qty_ordered <= qty
 - Mọi bước ghi một dòng vào `erp_approval_events` (`doc_type = PROCUREMENT_REQUEST`) trong cùng transaction, kèm tên role của người thao tác.
 - Người thao tác lấy từ JWT (`req.user.sub`), không nhận từ body.
 - Khóa: `pessimistic_write` trên header trước khi kiểm tra trạng thái.
+- Lõi dùng chung `approval-core` (2026-11-06): không có dòng trong `erp_approval_settings` thì giữ hành vi cũ (LEGACY, `approverId` tùy chọn). Module họ thường không seed khóa.
 
 ## 4. Endpoint (`/api/v2/erp-procurement-requests`)
 

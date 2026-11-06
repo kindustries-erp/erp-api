@@ -7,7 +7,8 @@ import {
 } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { GarageProcurementRequest } from '../procurement-requests-garage/entities/procurement-request.entity';
-import { RbacCoreService } from '@/v2/core/rbac-core';
+import { ErpResource, RbacCoreService } from '@/v2/core/rbac-core';
+import { ApproverDirectoryService } from '@/v2/core/approval-core/approver-directory.service';
 import { ProcurementOrderAction } from '@/v2/core/procurement-orders-core/contracts/procurement-orders.contract';
 import {
   AcceptServicesDto,
@@ -31,6 +32,7 @@ export class GarageProcurementOrdersService {
     private readonly query: GarageProcurementOrderQueryService,
     private readonly rbac: RbacCoreService,
     private readonly dataSource: DataSource,
+    private readonly approvers: ApproverDirectoryService,
   ) {}
 
   async create(
@@ -141,12 +143,21 @@ export class GarageProcurementOrdersService {
     action: ProcurementOrderAction,
     actorId: string,
     reason?: string,
+    approverId?: string | null,
   ): Promise<GarageProcurementOrderResponseDto> {
+    if (approverId) {
+      await this.approvers.assertEligible(
+        ErpResource.GARAGE_PROCUREMENT_ORDERS,
+        approverId,
+        actorId,
+      );
+    }
     await this.command.transition(
       id,
       action,
       { id: actorId, roles: await this.roles(actorId) },
       reason,
+      approverId ?? null,
     );
     return this.findOne(id);
   }

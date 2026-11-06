@@ -68,6 +68,46 @@ export class RbacCoreService {
       .map((role) => role.name);
   }
 
+  /**
+   * Danh sách user ID có đủ mọi action trên resource (role đang hoạt động).
+   * Khớp quyền như checkPermissionMatch: resource hoặc SUPER_ADMIN/'*', action hoặc ALL/'*'.
+   * Dùng cho danh sách người duyệt; không lọc trạng thái user (việc đó do lớp gọi).
+   */
+  async findUserIdsWithPermissions(
+    resource: string,
+    actions: string[],
+  ): Promise<string[]> {
+    const rows = await this.userRoleRepository
+      .createQueryBuilder('ur')
+      .innerJoin('ur.role', 'role', 'role.isActive = :active', {
+        active: true,
+      })
+      .innerJoin('role.permissions', 'perm')
+      .select('ur.userId', 'userId')
+      .addSelect('perm.action', 'action')
+      .where('perm.resource IN (:...resources)', {
+        resources: [resource, String(ErpResource.SUPER_ADMIN), '*'],
+      })
+      .getRawMany<{ userId: string; action: string }>();
+
+    const actionsByUser = new Map<string, Set<string>>();
+    for (const row of rows) {
+      const set = actionsByUser.get(row.userId) ?? new Set<string>();
+      set.add(String(row.action));
+      actionsByUser.set(row.userId, set);
+    }
+
+    const wildcard = [String(ErpAction.ALL), '*'];
+    return [...actionsByUser.entries()]
+      .filter(([, granted]) =>
+        actions.every(
+          (action) =>
+            granted.has(action) || wildcard.some((w) => granted.has(w)),
+        ),
+      )
+      .map(([userId]) => userId);
+  }
+
   async getUserPermissions(userId: string): Promise<CorePermission[]> {
     const userRoles = await this.userRoleRepository.find({
       where: { userId },

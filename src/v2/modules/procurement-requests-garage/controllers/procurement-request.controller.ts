@@ -16,6 +16,7 @@ import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
 import { RequirePermissions } from '@/auth/decorators/require-permissions.decorator';
 import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
+import { SubmitApprovalDto } from '@/v2/core/approval-core/dto/approval-action.dto';
 
 import {
   CreateProcurementRequestDto,
@@ -165,8 +166,18 @@ export class GarageProcurementRequestController {
     action: ErpAction.UPDATE,
   })
   @Post(':id/submit')
-  submit(@Param('id', ParseUUIDPipe) id: string, @Req() req: RequestWithUser) {
-    return this.service.transition(id, 'submit', req.user?.sub ?? '');
+  submit(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SubmitApprovalDto,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.service.transition(
+      id,
+      'submit',
+      req.user?.sub ?? '',
+      undefined,
+      dto.approverId ?? null,
+    );
   }
 
   @RequirePermissions({

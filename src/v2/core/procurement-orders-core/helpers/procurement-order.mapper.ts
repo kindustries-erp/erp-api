@@ -16,6 +16,7 @@ export interface OrderHeaderLike {
   fulfillmentStatus: string;
   totalAmount: string;
   approvedTotal: string | null;
+  approverId: string | null;
   remarks: string | null;
   rejectReason: string | null;
   cancelReason: string | null;
@@ -57,6 +58,7 @@ export function toProcurementOrderResponse(
     fulfillmentStatus: header.fulfillmentStatus,
     totalAmount: Number(header.totalAmount),
     approvedTotal: num(header.approvedTotal),
+    approverId: header.approverId,
     remarks: header.remarks,
     rejectReason: header.rejectReason,
     cancelReason: header.cancelReason,

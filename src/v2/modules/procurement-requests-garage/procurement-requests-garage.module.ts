@@ -3,6 +3,12 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { RbacCoreModule } from '@/v2/core/rbac-core';
 import { ApprovalEvent } from '@/v2/core/approval-core/entities/approval-event.entity';
 import { ApprovalEventService } from '@/v2/core/approval-core/approval-event.service';
+import { ApprovalSetting } from '@/v2/core/approval-core/entities/approval-setting.entity';
+import { ApprovalSettingsService } from '@/v2/core/approval-core/approval-settings.service';
+import { ApproverDirectoryService } from '@/v2/core/approval-core/approver-directory.service';
+import { createApprovalConfigController } from '@/v2/core/approval-core/approval-config.controller';
+import { CoreUser } from '@/users/entities/core-user.entity';
+import { ErpResource } from '@/v2/core/rbac-core';
 import { GarageProcurementRequest } from './entities/procurement-request.entity';
 import { GarageProcurementRequestLine } from './entities/procurement-request-line.entity';
 import { GarageProcurementRequestController } from './controllers/procurement-request.controller';
@@ -11,6 +17,14 @@ import { GarageProcurementRequestCommandService } from './services/procurement-r
 import { GarageProcurementRequestQueryService } from './services/procurement-request-query.service';
 import { GarageProcurementRequestOrderingService } from './services/garage-procurement-request-ordering.service';
 
+const GarageProcurementRequestApprovalConfigController =
+  createApprovalConfigController({
+    path: 'api/v2/approval-config/garage-procurement-requests',
+    docType: 'GARAGE_PROCUREMENT_REQUEST',
+    resource: ErpResource.GARAGE_PROCUREMENT_REQUESTS,
+    tag: 'procurement_requests',
+  });
+
 /** Module đề nghị mua thường (bảng erp_garage_proc_requests). Lõi nằm ở src/v2/core/procurement-requests. */
 @Module({
   imports: [
@@ -18,12 +32,19 @@ import { GarageProcurementRequestOrderingService } from './services/garage-procu
       GarageProcurementRequest,
       GarageProcurementRequestLine,
       ApprovalEvent,
+      ApprovalSetting,
+      CoreUser,
     ]),
     RbacCoreModule,
   ],
-  controllers: [GarageProcurementRequestController],
+  controllers: [
+    GarageProcurementRequestController,
+    GarageProcurementRequestApprovalConfigController,
+  ],
   providers: [
     ApprovalEventService,
+    ApprovalSettingsService,
+    ApproverDirectoryService,
     GarageProcurementRequestCommandService,
     GarageProcurementRequestQueryService,
     GarageProcurementRequestsService,

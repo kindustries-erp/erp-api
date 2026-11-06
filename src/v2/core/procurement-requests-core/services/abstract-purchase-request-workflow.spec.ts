@@ -44,6 +44,8 @@ function fakeManager(header: Header | null, lines: Line[] = []) {
   const manager = {
     findOne: jest.fn().mockResolvedValue(header),
     find: jest.fn().mockResolvedValue(lines),
+    // Không có dòng khóa duyệt: chế độ LEGACY (hành vi cũ).
+    getRepository: () => ({ findOne: jest.fn().mockResolvedValue(null) }),
     save: jest.fn(async (_target: unknown, value: unknown) => {
       saved.push(value);
       return value;

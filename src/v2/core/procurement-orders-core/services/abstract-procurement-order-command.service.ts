@@ -9,6 +9,11 @@ import {
 import { nextDocumentNo } from '../../../../common/numbering/document-numbering';
 import { ApprovalEventService } from '../../approval-core/approval-event.service';
 import {
+  assertCanDecide,
+  loadApprovalMode,
+  resolveSubmitDecision,
+} from '../../approval-core/approval-gate.helper';
+import {
   assertNotSelfApproval,
   requireReason,
   resolveTransition,
@@ -84,19 +89,26 @@ export abstract class AbstractProcurementOrderCommandService<
     protected readonly requestLink: RequestLinkPort,
   ) {}
 
+  /**
+   * Chuyển trạng thái. `approverId` chỉ dùng cho submit: người được chọn duyệt.
+   * Khi khóa duyệt tắt, submit tự duyệt (APPROVED, chốt approvedTotal) và ghi AUTO_APPROVED.
+   */
   async transition(
     id: string,
     action: ProcurementOrderAction,
     actor: OrderActor,
     reason?: string,
+    approverId?: string | null,
   ): Promise<H> {
     return this.dataSource.transaction(async (manager) => {
       const header = await this.lockHeader(manager, id);
       const from = header.status as ProcurementOrderStatus;
       const lines = await this.loadLines(manager, id);
+      const mode = await loadApprovalMode(manager, this.docType);
 
       if (PROCUREMENT_ORDER_ACTIONS_REQUIRING_APPROVER.includes(action)) {
         assertNotSelfApproval(actor.id, header.createdBy);
+        assertCanDecide(header.approverId, actor.id);
       }
       const cleanReason = PROCUREMENT_ORDER_ACTIONS_REQUIRING_REASON.includes(
         action,
@@ -115,8 +127,23 @@ export abstract class AbstractProcurementOrderCommandService<
       }
 
       const to = resolveTransition(PROCUREMENT_ORDER_TRANSITIONS, from, action);
+      const decision =
+        action === 'submit'
+          ? resolveSubmitDecision(mode, actor.id, approverId)
+          : null;
+
       this.applyFields(header, action, actor.id, cleanReason);
-      header.status = to;
+      if (decision) {
+        header.approverId = decision.approverId;
+        if (decision.autoApprove) {
+          this.applyFields(header, 'approve', actor.id, null);
+        }
+      }
+      if (action === 'recall' || action === 'reject') {
+        header.approverId = null;
+      }
+      const finalTo = decision?.autoApprove ? 'APPROVED' : to;
+      header.status = finalTo;
       await manager.save(this.headerEntity, header);
 
       if (action === 'cancel' && header.requestId) {
@@ -135,9 +162,9 @@ export abstract class AbstractProcurementOrderCommandService<
       await this.events.record(manager, {
         docType: this.docType,
         docId: id,
-        action,
+        action: decision?.autoApprove ? 'AUTO_APPROVED' : action,
         fromStatus: from,
-        toStatus: to,
+        toStatus: finalTo,
         actorId: actor.id,
         actorRoles: actor.roles,
         comment: cleanReason,

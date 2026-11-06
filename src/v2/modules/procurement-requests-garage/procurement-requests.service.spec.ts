@@ -32,10 +32,13 @@ describe('GarageProcurementRequestsService (facade)', () => {
       getUserRoleNames: jest.fn().mockResolvedValue(['GIAM_DOC']),
     };
 
+    const approvers = { assertEligible: jest.fn() };
+
     const svc = new GarageProcurementRequestsService(
       command as never,
       query as never,
       rbac as never,
+      approvers as never,
     );
     const out = await svc.transition('h1', 'approve', 'boss');
 
@@ -45,6 +48,7 @@ describe('GarageProcurementRequestsService (facade)', () => {
       'approve',
       { id: 'boss', roles: ['GIAM_DOC'] },
       undefined,
+      null,
     );
     expect(out.status).toBe('APPROVED');
     expect(out.approvedBy).toBe('boss');

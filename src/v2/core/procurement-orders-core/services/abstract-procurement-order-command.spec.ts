@@ -46,6 +46,8 @@ function setup(header: Header, lines: Line[]) {
   const manager = {
     findOne: jest.fn().mockResolvedValue(header),
     find: jest.fn().mockResolvedValue(lines),
+    // Không có dòng khóa duyệt: chế độ LEGACY (hành vi cũ).
+    getRepository: () => ({ findOne: jest.fn().mockResolvedValue(null) }),
     save: jest.fn(async (_t: unknown, v: unknown) => v),
   };
   const dataSource = {

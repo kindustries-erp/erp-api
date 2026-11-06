@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { RbacCoreService } from '@/v2/core/rbac-core';
+import { ErpResource, RbacCoreService } from '@/v2/core/rbac-core';
+import { ApproverDirectoryService } from '@/v2/core/approval-core/approver-directory.service';
 import { toPurchaseRequestResponse } from '@/v2/core/procurement-requests-core/helpers/procurement-request.mapper';
 import {
   PurchaseRequestAction,
@@ -28,6 +29,7 @@ export class GarageProcurementRequestsService {
     private readonly command: GarageProcurementRequestCommandService,
     private readonly query: GarageProcurementRequestQueryService,
     private readonly rbac: RbacCoreService,
+    private readonly approvers: ApproverDirectoryService,
   ) {}
 
   async create(
@@ -93,12 +95,21 @@ export class GarageProcurementRequestsService {
     action: PurchaseRequestAction,
     actorId: string,
     reason?: string,
+    approverId?: string | null,
   ): Promise<PurchaseRequestResponseDto> {
+    if (approverId) {
+      await this.approvers.assertEligible(
+        ErpResource.GARAGE_PROCUREMENT_REQUESTS,
+        approverId,
+        actorId,
+      );
+    }
     await this.command.transition(
       id,
       action,
       { id: actorId, roles: await this.roles(actorId) },
       reason,
+      approverId ?? null,
     );
     return this.findOne(id);
   }
