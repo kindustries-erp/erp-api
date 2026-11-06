@@ -1,4 +1,4 @@
-import { toKebab, toPascal } from './apiV2Data.mjs';
+import { toKebab, toPascal, toSnake } from './apiV2Data.mjs';
 
 /** Hai kiểu lõi: `engine` (Engine service, như goods-receipts/invoices) và `abstract-services` (như purchase-orders). */
 export const API_CORE_STYLES = ['engine', 'abstract-services'];
@@ -49,6 +49,8 @@ export function buildApiCoreData(answers) {
     moduleProviders: style === 'engine' ? serviceClass : '',
     moduleClass: `${familyPascal}CoreModule`,
     moduleFile: `${family}-core.module`,
-    serviceTemplateDir: style === 'engine' ? 'core-engine' : 'core-abstract',
+    serviceTemplateDir: style === 'engine' ? 'core-engine' : 'workflow-common',
+    // Hằng bảng chuyển trạng thái và tiền tố tên file, ví dụ PROCUREMENT_ORDER_TRANSITIONS
+    entityUpperSnake: toSnake(entity).toUpperCase(),
   };
 }

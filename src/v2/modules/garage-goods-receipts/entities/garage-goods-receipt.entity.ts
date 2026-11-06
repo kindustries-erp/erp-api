@@ -13,6 +13,15 @@ export class GarageGoodsReceipt extends BaseGoodsReceiptEntity {
   })
   paymentStatus: string;
 
+  /** Đơn mua garage nguồn; null khi nhập không qua PO. */
+  @Index()
+  @Column({
+    type: 'uuid',
+    name: 'garage_procurement_order_id',
+    nullable: true,
+  })
+  garageProcurementOrderId?: string | null;
+
   @OneToMany('GarageGoodsReceiptLine', (line: any) => line.receipt, {
     cascade: true,
   })

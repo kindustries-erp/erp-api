@@ -15,6 +15,15 @@ export class GarageGoodsReceiptLine extends BaseGoodsReceiptLineEntity {
   @Column({ type: 'uuid', name: 'garage_goods_receipt_id' })
   garageGoodsReceiptId: string;
 
+  /** Dòng đơn mua garage được nhận; bắt buộc khi phiếu thuộc một đơn mua. */
+  @Index()
+  @Column({
+    type: 'uuid',
+    name: 'procurement_order_line_id',
+    nullable: true,
+  })
+  procurementOrderLineId?: string | null;
+
   @ManyToOne('GarageGoodsReceipt', (receipt: any) => receipt.lines, {
     onDelete: 'CASCADE',
   })

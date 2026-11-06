@@ -16,7 +16,7 @@ import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
-import { ErpResource, ErpAction } from '@/rbac-core/enums';
+import { ErpResource, ErpAction } from '@/v2/core/rbac';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { GoodsIssuesCoreService } from './goods-issues-core.service';
 import { CreateGoodsIssueDto } from './dto/create-goods-issue.dto';

@@ -8,11 +8,11 @@ import { AuthModule } from './auth/auth.module';
 import { CoreUser } from './users/entities/core-user.entity';
 import { CoreUserPreference } from './users/entities/core-user-preference.entity';
 import { CoreUserTablePreference } from './users/entities/core-user-table-preference.entity';
-import { CoreRole } from './rbac-core/entities/core-role.entity';
-import { CorePermission } from './rbac-core/entities/core-permission.entity';
-import { CoreUserRole } from './rbac-core/entities/core-user-role.entity';
+import { CoreRole } from '@/v2/core/rbac/entities/core-role.entity';
+import { CorePermission } from '@/v2/core/rbac/entities/core-permission.entity';
+import { CoreUserRole } from '@/v2/core/rbac/entities/core-user-role.entity';
 import { EmployeesCoreModule } from './employees-core/employees-core.module';
-import { BusinessPartnersCoreModule } from './v2/business-partners-core/business-partners-core.module';
+import { BusinessPartnersManagementModule } from './v2/modules/business-partners-management/business-partners-management.module';
 import { InventoryCoreModule } from './inventory-core/inventory-core.module';
 import { BomCoreModule } from './bom-core/bom-core.module';
 import { ModuleConfigModule } from './module-config/module-config.module';
@@ -30,7 +30,8 @@ import { AuditCoreModule } from './audit-core/audit-core.module';
 import { UsersAdminModule } from './users-admin/users-admin.module';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { GlobalAuditInterceptor } from './audit-core/interceptors/global-audit.interceptor';
-import { RbacCoreModule } from './rbac-core/rbac-core.module';
+import { RbacCoreModule } from '@/v2/core/rbac';
+import { RbacRolesModule } from './v2/modules/rbac-roles/rbac-roles.module';
 import { BasicMastersCoreModule } from './basic-masters-core/basic-masters-core.module';
 import { DocumentDependenciesCoreModule } from './document-dependencies-core/document-dependencies-core.module';
 import { ErpInvoicesCoreModule } from './erp-invoices-core/erp-invoices-core.module';
@@ -58,7 +59,10 @@ import { FinanceInvoicesModule } from './v2/modules/finance-invoices/finance-inv
 import { AdminDashboardModule } from './v2/admin-dashboard-core/admin-dashboard.module';
 import { GarageGoodsReceiptsCoreModule } from './v2/modules/garage-goods-receipts/garage-goods-receipts-core.module'; // api-v2-module:garage-goods-receipts:app-imports
 import { PurchaseOrdersModule } from './v2/modules/purchase-orders/purchase-orders.module'; // api-v2-module:purchase-orders:app-imports
-import { GaragePurchaseOrdersModule } from './v2/modules/garage-purchase-orders/garage-purchase-orders.module'; // api-v2-module:garage-purchase-orders:app-imports
+import { ErpProcurementRequestsModule } from './v2/modules/erp-procurement-requests/erp-procurement-requests.module'; // procurement:pr-module
+import { ErpProcurementOrdersModule } from './v2/modules/erp-procurement-orders/erp-procurement-orders.module'; // procurement:po-module
+import { GarageProcurementRequestsModule } from './v2/modules/garage-procurement-requests/garage-procurement-requests.module'; // procurement:garage-pr-module
+import { GarageProcurementOrdersModule } from './v2/modules/garage-procurement-orders/garage-procurement-orders.module'; // procurement:garage-po-module
 // plop:api-v2-imports
 
 @Module({
@@ -132,7 +136,7 @@ import { GaragePurchaseOrdersModule } from './v2/modules/garage-purchase-orders/
     }),
     AuthModule,
     EmployeesCoreModule,
-    BusinessPartnersCoreModule,
+    BusinessPartnersManagementModule,
     InventoryCoreModule,
     ErpInvoicesCoreModule,
     ErpAttachmentsCoreModule,
@@ -152,6 +156,7 @@ import { GaragePurchaseOrdersModule } from './v2/modules/garage-purchase-orders/
     AuditCoreModule,
     UsersAdminModule,
     RbacCoreModule,
+    RbacRolesModule,
     BasicMastersCoreModule,
     DocumentDependenciesCoreModule,
     ErpInvoicesCoreModule,
@@ -175,7 +180,10 @@ import { GaragePurchaseOrdersModule } from './v2/modules/garage-purchase-orders/
     AdminDashboardModule,
     GarageGoodsReceiptsCoreModule, // api-v2-module:garage-goods-receipts:app-modules
     PurchaseOrdersModule, // api-v2-module:purchase-orders:app-modules
-    GaragePurchaseOrdersModule, // api-v2-module:garage-purchase-orders:app-modules
+    ErpProcurementRequestsModule, // procurement:pr-module-register
+    ErpProcurementOrdersModule, // procurement:po-module-register
+    GarageProcurementRequestsModule, // procurement:garage-pr-module-register
+    GarageProcurementOrdersModule, // procurement:garage-po-module-register
     // plop:api-v2-modules
   ],
   controllers: [AppController],

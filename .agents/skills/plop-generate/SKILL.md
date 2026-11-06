@@ -1,6 +1,6 @@
 ---
 name: plop-generate
-description: Fast boilerplate code generator for ERP API (erp-api) using PlopJS. Generates V2 core families, thin V2 modules wired into app.module and data-source, V2 facade modules, legacy V1 NestJS modules and TypeORM migrations.
+description: Fast boilerplate code generator for ERP API (erp-api) using PlopJS. Generates V2 core families (CRUD engine or workflow abstract-services with status transitions), thin V2 CRUD modules and workflow modules wired into app.module and data-source, V2 facade modules, legacy V1 NestJS modules and TypeORM migrations.
 ---
 
 # ⚡ Plop Boilerplate Generator Guide (ERP API)
@@ -19,7 +19,7 @@ Sinh `src/v2/core/<họ>/`: contracts, Base entity, Base create DTO, service n�
 
 **Prompts (tương tác):** `familyInput` (kebab-case, ví dụ `customer-claims`), `entityInput` (PascalCase), `styleInput`:
 - `engine`: `Base<Họ>EngineService`, dùng cho lõi kiểu voucher (ví dụ `goods-receipts`, `invoices`).
-- `abstract-services`: `Abstract<E>CommandService` và query service, dùng cho lõi kiểu `purchase-orders`. Module lõi không đăng ký lớp abstract làm provider (Nest không khởi tạo được lớp abstract).
+- `abstract-services`: khung workflow cho chứng từ có trạng thái: contract (`<E>Action`, bảng `<E>_TRANSITIONS` rỗng), entity có `status`/`createdBy`, và `Abstract<E>CommandService` với `transition()`, `createDraft()` cùng hook `// CUSTOM`. Module lõi không đăng ký lớp abstract làm provider (Nest không khởi tạo được lớp abstract).
 
 - Từ chối nếu `src/v2/core/<họ>` đã tồn tại.
 - `core.manifest.json` là nguồn duy nhất để `api-thin-module` đọc tên class và kiểu lõi.
@@ -41,6 +41,16 @@ Sinh 16 file trong `src/v2/modules/<module>/` theo đúng pipeline `api-module-v
 - Response và mapper chỉ trả cột riêng cùng `id`, `createdAt`, `updatedAt`. Cột của lõi cần bổ sung vào mapper bằng tay nếu API phải trả về.
 - Command service ép kiểu DTO sang entity (`as unknown as DeepPartial`) vì kiểu ngày của lõi là chuỗi. TypeORM nhận chuỗi ISO cho cột timestamptz.
 - Logic nghiệp vụ riêng của lõi (ví dụ kiểm tra chuyển trạng thái, đánh số) không được gọi tự động. Gọi tay qua service của lõi khi cần.
+
+### 🔁 Generator: `api-workflow-module` (module chứng từ có trạng thái, ghép lõi `abstract-services`)
+
+Chỉ nhận họ có `style: abstract-services` trong manifest; họ CRUD dùng `api-thin-module`. Sinh 6 file trong `src/v2/modules/<module>/`: entity con, DTO tạo, command con kế thừa lõi (điền `headerEntity`, `docType`), controller `POST /` (tạo nháp) và `POST /:id/transition/:action`, module, spec tối thiểu. Thêm `ErpResource` vào `erp-resource.enum.ts`; `wireInput` nối `app.module.ts` và `data-source.ts`.
+
+**Prompts (tương tác):** giống `api-thin-module`. Gợi ý `fieldSpecInput` mặc định không chứa `status`, vì lõi đã có.
+
+- Điền nghiệp vụ ở các hook `// CUSTOM`, bảng chuyển trạng thái trong contract của lõi. Không sửa template.
+- Chưa có endpoint đọc danh sách/chi tiết: dev thêm query service khi cần.
+- Spec sinh ra chỉ kiểm tra khai báo; test hành vi chuyển trạng thái do dev viết.
 
 ### 📦 Generator: `api-module-v2` (Module API v2 đứng riêng: Facade + sub-services + spec)
 

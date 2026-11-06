@@ -1,40 +1,50 @@
 ---
 name: business-partners-core
-description: Module tri thức Đối tác (Khách hàng & Nhà cung cấp) phía API erp-api (src/v2/business-partners-core). Bảng erp_business_partners, hợp đồng API v2 (envelope, lọc/sắp xếp/subtotal qua table-query), quy tắc sinh mã NCC-/KH-/DT-, kiểm tra trùng mã, RBAC business_partners và các module phụ thuộc entity.
+description: Module tri thức Đối tác (Khách hàng & Nhà cung cấp) phía API erp-api (src/v2/core/business-partners-core & src/v2/modules/business-partners-management). Bảng erp_business_partners, hợp đồng API v2 (envelope, lọc/sắp xếp/subtotal qua table-query), quy tắc sinh mã NCC-/KH-/DT-, kiểm tra trùng mã, RBAC business_partners và các module phụ thuộc entity.
 ---
 
-# 📦 Module Tri Thức: Business Partners Core (API)
+# 📦 Module Tri Thức: Business Partners (API V2)
 
 ## 1. Phạm vi
 
 - Route chính: `/api/v2/business-partners`; alias `/api/v1/business-partners` giữ cho web V1 (một `@Controller` hai path, spec `erp-business-partner.routes.spec.ts`). Quyền: `ErpResource.BUSINESS_PARTNERS` (`business_partners`) với READ, CREATE, UPDATE, DELETE.
 - Phân loại bằng `partnerType`: `CUSTOMER` (khách hàng) hoặc `VENDOR` (nhà cung cấp). Loại khác được chấp nhận và sinh mã tiền tố `DT-`.
 - Xóa là xóa mềm (`isDeleted`). Không có audit log, không có khóa bi quan (không có số dư).
-- Web tiêu thụ: V1 `src/modules/business-partners-core`, `src/modules/partners`, PO drawers; V2 `src/v2/modules/business-partners` (xem skill `business-partners` của erp-web).
+- Web tiêu thụ: V1 `src/modules/business-partners-core`, `src/modules/partners`, PO drawers; V2 `src/v2/modules/business-partners-customers` và `business-partners-suppliers` (xem skill `business-partners` của erp-web).
 
-## 2. Cấu trúc
+## 2. Cấu trúc (Theo chuẩn `/api-structure` V2 Core & Modules)
 
 ```text
-src/v2/business-partners-core/
-├── business-partners-core.module.ts        # imports TypeORM, providers, exports facade
-├── business-partners-core.service.ts       # Facade: sinh mã, envelope, NotFound
-├── business-partners-core.service.spec.ts  # nghiệp vụ + hợp đồng response
-├── controllers/erp-business-partner.controller.ts (+ .spec)
-├── dto/                                    # create/update/query/response (sinh bởi api-module-v2)
-├── entities/erp_business_partner.entity.ts # entity dùng chung, nhiều module import (đường dẫn đã cập nhật khi chuyển sang v2)
-├── helpers/
-│   ├── erp-business-partner.mapper.ts (+ .spec)       # entity <-> response DTO
-│   └── erp-business-partner-code.helper.ts (+ .spec)  # sinh mã, chuẩn hóa mã (hàm thuần)
-└── services/
-    ├── erp-business-partner-query.service.ts (+ .spec) # lọc, sắp xếp, tổng, column-options, mã đã dùng
-    ├── erp-business-partner-command.service.ts (+ .spec) # kiểm tra trùng mã và MST, create/update/softDelete
-    ├── erp-business-partner-invoice-sync.service.ts (+ .spec) # đồng bộ đối tác từ hóa đơn (1 MST = 1 đối tác), ensureFromInvoiceKey
-    └── erp-business-partner-options.service.ts (+ .spec) # danh sách chọn đối tượng cho sao kê (danh mục + người mua/bán chưa có)
+src/v2/
+├── core/business-partners-core/
+│   ├── core.manifest.json                     # Khai báo họ core (listCoreFamilies nhận diện)
+│   ├── index.ts                               # Barrel export cho alias @/v2/core/business-partners-core
+│   ├── business-partners-core.module.ts       # Module lõi xuất TypeOrmModule & Core services
+│   ├── contracts/
+│   │   └── business-partner.contract.ts       # IBusinessPartner, PartnerType
+│   ├── entities/
+│   │   ├── erp_business_partner.entity.ts     # Entity ErpBusinessPartner dùng chung toàn hệ thống
+│   │   └── index.ts
+│   ├── dto/                                   # create/update/query/response DTOs
+│   ├── helpers/
+│   │   ├── erp-business-partner.mapper.ts (+ .spec)       # entity <-> response DTO
+│   │   └── erp-business-partner-code.helper.ts (+ .spec)  # sinh mã, chuẩn hóa mã (hàm thuần)
+│   └── services/
+│       ├── erp-business-partner-query.service.ts (+ .spec) # lọc, sắp xếp, tổng, column-options, mã đã dùng
+│       ├── erp-business-partner-command.service.ts (+ .spec) # kiểm tra trùng mã và MST, create/update/softDelete
+│       ├── erp-business-partner-invoice-sync.service.ts (+ .spec) # đồng bộ đối tác từ hóa đơn, ensureFromInvoiceKey
+│       ├── erp-business-partner-options.service.ts (+ .spec) # danh sách chọn đối tượng cho sao kê
+│       └── business-partners-core.service.ts (+ .spec) # Facade lõi cho các service/module khác
+└── modules/business-partners-management/
+    ├── index.ts                               # Barrel export cho module
+    ├── business-partners-management.module.ts  # Đăng ký Controller và Facade, import BusinessPartnersCoreModule
+    ├── business-partners-management.service.ts # Facade Service của module HTTP (+ .spec)
+    └── controllers/
+        ├── erp-business-partner.controller.ts (+ .spec) # Phục vụ ['api/v2/business-partners', 'business-partners']
+        └── erp-business-partner.routes.spec.ts          # Test đảm bảo cả route V1 và V2 đều pass
 ```
 
 Helper khóa dùng chung (ngoài module): `src/common/utils/invoice-partner-key.util.ts` (MST/CCCD, biểu thức SQL tên/MST từ hóa đơn; công nợ và đồng bộ dùng chung).
-
-Sinh bằng `api-module-v2` (xem skill `erp-api-structure`, mục 3b về chuyển module cũ).
 
 ## 3. Schema (đã xác minh đối chiếu với DB, chỉ đọc)
 
@@ -53,7 +63,7 @@ Index unique trên `code` chỉ áp dụng cho bản ghi chưa xóa mềm (parti
 | `POST /` | `{ message: 'Tạo thành công', data }` |
 | `PATCH /:id` | `{ message: 'Cập nhật thành công', data }` |
 | `DELETE /:id` | `{ message: 'Xóa thành công', data }` (xóa mềm) |
-| `GET /options?direction=IN\|OUT&search&page&pageSize` | `{ items: [{partnerId, code, name, taxCode, partnerType, source: MASTER\|INVOICE}], total, page, pageSize, totalPages }`. Quyền: một trong `business_partners`, `bank_statements`, `cash_statements` (READ). `OUT` = khách hàng (tiền thu), `IN` = NCC (tiền chi) |
+| `GET /options?direction=IN|OUT&search&page&pageSize` | `{ items: [{partnerId, code, name, taxCode, partnerType, source: MASTER|INVOICE}], total, page, pageSize, totalPages }`. Quyền: một trong `business_partners`, `bank_statements`, `cash_statements` (READ). `OUT` = khách hàng (tiền thu), `IN` = NCC (tiền chi) |
 | `POST /sync-from-invoices` | Body `{ dryRun?: boolean }` → `{ message, dryRun, count, items: [{taxCode, name, address, partnerType}] }`. Tạo đối tác cho từng MST còn thiếu (1 MST = 1 đối tác, loại theo chiều có nhiều hóa đơn hơn, hòa → CUSTOMER). Chạy lại không tạo trùng. Quyền: `business_partners` CREATE |
 
 - `data` là response DTO: `id, code, name, displayName, partnerType, taxCode, phone, email, address, contactName, status, notes, createdAt, updatedAt`. Không có `isDeleted` (V1 có trả trường này).
@@ -64,7 +74,7 @@ Index unique trên `code` chỉ áp dụng cho bản ghi chưa xóa mềm (parti
 
 - Tham số: `search` (toàn cục trên 7 cột: code, name, displayName, taxCode, phone, email, contactName; nhiều từ khóa cách nhau bằng `;`), `partnerType`, `status`, `sort` (`a,-b`), `column_filters`, `column_search`, `column_operators`, `date_ranges`, `date_from`/`date_to` (áp cho `createdAt`, múi giờ +07:00).
 - Cột lọc được (whitelist `TABLE_COLUMNS`): code, name, displayName, partnerType, taxCode, phone, email, address, contactName, status, notes, createdAt. Key camelCase và snake_case đều được chấp nhận.
-- Logic lọc dùng helper chung `src/common/utils/table-query/` (không còn `business-partners-query-filter.util.ts`).
+- Logic lọc dùng helper chung `src/common/utils/table-query/`.
 
 ### 4.2 Quy tắc mã
 
@@ -82,24 +92,23 @@ Index unique trên `code` chỉ áp dụng cho bản ghi chưa xóa mềm (parti
 
 ## 5. Phụ thuộc từ module khác
 
-Entity `ErpBusinessPartner` (`src/v2/business-partners-core/entities/`) được import bởi: `sales-orders-core`, `goods-issues-core`, `goods-receipts-core`, `purchase-orders-core` (ManyToOne `supplier`), `operating-expenses-core` (ManyToOne `supplier`), `public-warranty`, `basic-masters-core`, `bank-transactions-core` (ManyToOne `partner` trên `erp_bank_transactions.partner_id`, `ON DELETE SET NULL`), `db/data-source.ts`, và các script seed.
+Entity `ErpBusinessPartner` được export từ `@/v2/core/business-partners-core` và được import bởi: `sales-orders-core`, `goods-issues-core`, `goods-receipts-core`, `purchase-orders-core` (ManyToOne `supplier`), `operating-expenses-core` (ManyToOne `supplier`), `public-warranty`, `basic-masters-core`, `bank-transactions-core` (ManyToOne `partner` trên `erp_bank_transactions.partner_id`, `ON DELETE SET NULL`), `db/data-source.ts`, và các script seed.
 
-Module nhận `BusinessPartnersCoreService` (export từ `BusinessPartnersCoreModule`): `bank-transactions-core` (gọi `ensurePartnerForInvoiceKey` khi gán đối tượng từ hóa đơn, và `listOptions` cho danh sách chọn).
-
-Đổi tên hoặc đổi cột entity sẽ ảnh hưởng tất cả các module trên.
+Module nhận `BusinessPartnersCoreService` (export từ `BusinessPartnersCoreModule` qua `@/v2/core/business-partners-core`): `bank-transactions-core` (gọi `ensurePartnerForInvoiceKey` khi gán đối tượng từ hóa đơn, và `listOptions` cho danh sách chọn).
 
 ## 6. Kiểm thử
 
 ```bash
 cd erp/erp-api
-bunx jest src/v2/business-partners-core src/common/utils/table-query --forceExit
-bunx tsc --noEmit
-bunx eslint "src/v2/business-partners-core/**/*.ts" --max-warnings=0
+bun run type:check
+bunx jest src/v2/core/business-partners-core src/v2/modules/business-partners-management --forceExit
+bun .agents/skills/erp-api-structure/scripts/scan-oversized-files.ts --strict --path=src/v2/core/business-partners-core
+bun .agents/skills/erp-api-structure/scripts/scan-oversized-files.ts --strict --path=src/v2/modules/business-partners-management
 ```
 
 ## 7. Hạn chế đã biết (giữ hành vi V1, chưa sửa)
 
-- **Trùng với mã đã xóa mềm gây 500 (đã sửa trong code, chưa chạy trên DB).** Entity khai báo partial unique index `UQ_erp_business_partners_code_active` (`WHERE is_deleted = false`). Migration `20261018160000-PartialUniqueBusinessPartnerCode.ts` thay index cũ `IDX_41e4debe2f4b2b1b011a6c6a9f`. Trước khi chạy, kiểm tra không có mã trùng giữa các bản ghi chưa xóa (đã kiểm tra chỉ đọc trên DB hiện tại: 0 nhóm).
+- **Trùng với mã đã xóa mềm gây 500 (đã sửa trong code, chưa chạy trên DB).** Entity khai báo partial unique index `UQ_erp_business_partners_code_active` (`WHERE is_deleted = false`). Migration `20261018160000-PartialUniqueBusinessPartnerCode.ts` thay index cũ `IDX_41e4debe2f4b2b1b011a6c6a9f`. Trước khi chạy, kiểm tra không có mã trùng giữa các bản ghi chưa xóa.
 - Thay đổi có chủ đích so với V1: `GET`, `PATCH`, `DELETE` trên bản ghi đã xóa mềm trả 404. V1 `remove` không kiểm tra `isDeleted` nên xóa lại được và ghi đè bản ghi.
 - `PATCH :id` và `DELETE :id` dùng `ParseUUIDPipe`, id sai định dạng trả 400 (V1 không có).
 

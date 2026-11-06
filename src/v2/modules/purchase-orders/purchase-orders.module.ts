@@ -3,7 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ErpGoodsReceipt } from '@/goods-receipts-core/entities/erp_goods_receipt.entity';
 import { ErpGoodsReceiptLine } from '@/goods-receipts-core/entities/erp_goods_receipt_line.entity';
 import { ErpInvoice } from '@/erp-invoices-core/entities/erp_invoice.entity';
-import { ErpBusinessPartner } from '@/v2/business-partners-core/entities/erp_business_partner.entity';
+import { ErpBusinessPartner } from '@/v2/core/business-partners-core';
 import { PurchaseOrder } from './entities/purchase-order.entity';
 import { PurchaseOrderLine } from './entities/purchase-order-line.entity';
 import { PurchaseOrdersCoreModule } from '@/v2/core/purchase-orders/purchase-orders-core.module';

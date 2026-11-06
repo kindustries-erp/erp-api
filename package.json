@@ -10,7 +10,7 @@
     "db:sync": "bash ./scripts/sync-db.sh",
     "audit:inventory": "node -r ts-node/register -r tsconfig-paths/register src/inventory-stock-core/audit-inventory-stock.ts",
     "build": "nest build && tsc-alias",
-    "seed:admin-full": "node -r ts-node/register -r tsconfig-paths/register src/seed-admin-full.ts",
+    "seed:admin-full": "node -r ts-node/register -r tsconfig-paths/register scripts/seed-admin-full.ts",
     "backfill:out-invoices": "bun run scripts/backfill-out-invoices.ts",
     "backfill:out-invoices:dry": "DRY_RUN=true bun run scripts/backfill-out-invoices.ts",
     "backfill:plates": "bun scripts/backfill-invoice-license-plates.ts",

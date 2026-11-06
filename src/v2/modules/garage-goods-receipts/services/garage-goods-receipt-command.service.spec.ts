@@ -2,6 +2,8 @@ import { DataSource, Repository } from 'typeorm';
 import { GarageGoodsReceipt } from '../entities/garage-goods-receipt.entity';
 import { CreateGarageGoodsReceiptDto } from '../dto/create-garage-goods-receipt.dto';
 import { GarageGoodsReceiptCommandService } from './garage-goods-receipt-command.service';
+import { GarageInventoryBalanceService } from './garage-inventory-balance.service';
+import { GarageInventoryBalance } from '../entities/garage-inventory-balance.entity';
 import { BaseVoucherEngineService } from '@/v2/core/goods-receipts/services/base-voucher-engine.service';
 
 describe('GarageGoodsReceiptCommandService', () => {
@@ -20,6 +22,7 @@ describe('GarageGoodsReceiptCommandService', () => {
   let dataSource: { transaction: jest.Mock };
   let voucherEngine: BaseVoucherEngineService;
   let service: GarageGoodsReceiptCommandService;
+  let lockedReceipt: GarageGoodsReceipt | null;
 
   beforeEach(() => {
     repo = {
@@ -39,12 +42,23 @@ describe('GarageGoodsReceiptCommandService', () => {
       findOne: jest.fn().mockResolvedValue(null),
     };
 
+    lockedReceipt = null;
     const manager = {
       getRepository: jest.fn((entityClass) => {
         if (entityClass === GarageGoodsReceipt) return repo;
         if (entityClass.name === 'GarageGoodsReceiptLine') return lineRepo;
         return balanceRepo;
       }),
+      findOne: jest.fn((entityClass, options) => {
+        if (entityClass === GarageGoodsReceipt) return lockedReceipt;
+        return balanceRepo.findOne(options);
+      }),
+      save: jest.fn((entityClass, value) =>
+        entityClass === GarageInventoryBalance
+          ? balanceRepo.save(value)
+          : Promise.resolve(value),
+      ),
+      query: jest.fn().mockResolvedValue(undefined),
     };
 
     dataSource = {
@@ -57,6 +71,8 @@ describe('GarageGoodsReceiptCommandService', () => {
       dataSource as unknown as DataSource,
       repo as unknown as Repository<GarageGoodsReceipt>,
       voucherEngine,
+      { applyGoodsReceipt: jest.fn(), revertGoodsReceipt: jest.fn() } as never,
+      new GarageInventoryBalanceService(),
     );
   });
 
@@ -95,10 +111,20 @@ describe('GarageGoodsReceiptCommandService', () => {
       isDeleted: false,
     } as GarageGoodsReceipt;
 
+    lockedReceipt = { ...entity } as GarageGoodsReceipt;
+
     await service.update(entity, {});
 
     expect(dataSource.transaction).toHaveBeenCalledTimes(1);
     expect(repo.save).toHaveBeenCalledWith(entity);
+  });
+
+  it('update kiểm trạng thái trên bản đã khóa (DRAFT trong entity, POSTED trong DB) và không ghi gì', async () => {
+    const entity = { id: 'id-1', status: 'DRAFT' } as GarageGoodsReceipt;
+    lockedReceipt = { ...entity, status: 'POSTED' } as GarageGoodsReceipt;
+
+    await expect(service.update(entity, {})).rejects.toThrow();
+    expect(repo.save).not.toHaveBeenCalled();
   });
 
   it('posts goods receipt and updates stock balance', async () => {
@@ -116,12 +142,23 @@ describe('GarageGoodsReceiptCommandService', () => {
       branchId: 'br-1',
       lines: [line],
     } as unknown as GarageGoodsReceipt;
+    lockedReceipt = entity;
+    lineRepo.find.mockResolvedValueOnce([line]);
+    balanceRepo.findOne.mockResolvedValueOnce({
+      itemCode: 'LOC-GIO',
+      qtyOnHand: '0',
+      avgCost: '0',
+    });
 
     await service.post(entity);
 
     expect(entity.status).toBe('POSTED');
-    expect(balanceRepo.create).toHaveBeenCalledWith(
-      expect.objectContaining({ itemCode: 'LOC-GIO', qtyOnHand: '5' }),
+    expect(balanceRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        itemCode: 'LOC-GIO',
+        qtyOnHand: '5',
+        avgCost: '50000',
+      }),
     );
     expect(repo.save).toHaveBeenCalledWith(entity);
   });

@@ -19,6 +19,7 @@ export function toGarageGoodsReceiptLineResponse(
     unitCost: Number(line.unitCost || 0),
     amount: Number(line.amount || 0),
     notes: line.notes ?? undefined,
+    procurementOrderLineId: line.procurementOrderLineId ?? undefined,
     createdAt: line.createdAt,
   };
 }
@@ -39,6 +40,7 @@ export function toGarageGoodsReceiptResponse(
       entity.totalAmount == null ? undefined : Number(entity.totalAmount),
     status: entity.status,
     paymentStatus: entity.paymentStatus,
+    garageProcurementOrderId: entity.garageProcurementOrderId ?? undefined,
     remarks: entity.remarks ?? undefined,
     lines: entity.lines?.map(toGarageGoodsReceiptLineResponse),
     createdAt: entity.createdAt,
@@ -65,6 +67,7 @@ export function toGarageGoodsReceiptEntityFields(
       dto.totalAmount === undefined ? undefined : String(dto.totalAmount),
     status: dto.status,
     paymentStatus: dto.paymentStatus,
+    garageProcurementOrderId: dto.garageProcurementOrderId,
     remarks: dto.remarks,
   });
 }

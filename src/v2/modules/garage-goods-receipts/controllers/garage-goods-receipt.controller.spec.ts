@@ -1,5 +1,5 @@
 import { Reflector } from '@nestjs/core';
-import { ErpAction, ErpResource } from '@/rbac-core/enums';
+import { ErpAction, ErpResource } from '@/v2/core/rbac';
 import { RBAC_PERMISSIONS_KEY } from '@/auth/decorators/require-permissions.decorator';
 import { GarageGoodsReceiptsCoreService } from '../garage-goods-receipts-core.service';
 import { CreateGarageGoodsReceiptDto } from '../dto/create-garage-goods-receipt.dto';

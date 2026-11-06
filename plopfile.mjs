@@ -17,6 +17,12 @@ import {
   readCoreManifest,
 } from './plop-helpers/apiThinData.mjs';
 import { thinFileMap } from './plop-helpers/apiThinFiles.mjs';
+import {
+  WORKFLOW_STYLE,
+  assertModuleAbsent,
+  buildApiWorkflowData,
+  workflowFileMap,
+} from './plop-helpers/apiWorkflowData.mjs';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -141,6 +147,86 @@ export default function (plop) {
       }
       return [
         ...thinFileMap(data).map(({ template, path }) => ({
+          type: 'add',
+          path,
+          templateFile: `plop-templates/${template}`,
+          data,
+        })),
+        ...rbacPlan(data).map(toModifyAction),
+        ...wiringPlan(data).map(toModifyAction),
+      ];
+    },
+  });
+
+  // 0c. GENERATOR: Module workflow (chứng từ có trạng thái) ghép lõi họ abstract-services.
+  // Sinh khung: entity, DTO tạo, command kế thừa lõi, controller tạo nháp + chuyển trạng thái, module, RBAC.
+  // Nghiệp vụ riêng để trống, điền ở các hook // CUSTOM.
+  plop.setGenerator('api-workflow-module', {
+    description:
+      'Tạo module chứng từ có trạng thái ghép lõi họ abstract-services (src/v2/modules/<module>): khung command, controller chuyển trạng thái, RBAC; chỗ nghiệp vụ để trống // CUSTOM',
+    prompts: [
+      {
+        type: 'list',
+        name: 'coreInput',
+        message: 'Chọn họ lõi kiểu abstract-services (src/v2/core/<họ>):',
+        choices: () => {
+          const base = plop.getDestBasePath();
+          return listCoreFamilies(base).filter(
+            (family) => readCoreManifest(base, family).style === WORKFLOW_STYLE,
+          );
+        },
+      },
+      {
+        type: 'input',
+        name: 'moduleInput',
+        message: 'Tên module (kebab-case, vd: garage-sample-orders):',
+        validate: (value) => (/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/.test(value) ? true : 'Dùng kebab-case'),
+      },
+      {
+        type: 'input',
+        name: 'entityInput',
+        message: 'Entity của module (PascalCase, vd: GarageSampleOrder):',
+        validate: (value) => (/^[A-Za-z][A-Za-z0-9]*$/.test(value) ? true : 'Dùng PascalCase'),
+      },
+      {
+        type: 'input',
+        name: 'fieldSpecInput',
+        message: 'Các trường riêng của module name:type[:required],... (không dùng status/createdBy, lõi đã có):',
+        default: 'code:string:required,name:string:required',
+      },
+      {
+        type: 'input',
+        name: 'tableNameInput',
+        message: 'Tên bảng PostgreSQL (để trống = erp_<module>):',
+        default: '',
+      },
+      {
+        type: 'input',
+        name: 'routePathInput',
+        message: 'Đường dẫn API (để trống = module):',
+        default: '',
+      },
+      {
+        type: 'input',
+        name: 'permissionResourceInput',
+        message: 'Resource RBAC snake_case (để trống = theo module):',
+        default: '',
+      },
+      {
+        type: 'confirm',
+        name: 'wireInput',
+        message: 'Nối tự động vào app.module.ts và data-source.ts? (resource RBAC luôn được đăng ký)',
+        default: false,
+      },
+    ],
+    actions: (answers) => {
+      const base = plop.getDestBasePath();
+      const manifest = readCoreManifest(base, answers.coreInput);
+      // Validate và dựng dữ liệu trước: input sai hoặc module đã có thì dừng tại đây, chưa ghi file nào.
+      const data = buildApiWorkflowData(answers, manifest, coreFieldNames(base, answers.coreInput));
+      assertModuleAbsent(base, data);
+      return [
+        ...workflowFileMap(data).map(({ template, path }) => ({
           type: 'add',
           path,
           templateFile: `plop-templates/${template}`,

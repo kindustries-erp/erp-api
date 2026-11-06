@@ -1,7 +1,7 @@
 import { describe, expect, it } from '@jest/globals';
 import { ErpInvoicesCoreController } from './erp-invoices-core.controller';
 import { RBAC_PERMISSIONS_KEY } from '../auth/decorators/require-permissions.decorator';
-import { ErpAction, ErpResource } from '@/rbac-core/enums';
+import { ErpAction, ErpResource } from '@/v2/core/rbac';
 
 /** Kiểm tra metadata RBAC của các endpoint GDT portal, không dựng module */
 const permissionsOf = (method: keyof ErpInvoicesCoreController) =>

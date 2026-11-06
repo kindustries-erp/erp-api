@@ -1,0 +1,46 @@
+import { Body, Controller, Param, ParseUUIDPipe, Post, Req, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
+import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
+import { RequirePermissions } from '@/auth/decorators/require-permissions.decorator';
+import { ErpAction, ErpResource } from '@/v2/core/rbac';
+import type { {{coreEntity}}Action } from '{{coreBarrel}}';
+import { Create{{entityName}}Dto } from '../dto/create-{{entityKebab}}.dto';
+import { {{entityName}}CommandService } from '../services/{{entityKebab}}-command.service';
+
+interface RequestWithUser {
+  user?: { sub?: string; roles?: string[] };
+}
+
+/** CUSTOM: dựng actor từ token. Thêm kiểm tra vai trò tại đây nếu module cần. */
+function actorOf(req: RequestWithUser): { id: string; roles: string[] } {
+  return { id: req.user?.sub ?? '', roles: req.user?.roles ?? [] };
+}
+
+@ApiTags('{{routePath}}')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, CoreRbacGuard)
+@Controller('{{routePath}}')
+export class {{entityName}}Controller {
+  constructor(private readonly command: {{entityName}}CommandService) {}
+
+  @RequirePermissions({ resource: ErpResource.{{resourceKey}}, action: ErpAction.CREATE })
+  @ApiOperation({ summary: 'Tạo chứng từ ở trạng thái nháp' })
+  @Post()
+  create(@Body() dto: Create{{entityName}}Dto, @Req() req: RequestWithUser) {
+    return this.command.createDraft(actorOf(req), dto);
+  }
+
+  // CUSTOM: chọn ErpAction phù hợp cho từng nhóm hành động (duyệt, hủy...) và thêm endpoint đọc danh sách/chi tiết.
+  @RequirePermissions({ resource: ErpResource.{{resourceKey}}, action: ErpAction.UPDATE })
+  @ApiOperation({ summary: 'Chuyển trạng thái chứng từ theo hành động' })
+  @Post(':id/transition/:action')
+  transition(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('action') action: {{coreEntity}}Action,
+    @Body() body: { reason?: string },
+    @Req() req: RequestWithUser,
+  ) {
+    return this.command.transition(id, action, actorOf(req), body?.reason ?? null);
+  }
+}

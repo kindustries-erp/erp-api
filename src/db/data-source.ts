@@ -4,11 +4,11 @@ import { CoreUser } from '../users/entities/core-user.entity';
 import { CoreUserPreference } from '../users/entities/core-user-preference.entity';
 import { CoreUserTablePreference } from '../users/entities/core-user-table-preference.entity';
 import { CoreRefreshToken } from '../auth/entities/core-refresh-token.entity';
-import { CoreRole } from '../rbac-core/entities/core-role.entity';
-import { CorePermission } from '../rbac-core/entities/core-permission.entity';
-import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
+import { CoreRole } from '@/v2/core/rbac/entities/core-role.entity';
+import { CorePermission } from '@/v2/core/rbac/entities/core-permission.entity';
+import { CoreUserRole } from '@/v2/core/rbac/entities/core-user-role.entity';
 import { ErpEmployee } from '../employees-core/entities/erp_employee.entity';
-import { ErpBusinessPartner } from '../v2/business-partners-core/entities/erp_business_partner.entity';
+import { ErpBusinessPartner } from '@/v2/core/business-partners-core';
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
 import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventory_transaction.entity';
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
@@ -92,11 +92,31 @@ import { GarageGoodsReceipt } from '@/v2/modules/garage-goods-receipts/entities/
 import { GarageGoodsReceiptLine } from '@/v2/modules/garage-goods-receipts/entities/garage-goods-receipt-line.entity';
 import { PurchaseOrder } from '@/v2/modules/purchase-orders/entities/purchase-order.entity'; // api-v2-module:purchase-orders:entity-imports
 import { PurchaseOrderLine } from '@/v2/modules/purchase-orders/entities/purchase-order-line.entity';
-import { GaragePurchaseOrder } from '@/v2/modules/garage-purchase-orders/entities/garage-purchase-order.entity'; // api-v2-module:garage-purchase-orders:entity-imports
-import { GaragePurchaseOrderLine } from '@/v2/modules/garage-purchase-orders/entities/garage-purchase-order-line.entity';
 import { GarageInventoryBalance } from '@/v2/modules/garage-goods-receipts/entities/garage-inventory-balance.entity';
+import { ApprovalEvent } from '@/v2/core/approval/entities/approval-event.entity';
+import { ProcurementRequest } from '@/v2/modules/erp-procurement-requests/entities/procurement-request.entity';
+import { ProcurementRequestLine } from '@/v2/modules/erp-procurement-requests/entities/procurement-request-line.entity';
+import { ProcurementOrder } from '@/v2/modules/erp-procurement-orders/entities/procurement-order.entity';
+import { ProcurementOrderLine } from '@/v2/modules/erp-procurement-orders/entities/procurement-order-line.entity';
+import { ProcurementOrderAcceptance } from '@/v2/modules/erp-procurement-orders/entities/procurement-order-acceptance.entity';
+import { GarageProcurementRequest } from '@/v2/modules/garage-procurement-requests/entities/procurement-request.entity';
+import { GarageProcurementRequestLine } from '@/v2/modules/garage-procurement-requests/entities/procurement-request-line.entity';
+import { GarageProcurementOrder } from '@/v2/modules/garage-procurement-orders/entities/procurement-order.entity';
+import { GarageProcurementOrderLine } from '@/v2/modules/garage-procurement-orders/entities/procurement-order-line.entity';
+import { GarageProcurementOrderAcceptance } from '@/v2/modules/garage-procurement-orders/entities/procurement-order-acceptance.entity';
 // plop:api-v2-entity-imports
 const entities = [
+  ApprovalEvent,
+  ProcurementRequest,
+  ProcurementRequestLine,
+  ProcurementOrder,
+  ProcurementOrderLine,
+  ProcurementOrderAcceptance,
+  GarageProcurementRequest,
+  GarageProcurementRequestLine,
+  GarageProcurementOrder,
+  GarageProcurementOrderLine,
+  GarageProcurementOrderAcceptance,
   CoreUser,
   CoreUserPreference,
   CoreUserTablePreference,
@@ -187,8 +207,6 @@ const entities = [
   GarageGoodsReceiptLine,
   PurchaseOrder, // api-v2-module:purchase-orders:entities
   PurchaseOrderLine,
-  GaragePurchaseOrder, // api-v2-module:garage-purchase-orders:entities
-  GaragePurchaseOrderLine,
   GarageInventoryBalance,
   // plop:api-v2-entities
 ];

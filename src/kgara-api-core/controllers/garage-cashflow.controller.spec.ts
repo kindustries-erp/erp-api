@@ -4,7 +4,7 @@ import {
   RBAC_PERMISSIONS_KEY,
   RBAC_ANY_PERMISSIONS_KEY,
 } from '../../auth/decorators/require-permissions.decorator';
-import { ErpResource, ErpAction } from '@/rbac-core/enums';
+import { ErpResource, ErpAction } from '@/v2/core/rbac';
 
 describe('GarageCashflowController RBAC Permissions', () => {
   const reflector = new Reflector();

@@ -18,7 +18,7 @@ import { resolveBranchAccount } from '../helpers/kgara-branch-account.helper';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
-import { ErpResource, ErpAction } from '@/rbac-core/enums';
+import { ErpResource, ErpAction } from '@/v2/core/rbac';
 import { BranchId } from '../decorators/branch-id.decorator';
 import { SyncAllDto } from '../dto/sync-all.dto';
 import { SyncAllBranchesDto } from '../dto/sync-all-branches.dto';

@@ -65,11 +65,11 @@ Cấu trúc chuẩn (vd: `src/v2/modules/<module>/`):
 | DTO ra | `dto/*-response.dto.ts` | Không trả entity ra ngoài |
 | Mapper | `helpers/*.mapper.ts` | Hàm thuần, hai chiều, bỏ `undefined` khi map DTO → entity |
 | Đọc | `services/*-query.service.ts` | Chỉ đọc, lọc `isDeleted = false` |
-| Ghi | `services/*-command.service.ts` | create / update / softDelete |
+| Ghi | `services/*-command.service.ts` | create / update / softDelete / hardDelete (có điều kiện, xem `api-structure` Phần B mục "Chính sách xóa") |
 | Facade | `<module>.service.ts` | Điều phối, throw `NotFoundException`, luôn trả response DTO |
 | Controller | `controllers/*.controller.ts` | `@RequirePermissions({ resource: ErpResource.X, action: ErpAction.* })` |
 
-- Quyền dùng enum `ErpAction` và `ErpResource` (trong `src/rbac-core/enums/`), không dùng chuỗi literal.
+- Quyền dùng enum `ErpAction` và `ErpResource` (trong `src/v2/core/rbac/enums/`, xuất qua `@/v2/core/rbac`), không dùng chuỗi literal.
 - Import trong module dùng alias `@/`. Generator tự sinh đúng vị trí `src/v2/modules/...`.
 - Core dùng chung nằm ở `src/v2/core/<core-name>/` (ví dụ `goods-receipts`, base voucher engine).
 - Module v1 nằm riêng (`src/<module>-core/`), không trộn vào v2.

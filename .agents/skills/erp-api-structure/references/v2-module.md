@@ -19,11 +19,11 @@ Kiến trúc API V2 được tổ chức phân cấp tương tự Web V2 (`erp-w
 | DTO ra | `dto/*-response.dto.ts` | Không trả entity ra ngoài module |
 | Mapper | `helpers/*.mapper.ts` | Hàm thuần. Hai chiều: entity→response, DTO→entity (bỏ `undefined`) |
 | Đọc | `services/*-query.service.ts` | Chỉ đọc, lọc `isDeleted = false` |
-| Ghi | `services/*-command.service.ts` | create / update / softDelete |
+| Ghi | `services/*-command.service.ts` | create / update / softDelete / hardDelete (có điều kiện, xem `api-structure` Phần B mục "Chính sách xóa") |
 | Facade | `<module>.service.ts` | Điều phối, `NotFoundException`, luôn trả response DTO |
-| Controller | `controllers/*.controller.ts` | `@RequirePermissions({ resource: ErpResource.X, action: ErpAction.READ\|CREATE\|UPDATE\|DELETE })` |
+| Controller | `controllers/*.controller.ts` | `@RequirePermissions({ resource: ErpResource.X, action: ErpAction.READ\|CREATE\|UPDATE\|DELETE\|PURGE })`; xóa cứng dùng `PURGE` và route `:id/permanent` |
 
-Enum quyền: `src/rbac-core/enums/erp-action.enum.ts` (`ErpAction`), `src/rbac-core/enums/erp-resource.enum.ts` (`ErpResource`). Không dùng chuỗi literal cho quyền.
+Enum quyền: `src/v2/core/rbac/enums/erp-action.enum.ts` (`ErpAction`), `src/v2/core/rbac/enums/erp-resource.enum.ts` (`ErpResource`), xuất qua `@/v2/core/rbac`. Không dùng chuỗi literal cho quyền.
 
 ## 2. Kiểu trường (`fieldSpec`)
 
@@ -136,12 +136,12 @@ Các file trong `plop-helpers/` là hàm thuần: `apiV2Fields`, `apiV2Data`, `a
 
 | Module V1 | Module V2 (`src/v2/`) | Trạng thái |
 | :--- | :--- | :--- |
-| `business-partners-core` | `src/v2/business-partners-core/` (route `/api/v2/business-partners`, alias v1 còn dùng bởi web V1) | Đã v2 (module mẫu). Đối chiếu với plop: khác biệt còn lại đều là nghiệp vụ viết tay |
+| `business-partners-core` | Lõi `src/v2/core/business-partners-core/` (entity `ErpBusinessPartner`, services, contracts, `core.manifest.json`) & module `src/v2/modules/business-partners-management/` (route `/api/v2/business-partners`, alias v1 `business-partners`) | Đã v2 chuẩn hóa 2 tầng Core & Module. Controller và route giữ nguyên 100%, UI không đổi. |
 | `erp-invoices-core` (lõi: list/get/create/update/bulk/soft-delete) | `src/v2/core/invoices/` (Core Foundation) & `src/v2/modules/finance-invoices/` (route `/api/v2/invoices`, chạy song song) | Đang migrate. Tách Core (Abstract entities, Engine tính toán dùng chung, DTOs) và Business Module `finance-invoices` (kế thừa Core, Controller V2, Query/Command). Entity `FinanceInvoice`, `FinanceInvoiceItem` trỏ cùng bảng `erp_invoices` / `erp_invoice_items`, không migration. |
 | `purchase-orders-core` (lõi: list/detail/create/update/approve/confirm/cancel/soft-delete, next-no, column-options, receipts, connections, link/unlink hóa đơn) | `src/v2/modules/purchase-orders/` (route `/api/v2/purchase-orders`, chạy song song, dùng chung bảng `erp_purchase_orders`). Lõi `src/v2/core/purchase-orders/` (entity/service/DTO trừu tượng) được v1 kế thừa khi refactor. Giữ ở v1: Excel (range và từng phiếu), `/items`, `/supplier-stats`, `goods-receipts-core` ghi trạng thái PO | Đang migrate. Entity v2 trỏ cùng bảng, không migration. Đổi trạng thái qua action endpoint, không qua PATCH. Chưa có UI v2. |
-| Garage purchase orders (mới, không có ở v1) | `src/v2/modules/garage-purchase-orders/` (route `/api/v2/garage-purchase-orders`, bảng `erp_garage_purchase_orders`, quyền `garage_purchase_orders`) | Mới. Chưa nối phiếu nhập garage (`purchase_order_id` trên GR garage chưa có). |
+| `rbac-core` (kiểm quyền dùng chung + quản trị role) | Lõi `src/v2/core/rbac/` (entity `CoreRole`/`CorePermission`/`CoreUserRole`, `RbacCoreService` 5 method kiểm quyền, `enums/` xuất qua `@/v2/core/rbac`, `@Global`); module `src/v2/modules/rbac-roles/` (route vẫn `/api/v1/rbac-core`, chung UI). Đã xóa sạch `src/rbac-core`. | Đã v2, giữ nguyên hợp đồng v1. Khác biệt có chủ đích: `GET roles/:roleId/users` chỉ trả `{id, email}`; id/roleId sai UUID trả 400 (trước đây 500). Xóa role vẫn là xóa cứng (bảng `core_roles` không có `isDeleted`). |
 
-Module v2 PO (`purchase-orders`, `garage-purchase-orders`) không dùng plop, đã đối chiếu cả hai generator:
+Module v2 PO (`purchase-orders`) không dùng plop, đã đối chiếu cả hai generator:
 - `api-voucher-v2` sinh code kế thừa `BaseGoodsReceipt*`, không hợp PO.
 - `api-module-v2` sinh cấu trúc Facade + sub-service + mapper + controller + wiring giống module đã dựng, nhưng sinh thêm entity, DTO và migration. Với PO, chạy nó sẽ tạo lại bảng `erp_purchase_orders` đã có và nhân bản logic thay vì kế thừa lõi `src/v2/core/purchase-orders/`.
 Vì vậy dựng tay theo đúng cấu trúc của `api-module-v2` (cùng tên marker `api-v2-module:<module>:<key>`), rồi kế thừa lõi. Khi làm module v2 mới không có lõi dùng chung và có bảng mới, nên dùng `api-module-v2`.
@@ -156,3 +156,20 @@ Knowledge-Sync: mỗi lần migrate xong, thêm/đổi dòng ở bảng này và
 - Không kiểm tra trùng route hay trùng `ErpResource` lúc sinh. Lỗi trùng sẽ lộ khi `tsc` (enum) hoặc lúc chạy (route).
 - Scope theo loại (ví dụ `partnerType` của BP) không có trong template: thêm tay vào query service và controller (xem `business-partners-core`).
 - Trùng `code` với bản ghi đã xóa mềm: index unique DB không lọc `is_deleted`, nên mã cũ không dùng lại được (lỗi 500). Đây là hành vi V1, cần migration (partial unique index) để sửa.
+
+## 4. Họ workflow (`abstract-services`) và module chứng từ
+
+Dùng cho chứng từ có vòng đời trạng thái (ví dụ đơn mua, phiếu nhập). Họ CRUD dùng `api-core` kiểu `engine` và `api-thin-module`.
+
+1. **`api-core`** với style `abstract-services` sinh khung lõi trong `src/v2/core/<họ>/`:
+   - `contracts/<họ>.contract.ts`: kiểu `<Entity>Action` và bảng `<ENTITY>_TRANSITIONS` (mặc định rỗng).
+   - `entities/base-*.entity.ts`: cột `id`, `isDeleted`, `status` (mặc định `DRAFT`), `createdBy`, timestamp.
+   - `services/abstract-*-command.service.ts`: `transition()` và `createDraft()` chạy trong transaction, khóa `pessimistic_write`, ghi nhật ký `ApprovalEvent`. Hook rỗng đánh dấu `// CUSTOM`: `initialStatus`, `beforeTransition`, `applyFields`.
+2. **`api-workflow-module`** (chỉ nhận họ `abstract-services`) sinh module trong `src/v2/modules/<module>/`: entity con, DTO tạo, command con (điền `headerEntity`, `docType`), controller `POST /` và `POST /:id/transition/:action`, module, spec tối thiểu, và RBAC (`ErpResource`). Wiring `app.module.ts` và `data-source.ts` chỉ khi bật `wireInput`.
+
+Quy ước "điền chỗ trống":
+- Nghiệp vụ riêng viết ở các hook `// CUSTOM` của command con hoặc lõi, không sửa template.
+- Bảng chuyển trạng thái điền trong `contracts/<họ>.contract.ts`, kèm khai báo kiểu `<Entity>Action`.
+- Trường trùng với lõi (`status`, `createdBy`, `isDeleted`, `id`) bị từ chối khi sinh.
+- Module workflow không có đọc danh sách/chi tiết: dev thêm query service và endpoint `GET` theo nhu cầu.
+- Generator không ghi đè file đã có. Đổi mẫu về sau không tự cập nhật các họ/module đã sinh.

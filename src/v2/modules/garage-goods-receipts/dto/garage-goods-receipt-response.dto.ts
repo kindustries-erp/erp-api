@@ -4,11 +4,17 @@ import {
   BaseGoodsReceiptResponseDto,
 } from '@/v2/core/goods-receipts/dto/base-goods-receipt-response.dto';
 
-export class GarageGoodsReceiptLineResponseDto extends BaseGoodsReceiptLineResponseDto {}
+export class GarageGoodsReceiptLineResponseDto extends BaseGoodsReceiptLineResponseDto {
+  @ApiPropertyOptional()
+  procurementOrderLineId?: string;
+}
 
 export class GarageGoodsReceiptResponseDto extends BaseGoodsReceiptResponseDto {
   @ApiPropertyOptional()
   paymentStatus?: string;
+
+  @ApiPropertyOptional()
+  garageProcurementOrderId?: string;
 
   @ApiPropertyOptional({ type: [GarageGoodsReceiptLineResponseDto] })
   declare lines?: GarageGoodsReceiptLineResponseDto[];

@@ -20,7 +20,7 @@ import {
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { RequireAnyPermissions } from '../../auth/decorators/require-permissions.decorator';
-import { ErpResource, ErpAction } from '@/rbac-core/enums';
+import { ErpResource, ErpAction } from '@/v2/core/rbac';
 import { InvoiceOriginalPdfFacade } from '../services/original-pdf/invoice-original-pdf.facade';
 import { SyncAdvancedInvoiceDto } from '../dto/sync-advanced-invoice.dto';
 import {

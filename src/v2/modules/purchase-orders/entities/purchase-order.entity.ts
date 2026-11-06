@@ -6,7 +6,7 @@ import {
   type Relation,
 } from 'typeorm';
 import { BasePurchaseOrderEntity } from '@/v2/core/purchase-orders/entities/base-purchase-order.entity';
-import { ErpBusinessPartner } from '@/v2/business-partners-core/entities/erp_business_partner.entity';
+import { ErpBusinessPartner } from '@/v2/core/business-partners-core';
 import type { PurchaseOrderLine } from './purchase-order-line.entity';
 
 /**

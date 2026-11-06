@@ -119,4 +119,17 @@ Module `garage-goods-receipts` (`src/v2/modules/garage-goods-receipts/`) sử d�
 - **Rbac Core Collections API**: Đã khai báo `{ resource: ErpResource.GARAGE_GOODS_RECEIPTS, label: 'Nhập kho Garage (Garage Goods Receipts)' }` trong `rbacCoreService.getAvailableResources()` (`GET /api/v1/rbac-core/collections`) để hiển thị trực tiếp trên ma trận phân quyền `ErpPermissionsCorePage`.
 - **Frontend RBAC**: Khai báo `garage_goods_receipts` trong `RBAC_COLLECTIONS` và `PERMISSION_RESOURCE_GROUPS` (nhóm "Garage & Xưởng dịch vụ") trên Web giúp quản trị viên phân quyền linh hoạt qua Role Drawer và Permission Matrix.
 
+## 8. Cập nhật 2026-11-05: nối đơn mua Garage
 
+- Migration `20261105103500-LinkGarageGoodsReceiptsToProcOrders`: phiếu có `garage_procurement_order_id` (FK RESTRICT, có chỉ mục), dòng có `procurement_order_line_id`. Đều nullable; phiếu không nối thì hành vi cũ giữ nguyên.
+- `post` phiếu có PO: kiểm tra PO tồn tại và chưa xóa, cùng chi nhánh (null so với null), cùng NCC, mọi dòng có `procurement_order_line_id`, rồi gọi `applyGoodsReceipt` trong transaction.
+- `cancel` phiếu đã POSTED có PO: gọi `revertGoodsReceipt`, số đã nhận trên PO giảm; PO từ CLOSED tự mở lại thành ISSUED nếu không còn đủ.
+- Tồn kho: `balanceBranch` dùng `IsNull()` khi chi nhánh null, không khớp nhầm mọi chi nhánh. Chưa có khóa dòng tồn (`pessimistic_write`) khi cộng/trừ tồn.
+- Module phụ thuộc: `garage-goods-receipts-core.module` import `GarageProcurementOrdersModule`.
+
+## 9. Cập nhật 2026-11-05: khóa phiếu và tồn
+
+- `post`/`cancel` khóa phiếu bằng `pessimistic_write` rồi mới kiểm trạng thái, nên post lặp hoặc post song song cùng phiếu bị chặn (400 từ lần sau).
+- Tồn được cập nhật qua `GarageInventoryBalanceService`: khóa từng mặt hàng theo `itemCode` tăng dần; dòng tồn mới tạo bằng `INSERT ... ON CONFLICT DO NOTHING` theo hai partial unique index (`UQ_garage_inv_bal_branch_item`, `UQ_garage_inv_bal_null_branch_item`, migration `20261105105500`).
+- Thứ tự khóa: phiếu GR → đầu đơn PO → dòng PO → dòng tồn (theo itemCode). Không đảo thứ tự.
+- Đã đóng: `update` phiếu nháp khóa phiếu bằng `pessimistic_write` trong transaction, kiểm trạng thái trên bản đã khóa rồi mới ghi dòng. Một lần post đồng thời không thể bị sửa dòng chồng lên.

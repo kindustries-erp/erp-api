@@ -17,7 +17,7 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
-import { ErpResource, ErpAction } from '@/rbac-core/enums';
+import { ErpResource, ErpAction } from '@/v2/core/rbac';
 import { ExecuteProductionDto } from './dto/execute-production.dto';
 import { ListProductionDto } from './dto/list-production.dto';
 import { StartProductionDto } from './dto/start-production.dto';

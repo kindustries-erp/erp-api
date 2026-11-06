@@ -1,0 +1,19 @@
+import { Injectable } from '@nestjs/common';
+import { DataSource } from 'typeorm';
+import { ApprovalEventService } from '@/v2/core/approval/approval-event.service';
+import { {{baseService}} } from '{{coreBarrel}}';
+import { {{entityName}} } from '../entities/{{entityKebab}}.entity';
+
+/**
+ * Ghi dữ liệu và chuyển trạng thái của {{entityName}}. Lõi họ {{family}} lo khóa, transaction và nhật ký.
+ * CUSTOM: ghi đè beforeTransition, applyFields hoặc initialStatus tại đây khi module có nghiệp vụ riêng.
+ */
+@Injectable()
+export class {{entityName}}CommandService extends {{baseService}}<{{entityName}}> {
+  protected readonly headerEntity = {{entityName}};
+  protected readonly docType = '{{docType}}';
+
+  constructor(dataSource: DataSource, events: ApprovalEventService) {
+    super(dataSource, events);
+  }
+}

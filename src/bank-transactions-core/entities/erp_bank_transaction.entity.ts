@@ -15,7 +15,7 @@ import { ErpCashBook } from './erp_cash_book.entity';
 import { ErpInvoiceVoucherNetOff } from '../../erp-invoices-core/entities/erp_invoice_voucher_netoff.entity';
 import { ErpChartOfAccount } from '../../accounting-core/entities/erp_chart_of_account.entity';
 import { ErpModuleCategory } from '../../module-config/entities/erp_module_category.entity';
-import { ErpBusinessPartner } from '../../v2/business-partners-core/entities/erp_business_partner.entity';
+import { ErpBusinessPartner } from '@/v2/core/business-partners-core';
 import {
   CashflowClassification,
   CashflowPurpose,
