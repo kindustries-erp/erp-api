@@ -16,7 +16,7 @@ import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
-import { ErpResource, ErpAction } from '@/v2/core/rbac';
+import { ErpResource, ErpAction } from '@/v2/core/rbac-core';
 import { GarageDashboardService } from './garage-dashboard.service';
 import { GarageOpexService } from './services/garage-opex.service';
 import {
@@ -25,6 +25,7 @@ import {
   ApplyRecurringOpexDto,
   ListGarageOpexQueryDto,
 } from './dto/garage-opex.dto';
+import { GarageCheckpointCasesQueryDto } from './dto/garage-checkpoint-cases-query.dto';
 
 @ApiTags('garage_dashboard')
 @ApiBearerAuth()
@@ -99,37 +100,17 @@ export class GarageDashboardController {
 
   @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   @Get('checkpoint-cases')
-  @ApiQuery({ name: 'date_from', required: true })
-  @ApiQuery({ name: 'date_to', required: true })
-  @ApiQuery({ name: 'page', required: false })
-  @ApiQuery({ name: 'pageSize', required: false })
-  @ApiQuery({ name: 'search', required: false })
-  @ApiQuery({ name: 'payment_status', required: false })
-  @ApiQuery({ name: 'classification', required: false })
-  @ApiQuery({ name: 'sort_by', required: false })
-  @ApiQuery({ name: 'sort_order', required: false })
-  getCheckpointCases(
-    @Query('date_from') dateFrom: string,
-    @Query('date_to') dateTo: string,
-    @Query('page') page?: string,
-    @Query('pageSize') pageSize?: string,
-    @Query('search') search?: string,
-    @Query('payment_status')
-    paymentStatus?: 'all' | 'remaining' | 'paid' | 'unpaid',
-    @Query('classification') classification?: string,
-    @Query('sort_by') sortBy?: string,
-    @Query('sort_order') sortOrder?: 'ASC' | 'DESC',
-  ) {
+  getCheckpointCases(@Query() query: GarageCheckpointCasesQueryDto) {
     return this.service.getCheckpointCases(
-      dateFrom,
-      dateTo,
-      page ? parseInt(page, 10) : 1,
-      pageSize ? parseInt(pageSize, 10) : 20,
-      search,
-      paymentStatus,
-      classification,
-      sortBy || 'ngayHoanThanhCongViec',
-      sortOrder || 'DESC',
+      query.date_from,
+      query.date_to,
+      query.page ?? 1,
+      query.pageSize ?? 20,
+      query.search,
+      query.payment_status,
+      query.classification,
+      query.sort_by || 'ngayHoanThanhCongViec',
+      query.sort_order || 'DESC',
     );
   }
 

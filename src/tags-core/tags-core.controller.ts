@@ -16,7 +16,7 @@ import { UpdateEntityTagsDto } from './dto/update-entity-tags.dto';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
-import { ErpResource, ErpAction } from '@/v2/core/rbac';
+import { ErpResource, ErpAction } from '@/v2/core/rbac-core';
 
 @ApiTags('sys_tags')
 @ApiBearerAuth()

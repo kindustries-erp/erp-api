@@ -50,7 +50,7 @@ export default function (plop) {
       {
         type: 'input',
         name: 'familyInput',
-        message: 'Tên họ (kebab-case, vd: customer-claims):',
+        message: 'Tên họ (kebab-case, vd: customer-claims; hậu tố -core được tự thêm vào thư mục src/v2/core/<họ>-core):',
         validate: (value) => (/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/.test(value) ? true : 'Dùng kebab-case, vd: customer-claims'),
       },
       {
@@ -446,9 +446,9 @@ export default function (plop) {
     actions: (answers) => {
       const data = buildApiVoucherData(answers);
       // Họ đã có lõi thì cảnh báo: sinh lại Header/Line từ đầu sẽ nhân bản logic của lõi.
-      if (existsSync(join(plop.getDestBasePath(), 'src/v2/core', data.moduleBase, 'core.manifest.json'))) {
+      if (existsSync(join(plop.getDestBasePath(), 'src/v2/core', `${data.moduleBase}-core`, 'core.manifest.json'))) {
         console.warn(
-          `[api-voucher-v2] Họ "${data.moduleBase}" đã có lõi tại src/v2/core/${data.moduleBase}. Nên dùng api-thin-module để ghép lõi.`,
+          `[api-voucher-v2] Họ "${data.moduleBase}" đã có lõi tại src/v2/core/${data.moduleBase}-core. Nên dùng api-thin-module để ghép lõi.`,
         );
       }
       return [

@@ -69,7 +69,7 @@ Cấu trúc chuẩn (vd: `src/v2/modules/<module>/`):
 | Facade | `<module>.service.ts` | Điều phối, throw `NotFoundException`, luôn trả response DTO |
 | Controller | `controllers/*.controller.ts` | `@RequirePermissions({ resource: ErpResource.X, action: ErpAction.* })` |
 
-- Quyền dùng enum `ErpAction` và `ErpResource` (trong `src/v2/core/rbac/enums/`, xuất qua `@/v2/core/rbac`), không dùng chuỗi literal.
+- Quyền dùng enum `ErpAction` và `ErpResource` (trong `src/v2/core/rbac-core/enums/`, xuất qua `@/v2/core/rbac-core`), không dùng chuỗi literal.
 - Import trong module dùng alias `@/`. Generator tự sinh đúng vị trí `src/v2/modules/...`.
 - Core dùng chung nằm ở `src/v2/core/<core-name>/` (ví dụ `goods-receipts`, base voucher engine).
 - Module v1 nằm riêng (`src/<module>-core/`), không trộn vào v2.

@@ -5,7 +5,7 @@ import AdmZip from 'adm-zip';
 
 import { ErpInvoice } from '../entities/erp_invoice.entity';
 import { ErpInvoiceItem } from '../entities/erp_invoice_item.entity';
-import { ErpBranch } from '../../branches-core/entities/erp_branch.entity';
+import { ErpBranch } from '@/v2/core/branches-core/entities/erp_branch.entity';
 import { R2Service } from '../../r2/r2.service';
 import { VinfastPartsService } from '../../vinfast-parts/vinfast-parts.service';
 import { InvoiceBranchService } from './invoice-branch.service';

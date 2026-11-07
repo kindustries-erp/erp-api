@@ -15,7 +15,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
-import { ErpResource, ErpAction } from '@/v2/core/rbac';
+import { ErpResource, ErpAction } from '@/v2/core/rbac-core';
 import { QueryPurchaseOrdersDto } from './dto/query-purchase-orders.dto';
 import { PurchaseOrdersCoreService } from './purchase-orders-core.service';
 import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';

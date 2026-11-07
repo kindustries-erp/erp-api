@@ -5,7 +5,7 @@ description: Module tri thức Đơn mua (Procurement Order, PO) họ Garage tro
 
 # Module Tri Thức: Đơn mua (Garage)
 
-Module `src/v2/modules/garage-procurement-orders`. Dùng chung lõi `src/v2/core/procurement-orders` với họ thường. Khác biệt: bảng, quyền, tiền tố `GDMH`, chi nhánh, route, và cổng liên kết PR Garage.
+Module `src/v2/modules/procurement-orders-garage`. Dùng chung lõi `src/v2/core/procurement-orders-core` với họ thường. Khác biệt: bảng, quyền, tiền tố `GDMH`, chi nhánh, route, và cổng liên kết PR Garage.
 
 ## 1. Database
 
@@ -30,7 +30,9 @@ Giống họ thường: DRAFT, PENDING_APPROVAL, APPROVED, ISSUED, CLOSED, CANCE
 
 ## 4. Chi nhánh
 
-- `POST` bắt buộc `branchId`. `GET /` lọc theo `branchId` nếu có.
+- `POST`: `branchId` **tùy chọn** (bỏ trống được). `GET /` lọc theo `branchId` nếu có.
+- Đơn có PR nguồn (`request_id`): chi nhánh đơn phải khớp chi nhánh PR, kể cả cùng trống. Kiểm tra ở `POST` (`assertRequestSameBranch`, so sánh có xử lý null) và ở `PATCH` khi có đổi `branchId`.
+- `PATCH /:id` nhận `branchId` (nullable) và `branchName` (nullable) khi còn DRAFT. Gửi `null` để bỏ trống.
 
 ## 5. Liên kết PR Garage
 
@@ -51,6 +53,14 @@ Quyền resource: `garage_procurement_orders`. Seed từ `garage_purchase_orders
 
 - Đề nghị Garage: [`garage-procurement-requests`](../garage-procurement-requests/SKILL.md)
 - Họ thường: [`erp-procurement-orders`](../erp-procurement-orders/SKILL.md)
+
+## 12. Khóa duyệt và chọn người duyệt (2026-11-06)
+
+- Khóa BE, không có UI, `doc_type = GARAGE_PROCUREMENT_ORDER`, mặc định **tắt** (migration `20261106120000-SetGarageProcurementOrderApprovalOff`). Đọc: `GET /api/v2/approval-config/garage-procurement-orders/setting`. Đổi: `PATCH` cùng path (quyền `admin_users:update`).
+- Khóa **tắt**: submit tự duyệt (`AUTO_APPROVED`) và vẫn chốt `approved_total`. Người dùng không chọn người duyệt.
+- Khóa **bật**: `POST /:id/submit` nhận `{ approverId }` bắt buộc; chỉ người đó approve/reject (403 nếu khác); lưu `approver_id` trên `erp_garage_proc_orders`. Quy tắc giống đề nghị Garage (mục 11 bên đó).
+- Danh sách người duyệt: `GET /api/v2/approval-config/garage-procurement-orders/approvers`.
+- Migration bật khóa: `20261106110000-AddApprovalSettingsAndApprover.ts`; đổi mặc định PO: `20261106120000-SetGarageProcurementOrderApprovalOff.ts`.
 
 ## 8. Cập nhật 2026-11-05: sửa nháp, xóa, thanh toán, GR
 

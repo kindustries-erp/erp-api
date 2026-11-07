@@ -409,7 +409,7 @@ Bốn quy tắc cứng:
 #### Giai đoạn 1: Discovery (chỉ đọc)
 1. Xác định module đích và bảng: đọc `.agents/skills/modules/<module>/SKILL.md` nếu module đã có.
 2. Kiểm tra DB đúng với `.env` theo quy tắc workspace: chạy `SELECT current_database();` trước khi đọc schema, báo tên DB cho người dùng.
-3. Kiểm tra trùng: `routePath` (không trùng controller khác), `ErpResource` (không trùng key/value trong `src/v2/core/rbac/enums/erp-resource.enum.ts`), tên entity.
+3. Kiểm tra trùng: `routePath` (không trùng controller khác), `ErpResource` (không trùng key/value trong `src/v2/core/rbac-core/enums/erp-resource.enum.ts`), tên entity.
 4. Chốt danh sách trường (`fieldSpec`) với người dùng. Mọi quyết định nghiệp vụ (mã duy nhất, trạng thái, số tiền) phải được chốt trước khi sinh.
 
 #### Giai đoạn 2: Scaffold bằng plop

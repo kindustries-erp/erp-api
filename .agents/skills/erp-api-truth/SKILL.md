@@ -75,12 +75,13 @@ Tài liệu chi tiết của từng module nằm tại `.agents/skills/modules/<
 
 - **Sản xuất & BOM**: `production-core`, `bom-core`
 - **Bán hàng & sau bán hàng**: `erp-sales-orders`, `sales-report-dashboard`, `after-sales`
-- **Mua hàng & nhà cung cấp**: `purchasing`, `purchasing-report-dashboard`, `erp-suppliers`, `purchase-orders-v2` (API v2 chạy song song với v1, lõi dùng chung `src/v2/core/purchase-orders/`)
+- **Mua hàng & nhà cung cấp**: `purchasing`, `purchasing-report-dashboard`, `erp-suppliers`
 - **Kho & tồn kho**: `inventory-dashboard`, `erp-inventory-items`, `erp-inventory-stock`, `erp-inventory-tracking`, `erp-inventory-transactions`, `erp-inventory-adjustments`, `erp-inventory-vouchers`, `goods-receipts-core`
 - **Tài chính, dòng tiền, hóa đơn**: `bank-statement`, `cashflow-dashboard`, `erp-invoice`, `invoice-netoff`, `invoice-dashboard`, `invoice-debts`, `journal-entry`, `settings-accounts`
 - **Garage**: `garage-cases`, `garage-customers`, `garage-dashboard`, `garage-cashflow`, `garage-bank-reconciliation`, `garage-invoice-reconciliation`, `garage-goods-receipts`, `garage-opex`, `operating-expenses`
 - **Phụ tùng VinFast**: `vinfast-parts-stock`, `vinfast-parts-dashboard`
 - **Đối tác**: `business-partners-core` (lõi `src/v2/core/business-partners-core`, module `src/v2/modules/business-partners-management`)
+- **Chi nhánh**: `branches-core` (lõi `src/v2/core/branches-core`, module `src/v2/modules/branches-management`; entity consumers import canonical v2, route v1 giữ nguyên)
 - **Hệ thống, cấu hình, phân quyền, nhật ký**: `admin-dashboard-core`, `ai-hub-core`, `app-config`, `audit-core`, `module-config`, `rbac-core`, `system-operations-core`
 
 Khi cần quét mới hoặc cập nhật tài liệu module: skill `scan-module-knowledge`.

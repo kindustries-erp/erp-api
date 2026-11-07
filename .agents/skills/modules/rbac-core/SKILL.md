@@ -69,9 +69,9 @@ erDiagram
 ## 3. Cấu trúc Source Code
 
 ### 3.1. Backend (kiến trúc v2)
-Lõi kiểm quyền và module quản trị tách riêng. Enums nằm tại `src/v2/core/rbac/enums/` và được export trực tiếp qua `@/v2/core/rbac`. Thư mục cũ `src/rbac-core` đã được xóa bỏ hoàn toàn.
+Lõi kiểm quyền và module quản trị tách riêng. Enums nằm tại `src/v2/core/rbac-core/enums/` và được export trực tiếp qua `@/v2/core/rbac-core`. Thư mục cũ `src/rbac-core` đã được xóa bỏ hoàn toàn.
 ```text
-erp-api/src/v2/core/rbac/                       # Lõi họ rbac (@Global)
+erp-api/src/v2/core/rbac-core/                       # Lõi họ rbac (@Global)
 ├── enums/
 │   ├── erp-action.enum.ts            # ErpAction (READ, CREATE, UPDATE, DELETE, PURGE...)
 │   ├── erp-resource.enum.ts          # ErpResource (tất cả resources hệ thống)
@@ -105,13 +105,13 @@ erp-api/src/v2/modules/rbac-roles/              # Module quản trị role (API 
 └── rbac-roles.module.ts
 ```
 
-Enums: `erp-api/src/v2/core/rbac/enums/` (`erp-resource.enum.ts`, `erp-action.enum.ts`, `index.ts`), import qua `@/v2/core/rbac`.
+Enums: `erp-api/src/v2/core/rbac-core/enums/` (`erp-resource.enum.ts`, `erp-action.enum.ts`, `index.ts`), import qua `@/v2/core/rbac-core`.
 
 ### 3.2. Guards & Decorators Tích hợp (`erp-api/src/auth/`)
 ```text
 erp-api/src/auth/
 ├── guards/
-│   └── core-rbac.guard.ts            # CoreRbacGuard kiểm tra @RequirePermissions qua RbacCoreService (@/v2/core/rbac)
+│   └── core-rbac.guard.ts            # CoreRbacGuard kiểm tra @RequirePermissions qua RbacCoreService (@/v2/core/rbac-core)
 └── decorators/
     └── require-permissions.decorator.ts # Decorator khai báo { resource, action } trên endpoint
 ```
@@ -222,7 +222,7 @@ Các tài nguyên được gom thành 9 nhóm nghiệp vụ chính:
 - **Unit Test Backend**:
   ```bash
   cd erp/erp-api
-  bunx jest src/v2/core/rbac src/v2/modules/rbac-roles
+  bunx jest src/v2/core/rbac-core src/v2/modules/rbac-roles
   ```
   Gồm: spec kiểm quyền của lõi, spec hợp đồng route/RBAC/response, spec HTTP kiểm tra UUID (400), spec mapper và facade.
 - **CI / Type Check Frontend**:

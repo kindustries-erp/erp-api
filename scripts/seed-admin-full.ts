@@ -3,9 +3,9 @@ import { DataSource } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import dataSource from '../src/db/data-source';
 import { CoreUser } from '../src/users/entities/core-user.entity';
-import { CoreRole } from '../src/v2/core/rbac/entities/core-role.entity';
-import { CorePermission } from '../src/v2/core/rbac/entities/core-permission.entity';
-import { CoreUserRole } from '../src/v2/core/rbac/entities/core-user-role.entity';
+import { CoreRole } from '../src/v2/core/rbac-core/entities/core-role.entity';
+import { CorePermission } from '../src/v2/core/rbac-core/entities/core-permission.entity';
+import { CoreUserRole } from '../src/v2/core/rbac-core/entities/core-user-role.entity';
 
 async function seedAdminFull() {
   await dataSource.initialize();

@@ -17,7 +17,7 @@ import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
-import { ErpResource, ErpAction } from '@/v2/core/rbac';
+import { ErpResource, ErpAction } from '@/v2/core/rbac-core';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { SalesOrdersCoreService } from './sales-orders-core.service';
 import { CreateSalesOrderDto } from './dto/create-sales-order.dto';

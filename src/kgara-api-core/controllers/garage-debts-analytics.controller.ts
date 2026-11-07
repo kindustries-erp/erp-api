@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
-import { ErpResource, ErpAction } from '@/v2/core/rbac';
+import { ErpResource, ErpAction } from '@/v2/core/rbac-core';
 import { GarageDebtsAnalyticsService } from '../services/garage-debts-analytics.service';
 import {
   GetGarageDebtsAnalyticsQueryDto,

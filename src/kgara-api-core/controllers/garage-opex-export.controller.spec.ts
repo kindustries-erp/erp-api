@@ -4,7 +4,7 @@ import { GarageExportJobsService } from '../services/garage-export-jobs.service'
 import { RBAC_PERMISSIONS_KEY } from '../../auth/decorators/require-permissions.decorator';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
-import { ErpAction, ErpResource } from '@/v2/core/rbac';
+import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
 
 describe('GarageOpexExportController', () => {
   let controller: GarageOpexExportController;

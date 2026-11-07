@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "layer": "api",
+  "family": "admin-dashboard-core",
+  "style": "engine",
+  "barrel": "src/v2/core/admin-dashboard-core/index.ts",
+  "module": "AdminDashboardCoreModule",
+  "moduleFile": "admin-dashboard-core.module.ts",
+  "serviceFile": "services/admin-dashboard-stats.service.ts",
+  "permissionPattern": "admin-dashboard",
+  "notes": "Lõi v2 cung cấp API tổng quan điều hành và quản trị hệ thống (/api/v2/admin/dashboard/summary)."
+}

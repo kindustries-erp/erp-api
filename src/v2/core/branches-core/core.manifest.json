@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "layer": "api",
+  "family": "branches-core",
+  "entity": "ErpBranch",
+  "style": "legacy-compatible",
+  "barrel": "src/v2/core/branches-core/index.ts",
+  "module": "BranchesCoreModule",
+  "moduleFile": "branches-core.module.ts",
+  "baseClasses": {
+    "entity": "ErpBranch",
+    "createDto": null,
+    "contract": null,
+    "service": "BranchesCoreService"
+  },
+  "serviceFile": "services/branches-core.service.ts",
+  "permissionPattern": null,
+  "requiredModuleFiles": [
+    "entities",
+    "services"
+  ]
+}

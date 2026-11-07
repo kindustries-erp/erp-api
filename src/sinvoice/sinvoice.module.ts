@@ -5,8 +5,8 @@ import { SinvoiceService } from './sinvoice.service';
 import { SinvoiceConfig } from './entities/sinvoice-config.entity';
 import { SinvoiceDraft } from './entities/sinvoice-draft.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
-import { CorePermission } from '@/v2/core/rbac/entities/core-permission.entity';
-import { CoreUserRole } from '@/v2/core/rbac/entities/core-user-role.entity';
+import { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.entity';
+import { CoreUserRole } from '@/v2/core/rbac-core/entities/core-user-role.entity';
 import { SinvoiceCronService } from './sinvoice-cron.service';
 
 @Module({

@@ -29,7 +29,7 @@ import {
   RequirePermissions,
   RequireAnyPermissions,
 } from '../../auth/decorators/require-permissions.decorator';
-import { ErpResource, ErpAction } from '@/v2/core/rbac';
+import { ErpResource, ErpAction } from '@/v2/core/rbac-core';
 
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
 @Controller('greenway')

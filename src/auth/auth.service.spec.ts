@@ -7,7 +7,7 @@ import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 import { CoreRefreshToken } from './entities/core-refresh-token.entity';
 import { AuditCoreService } from '../audit-core/audit-core.service';
-import { RbacCoreService } from '@/v2/core/rbac';
+import { RbacCoreService } from '@/v2/core/rbac-core';
 import { AppConfigService } from '../app-config/app-config.service';
 
 describe('AuthService', () => {

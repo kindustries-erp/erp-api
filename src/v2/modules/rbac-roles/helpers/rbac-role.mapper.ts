@@ -1,5 +1,5 @@
-import type { CoreRole } from '@/v2/core/rbac/entities/core-role.entity';
-import type { CorePermission } from '@/v2/core/rbac/entities/core-permission.entity';
+import type { CoreRole } from '@/v2/core/rbac-core/entities/core-role.entity';
+import type { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.entity';
 import type { CoreUser } from '@/users/entities/core-user.entity';
 import type {
   PermissionResponse,

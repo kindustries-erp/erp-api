@@ -6,9 +6,16 @@ Workflow đầy đủ: [`../../../workflows/api-structure.md`](../../../workflow
 ## 0. Vị trí
 
 Kiến trúc API V2 được tổ chức phân cấp tương tự Web V2 (`erp-web/src/v2/`):
-- **Core Foundations & Shared Engines**: Nằm trong `src/v2/core/<core-name>/` (vd: `src/v2/core/goods-receipts/` chứa Base Voucher Engine, shared voucher contracts).
-- **Business Modules**: Nằm trong `src/v2/modules/<module-name>/` (vd: `src/v2/modules/garage-goods-receipts/`).
+- **Core Foundations & Shared Engines**: Nằm trong `src/v2/core/<core-name>/` (vd: `src/v2/core/goods-receipts-core/` chứa Base Voucher Engine, shared voucher contracts).
+- **Business Modules**: Nằm trong `src/v2/modules/<module-name>/` (vd: `src/v2/modules/goods-receipts-garage/`).
 - Tách biệt hoàn toàn khỏi các module V1 legacy (`src/<module>-core/`). Import trong module dùng alias `@/` (`@/common`, `@/auth`, `@/rbac-core`, `@/v2/core/...`). Generator `api-module-v2` và `api-voucher-v2` tự sinh đúng vị trí `src/v2/modules/...` và wiring `./v2/modules/...`.
+
+## 0a. Quy ước đặt tên thư mục v2
+
+- **Lõi** `src/v2/core/<họ>-core/`: tên luôn kết thúc `-core`. Generator `api-core` nhận tên có hoặc không có `-core` và tự thêm hậu tố. Tên class (`<Họ>CoreModule`, `Base<Entity>...`) và tên file service giữ theo phần gốc, không nhân đôi `-core`.
+- **Module** `src/v2/modules/<gốc>-<biến thể>/`: biến thể đặt ở hậu tố, ví dụ `procurement-orders-garage`, `procurement-orders-erp`, `invoices-finance`. Không dùng tiền tố `erp-`, `garage-`, `finance-`. `rbac` là tên miền (quản trị quyền), không phải tiền tố biến thể, nên module quản trị role là `rbac-roles`. Module không có biến thể (`business-partners-management`, `purchase-orders`) giữ nguyên.
+- **Hợp đồng không đổi khi đổi tên thư mục**: route (`@Controller`), `permissionPattern` và `ErpResource`, tên bảng (`@Entity`), tên class và symbol trong barrel. Khi triển khai module đã có, truyền tường minh `tableNameInput`, `routePathInput`, `permissionResourceInput` cho generator; không để generator suy ra từ tên thư mục.
+- Generator `api-voucher-v2` vẫn chuẩn hóa tên module thành `<gốc>-core`. Module đổi tên theo quy ước trên không đi qua generator này; khi tạo module mới theo quy ước suffix, đặt tên theo `<gốc>-<biến thể>` và kiểm tra lại `moduleName`/`moduleBase` sinh ra.
 
 ## 1. Quy ước v2
 
@@ -23,7 +30,7 @@ Kiến trúc API V2 được tổ chức phân cấp tương tự Web V2 (`erp-w
 | Facade | `<module>.service.ts` | Điều phối, `NotFoundException`, luôn trả response DTO |
 | Controller | `controllers/*.controller.ts` | `@RequirePermissions({ resource: ErpResource.X, action: ErpAction.READ\|CREATE\|UPDATE\|DELETE\|PURGE })`; xóa cứng dùng `PURGE` và route `:id/permanent` |
 
-Enum quyền: `src/v2/core/rbac/enums/erp-action.enum.ts` (`ErpAction`), `src/v2/core/rbac/enums/erp-resource.enum.ts` (`ErpResource`), xuất qua `@/v2/core/rbac`. Không dùng chuỗi literal cho quyền.
+Enum quyền: `src/v2/core/rbac-core/enums/erp-action.enum.ts` (`ErpAction`), `src/v2/core/rbac-core/enums/erp-resource.enum.ts` (`ErpResource`), xuất qua `@/v2/core/rbac-core`. Không dùng chuỗi literal cho quyền.
 
 ## 2. Kiểu trường (`fieldSpec`)
 
@@ -112,10 +119,10 @@ bunx plop api-voucher-v2
 9. `wireInput`: Nối tự động vào AppModule và DataSource (`true`/`false`).
 
 ### Cấu trúc sinh ra (tại `src/v2/modules/<module-name>/`):
-- **Entities**: Header và Line kế thừa `BaseGoodsReceiptEntity` và `BaseGoodsReceiptLineEntity` từ `@/v2/core/goods-receipts/entities/`, tự động có sẵn các trường chuẩn chứng từ (`receiptNo`, `status`, `totalAmount`, timestamps, timestamps line, FK cascade).
-- **DTOs**: Create, Update, Query, Response DTOs kế thừa trực tiếp từ `@/v2/core/goods-receipts/dto/`, loại bỏ mã lặp class-validator & Swagger annotations.
+- **Entities**: Header và Line kế thừa `BaseGoodsReceiptEntity` và `BaseGoodsReceiptLineEntity` từ `@/v2/core/goods-receipts-core/entities/`, tự động có sẵn các trường chuẩn chứng từ (`receiptNo`, `status`, `totalAmount`, timestamps, timestamps line, FK cascade).
+- **DTOs**: Create, Update, Query, Response DTOs kế thừa trực tiếp từ `@/v2/core/goods-receipts-core/dto/`, loại bỏ mã lặp class-validator & Swagger annotations.
 - **Helpers**: Mapper hai chiều Header + nested Lines (tự tính tổng dòng hàng).
-- **Core Engine Integration**: Tự động kết nối `BaseVoucherEngineService` (`@/v2/core/goods-receipts`):
+- **Core Engine Integration**: Tự động kết nối `BaseVoucherEngineService` (`@/v2/core/goods-receipts-core`):
   - Sinh mã theo ngày: `generateDailyVoucherNo` (`PREFIX-YYYYMMDD-001`).
   - Kiểm tra trạng thái: `validateVoucherTransition` (`DRAFT` -> `POSTED` -> `CANCELLED`).
   - Xóa mềm: Chỉ cho phép xóa khi ở trạng thái `DRAFT`.
@@ -137,14 +144,12 @@ Các file trong `plop-helpers/` là hàm thuần: `apiV2Fields`, `apiV2Data`, `a
 | Module V1 | Module V2 (`src/v2/`) | Trạng thái |
 | :--- | :--- | :--- |
 | `business-partners-core` | Lõi `src/v2/core/business-partners-core/` (entity `ErpBusinessPartner`, services, contracts, `core.manifest.json`) & module `src/v2/modules/business-partners-management/` (route `/api/v2/business-partners`, alias v1 `business-partners`) | Đã v2 chuẩn hóa 2 tầng Core & Module. Controller và route giữ nguyên 100%, UI không đổi. |
-| `erp-invoices-core` (lõi: list/get/create/update/bulk/soft-delete) | `src/v2/core/invoices/` (Core Foundation) & `src/v2/modules/finance-invoices/` (route `/api/v2/invoices`, chạy song song) | Đang migrate. Tách Core (Abstract entities, Engine tính toán dùng chung, DTOs) và Business Module `finance-invoices` (kế thừa Core, Controller V2, Query/Command). Entity `FinanceInvoice`, `FinanceInvoiceItem` trỏ cùng bảng `erp_invoices` / `erp_invoice_items`, không migration. |
-| `purchase-orders-core` (lõi: list/detail/create/update/approve/confirm/cancel/soft-delete, next-no, column-options, receipts, connections, link/unlink hóa đơn) | `src/v2/modules/purchase-orders/` (route `/api/v2/purchase-orders`, chạy song song, dùng chung bảng `erp_purchase_orders`). Lõi `src/v2/core/purchase-orders/` (entity/service/DTO trừu tượng) được v1 kế thừa khi refactor. Giữ ở v1: Excel (range và từng phiếu), `/items`, `/supplier-stats`, `goods-receipts-core` ghi trạng thái PO | Đang migrate. Entity v2 trỏ cùng bảng, không migration. Đổi trạng thái qua action endpoint, không qua PATCH. Chưa có UI v2. |
-| `rbac-core` (kiểm quyền dùng chung + quản trị role) | Lõi `src/v2/core/rbac/` (entity `CoreRole`/`CorePermission`/`CoreUserRole`, `RbacCoreService` 5 method kiểm quyền, `enums/` xuất qua `@/v2/core/rbac`, `@Global`); module `src/v2/modules/rbac-roles/` (route vẫn `/api/v1/rbac-core`, chung UI). Đã xóa sạch `src/rbac-core`. | Đã v2, giữ nguyên hợp đồng v1. Khác biệt có chủ đích: `GET roles/:roleId/users` chỉ trả `{id, email}`; id/roleId sai UUID trả 400 (trước đây 500). Xóa role vẫn là xóa cứng (bảng `core_roles` không có `isDeleted`). |
+| `branches-core` | Lõi `src/v2/core/branches-core/` (một entity `ErpBranch`, query/command, facade) & module `src/v2/modules/branches-management/` (controller/response mapper, route vẫn `/api/v1/branches`). | Đã chuyển cấu trúc v2, giữ nguyên DB/API/UI. Ngoại lệ legacy: JWT-only, body không siết validator, `DELETE /:id` xóa cứng, không có `is_deleted`; xem module skill `branches-core`. Manifest đánh dấu `legacy-compatible`, không dùng làm base cho `api-thin-module`. |
+| `erp-invoices-core` (lõi: list/get/create/update/bulk/soft-delete) | `src/v2/core/invoices-core/` (Core Foundation) & `src/v2/modules/invoices-finance/` (route `/api/v2/invoices`, chạy song song) | Đang migrate. Tách Core (Abstract entities, Engine tính toán dùng chung, DTOs) và Business Module `finance-invoices` (kế thừa Core, Controller V2, Query/Command). Entity `FinanceInvoice`, `FinanceInvoiceItem` trỏ cùng bảng `erp_invoices` / `erp_invoice_items`, không migration. |
+| `purchase-orders-core` (v2, đã gỡ) | Không còn module/lõi v2 `purchase-orders`. Đã kiểm tra: không có caller nào (erp-web, erp-api, test, scripts) gọi `/api/v2/purchase-orders`. Khôi phục từ commit `5b1ec29` nếu cần. PO dùng v1: `src/purchase-orders-core/`, route `/api/v1/purchase-orders`. | Đã gỡ cùng đợt đổi tên. |
+| `rbac-core` (kiểm quyền dùng chung + quản trị role) | Lõi `src/v2/core/rbac-core/` (entity `CoreRole`/`CorePermission`/`CoreUserRole`, `RbacCoreService` 5 method kiểm quyền, `enums/` xuất qua `@/v2/core/rbac-core`, `@Global`); module `src/v2/modules/rbac-roles/` (route vẫn `/api/v1/rbac-core`, chung UI). Đã xóa sạch `src/rbac-core`. | Đã v2, giữ nguyên hợp đồng v1. Khác biệt có chủ đích: `GET roles/:roleId/users` chỉ trả `{id, email}`; id/roleId sai UUID trả 400 (trước đây 500). Xóa role vẫn là xóa cứng (bảng `core_roles` không có `isDeleted`). |
 
-Module v2 PO (`purchase-orders`) không dùng plop, đã đối chiếu cả hai generator:
-- `api-voucher-v2` sinh code kế thừa `BaseGoodsReceipt*`, không hợp PO.
-- `api-module-v2` sinh cấu trúc Facade + sub-service + mapper + controller + wiring giống module đã dựng, nhưng sinh thêm entity, DTO và migration. Với PO, chạy nó sẽ tạo lại bảng `erp_purchase_orders` đã có và nhân bản logic thay vì kế thừa lõi `src/v2/core/purchase-orders/`.
-Vì vậy dựng tay theo đúng cấu trúc của `api-module-v2` (cùng tên marker `api-v2-module:<module>:<key>`), rồi kế thừa lõi. Khi làm module v2 mới không có lõi dùng chung và có bảng mới, nên dùng `api-module-v2`.
+Khi làm module v2 mới không có lõi dùng chung và có bảng mới, dùng `api-module-v2`. Ví dụ PO v2 từng dựng tay theo cấu trúc này đã được gỡ; khôi phục từ commit `5b1ec29` nếu cần tham khảo.
 
 Route v2: `GLOBAL_PREFIX_EXCLUDE` cho phép controller `api/v2/...` không mang prefix `api/v1`. Plop sinh `@Controller('<routePath>')` có prefix `api/v1`, nên module v2 mới cần đổi tay path sang `api/v2/...` và cập nhật `global-prefix.config.ts` nếu cần.
 

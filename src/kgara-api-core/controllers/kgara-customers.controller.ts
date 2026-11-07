@@ -7,7 +7,7 @@ import { extractNetPayableAmount } from '../kgara-sync.service';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
-import { ErpResource, ErpAction } from '@/v2/core/rbac';
+import { ErpResource, ErpAction } from '@/v2/core/rbac-core';
 import { BranchId } from '../decorators/branch-id.decorator';
 import { KgaraCustomerCasesDetailService } from '../services/kgara-customer-cases-detail.service';
 import { KgaraCustomersDebtQueryService } from '../services/kgara-customers-debt-query.service';
