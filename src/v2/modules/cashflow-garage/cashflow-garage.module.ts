@@ -33,6 +33,32 @@ import { LegacyVoucherExportService } from './compat/legacy-voucher-export.servi
 import { GarageCashflowExcelBuilder } from '../../../kgara-api-core/services/garage-cashflow-excel.builder';
 import { GarageCaseReceivableSyncService } from './services/garage-case-receivable-sync.service';
 import { GarageCommissionForecastSyncService } from './services/garage-commission-forecast-sync.service';
+import {
+  CASHFLOW_PAYMENT_REQUEST_DOC_TYPE,
+  CashflowPaymentRequest,
+  CashflowPaymentRequestLine,
+  CashflowPaymentRequestLinePayment,
+  DEFAULT_PAYMENT_REQUEST_APPROVAL_ENABLED,
+} from '@/v2/core/cashflow-core';
+import { GarageProcurementOrder } from '@/v2/modules/procurement-orders-garage/entities/procurement-order.entity';
+import { GARAGE_PAYMENT_REQUEST_HOOKS } from './contracts/garage-payment-request.types';
+import { GaragePaymentRequestLinesHook } from './hooks/garage-payment-request-lines.hook';
+import { GaragePaymentRequestController } from './controllers/garage-payment-request.controller';
+import { GaragePaymentRequestCommandService } from './services/garage-payment-request-command.service';
+import { GaragePaymentRequestPaymentService } from './services/garage-payment-request-payment.service';
+import { GaragePaymentRequestQueryService } from './services/garage-payment-request-query.service';
+import { LegacyPurchaseRequestQueryService } from './compat/legacy-purchase-request-query.service';
+import { LegacyPurchaseRequestWriteService } from './compat/legacy-purchase-request-write.service';
+
+/** Cấu hình duyệt đề nghị thanh toán Garage. Mặc định bật duyệt. */
+const GaragePaymentRequestApprovalConfigController =
+  createApprovalConfigController({
+    path: 'api/v2/approval-config/cashflow-payment-request',
+    docType: CASHFLOW_PAYMENT_REQUEST_DOC_TYPE,
+    resource: ErpResource.GARAGE_PAYMENT_REQUESTS,
+    tag: 'cashflow_garage',
+    defaultEnabled: DEFAULT_PAYMENT_REQUEST_APPROVAL_ENABLED,
+  });
 
 /** Cấu hình duyệt dự chi và dự thu Garage (bật/tắt theo doc_type). */
 const GarageForecastOutApprovalConfigController =
@@ -69,6 +95,10 @@ const GarageForecastInApprovalConfigController = createApprovalConfigController(
       CashflowForecastLine,
       CashflowAllocation,
       CashflowGarageForecastExt,
+      CashflowPaymentRequest,
+      CashflowPaymentRequestLine,
+      CashflowPaymentRequestLinePayment,
+      GarageProcurementOrder,
       ApprovalEvent,
       ApprovalSetting,
       CoreUser,
@@ -80,6 +110,8 @@ const GarageForecastInApprovalConfigController = createApprovalConfigController(
     CashflowGarageController,
     GarageForecastOutApprovalConfigController,
     GarageForecastInApprovalConfigController,
+    GaragePaymentRequestController,
+    GaragePaymentRequestApprovalConfigController,
   ],
   providers: [
     ApprovalEventService,
@@ -93,6 +125,17 @@ const GarageForecastInApprovalConfigController = createApprovalConfigController(
     },
     GarageForecastCommandService,
     GarageForecastQueryService,
+    GaragePaymentRequestLinesHook,
+    {
+      provide: GARAGE_PAYMENT_REQUEST_HOOKS,
+      useFactory: (lines: GaragePaymentRequestLinesHook) => [lines],
+      inject: [GaragePaymentRequestLinesHook],
+    },
+    GaragePaymentRequestCommandService,
+    GaragePaymentRequestPaymentService,
+    GaragePaymentRequestQueryService,
+    LegacyPurchaseRequestQueryService,
+    LegacyPurchaseRequestWriteService,
     CashflowGarageService,
     LegacyVoucherListService,
     LegacyVoucherDashboardService,
@@ -106,6 +149,8 @@ const GarageForecastInApprovalConfigController = createApprovalConfigController(
     GarageCommissionForecastSyncService,
   ],
   exports: [
+    LegacyPurchaseRequestQueryService,
+    LegacyPurchaseRequestWriteService,
     LegacyVoucherPeriodService,
     LegacyVoucherExportService,
     CashflowGarageService,

@@ -83,3 +83,10 @@ Quyền resource: `garage_procurement_requests`. Seed từ `garage_purchase_orde
 - Danh sách người duyệt: `GET /api/v2/approval-config/garage-procurement-requests/approvers` (loại người đang gọi).
 - Logic dùng chung ở `src/v2/core/approval-core` (`approval-gate.helper.ts`, `approval-settings.service.ts`, `approver-directory.service.ts`); module chỉ khai báo `docType` và resource.
 - Migration: `20261106110000-AddApprovalSettingsAndApprover.ts`.
+
+## Cập nhật 2026-11-07: đọc/ghi qua dự chi khi cờ `new`
+
+- Khi `CASHFLOW_GARAGE_SOURCE=new`, `GarageProcurementRequestsService` (facade) đọc và ghi PR trên `cashflow_forecasts` (kind `PURCHASE`) thay cho `erp_garage_proc_requests`. Route, DTO và response không đổi. Khi cờ không đặt hoặc khác `new`, giữ đường cũ.
+- Đọc: `compat/legacy-purchase-request-query.service.ts` (list, detail, nhật ký duyệt). Ghi: `compat/legacy-purchase-request-write.service.ts` (tạo nháp, sửa đầu đề, thay dòng khi nháp, chuyển trạng thái, xóa mềm, xóa cứng khi không còn PO tham chiếu). Chi tiết ở `cashflow-garage/SKILL.md` mục 11.2.
+- Column-options trả rỗng khi cờ `new`. Lý do hủy không có cột riêng (chỉ có trong nhật ký). `requestDate` không sửa được.
+- Khóa duyệt của PR cũ (`GARAGE_PROCUREMENT_REQUEST`) không dùng khi cờ `new`; luồng duyệt dùng cấu hình `cashflow-forecast-out`.

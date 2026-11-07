@@ -18,6 +18,7 @@ import { GarageProcurementOrdersService } from './procurement-orders-garage.serv
 import { GarageProcurementOrderCommandService } from './services/procurement-order-command.service';
 import { GarageProcurementOrderFulfilmentService } from './services/procurement-order-fulfilment.service';
 import { GarageProcurementOrderQueryService } from './services/procurement-order-query.service';
+import { CashflowPurchaseOrderingService } from './services/cashflow-purchase-ordering.service';
 import {
   GARAGE_PROCUREMENT_REQUEST_LINK,
   GarageProcurementRequestLinkAdapter,
@@ -54,6 +55,7 @@ const GarageProcurementOrderApprovalConfigController =
     ApprovalActorService,
     ApprovalSettingsService,
     ApproverDirectoryService,
+    CashflowPurchaseOrderingService,
     GarageProcurementRequestLinkAdapter,
     {
       provide: GARAGE_PROCUREMENT_REQUEST_LINK,

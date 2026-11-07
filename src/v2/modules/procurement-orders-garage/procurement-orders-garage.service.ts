@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { GarageProcurementRequest } from '../procurement-requests-garage/entities/procurement-request.entity';
+import { isNewCashflowSource } from '@/v2/modules/cashflow-garage/cashflow-garage-source';
 import { ErpResource, RbacCoreService } from '@/v2/core/rbac-core';
 import { ApproverDirectoryService } from '@/v2/core/approval-core/approver-directory.service';
 import { ProcurementOrderAction } from '@/v2/core/procurement-orders-core/contracts/procurement-orders.contract';
@@ -202,11 +203,24 @@ export class GarageProcurementOrdersService {
     requestId: string,
     branchId: string | null | undefined,
   ): Promise<void> {
-    const request = await this.dataSource
-      .getRepository(GarageProcurementRequest)
-      .findOne({ where: { id: requestId } });
-    if (!request) throw new NotFoundException('Không tìm thấy đề nghị mua');
-    if ((request.branchId ?? null) !== (branchId ?? null)) {
+    // Cờ new: đề nghị nằm trên dự chi PURCHASE; cờ cũ: bảng PR cũ.
+    let requestBranchId: string | null;
+    if (isNewCashflowSource()) {
+      const [row] = await this.dataSource.query(
+        `SELECT branch_id FROM cashflow_forecasts
+          WHERE id = $1 AND kind = 'PURCHASE' AND is_deleted = false`,
+        [requestId],
+      );
+      if (!row) throw new NotFoundException('Không tìm thấy đề nghị mua');
+      requestBranchId = row.branch_id ?? null;
+    } else {
+      const request = await this.dataSource
+        .getRepository(GarageProcurementRequest)
+        .findOne({ where: { id: requestId } });
+      if (!request) throw new NotFoundException('Không tìm thấy đề nghị mua');
+      requestBranchId = request.branchId ?? null;
+    }
+    if (requestBranchId !== (branchId ?? null)) {
       throw new BadRequestException(
         'Đơn mua phải cùng chi nhánh với đề nghị mua nguồn',
       );

@@ -10,6 +10,7 @@ import {
   requireReason,
   resolveTransition,
 } from '@/v2/core/approval-core/approval.engine';
+import type { BaseApprovalFields } from '../../approval-core/entities/base-approval-fields';
 import {
   CASHFLOW_FORECAST_ACTIONS_REQUIRING_REASON,
   CASHFLOW_FORECAST_STATUS,
@@ -18,11 +19,23 @@ import {
 } from '../contracts/cashflow-core.contract';
 import type { CashflowForecastHook } from '../contracts/cashflow-core.hooks';
 import { BaseCashflowForecastEntity } from '../entities/base-cashflow-forecast.entity';
+import type { TransitionRule } from '@/v2/core/approval-core/approval.engine';
 
 export interface CashflowForecastActor {
   id: string;
   roles: string[];
 }
+
+/**
+ * Phần chung của header có vòng đời duyệt (dự thu, dự chi, DNTT). Dùng làm ràng buộc generic của lõi.
+ */
+export type CashflowApprovableHeader = BaseApprovalFields & {
+  id: string;
+  status: string;
+  requiresApproval: boolean;
+  createdBy: string | null;
+  isDeleted: boolean;
+};
 
 export interface CashflowForecastTransitionOptions {
   /** Chỉ dùng khi `submit`: người duyệt được chọn. Bắt buộc nếu chứng từ cần duyệt. */
@@ -35,7 +48,7 @@ export interface CashflowForecastTransitionOptions {
  * Nghiệp vụ riêng của module viết ở các hook CUSTOM.
  */
 export abstract class AbstractCashflowForecastCommandService<
-  H extends BaseCashflowForecastEntity = BaseCashflowForecastEntity,
+  H extends CashflowApprovableHeader = BaseCashflowForecastEntity,
 > {
   protected abstract readonly headerEntity: EntityTarget<H>;
   /** Mã loại chứng từ ghi vào nhật ký duyệt. */
@@ -59,9 +72,7 @@ export abstract class AbstractCashflowForecastCommandService<
     return this.dataSource.transaction(async (manager) => {
       const entity = manager.create(this.headerEntity, {
         ...data,
-        status: data.requiresApproval
-          ? CASHFLOW_FORECAST_STATUS.DRAFT
-          : CASHFLOW_FORECAST_STATUS.OPEN,
+        status: this.initialStatus(data.requiresApproval),
         createdBy: actor.id,
         isDeleted: false,
       } as DeepPartial<H>);
@@ -86,7 +97,7 @@ export abstract class AbstractCashflowForecastCommandService<
       const cleanReason = this.checkReason(action, reason);
 
       await this.beforeTransition(manager, header, action, actor, cleanReason);
-      const to = resolveTransition(CASHFLOW_FORECAST_TRANSITIONS, from, action);
+      const to = resolveTransition(this.transitionRules(), from, action);
       if (action === 'submit') {
         this.assignApprover(header, actor, options.approverId);
       }
@@ -117,6 +128,18 @@ export abstract class AbstractCashflowForecastCommandService<
       }
       return header;
     });
+  }
+
+  /** Bảng chuyển trạng thái. Module con có thể thay (DNTT có bước APPROVED thay cho OPEN). */
+  protected transitionRules(): Record<CashflowForecastAction, TransitionRule> {
+    return CASHFLOW_FORECAST_TRANSITIONS;
+  }
+
+  /** Trạng thái lúc tạo: có duyệt thì DRAFT, không duyệt thì mở ngay. */
+  protected initialStatus(requiresApproval: boolean): string {
+    return requiresApproval
+      ? CASHFLOW_FORECAST_STATUS.DRAFT
+      : CASHFLOW_FORECAST_STATUS.OPEN;
   }
 
   /** Khóa pessimistic_write trên dòng để tránh hai thao tác đồng thời cùng chuyển trạng thái. */

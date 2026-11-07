@@ -193,7 +193,7 @@ export async function applyGarageCashflowBackfill(
          partner_name, branch_id, amount, planned_date, status,
          requires_approval, note, is_deleted, created_by, created_at, updated_at,
          submitted_by, submitted_at, approver_id, approved_by, approved_at,
-         rejected_by, rejected_at, reject_reason)
+         rejected_by, rejected_at, reject_reason, title, requester_employee_id)
        SELECT r.id, r.request_no, 'OUT', 'PURCHASE', 'MANUAL', 'LEGACY_PR', NULL,
          NULL, r.branch_id,
          COALESCE(NULLIF((SELECT sum(l.est_amount) FROM erp_garage_proc_request_lines l WHERE l.request_id = r.id), 0),
@@ -202,41 +202,66 @@ export async function applyGarageCashflowBackfill(
          CASE r.status
            WHEN 'DRAFT' THEN 'DRAFT'
            WHEN 'APPROVED' THEN 'OPEN'
-           WHEN 'CLOSED' THEN 'SETTLED'
+           WHEN 'CLOSED' THEN 'CANCELLED'
            WHEN 'CANCELLED' THEN 'CANCELLED'
            ELSE 'DRAFT' END,
          true, r.remarks, false, r.created_by, r.created_at, r.updated_at,
          r.submitted_by, r.submitted_at, r.approver_id, r.approved_by, r.approved_at,
-         r.rejected_by, r.rejected_at, r.reject_reason
+         r.rejected_by, r.rejected_at, r.reject_reason, r.title, r.requester_employee_id
          FROM erp_garage_proc_requests r
         WHERE ${PR_SCOPE}
-       ON CONFLICT (id) DO NOTHING`,
+       ON CONFLICT (id) DO UPDATE SET
+         title = EXCLUDED.title, requester_employee_id = EXCLUDED.requester_employee_id,
+         status = EXCLUDED.status, amount = EXCLUDED.amount,
+         planned_date = EXCLUDED.planned_date, branch_id = EXCLUDED.branch_id,
+         note = EXCLUDED.note, submitted_by = EXCLUDED.submitted_by,
+         submitted_at = EXCLUDED.submitted_at, approver_id = EXCLUDED.approver_id,
+         approved_by = EXCLUDED.approved_by, approved_at = EXCLUDED.approved_at,
+         rejected_by = EXCLUDED.rejected_by, rejected_at = EXCLUDED.rejected_at,
+         reject_reason = EXCLUDED.reject_reason, updated_at = EXCLUDED.updated_at`,
     );
 
     await run(
-      'ext rỗng <- PR',
-      `INSERT INTO cashflow_garage_forecast_ext (forecast_id, is_auto_expected, is_auto_commission)
-       SELECT r.id, false, false
+      'ext PR (dấu đóng)',
+      `INSERT INTO cashflow_garage_forecast_ext (forecast_id, is_auto_expected, is_auto_commission, closed_at, close_reason)
+       SELECT r.id, false, false,
+              CASE WHEN r.status = 'CLOSED' THEN r.closed_at END,
+              CASE WHEN r.status = 'CLOSED' THEN r.close_reason END
          FROM erp_garage_proc_requests r
         WHERE ${PR_SCOPE}
-       ON CONFLICT (forecast_id) DO NOTHING`,
+       ON CONFLICT (forecast_id) DO UPDATE SET
+         closed_at = EXCLUDED.closed_at, close_reason = EXCLUDED.close_reason`,
     );
 
     await run(
       'forecast lines <- dòng PR (giữ id)',
       `INSERT INTO cashflow_forecast_lines (
          id, forecast_id, line_no, line_type, item_name, qty_requested, qty_ordered,
-         unit_price, amount, created_at, updated_at)
+         unit_price, amount, created_at, updated_at, item_id, item_code, description, notes)
        SELECT l.id, l.request_id, l.line_no,
          CASE WHEN l.line_type = 'SERVICE' THEN 'SERVICE' ELSE 'GOODS' END,
          COALESCE(NULLIF(l.item_name, ''), NULLIF(l.item_code, ''), '(không tên)'),
          l.qty_requested, l.qty_ordered,
          COALESCE(l.est_unit_price, 0), COALESCE(l.est_amount, 0),
-         l.created_at, l.updated_at
+         l.created_at, l.updated_at, l.item_id, l.item_code, l.description, l.notes
          FROM erp_garage_proc_request_lines l
          JOIN erp_garage_proc_requests r ON r.id = l.request_id
         WHERE ${PR_SCOPE}
-       ON CONFLICT (id) DO NOTHING`,
+       ON CONFLICT (id) DO UPDATE SET
+         item_id = EXCLUDED.item_id, item_code = EXCLUDED.item_code,
+         description = EXCLUDED.description, notes = EXCLUDED.notes,
+         line_type = EXCLUDED.line_type, item_name = EXCLUDED.item_name,
+         qty_requested = EXCLUDED.qty_requested, qty_ordered = EXCLUDED.qty_ordered,
+         unit_price = EXCLUDED.unit_price, amount = EXCLUDED.amount,
+         updated_at = EXCLUDED.updated_at`,
+    );
+
+    // Dòng PR đã bị xóa ở nguồn thì bỏ khỏi dự chi (chỉ dòng của PR đang còn trong nguồn).
+    await run(
+      'dọn dòng PR không còn ở nguồn',
+      `DELETE FROM cashflow_forecast_lines fl
+        WHERE fl.forecast_id IN (SELECT r.id FROM erp_garage_proc_requests r WHERE ${PR_SCOPE})
+          AND NOT EXISTS (SELECT 1 FROM erp_garage_proc_request_lines l WHERE l.id = fl.id)`,
     );
 
     const settlementMismatch = Number(
