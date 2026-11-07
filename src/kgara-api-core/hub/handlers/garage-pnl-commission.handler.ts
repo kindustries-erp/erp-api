@@ -1,8 +1,6 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { isNewCashflowSource } from '@/v2/modules/cashflow-garage/cashflow-garage-source';
-import { GarageCommissionForecastSyncService } from '@/v2/modules/cashflow-garage/services/garage-commission-forecast-sync.service';
 import { KgaraOperatingExpense } from '../../entities/kgara_operating_expense.entity';
 import { KgaraCashflowVoucher } from '../../entities/kgara_cashflow_voucher.entity';
 import {
@@ -23,8 +21,6 @@ export class GaragePnlCommissionHandler {
     private readonly opexRepo: Repository<KgaraOperatingExpense>,
     @InjectRepository(KgaraCashflowVoucher)
     private readonly voucherRepo: Repository<KgaraCashflowVoucher>,
-    @Optional()
-    private readonly commissionSync?: GarageCommissionForecastSyncService,
   ) {}
 
   /**
@@ -91,22 +87,7 @@ export class GaragePnlCommissionHandler {
       await this.opexRepo.save(opex);
       syncedOpex++;
 
-      // 2. Phiếu dự chi: bảng cũ (legacy) hoặc lõi mới (cashflow_*) theo công tắc
-      if (isNewCashflowSource() && this.commissionSync) {
-        const r = await this.commissionSync.syncCommission({
-          year,
-          month,
-          type: item.type,
-          amount: item.amount,
-          categoryName: item.categoryName,
-          paymentContent: item.paymentContent,
-        });
-        syncedVouchers += r.synced;
-        createdVouchers += r.created;
-        updatedVouchers += r.updated;
-        deltaVouchers += r.delta;
-        continue;
-      }
+      // 2. Đồng bộ vào bảng kgara_cashflow_vouchers
       const existingVouchers = await this.voucherRepo.find({
         where: {
           pnlPeriodYear: year,

@@ -71,7 +71,6 @@ import { KgaraCustomersController } from './controllers/kgara-customers.controll
 import { KgaraSuppliersController } from './controllers/kgara-suppliers.controller';
 import { KgaraGrossProfitController } from './controllers/kgara-gross-profit.controller';
 import { GarageCashflowController } from './controllers/garage-cashflow.controller';
-import { CashflowGarageModule } from '../v2/modules/cashflow-garage/cashflow-garage.module';
 import { KgaraSyncController } from './controllers/kgara-sync.controller';
 import { KgaraReportsController } from './controllers/kgara-reports.controller';
 import { KgaraCaseFinancialController } from './controllers/kgara-case-financial.controller';
@@ -97,7 +96,6 @@ import { GarageOpexExportController } from './controllers/garage-opex-export.con
 
 @Module({
   imports: [
-    CashflowGarageModule,
     TypeOrmModule.forFeature([
       KgaraAuth,
       KgaraBranch,

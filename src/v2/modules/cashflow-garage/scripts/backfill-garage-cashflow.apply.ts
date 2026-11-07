@@ -22,17 +22,10 @@ function voucherScope(a: string): string {
   )`;
 }
 
-function debtCountedSql(a: string): string {
-  return `NOT (${a}.voucher_type = 'RECEIPT' AND ${a}.payment_status IS NULL AND NOT EXISTS (SELECT 1 FROM kgara_case_settlements s WHERE s.cashflow_voucher_id = ${a}.id))`;
-}
-
-/** Phiếu thu NULL: tạo thanh toán/phân bổ khi có settlement hoặc có liên kết ngân hàng (giữ link; công nợ dùng debt_counted). */
+/** Phiếu đã thu/chi (tạo thanh toán và phân bổ). */
 function paidScope(a: string): string {
   return `(
-    (${a}.voucher_type = 'RECEIPT' AND ${a}.payment_status = 'PAID')
-    OR (${a}.voucher_type = 'RECEIPT' AND ${a}.payment_status IS NULL AND (
-      ${a}.erp_bank_transaction_id IS NOT NULL
-      OR EXISTS (SELECT 1 FROM kgara_case_settlements s WHERE s.cashflow_voucher_id = ${a}.id)))
+    (${a}.voucher_type = 'RECEIPT' AND (${a}.payment_status = 'PAID' OR ${a}.payment_status IS NULL))
     OR (${a}.voucher_type = 'PAYMENT' AND ${a}.payment_status = 'PAID')
   )`;
 }
@@ -86,9 +79,7 @@ async function pair(
 
 export async function applyGarageCashflowBackfill(
   client: Client,
-  options: { commit?: boolean } = {},
 ): Promise<BackfillReport> {
-  const commit = options.commit !== false;
   const steps: BackfillStepResult[] = [];
   const run = async (step: string, sql: string): Promise<void> => {
     const res = await client.query(sql);
@@ -135,27 +126,16 @@ export async function applyGarageCashflowBackfill(
          forecast_id, case_id, license_plate, payment_content,
          is_auto_expected, is_auto_commission,
          pnl_period_year, pnl_period_month, pnl_commission_type, pnl_commission_anchor_id,
-         legacy_created_by, legacy_payment_method, debt_counted)
+         legacy_created_by, legacy_payment_method)
        SELECT v.id, v.case_id, v.license_plate, v.payment_content,
          COALESCE(v.is_auto_expected, false), COALESCE(v.is_auto_commission, false),
          v.pnl_period_year, v.pnl_period_month, v.pnl_commission_type, v.pnl_commission_anchor_id,
-         v.created_by, v.payment_method, ${debtCountedSql('v')}
+         v.created_by, v.payment_method
          FROM kgara_cashflow_vouchers v
         WHERE ${voucherScope('v')}
        ON CONFLICT (forecast_id) DO UPDATE SET
          legacy_created_by = EXCLUDED.legacy_created_by,
-         legacy_payment_method = EXCLUDED.legacy_payment_method,
-         debt_counted = EXCLUDED.debt_counted`,
-    );
-
-    await run(
-      'dọn thanh toán của phiếu thu NULL không có settlement và không có liên kết ngân hàng',
-      `DELETE FROM cashflow_payments p
-        USING kgara_cashflow_vouchers v
-       WHERE p.code = 'PM-' || v.voucher_code
-         AND v.voucher_type = 'RECEIPT' AND v.payment_status IS NULL
-         AND v.erp_bank_transaction_id IS NULL
-         AND NOT EXISTS (SELECT 1 FROM kgara_case_settlements s WHERE s.cashflow_voucher_id = v.id)`,
+         legacy_payment_method = EXCLUDED.legacy_payment_method`,
     );
 
     await run(
@@ -253,10 +233,6 @@ export async function applyGarageCashflowBackfill(
     );
 
     const checks = await collectChecks(client);
-    if (!commit) {
-      await client.query('ROLLBACK');
-      return { steps, checks, settlementMismatch };
-    }
     if (checks.some((c) => !c.ok)) {
       throw new Error(
         `Đối chiếu sau ghi lệch: ${checks

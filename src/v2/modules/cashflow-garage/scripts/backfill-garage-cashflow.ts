@@ -27,7 +27,6 @@ import { applyGarageCashflowBackfill } from './backfill-garage-cashflow.apply';
 
 const args = process.argv.slice(2);
 const APPLY = args.includes('--apply');
-const SIMULATE = args.includes('--simulate');
 const CONFIRM = args
   .find((a) => a.startsWith('--confirm='))
   ?.slice('--confirm='.length);
@@ -39,12 +38,8 @@ const VOUCHER_BUCKETS = [
     where: `voucher_type = 'RECEIPT' AND payment_status = 'EXPECTED'`,
   },
   {
-    bucket: 'RECEIPT PAID -> payment IN',
-    where: `voucher_type = 'RECEIPT' AND payment_status = 'PAID'`,
-  },
-  {
-    bucket: 'RECEIPT NULL -> header SETTLED (payment IN nếu có settlement)',
-    where: `voucher_type = 'RECEIPT' AND payment_status IS NULL`,
+    bucket: 'RECEIPT PAID/NULL -> payment IN',
+    where: `voucher_type = 'RECEIPT' AND (payment_status = 'PAID' OR payment_status IS NULL)`,
   },
   {
     bucket: 'PAYMENT PAID -> payment OUT',
@@ -91,27 +86,21 @@ async function main(): Promise<void> {
 
   try {
     await client.query(
-      `SET default_transaction_read_only = ${APPLY || SIMULATE ? 'off' : 'on'}`,
+      `SET default_transaction_read_only = ${APPLY ? 'off' : 'on'}`,
     );
     const { rows: dbRows } = await client.query<{ db: string }>(
       'SELECT current_database() AS db',
     );
     console.log(`Database thực tế: ${dbRows[0].db}`);
 
-    if (APPLY || SIMULATE) {
-      if (APPLY && CONFIRM !== dbRows[0].db) {
+    if (APPLY) {
+      if (CONFIRM !== dbRows[0].db) {
         throw new ScriptEnvError(
           `--apply cần --confirm=${dbRows[0].db} (khớp đúng tên DB thực tế).`,
         );
       }
-      const report = await applyGarageCashflowBackfill(client, {
-        commit: !SIMULATE,
-      });
-      console.log(
-        SIMULATE
-          ? '\nMÔ PHỎNG (đã ROLLBACK, không ghi):'
-          : '\nGhi dữ liệu (đã COMMIT):',
-      );
+      const report = await applyGarageCashflowBackfill(client);
+      console.log('\nGhi dữ liệu (đã COMMIT):');
       for (const s of report.steps)
         console.log(`  ${s.step.padEnd(44)} rows=${s.rows}`);
       console.log('\nĐối chiếu sau ghi:');

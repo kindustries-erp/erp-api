@@ -1,8 +1,6 @@
-import { Injectable, Optional } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { isNewCashflowSource } from '../../v2/modules/cashflow-garage/cashflow-garage-source';
-import { LegacyVoucherPeriodService } from '../../v2/modules/cashflow-garage/compat/legacy-voucher-period.service';
 
 import { KgaraCashflowVoucher } from '../entities/kgara_cashflow_voucher.entity';
 import {
@@ -29,8 +27,6 @@ export class GaragePeriodReportQueries {
     @InjectRepository(KgaraCashflowVoucher)
     private readonly voucherRepo: Repository<KgaraCashflowVoucher>,
     private readonly pnlService: GaragePnlService,
-    @Optional()
-    private readonly legacyPeriod?: LegacyVoucherPeriodService,
   ) {}
 
   /** Phiếu thu/chi trong kỳ; truy vấn dùng chung với Hub qua `loadPeriodVoucherRows`. */
@@ -39,9 +35,6 @@ export class GaragePeriodReportQueries {
     to?: string,
     branchId?: string,
   ): Promise<PeriodVoucherRow[]> {
-    if (isNewCashflowSource() && this.legacyPeriod) {
-      return this.legacyPeriod.loadVouchers(from, to, branchId);
-    }
     return loadPeriodVoucherRows(this.voucherRepo, from, to, branchId);
   }
 

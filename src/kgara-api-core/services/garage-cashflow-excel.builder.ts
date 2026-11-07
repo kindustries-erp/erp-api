@@ -1,36 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { Workbook } from 'exceljs';
+import { KgaraCashflowVoucher } from '../entities/kgara_cashflow_voucher.entity';
 import { toVietnamExcelDate } from '../../common/utils/date.util';
 import { classifyVoucher } from '../helpers/garage-ledger-classifier';
 import { applyForecastColumnStyle } from '../helpers/kgara-excel-style.helper';
 
-/**
- * Dòng phiếu đưa vào file Excel. Cả entity cũ và response tương thích mới đều thỏa mãn kiểu này.
- * Chỉ khai báo các trường builder thực sự đọc.
- */
-export interface GarageCashflowExcelVoucherRow {
-  amount: number | string;
-  voucherType: string;
-  paymentStatus?: string | null;
-  voucherCode: string;
-  transDate: string | Date;
-  createdAt: string | Date;
-  updatedAt: string | Date;
-  paymentMethod?: string | null;
-  paymentContent?: string | null;
-  licensePlate?: string | null;
-  partnerName?: string | null;
-  note?: string | null;
-  createdBy?: string | null;
-  case?: {
-    soChungTu?: string | null;
-    khachHangName?: string | null;
-    bienSoXe?: string | null;
-  } | null;
-}
-
 export interface GarageCashflowExcelBuildOptions {
-  vouchers: GarageCashflowExcelVoucherRow[];
+  vouchers: KgaraCashflowVoucher[];
   selectedColumns?: string[];
   onProgress?: (percent: number, message: string) => void;
 }

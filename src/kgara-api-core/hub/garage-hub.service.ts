@@ -1,4 +1,4 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, EntityManager } from 'typeorm';
 import { GarageCaseLifecycleHandler } from './handlers/garage-case-lifecycle.handler';
@@ -10,8 +10,6 @@ import {
   type CaseLedgerAmounts,
 } from './handlers/garage-case-ledger.handler';
 import { KgaraCashflowVoucher } from '../entities/kgara_cashflow_voucher.entity';
-import { isNewCashflowSource } from '../../v2/modules/cashflow-garage/cashflow-garage-source';
-import { LegacyVoucherPeriodService } from '../../v2/modules/cashflow-garage/compat/legacy-voucher-period.service';
 import { KgaraOperatingExpense } from '../entities/kgara_operating_expense.entity';
 import {
   CaseTransitionEvent,
@@ -38,8 +36,6 @@ export class GarageHubService {
     private readonly voucherRepo: Repository<KgaraCashflowVoucher>,
     @InjectRepository(KgaraOperatingExpense)
     private readonly opexRepo: Repository<KgaraOperatingExpense>,
-    @Optional()
-    private readonly legacyPeriod?: LegacyVoucherPeriodService,
   ) {}
 
   /**
@@ -91,9 +87,6 @@ export class GarageHubService {
     to?: string,
     branchId?: string,
   ): Promise<PeriodLedger> {
-    if (isNewCashflowSource() && this.legacyPeriod) {
-      return this.legacyPeriod.loadLedger(from, to, branchId);
-    }
     return this.periodLedgerHandler.loadLedger(from, to, branchId);
   }
 
@@ -103,9 +96,6 @@ export class GarageHubService {
   async getCaseLedger(
     caseIds: string[],
   ): Promise<Record<string, CaseLedgerAmounts>> {
-    if (isNewCashflowSource() && this.legacyPeriod) {
-      return this.legacyPeriod.loadCaseLedger(caseIds);
-    }
     return this.caseLedgerHandler.loadCaseLedger(caseIds);
   }
 

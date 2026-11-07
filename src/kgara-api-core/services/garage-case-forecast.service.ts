@@ -1,8 +1,6 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
-import { isNewCashflowSource } from '@/v2/modules/cashflow-garage/cashflow-garage-source';
-import { GarageCaseReceivableSyncService } from '@/v2/modules/cashflow-garage/services/garage-case-receivable-sync.service';
 import { KgaraCashflowVoucher } from '../entities/kgara_cashflow_voucher.entity';
 import { parseSafeDate } from '../utils/kgara-parser.util';
 
@@ -25,8 +23,6 @@ export class GarageCaseForecastService {
   constructor(
     @InjectRepository(KgaraCashflowVoucher)
     private readonly voucherRepo: Repository<KgaraCashflowVoucher>,
-    @Optional()
-    private readonly receivableSync?: GarageCaseReceivableSyncService,
   ) {}
 
   /**
@@ -37,9 +33,6 @@ export class GarageCaseForecastService {
   async syncCaseForecast(input: CaseForecastInput): Promise<void> {
     const { caseId, previousStatus, newStatus } = input;
     if (!caseId) return;
-    if (isNewCashflowSource() && this.receivableSync) {
-      return this.receivableSync.syncCaseForecast(input);
-    }
 
     try {
       // Rule 1: Chuyển sang Hoàn tất (status 3)
