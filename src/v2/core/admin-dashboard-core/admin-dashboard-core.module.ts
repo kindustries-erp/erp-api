@@ -9,4 +9,6 @@ import { AdminDashboardStatsService } from './services/admin-dashboard-stats.ser
   providers: [AdminDashboardStatsService],
   exports: [AdminDashboardStatsService],
 })
-export class AdminDashboardModule {}
+export class AdminDashboardCoreModule {}
+
+export const AdminDashboardModule = AdminDashboardCoreModule;

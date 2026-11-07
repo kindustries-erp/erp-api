@@ -7,8 +7,10 @@ description: Module backend cung cấp API tổng quan điều hành và quản 
 
 ## 1. Tổng Quan & Trách Nhiệm
 - **Endpoint**: `GET /api/v2/admin/dashboard/summary`
-- **Controller**: `AdminDashboardController` (`src/v2/admin-dashboard-core/controllers/admin-dashboard.controller.ts`)
-- **Service**: `AdminDashboardStatsService` (`src/v2/admin-dashboard-core/services/admin-dashboard-stats.service.ts`)
+- **Module**: `AdminDashboardCoreModule` (`src/v2/core/admin-dashboard-core/admin-dashboard-core.module.ts`)
+- **Controller**: `AdminDashboardController` (`src/v2/core/admin-dashboard-core/admin-dashboard.controller.ts`)
+- **Service**: `AdminDashboardStatsService` (`src/v2/core/admin-dashboard-core/services/admin-dashboard-stats.service.ts`)
+- **Manifest**: `src/v2/core/admin-dashboard-core/core.manifest.json` (style: `engine`)
 - **Guard**: `JwtAuthGuard` + `CoreRbacGuard`
 - **Quyền yêu cầu**: Phục vụ tài khoản quản trị tối cao (Super Admin) qua RBAC.
 
@@ -20,5 +22,5 @@ description: Module backend cung cấp API tổng quan điều hành và quản 
   - `systemHealth`: Trạng thái kết nối DB, API, Services và thời gian phản hồi.
 
 ## 3. Co-located Tests
-- Controller Spec: `src/v2/admin-dashboard-core/admin-dashboard.controller.spec.ts` (PASS)
-- Service Spec: `src/v2/admin-dashboard-core/services/admin-dashboard-stats.service.spec.ts` (PASS)
+- Controller Spec: `src/v2/core/admin-dashboard-core/admin-dashboard.controller.spec.ts` (PASS)
+- Service Spec: `src/v2/core/admin-dashboard-core/services/admin-dashboard-stats.service.spec.ts` (PASS)

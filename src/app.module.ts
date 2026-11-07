@@ -56,7 +56,7 @@ import { AppConfigModule } from './app-config/app-config.module';
 import { SystemOperationsCoreModule } from './system-operations-core/system-operations-core.module';
 import { AiHubCoreModule } from './ai-hub-core/ai-hub-core.module';
 import { FinanceInvoicesModule } from './v2/modules/invoices-finance/invoices-finance.module'; // api-v2-module:invoices-finance:app-imports
-import { AdminDashboardModule } from './v2/admin-dashboard-core/admin-dashboard.module';
+import { AdminDashboardCoreModule } from './v2/core/admin-dashboard-core/admin-dashboard-core.module';
 import { GarageGoodsReceiptsCoreModule } from './v2/modules/goods-receipts-garage/goods-receipts-garage-core.module'; // api-v2-module:goods-receipts-garage:app-imports
 import { ErpProcurementRequestsModule } from './v2/modules/procurement-requests-erp/procurement-requests-erp.module'; // procurement:pr-module
 import { ErpProcurementOrdersModule } from './v2/modules/procurement-orders-erp/procurement-orders-erp.module'; // procurement:po-module
@@ -179,7 +179,7 @@ import { InventoryMovementsGarageAdjustmentsModule } from './v2/modules/inventor
     AppConfigModule,
     AiHubCoreModule,
     FinanceInvoicesModule, // api-v2-module:invoices-finance:app-modules
-    AdminDashboardModule,
+    AdminDashboardCoreModule,
     GarageGoodsReceiptsCoreModule, // api-v2-module:goods-receipts-garage:app-modules
     ErpProcurementRequestsModule, // procurement:pr-module-register
     ErpProcurementOrdersModule, // procurement:po-module-register
