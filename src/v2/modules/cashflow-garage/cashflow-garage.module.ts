@@ -24,6 +24,15 @@ import { GarageForecastCommandService } from './services/garage-forecast-command
 import { GarageForecastQueryService } from './services/garage-forecast-query.service';
 import { GarageForecastLinesHook } from './hooks/garage-forecast-lines.hook';
 import { LegacyVoucherListService } from './compat/legacy-voucher-list.service';
+import { LegacyVoucherDashboardService } from './compat/legacy-voucher-dashboard.service';
+import { LegacyVoucherOptionsService } from './compat/legacy-voucher-options.service';
+import { LegacyVoucherDuplicateService } from './compat/legacy-voucher-duplicate.service';
+import { LegacyVoucherWriteService } from './compat/legacy-voucher-write.service';
+import { LegacyVoucherPeriodService } from './compat/legacy-voucher-period.service';
+import { LegacyVoucherExportService } from './compat/legacy-voucher-export.service';
+import { GarageCashflowExcelBuilder } from '../../../kgara-api-core/services/garage-cashflow-excel.builder';
+import { GarageCaseReceivableSyncService } from './services/garage-case-receivable-sync.service';
+import { GarageCommissionForecastSyncService } from './services/garage-commission-forecast-sync.service';
 
 /** Cấu hình duyệt dự chi và dự thu Garage (bật/tắt theo doc_type). */
 const GarageForecastOutApprovalConfigController =
@@ -86,7 +95,27 @@ const GarageForecastInApprovalConfigController = createApprovalConfigController(
     GarageForecastQueryService,
     CashflowGarageService,
     LegacyVoucherListService,
+    LegacyVoucherDashboardService,
+    LegacyVoucherOptionsService,
+    LegacyVoucherDuplicateService,
+    LegacyVoucherWriteService,
+    LegacyVoucherPeriodService,
+    LegacyVoucherExportService,
+    GarageCashflowExcelBuilder,
+    GarageCaseReceivableSyncService,
+    GarageCommissionForecastSyncService,
   ],
-  exports: [CashflowGarageService],
+  exports: [
+    LegacyVoucherPeriodService,
+    LegacyVoucherExportService,
+    CashflowGarageService,
+    LegacyVoucherListService,
+    LegacyVoucherDashboardService,
+    LegacyVoucherOptionsService,
+    LegacyVoucherDuplicateService,
+    LegacyVoucherWriteService,
+    GarageCaseReceivableSyncService,
+    GarageCommissionForecastSyncService,
+  ],
 })
 export class CashflowGarageModule {}

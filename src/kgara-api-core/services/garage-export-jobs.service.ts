@@ -1,4 +1,6 @@
-import { Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, OnModuleDestroy, Optional } from '@nestjs/common';
+import { isNewCashflowSource } from '../../v2/modules/cashflow-garage/cashflow-garage-source';
+import { LegacyVoucherExportService } from '../../v2/modules/cashflow-garage/compat/legacy-voucher-export.service';
 
 import {
   ExportJobRunner,
@@ -111,6 +113,8 @@ export class GarageExportJobsService implements OnModuleDestroy {
     private readonly periodReportService: GaragePeriodReportService,
     private readonly cashflowExportService: GarageCashflowExportService,
     private readonly opexExportService: GarageOpexExportService,
+    @Optional()
+    private readonly newCashflowExport?: LegacyVoucherExportService,
   ) {}
 
   onModuleDestroy() {
@@ -264,7 +268,9 @@ export class GarageExportJobsService implements OnModuleDestroy {
       dateFrom: dto.dateFrom || dto.startDate,
       dateTo: dto.dateTo || dto.endDate,
       producer: (onProgress) =>
-        this.cashflowExportService.buildExcel(dto, onProgress),
+        isNewCashflowSource() && this.newCashflowExport
+          ? this.newCashflowExport.buildExcel(dto, onProgress)
+          : this.cashflowExportService.buildExcel(dto, onProgress),
     });
   }
 

@@ -20,6 +20,12 @@ import {
 import { ErpResource, ErpAction } from '@/v2/core/rbac-core';
 import { GarageCashflowService } from '../services/garage-cashflow.service';
 import { GaragePnlService } from '../services/garage-pnl.service';
+import { isNewCashflowSource } from '@/v2/modules/cashflow-garage/cashflow-garage-source';
+import { LegacyVoucherListService } from '@/v2/modules/cashflow-garage/compat/legacy-voucher-list.service';
+import { LegacyVoucherDashboardService } from '@/v2/modules/cashflow-garage/compat/legacy-voucher-dashboard.service';
+import { LegacyVoucherOptionsService } from '@/v2/modules/cashflow-garage/compat/legacy-voucher-options.service';
+import { LegacyVoucherDuplicateService } from '@/v2/modules/cashflow-garage/compat/legacy-voucher-duplicate.service';
+import { LegacyVoucherWriteService } from '@/v2/modules/cashflow-garage/compat/legacy-voucher-write.service';
 import {
   CreateKgaraCashflowVoucherDto,
   UpdateKgaraCashflowVoucherDto,
@@ -40,7 +46,29 @@ export class GarageCashflowController {
   constructor(
     private readonly cashflowService: GarageCashflowService,
     private readonly pnlService?: GaragePnlService,
+    private readonly newList?: LegacyVoucherListService,
+    private readonly newDashboard?: LegacyVoucherDashboardService,
+    private readonly newOptions?: LegacyVoucherOptionsService,
+    private readonly newDuplicates?: LegacyVoucherDuplicateService,
+    private readonly newWrite?: LegacyVoucherWriteService,
   ) {}
+
+  /** Đọc lại phiếu vừa ghi theo hình dạng cũ (để trả về cùng response như trước). */
+  private async reloadVoucher(
+    id: string,
+    code: string,
+  ): Promise<KgaraCashflowVoucherResponseDto> {
+    const page = await this.newList?.list({
+      column_search: JSON.stringify({ voucherCode: code }),
+      tab: 'all',
+      pageSize: 5,
+    });
+    const row = (page?.data ?? []).find((r: { id?: string }) => r.id === id);
+    return (row ?? {
+      id,
+      voucherCode: code,
+    }) as KgaraCashflowVoucherResponseDto;
+  }
 
   @Post('sync-pnl-commissions')
   @RequireAnyPermissions(
@@ -67,6 +95,9 @@ export class GarageCashflowController {
   async listVouchers(
     @Query() query: ListKgaraCashflowVoucherQueryDto,
   ): Promise<ListKgaraCashflowVouchersResponseDto> {
+    if (isNewCashflowSource() && this.newList) {
+      return this.newList.list(query as never) as never;
+    }
     return this.cashflowService.listVouchers(query);
   }
 
@@ -78,6 +109,9 @@ export class GarageCashflowController {
   async getDashboard(
     @Query() query: GarageCashflowDashboardQueryDto,
   ): Promise<GarageCashflowDashboardResponseDto> {
+    if (isNewCashflowSource() && this.newDashboard) {
+      return this.newDashboard.getDashboardStats(query);
+    }
     return this.cashflowService.getDashboardStats(query);
   }
 
@@ -94,6 +128,16 @@ export class GarageCashflowController {
     @Query('column_filters') column_filters: string,
     @Query('tab') tab?: string,
   ) {
+    if (isNewCashflowSource() && this.newOptions) {
+      return this.newOptions.getColumnOptions(
+        column,
+        search,
+        page,
+        pageSize,
+        column_filters,
+        tab,
+      );
+    }
     return this.cashflowService.getColumnOptions(
       column,
       search,
@@ -112,6 +156,9 @@ export class GarageCashflowController {
   async checkDuplicates(
     @Query() query: CheckKgaraCashflowDuplicateQueryDto,
   ): Promise<KgaraCashflowDuplicateResponseDto> {
+    if (isNewCashflowSource() && this.newDuplicates) {
+      return this.newDuplicates.findPotentialDuplicates(query) as never;
+    }
     return this.cashflowService.findPotentialDuplicates(query);
   }
 
@@ -124,6 +171,10 @@ export class GarageCashflowController {
     @Body() dto: CreateKgaraCashflowVoucherDto,
     @Req() req?: any,
   ): Promise<KgaraCashflowVoucherResponseDto> {
+    if (isNewCashflowSource() && this.newWrite) {
+      const created = await this.newWrite.createVoucher(dto, req?.user);
+      return this.reloadVoucher(created.id, created.code);
+    }
     return this.cashflowService.createVoucher(dto, req?.user);
   }
 
@@ -137,6 +188,10 @@ export class GarageCashflowController {
     @Body() dto: UpdateKgaraCashflowVoucherDto,
     @Req() req?: any,
   ): Promise<KgaraCashflowVoucherResponseDto> {
+    if (isNewCashflowSource() && this.newWrite) {
+      const updated = await this.newWrite.updateVoucher(id, dto, req?.user);
+      return this.reloadVoucher(updated.id, updated.code);
+    }
     return this.cashflowService.updateVoucher(id, dto, req?.user);
   }
 
@@ -149,6 +204,9 @@ export class GarageCashflowController {
     @Param('id') id: string,
     @Req() req?: any,
   ): Promise<void> {
+    if (isNewCashflowSource() && this.newWrite) {
+      return this.newWrite.deleteVoucher(id);
+    }
     return this.cashflowService.deleteVoucher(id, req?.user);
   }
 }

@@ -1,5 +1,5 @@
 import { EntityManager } from 'typeorm';
-import { KgaraCashflowVoucher } from '../entities/kgara_cashflow_voucher.entity';
+import type { KgaraCashflowVoucher } from '../entities/kgara_cashflow_voucher.entity';
 import { KgaraOperatingExpense } from '../entities/kgara_operating_expense.entity';
 import {
   getOpexCategoryForContent,
@@ -11,9 +11,21 @@ import {
  * Phiếu đủ điều kiện thì upsert theo `source_cashflow_voucher_id`, ngược lại gỡ dòng cũ.
  * Chạy trong transaction của phiếu.
  */
+/** Trường tối thiểu cần để đồng bộ opex: dùng chung cho phiếu cũ và dự chi mới (id giữ nguyên qua backfill). */
+export type OpexSourceVoucher = Pick<
+  KgaraCashflowVoucher,
+  | 'id'
+  | 'voucherCode'
+  | 'voucherType'
+  | 'paymentStatus'
+  | 'paymentContent'
+  | 'transDate'
+  | 'amount'
+>;
+
 export async function syncOpexFromVoucher(
   manager: EntityManager,
-  voucher: KgaraCashflowVoucher,
+  voucher: OpexSourceVoucher,
 ): Promise<void> {
   const existing = await manager.findOne(KgaraOperatingExpense, {
     where: { sourceCashflowVoucherId: voucher.id },

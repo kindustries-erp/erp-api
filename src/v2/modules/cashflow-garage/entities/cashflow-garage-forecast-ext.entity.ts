@@ -31,6 +31,10 @@ export class CashflowGarageForecastExt {
   @Column({ type: 'boolean', name: 'is_auto_commission', default: false })
   isAutoCommission: boolean;
 
+  /** Có tính vào công nợ phiếu dịch vụ không (xem migration 20261108100000). */
+  @Column({ type: 'boolean', name: 'debt_counted', default: true })
+  debtCounted: boolean;
+
   @Column({ type: 'smallint', name: 'pnl_period_year', nullable: true })
   pnlPeriodYear: number | null;
 
