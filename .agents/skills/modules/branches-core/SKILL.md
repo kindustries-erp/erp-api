@@ -28,6 +28,8 @@ Toàn bộ dưới `/api/v1/branches`, guard `JwtAuthGuard` duy nhất và Swagg
 
 Response entity JSON giữ `id`, `code`, `name`, `address` (giữ `null`), `isActive` (camelCase), `createdAt`, `updatedAt` (ISO qua JSON). POST/PATCH chỉ ghi `code`, `name`, `is_active` (map sang `isActive`).
 
+Client `erp-web` (`src/modules/branches/api/branchApi.ts`, `normalizeBranch`) đọc `isActive` trước, fallback `is_active` nếu phản hồi cũ; thiếu cả hai thì coi là active. Đừng đổi response sang `is_active` để "khớp" UI.
+
 **Body POST/PATCH (đã siết, follow-up `branches-core-v2-followup`)**: validate qua `ParseBranchBodyPipe(CreateErpBranchDto | UpdateErpBranchDto)` gắn ở tham số `@Body()`, không dùng `ValidationPipe` toàn cục trên body.
 - POST: `code` và `name` là chuỗi không rỗng (tối đa 100 và 255); `is_active` tùy chọn nhưng phải là boolean.
 - PATCH: mọi field tùy chọn; field có mặt thì phải hợp lệ, kể cả `null` đều bị 400.
