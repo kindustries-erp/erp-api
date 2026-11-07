@@ -20,6 +20,8 @@ export interface ApprovalConfigOptions {
   /** Resource quyền của chứng từ (dùng để liệt kê người duyệt). */
   resource: ErpResource;
   tag: string;
+  /** Giá trị khi chưa có dòng khóa. Mặc định: bật. */
+  defaultEnabled?: boolean;
 }
 
 /**
@@ -51,7 +53,10 @@ export function createApprovalConfigController(opts: ApprovalConfigOptions) {
     async getSetting() {
       return {
         docType: opts.docType,
-        approvalEnabled: await this.settings.isEnabled(opts.docType),
+        approvalEnabled: await this.settings.isEnabled(
+          opts.docType,
+          opts.defaultEnabled ?? true,
+        ),
       };
     }
 

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "layer": "api",
+  "family": "cashflow-core",
+  "entity": "CashflowForecast",
+  "style": "abstract-services",
+  "barrel": "src/v2/core/cashflow-core/index.ts",
+  "module": "CashflowCoreModule",
+  "moduleFile": "cashflow-core.module.ts",
+  "baseClasses": {
+    "entity": "BaseCashflowForecastEntity",
+    "createDto": "BaseCreateCashflowForecastDto",
+    "contract": "BaseCashflowForecastContract",
+    "service": "AbstractCashflowForecastCommandService"
+  },
+  "serviceFile": "abstract-cashflow-forecast-command.service.ts",
+  "permissionPattern": "cashflow-core",
+  "requiredModuleFiles": [
+    "contracts",
+    "controllers",
+    "dto",
+    "entities",
+    "services"
+  ]
+}

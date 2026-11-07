@@ -62,6 +62,7 @@ import { ErpProcurementRequestsModule } from './v2/modules/procurement-requests-
 import { ErpProcurementOrdersModule } from './v2/modules/procurement-orders-erp/procurement-orders-erp.module'; // procurement:po-module
 import { GarageProcurementRequestsModule } from './v2/modules/procurement-requests-garage/procurement-requests-garage.module'; // procurement:garage-pr-module
 import { GarageProcurementOrdersModule } from './v2/modules/procurement-orders-garage/procurement-orders-garage.module'; // procurement:garage-po-module
+import { CashflowGarageModule } from './v2/modules/cashflow-garage/cashflow-garage.module'; // cashflow:garage-module
 import { InventoryMovementsGarageReceiptsModule } from './v2/modules/inventory-movements-garage-receipts/inventory-movements-garage-receipts.module'; // api-v2-module:inventory-movements-garage-receipts:app-imports
 import { InventoryMovementsGarageIssuesModule } from './v2/modules/inventory-movements-garage-issues/inventory-movements-garage-issues.module'; // api-v2-module:inventory-movements-garage-issues:app-imports
 import { InventoryMovementsGarageAdjustmentsModule } from './v2/modules/inventory-movements-garage-adjustments/inventory-movements-garage-adjustments.module'; // api-v2-module:inventory-movements-garage-adjustments:app-imports
@@ -185,6 +186,7 @@ import { InventoryMovementsGarageAdjustmentsModule } from './v2/modules/inventor
     ErpProcurementOrdersModule, // procurement:po-module-register
     GarageProcurementRequestsModule, // procurement:garage-pr-module-register
     GarageProcurementOrdersModule, // procurement:garage-po-module-register
+    CashflowGarageModule, // cashflow:garage-module-register
     InventoryMovementsGarageReceiptsModule, // api-v2-module:inventory-movements-garage-receipts:app-modules
     InventoryMovementsGarageIssuesModule, // api-v2-module:inventory-movements-garage-issues:app-modules
     InventoryMovementsGarageAdjustmentsModule, // api-v2-module:inventory-movements-garage-adjustments:app-modules

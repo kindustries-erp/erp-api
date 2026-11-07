@@ -17,9 +17,10 @@ export class ApprovalSettingsService {
     return resolveApprovalMode(row);
   }
 
-  async isEnabled(docType: string): Promise<boolean> {
+  /** Không có dòng khóa thì trả về `fallback` (mặc định cũ: bật). */
+  async isEnabled(docType: string, fallback = true): Promise<boolean> {
     const row = await this.repo.findOne({ where: { docType } });
-    return row ? row.approvalEnabled : true;
+    return row ? row.approvalEnabled : fallback;
   }
 
   /** Bật/tắt khóa duyệt. Tạo dòng nếu chưa có. */
