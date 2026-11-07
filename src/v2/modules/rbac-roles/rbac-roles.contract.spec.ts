@@ -8,7 +8,7 @@ import { RoleCommandService } from './services/role-command.service';
 import { RolePermissionsService } from './services/role-permissions.service';
 import { RoleUsersService } from './services/role-users.service';
 import { RBAC_PERMISSIONS_KEY } from '@/auth/decorators/require-permissions.decorator';
-import { ErpAction, ErpResource } from '@/v2/core/rbac';
+import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
 
 /**
  * Hợp đồng API /api/v1/rbac-core sau migrate v2.

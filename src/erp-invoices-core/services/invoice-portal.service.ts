@@ -12,7 +12,7 @@ import { Subject } from 'rxjs';
 
 import { ErpInvoice } from '../entities/erp_invoice.entity';
 import { CompanyProfile } from '../../company-profile/entities/company-profile.entity';
-import { ErpBranch } from '../../branches-core/entities/erp_branch.entity';
+import { ErpBranch } from '@/v2/core/branches-core/entities/erp_branch.entity';
 import { PortalFetchDto } from '../dto/portal-invoice.dto';
 import { R2Service } from '../../r2/r2.service';
 import { NotificationsService } from '../../notifications/notifications.service';

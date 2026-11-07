@@ -16,7 +16,7 @@ import type { Response } from 'express';
 import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
-import { ErpAction, ErpResource } from '@/v2/core/rbac';
+import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
 import { BranchId } from '../decorators/branch-id.decorator';
 import { GarageDebtsExportDto } from '../dto/garage-export.dto';
 import type { GarageDebtExportKind } from '../helpers/garage-debts-export.helper';

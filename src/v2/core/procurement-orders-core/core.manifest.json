@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "layer": "api",
+  "family": "procurement-orders-core",
+  "entity": "ProcurementOrder",
+  "style": "abstract-services",
+  "barrel": "src/v2/core/procurement-orders-core/index.ts",
+  "module": "ProcurementOrdersCoreModule",
+  "moduleFile": "procurement-orders-core.module.ts",
+  "baseClasses": {
+    "entity": "BaseProcurementOrderEntity",
+    "createDto": "BaseCreateProcurementOrderDto",
+    "contract": "BaseProcurementOrderContract",
+    "service": "AbstractProcurementOrderCommandService"
+  },
+  "serviceFile": "abstract-procurement-order-command.service.ts",
+  "permissionPattern": "procurement-orders",
+  "requiredModuleFiles": [
+    "contracts",
+    "controllers",
+    "dto",
+    "entities",
+    "services"
+  ]
+}
+

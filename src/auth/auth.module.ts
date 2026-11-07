@@ -10,7 +10,7 @@ import { JwtStrategy } from './jwt.strategy';
 import { UsersModule } from '../users/users.module';
 import { AuditCoreModule } from '../audit-core/audit-core.module';
 import { CoreRefreshToken } from './entities/core-refresh-token.entity';
-import { RbacCoreModule } from '@/v2/core/rbac';
+import { RbacCoreModule } from '@/v2/core/rbac-core';
 import { AppConfigModule } from '../app-config/app-config.module';
 
 @Module({

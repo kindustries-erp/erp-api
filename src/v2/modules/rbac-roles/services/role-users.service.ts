@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { CoreUserRole } from '@/v2/core/rbac/entities/core-user-role.entity';
+import { CoreUserRole } from '@/v2/core/rbac-core/entities/core-user-role.entity';
 import { UpdateCoreRoleUsersDto } from '../dto/rbac-core.dto';
 import type { RoleUserResponse } from '../dto/rbac-response.dto';
 import { toRoleUser } from '../helpers/rbac-role.mapper';

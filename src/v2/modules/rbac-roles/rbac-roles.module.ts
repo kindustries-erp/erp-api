@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { CoreRole } from '@/v2/core/rbac/entities/core-role.entity';
-import { CorePermission } from '@/v2/core/rbac/entities/core-permission.entity';
-import { CoreUserRole } from '@/v2/core/rbac/entities/core-user-role.entity';
+import { CoreRole } from '@/v2/core/rbac-core/entities/core-role.entity';
+import { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.entity';
+import { CoreUserRole } from '@/v2/core/rbac-core/entities/core-user-role.entity';
 import { RbacRolesController } from './controllers/rbac-roles.controller';
 import { RbacRolesService } from './rbac-roles.service';
 import { RoleQueryService } from './services/role-query.service';

@@ -11,16 +11,17 @@ const engineManifest = buildCoreManifest(
   buildApiCoreData({ familyInput: 'goods-receipts', entityInput: 'GoodsReceipt', styleInput: 'engine' }),
 );
 const abstractManifest = buildCoreManifest(
-  buildApiCoreData({ familyInput: 'purchase-orders', entityInput: 'PurchaseOrder', styleInput: 'abstract-services' }),
+  buildApiCoreData({ familyInput: 'procurement-orders', entityInput: 'PurchaseOrder', styleInput: 'abstract-services' }),
 );
 
 const thinAnswers = {
-  moduleInput: 'garage-goods-receipts',
+  moduleInput: 'goods-receipts-garage',
   entityInput: 'GarageGoodsReceipt',
   fieldSpecInput: 'code:string:required,status:status',
-  tableNameInput: '',
-  routePathInput: '',
-  permissionResourceInput: '',
+  // Tên thật của module đã triển khai: truyền tường minh, không để generator suy ra từ tên thư mục.
+  tableNameInput: 'erp_garage_goods_receipts',
+  routePathInput: 'garage-goods-receipts',
+  permissionResourceInput: 'garage_goods_receipts',
   wireInput: false,
 };
 
@@ -37,9 +38,9 @@ function fakeRepo(manifests) {
 describe('buildApiThinData', () => {
   it('ghép module với lõi engine và dùng lại dữ liệu pipeline api-module-v2', () => {
     const data = buildApiThinData(thinAnswers, engineManifest);
-    expect(data.modulePath).toBe('src/v2/modules/garage-goods-receipts');
-    expect(data.moduleClass).toBe('GarageGoodsReceipts');
-    expect(data.coreBarrel).toBe('@/v2/core/goods-receipts');
+    expect(data.modulePath).toBe('src/v2/modules/goods-receipts-garage');
+    expect(data.moduleClass).toBe('GoodsReceiptsGarage');
+    expect(data.coreBarrel).toBe('@/v2/core/goods-receipts-core');
     expect(data.coreModule).toBe('GoodsReceiptsCoreModule');
     expect(data.baseEntity).toBe('BaseGoodsReceiptEntity');
     expect(data.baseCreateDto).toBe('BaseCreateGoodsReceiptDto');
@@ -78,8 +79,8 @@ describe('buildApiThinData', () => {
 });
 
 describe('coreFieldNames', () => {
-  it('đọc tên trường đã khai báo trong entity và DTO của lõi thật goods-receipts', () => {
-    const names = coreFieldNames(join(import.meta.dir, '..'), 'goods-receipts');
+  it('đọc tên trường đã khai báo trong entity và DTO của lõi thật goods-receipts-core', () => {
+    const names = coreFieldNames(join(import.meta.dir, '..'), 'goods-receipts-core');
     expect(names).toContain('receiptNo');
     expect(names).toContain('status');
   });
@@ -90,7 +91,7 @@ describe('thinFileMap', () => {
     const data = buildApiThinData(thinAnswers, engineManifest);
     const files = thinFileMap(data);
     expect(files).toHaveLength(16);
-    for (const { path } of files) expect(path.startsWith('src/v2/modules/garage-goods-receipts/')).toBe(true);
+    for (const { path } of files) expect(path.startsWith('src/v2/modules/goods-receipts-garage/')).toBe(true);
     const templates = files.map((f) => f.template);
     expect(templates).toContain('thin-common/entity.ts.hbs');
     expect(templates).toContain('thin-common/create-dto.ts.hbs');
@@ -103,20 +104,20 @@ describe('thinFileMap', () => {
 
 describe('đọc manifest họ', () => {
   it('liệt kê họ có manifest hợp lệ và bỏ qua thư mục không có', () => {
-    const root = fakeRepo({ 'goods-receipts': engineManifest, 'purchase-orders': abstractManifest });
+    const root = fakeRepo({ 'goods-receipts-core': engineManifest, 'procurement-orders-core': abstractManifest });
     mkdirSync(join(root, 'src/v2/core/no-manifest'), { recursive: true });
-    expect(listCoreFamilies(root)).toEqual(['goods-receipts', 'purchase-orders']);
+    expect(listCoreFamilies(root)).toEqual(['goods-receipts-core', 'procurement-orders-core']);
   });
 
   it('từ chối manifest của layer web', () => {
-    const root = fakeRepo({ 'goods-receipts': { ...engineManifest, layer: 'web' } });
-    expect(() => readCoreManifest(root, 'goods-receipts')).toThrow(/layer api/);
+    const root = fakeRepo({ 'goods-receipts-core': { ...engineManifest, layer: 'web' } });
+    expect(() => readCoreManifest(root, 'goods-receipts-core')).toThrow(/layer api/);
   });
 
   it('từ chối manifest thiếu baseClasses', () => {
     const broken = { ...engineManifest, baseClasses: { entity: 'X' } };
-    const root = fakeRepo({ 'goods-receipts': broken });
-    expect(() => readCoreManifest(root, 'goods-receipts')).toThrow(/baseClasses/);
+    const root = fakeRepo({ 'goods-receipts-core': broken });
+    expect(() => readCoreManifest(root, 'goods-receipts-core')).toThrow(/baseClasses/);
   });
 
   it('thư mục gốc không có src/v2/core trả về danh sách rỗng', () => {

@@ -5,7 +5,7 @@ description: Module tri thức Đơn mua (Procurement Order, PO) họ ERP thư�
 
 # Module Tri Thức: Đơn mua (ERP thường)
 
-Module `src/v2/modules/erp-procurement-orders`. Lõi dùng chung ở `src/v2/core/procurement-orders` (contract, engine thuần, `AbstractProcurementOrderCommandService`, `AbstractProcurementOrderFulfilmentService`, `RequestLinkPort`). Lõi không import lõi PR.
+Module `src/v2/modules/procurement-orders-erp`. Lõi dùng chung ở `src/v2/core/procurement-orders-core` (contract, engine thuần, `AbstractProcurementOrderCommandService`, `AbstractProcurementOrderFulfilmentService`, `RequestLinkPort`). Lõi không import lõi PR.
 
 ## 1. Database
 
@@ -59,7 +59,7 @@ Không có `po-draft` (PO đọc phần còn lại từ PR qua `/procurement-req
 
 ## 7. Tests
 
-`procurement-order.controller.spec.ts` (RBAC), `procurement-order.di.spec.ts` (DI của cổng `PROCUREMENT_REQUEST_LINK`). Lõi có spec riêng ở `src/v2/core/procurement-orders/`.
+`procurement-order.controller.spec.ts` (RBAC), `procurement-order.di.spec.ts` (DI của cổng `PROCUREMENT_REQUEST_LINK`). Lõi có spec riêng ở `src/v2/core/procurement-orders-core/`.
 
 ## Liên quan
 

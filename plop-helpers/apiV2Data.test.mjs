@@ -108,7 +108,7 @@ describe('wiringPlan', () => {
 describe('rbacPlan', () => {
   it('registers the RBAC resource even when wire is off', () => {
     const [item] = rbacPlan(buildApiV2Data(base));
-    expect(item.file).toBe('src/rbac-core/enums/erp-resource.enum.ts');
+    expect(item.file).toBe('src/v2/core/rbac-core/enums/erp-resource.enum.ts');
     expect(item.snippet).toBe("  CUSTOMER_CLAIMS = 'customer_claims',");
   });
 });

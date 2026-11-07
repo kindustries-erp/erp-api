@@ -1,4 +1,4 @@
-import { ErpAction, ErpResource } from '@/v2/core/rbac';
+import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
 
 export interface AvailableRbacResource {
   resource: string;
@@ -33,6 +33,18 @@ export const AVAILABLE_RBAC_RESOURCES: AvailableRbacResource[] = [
   {
     resource: ErpResource.GARAGE_GOODS_RECEIPTS,
     label: 'Nhập kho Garage (Garage Goods Receipts)',
+  },
+  {
+    resource: ErpResource.GARAGE_STOCK_RECEIPTS,
+    label: 'Nhập kho Garage (phiếu nhập mới)',
+  },
+  {
+    resource: ErpResource.GARAGE_STOCK_ISSUES,
+    label: 'Xuất kho Garage',
+  },
+  {
+    resource: ErpResource.GARAGE_STOCK_ADJUSTMENTS,
+    label: 'Điều chỉnh kho Garage',
   },
   {
     resource: 'accounting_configs',

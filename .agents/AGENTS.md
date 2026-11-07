@@ -10,8 +10,9 @@ Source of truth for this repo (`./erp-api`).
 
 ### 1. API Auto-TDD (Test Driven)
 
-- After creating or modifying a core function, service, controller, or critical logic, you **MUST** generate a corresponding `.spec.ts` file.
-- The unit test must cover the happy path and any obvious edge cases.
+- After creating or modifying a service or logic with business rules (tiền, công nợ, tồn kho, khóa `pessimistic_write`, trạng thái chứng từ), you **MUST** generate or update a corresponding `.spec.ts` file covering the happy path and obvious edge cases.
+- Luồng nghiệp vụ nhiều bước (netoff hóa đơn, voucher tồn kho, giao dịch có QueryRunner) ưu tiên **integration spec** (`*.integration.spec.ts`) bên cạnh unit spec. Mẫu: `src/erp-invoices-core/services/invoice-netoff-decoupling.integration.spec.ts`, `src/inventory-core/services/inventory-voucher-flow.integration.spec.ts`.
+- Controller mỏng (chỉ parse và gọi service) và CRUD đơn giản không bắt buộc spec riêng; phải có test khi thêm logic.
 
 ### 2. API Contract DB-First
 
@@ -128,7 +129,7 @@ Source of truth for this repo (`./erp-api`).
 
 ### Architecture & Development Standards
 
-- **TDD**: Prefer Test-Driven Development for new features and non-trivial fixes. If not practical, add or update the nearest affected automated test before closing the task.
+- **TDD**: Prefer Test-Driven Development for new features and non-trivial fixes. If not practical, add or update the nearest affected automated test before closing the task. Ưu tiên integration spec cho luồng nghiệp vụ nhiều bước (xem mục Auto-TDD).
 - **Modularity**: Apply a modular mindset to backend code. Split controllers, services, DTOs, mappers, and helper functions by domain responsibility; do not grow "god services".
 - **Imports**: Use alias imports. Group 3rd-party imports first, followed by a blank line, then custom code imports.
 - **Module boundaries**: New domain work should stay inside `src/<domain>/...`. Cross-domain orchestration is allowed, but hidden coupling and DTO leakage across domains are not.

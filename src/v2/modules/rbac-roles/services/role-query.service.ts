@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { CoreRole } from '@/v2/core/rbac/entities/core-role.entity';
+import { CoreRole } from '@/v2/core/rbac-core/entities/core-role.entity';
 import { applyMultiKeywordFilter } from '@/common/utils/query-builder.util';
 import { ListCoreRolesDto } from '../dto/rbac-core.dto';
 import type {

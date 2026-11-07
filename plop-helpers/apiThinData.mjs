@@ -14,6 +14,7 @@ export function listCoreFamilies(baseDir) {
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
     .filter((family) => {
+      if (!family.endsWith('-core')) return false;
       try {
         readCoreManifest(baseDir, family);
         return true;
@@ -29,6 +30,9 @@ export function readCoreManifest(baseDir, family) {
   const path = join(baseDir, 'src/v2/core', family, 'core.manifest.json');
   const manifest = JSON.parse(readFileSync(path, 'utf8'));
   if (manifest.layer !== 'api') throw new Error(`Manifest của họ "${family}" không phải layer api`);
+  if (manifest.family !== family) {
+    throw new Error(`Manifest của họ "${family}" khai báo family "${manifest.family}", phải trùng tên thư mục`);
+  }
   for (const key of MANIFEST_FIELDS) {
     if (!manifest[key]) throw new Error(`Manifest của họ "${family}" thiếu trường "${key}"`);
   }
