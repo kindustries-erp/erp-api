@@ -10,7 +10,6 @@ import { ApproverDirectoryService } from '@/v2/core/approval-core/approver-direc
 import { createApprovalConfigController } from '@/v2/core/approval-core/approval-config.controller';
 import { CoreUser } from '@/users/entities/core-user.entity';
 import { ErpResource } from '@/v2/core/rbac-core';
-import { CashflowGarageModule } from '@/v2/modules/cashflow-garage/cashflow-garage.module';
 import { GarageProcurementRequest } from './entities/procurement-request.entity';
 import { GarageProcurementRequestLine } from './entities/procurement-request-line.entity';
 import { GarageProcurementRequestController } from './controllers/procurement-request.controller';
@@ -38,7 +37,6 @@ const GarageProcurementRequestApprovalConfigController =
       CoreUser,
     ]),
     RbacCoreModule,
-    CashflowGarageModule,
   ],
   controllers: [
     GarageProcurementRequestController,

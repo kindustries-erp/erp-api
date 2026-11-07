@@ -25,16 +25,6 @@ export class CashflowGarageForecastExt {
   })
   paymentContent: string | null;
 
-  /** Dấu đóng (PR cũ Đóng thủ công). Dự chi gốc CANCELLED kèm closed_at. Xem migration 20261108120000. */
-  @Column({ type: 'timestamptz', name: 'closed_at', nullable: true })
-  closedAt: Date | null;
-
-  @Column({ type: 'uuid', name: 'closed_by', nullable: true })
-  closedBy: string | null;
-
-  @Column({ type: 'text', name: 'close_reason', nullable: true })
-  closeReason: string | null;
-
   @Column({ type: 'boolean', name: 'is_auto_expected', default: false })
   isAutoExpected: boolean;
 

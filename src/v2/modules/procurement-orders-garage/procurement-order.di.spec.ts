@@ -7,7 +7,6 @@ import {
   GarageProcurementRequestLinkAdapter,
 } from './services/garage-procurement-request-link.adapter';
 import { GarageProcurementRequestOrderingService } from '@/v2/modules/procurement-requests-garage/services/garage-procurement-request-ordering.service';
-import { CashflowPurchaseOrderingService } from './services/cashflow-purchase-ordering.service';
 
 describe('Nối DI của module PO (token cổng PR)', () => {
   it('GarageProcurementOrderCommandService nhận đúng cổng PR qua token', async () => {
@@ -34,10 +33,8 @@ describe('Nối DI của module PO (token cổng PR)', () => {
       reserve: jest.fn().mockResolvedValue(undefined),
       release: jest.fn().mockResolvedValue(undefined),
     };
-    const cashflow = { reserve: jest.fn(), release: jest.fn() };
     const adapter = new GarageProcurementRequestLinkAdapter(
       ordering as unknown as GarageProcurementRequestOrderingService,
-      cashflow as unknown as CashflowPurchaseOrderingService,
     );
     const m = {} as never;
     await adapter.reserve(m, 'pr1', [
@@ -50,28 +47,5 @@ describe('Nối DI của module PO (token cổng PR)', () => {
     expect(ordering.release).toHaveBeenCalledWith(m, 'pr1', [
       { requestLineId: 'rl1', qty: 2 },
     ]);
-  });
-
-  it('CASHFLOW_GARAGE_SOURCE=new chuyển reserve/release sang dự chi, không gọi PR cũ', async () => {
-    const ordering = { reserve: jest.fn(), release: jest.fn() };
-    const cashflow = {
-      reserve: jest.fn().mockResolvedValue(undefined),
-      release: jest.fn().mockResolvedValue(undefined),
-    };
-    const adapter = new GarageProcurementRequestLinkAdapter(
-      ordering as unknown as GarageProcurementRequestOrderingService,
-      cashflow as unknown as CashflowPurchaseOrderingService,
-    );
-    const prev = process.env.CASHFLOW_GARAGE_SOURCE;
-    process.env.CASHFLOW_GARAGE_SOURCE = 'new';
-    try {
-      const m = {} as never;
-      await adapter.reserve(m, 'f1', [{ requestLineId: 'l1', qty: 1 }]);
-      expect(cashflow.reserve).toHaveBeenCalledTimes(1);
-      expect(ordering.reserve).not.toHaveBeenCalled();
-    } finally {
-      if (prev === undefined) delete process.env.CASHFLOW_GARAGE_SOURCE;
-      else process.env.CASHFLOW_GARAGE_SOURCE = prev;
-    }
   });
 });

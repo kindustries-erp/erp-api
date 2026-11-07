@@ -37,8 +37,6 @@ describe('GarageProcurementRequestsService (facade)', () => {
     const svc = new GarageProcurementRequestsService(
       command as never,
       query as never,
-      {} as never,
-      {} as never,
       rbac as never,
       { resolve: jest.fn().mockResolvedValue(new Map()) } as never,
       approvers as never,

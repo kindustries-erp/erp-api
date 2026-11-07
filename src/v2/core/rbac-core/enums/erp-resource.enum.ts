@@ -18,7 +18,6 @@ export enum ErpResource {
   GARAGE = 'garage',
   GARAGE_DEBTS = 'garage_debts',
   GARAGE_CASHFLOW = 'garage_cashflow',
-  GARAGE_PAYMENT_REQUESTS = 'garage_payment_requests', // api-v2-module:cashflow-garage:rbac-resource
   ACCOUNTING_CONFIGS = 'accounting_configs',
   INVOICES = 'invoices',
   INVOICE_DEBTS = 'invoice_debts',

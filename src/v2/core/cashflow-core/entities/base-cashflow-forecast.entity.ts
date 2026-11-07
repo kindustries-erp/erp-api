@@ -48,13 +48,6 @@ export abstract class BaseCashflowForecastEntity extends BaseApprovalFields {
   })
   partnerName: string | null;
 
-  /** Tiêu đề và người yêu cầu của đề nghị mua (chỉ PR). Migration 20261108140000. */
-  @Column({ type: 'varchar', length: 255, name: 'title', nullable: true })
-  title: string | null;
-
-  @Column({ type: 'uuid', name: 'requester_employee_id', nullable: true })
-  requesterEmployeeId: string | null;
-
   @Column({ type: 'uuid', name: 'branch_id', nullable: true })
   branchId: string | null;
 

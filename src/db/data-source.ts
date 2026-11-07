@@ -103,9 +103,6 @@ import { GarageProcurementRequestLine } from '@/v2/modules/procurement-requests-
 import { CashflowForecast } from '@/v2/core/cashflow-core/entities/cashflow-forecast.entity';
 import { CashflowForecastLine } from '@/v2/core/cashflow-core/entities/cashflow-forecast-line.entity';
 import { CashflowAllocation } from '@/v2/core/cashflow-core/entities/cashflow-allocation.entity';
-import { CashflowPaymentRequest } from '@/v2/core/cashflow-core/entities/cashflow-payment-request.entity';
-import { CashflowPaymentRequestLine } from '@/v2/core/cashflow-core/entities/cashflow-payment-request-line.entity';
-import { CashflowPaymentRequestLinePayment } from '@/v2/core/cashflow-core/entities/cashflow-payment-request-line-payment.entity';
 import { CashflowGarageForecastExt } from '@/v2/modules/cashflow-garage/entities/cashflow-garage-forecast-ext.entity';
 import { GarageProcurementOrder } from '@/v2/modules/procurement-orders-garage/entities/procurement-order.entity';
 import { GarageProcurementOrderLine } from '@/v2/modules/procurement-orders-garage/entities/procurement-order-line.entity';
@@ -133,9 +130,6 @@ const entities = [
   CashflowForecast,
   CashflowForecastLine,
   CashflowAllocation,
-  CashflowPaymentRequest,
-  CashflowPaymentRequestLine,
-  CashflowPaymentRequestLinePayment,
   CashflowGarageForecastExt,
   GarageProcurementOrder,
   GarageProcurementOrderLine,

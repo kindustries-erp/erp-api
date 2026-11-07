@@ -62,19 +62,6 @@ export class CashflowForecastLine {
   })
   amount: string;
 
-  /** Mã hàng/mô tả/ghi chú của dòng PR cũ (migration 20261108140000). Dùng để điền PO draft. */
-  @Column({ type: 'uuid', name: 'item_id', nullable: true })
-  itemId: string | null;
-
-  @Column({ type: 'varchar', length: 128, name: 'item_code', nullable: true })
-  itemCode: string | null;
-
-  @Column({ type: 'text', name: 'description', nullable: true })
-  description: string | null;
-
-  @Column({ type: 'text', name: 'notes', nullable: true })
-  notes: string | null;
-
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
