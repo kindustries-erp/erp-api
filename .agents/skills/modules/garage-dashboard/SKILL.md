@@ -217,7 +217,7 @@ Resource RBAC: `garage`
 | :--- | :--- | :--- | :--- | :--- |
 | `GET` | `/stats` | `{ resource: 'garage', action: 'read' }` | `date_from`, `date_to` | Xu hướng tháng, tiến độ thu/chi & phân bổ trạng thái |
 | `GET` | `/checkpoint-kpis` | `{ resource: 'garage', action: 'read' }` | — | KPIs Sparkline Tháng/Tuần/Hôm nay |
-| `GET` | `/checkpoint-cases` | `{ resource: 'garage', action: 'read' }` | `date_from`, `date_to`, `page`, `pageSize` | Danh sách vụ việc chi tiết theo checkpoint |
+| `GET` | `/checkpoint-cases` | `{ resource: 'garage', action: 'read' }` | `date_from`, `date_to` (bắt buộc, `YYYY-MM-DD`), `page`, `pageSize`, `search`, `payment_status` (`all`/`remaining`/`paid`/`unpaid`), `classification`, `sort_by`, `sort_order` (`ASC`/`DESC`) | Danh sách vụ việc chi tiết theo checkpoint. Validate bằng `GarageCheckpointCasesQueryDto` (`src/kgara-api-core/dto/garage-checkpoint-cases-query.dto.ts`): thiếu ngày hoặc tham số lạ → 400, không còn 500 |
 | `GET` | `/customers` | `{ resource: 'garage', action: 'read' }` | Query pagination, filters, sort | Danh sách khách hàng kèm doanh thu, lãi gộp & nợ |
 | `POST` | `/export/background` | `garage:read` + `garage_debts:read` | body `{ from?, to?, reportType? }` | Tạo job nền xuất báo cáo Garage theo kỳ (kèm `GET /export/background/history`, `GET /export/background/:jobId/download`, `SSE /export/progress/stream`). Thay endpoint cũ `GET /export` đã xóa |
 | `GET` | `/opex` | `{ resource: 'garage', action: 'read' }` | `year`, `month`, `page`, `pageSize`, `sorts`, `columnFilters`, `columnSearch` | Danh sách chi phí vận hành có phân trang, sort, filter |

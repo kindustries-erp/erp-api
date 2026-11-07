@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  ParseUUIDPipe,
   Query,
   UseGuards,
   UseInterceptors,
@@ -342,9 +343,9 @@ export class BankTransactionsCoreController {
     action: ErpAction.READ,
   })
   @Get('bank-account-balances')
-  getBankAccountBalances(@Query('bankAccountId') bankAccountId: string) {
-    if (!bankAccountId)
-      throw new BadRequestException('bankAccountId is required');
+  getBankAccountBalances(
+    @Query('bankAccountId', new ParseUUIDPipe()) bankAccountId: string,
+  ) {
     return this.service.getBankAccountBalances(bankAccountId);
   }
 
@@ -363,7 +364,7 @@ export class BankTransactionsCoreController {
   })
   @Patch('bank-account-balances/:id')
   updateBankAccountBalance(
-    @Param('id') id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdateBankAccountBalanceDto,
   ) {
     return this.service.updateBankAccountBalance(id, dto);
@@ -374,7 +375,7 @@ export class BankTransactionsCoreController {
     action: ErpAction.DELETE,
   })
   @Delete('bank-account-balances/:id')
-  deleteBankAccountBalance(@Param('id') id: string) {
+  deleteBankAccountBalance(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.deleteBankAccountBalance(id);
   }
 
@@ -383,8 +384,9 @@ export class BankTransactionsCoreController {
     action: ErpAction.READ,
   })
   @Get('cash-book-balances')
-  getCashBookBalances(@Query('cashBookId') cashBookId: string) {
-    if (!cashBookId) throw new BadRequestException('cashBookId is required');
+  getCashBookBalances(
+    @Query('cashBookId', new ParseUUIDPipe()) cashBookId: string,
+  ) {
     return this.service.getCashBookBalances(cashBookId);
   }
 
@@ -403,7 +405,7 @@ export class BankTransactionsCoreController {
   })
   @Patch('cash-book-balances/:id')
   updateCashBookBalance(
-    @Param('id') id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdateCashBookBalanceDto,
   ) {
     return this.service.updateCashBookBalance(id, dto);
@@ -414,7 +416,7 @@ export class BankTransactionsCoreController {
     action: ErpAction.DELETE,
   })
   @Delete('cash-book-balances/:id')
-  deleteCashBookBalance(@Param('id') id: string) {
+  deleteCashBookBalance(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.deleteCashBookBalance(id);
   }
 
