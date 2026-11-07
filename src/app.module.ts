@@ -22,7 +22,7 @@ import { GoodsReceiptsCoreModule } from './goods-receipts-core/goods-receipts-co
 import { GoodsIssuesCoreModule } from './goods-issues-core/goods-issues-core.module';
 import { SalesOrdersCoreModule } from './sales-orders-core/sales-orders-core.module';
 import { ProductionCoreModule } from './production-core/production-core.module';
-import { BranchesCoreModule } from './branches-core/branches-core.module';
+import { BranchesManagementModule } from './v2/modules/branches-management/branches-management.module';
 import { SalesServiceOrdersCoreModule } from './sales-service-orders-core/sales-service-orders-core.module';
 import { InventoryStockCoreModule } from './inventory-stock-core/inventory-stock-core.module';
 import { ErpMfgCoreModule } from './erp-mfg-core/erp-mfg-core.module';
@@ -151,7 +151,7 @@ import { InventoryMovementsGarageAdjustmentsModule } from './v2/modules/inventor
     GoodsIssuesCoreModule,
     SalesOrdersCoreModule,
     ProductionCoreModule,
-    BranchesCoreModule,
+    BranchesManagementModule,
     SalesServiceOrdersCoreModule,
     InventoryStockCoreModule,
     ErpMfgCoreModule,

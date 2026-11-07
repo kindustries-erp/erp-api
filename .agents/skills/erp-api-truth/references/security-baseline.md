@@ -48,7 +48,7 @@ Lệnh 6 chỉ thấy nội suy trên một dòng; truy vấn nhiều dòng ph�
 
 - `accounting-core.controller.ts` không có guard và gồm endpoint ghi (PATCH journal-entries, POST/PATCH/DELETE chart-of-accounts). Cần xác nhận lại bằng request thật không kèm token trước khi kết luận.
 - `JWT_SECRET` có giá trị mặc định ở `auth/auth.module.ts` và `auth/jwt.strategy.ts`; `jwt.strategy.ts` còn nhận `access_token` qua query string.
-- Khoảng 37 chỗ `@Body()`/`@Query()` dùng `any` hoặc kiểu inline (ví dụ `branches-core`, `operating-expenses-core`, `erp-mfg-core`).
+- Khoảng 37 chỗ `@Body()`/`@Query()` dùng `any` hoặc kiểu inline (ví dụ `operating-expenses-core`, `erp-mfg-core`). Số này là ghi nhận 2026-11-03, chưa kiểm lại; `branches-management` đã có DTO validate body qua `ParseBranchBodyPipe` (xem module skill `branches-core`).
 - 3 chỗ upload không có `limits`: `bom-core`, `files`, `bank-transactions-core`.
 - `AllExceptionsFilter` trả `exception.message` của TypeORM và `Error` cho client ở mọi môi trường.
 - Chưa thấy giới hạn tần suất, `helmet` hay khóa đăng nhập sai ở tầng ứng dụng (không có trong `package.json`). Hạ tầng phía trước (NPM/nginx) có thể đã xử lý; xác nhận rồi ghi vào Trilium trước khi thêm dependency.

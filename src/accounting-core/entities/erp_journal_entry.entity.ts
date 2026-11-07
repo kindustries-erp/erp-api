@@ -8,7 +8,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { ErpBranch } from '../../branches-core/entities/erp_branch.entity';
+import { ErpBranch } from '@/v2/core/branches-core/entities/erp_branch.entity';
 import { ErpJournalEntryLine } from './erp_journal_entry_line.entity';
 
 @Entity({ name: 'erp_journal_entries' })

@@ -9,7 +9,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { ErpBranch } from '../../branches-core/entities/erp_branch.entity';
+import { ErpBranch } from '@/v2/core/branches-core/entities/erp_branch.entity';
 import { ErpBankAccount } from './erp_bank_account.entity';
 import { ErpCashBook } from './erp_cash_book.entity';
 import { ErpInvoiceVoucherNetOff } from '../../erp-invoices-core/entities/erp_invoice_voucher_netoff.entity';
