@@ -141,3 +141,11 @@ Module `garage-goods-receipts` (`src/v2/modules/goods-receipts-garage/`) sử d�
 - Tồn kho khi post: `branch_id = NULL` cộng vào nhóm không chi nhánh (`UQ_garage_inv_bal_null_branch_item`). Không đổi logic tồn kho.
 - Kiểm tra cùng chi nhánh với PO (`garage-goods-receipt-command.service.ts`): so sánh có xử lý null, hai bên cùng trống thì hợp lệ.
 - Spec: `garage-goods-receipt.mapper.spec.ts` (giữ `null`, không ghi đè khi thiếu).
+
+## extraData (JSON tùy biến, 2026-11-08)
+
+- **DB**: cột `extra_data jsonb NOT NULL DEFAULT '{}'` (CHECK: object) trên: `goods_receipts_garage`, `goods_receipt_lines_garage`. Migration `20261108120000-add-extra-data-to-v2-tables.ts`. Dữ liệu cũ là `{}`.
+- **DTO**: field `extraData?: Record<string, unknown>` (`@ExtraDataField()`, base-core). Không gửi thì không đổi.
+- **Ghi**: tạo mặc định `{}`. Sửa header merge cấp 1 (`null` xóa key). Dòng chứng từ ghi theo payload, không merge.
+- **Giới hạn**: 16 KB, sâu 5 cấp, key ≤ 64 ký tự, cấm `__proto__`/`constructor`/`prototype` (400 qua `RejectUnsafeExtraDataPipe` và service).
+- **Response**: luôn có `extraData` (object).

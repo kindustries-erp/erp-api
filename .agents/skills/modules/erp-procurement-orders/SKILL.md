@@ -65,3 +65,11 @@ Không có `po-draft` (PO đọc phần còn lại từ PR qua `/procurement-req
 
 - Module Garage: [`garage-procurement-orders`](../garage-procurement-orders/SKILL.md)
 - PR thường: [`erp-procurement-requests`](../erp-procurement-requests/SKILL.md)
+
+## extraData (JSON tùy biến, 2026-11-08)
+
+- **DB**: cột `extra_data jsonb NOT NULL DEFAULT '{}'` (CHECK: object) trên: `erp_proc_orders`, `erp_proc_order_lines`, `erp_proc_order_acceptances`. Migration `20261108120000-add-extra-data-to-v2-tables.ts`. Dữ liệu cũ là `{}`.
+- **DTO**: field `extraData?: Record<string, unknown>` (`@ExtraDataField()`, base-core). Không gửi thì không đổi.
+- **Ghi**: tạo mặc định `{}`. Sửa header merge cấp 1 (`null` xóa key). Dòng chứng từ ghi theo payload, không merge.
+- **Giới hạn**: 16 KB, sâu 5 cấp, key ≤ 64 ký tự, cấm `__proto__`/`constructor`/`prototype` (400 qua `RejectUnsafeExtraDataPipe` và service).
+- **Response**: luôn có `extraData` (object).

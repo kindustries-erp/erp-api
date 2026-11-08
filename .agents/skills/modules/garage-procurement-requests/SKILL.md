@@ -83,3 +83,11 @@ Quyền resource: `garage_procurement_requests`. Seed từ `garage_purchase_orde
 - Danh sách người duyệt: `GET /api/v2/approval-config/garage-procurement-requests/approvers` (loại người đang gọi).
 - Logic dùng chung ở `src/v2/core/approval-core` (`approval-gate.helper.ts`, `approval-settings.service.ts`, `approver-directory.service.ts`); module chỉ khai báo `docType` và resource.
 - Migration: `20261106110000-AddApprovalSettingsAndApprover.ts`.
+
+## extraData (JSON tùy biến, 2026-11-08)
+
+- **DB**: cột `extra_data jsonb NOT NULL DEFAULT '{}'` (CHECK: object) trên: `proc_requests_garage`, `proc_request_lines_garage`. Migration `20261108120000-add-extra-data-to-v2-tables.ts`. Dữ liệu cũ là `{}`.
+- **DTO**: field `extraData?: Record<string, unknown>` (`@ExtraDataField()`, base-core). Không gửi thì không đổi.
+- **Ghi**: tạo mặc định `{}`. Sửa header merge cấp 1 (`null` xóa key). Dòng chứng từ ghi theo payload, không merge.
+- **Giới hạn**: 16 KB, sâu 5 cấp, key ≤ 64 ký tự, cấm `__proto__`/`constructor`/`prototype` (400 qua `RejectUnsafeExtraDataPipe` và service).
+- **Response**: luôn có `extraData` (object).

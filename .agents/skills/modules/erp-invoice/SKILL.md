@@ -875,3 +875,11 @@ Script sửa mã đã gán sai: `src/erp-invoices-core/scripts/fix-vinfast-item-
 - Gán chi nhánh: luôn qua `InvoiceBranchService.assign` (ghi cả hai cột, kiểm tra `erp_branches.is_active`, tái phân bổ bút toán trong cùng transaction). Import/cổng thuế dùng `onlyIfUnassigned`.
 - `erp_branches` không có `is_deleted`; dùng `is_active`.
 - Chưa làm: 12 hóa đơn có `branch_id` khác phần tử đầu của `branch_ids` và ~278 hóa đơn đã ghi sổ có bút toán ở chi nhánh khác (xem audit); migration chuẩn hóa và CHECK constraint chờ quyết định.
+
+## extraData (JSON tùy biến, 2026-11-08)
+
+- **DB**: cột `extra_data jsonb NOT NULL DEFAULT '{}'` (CHECK: object) trên: `erp_invoices`, `erp_invoice_items`. Migration `20261108120000-add-extra-data-to-v2-tables.ts`. Dữ liệu cũ là `{}`.
+- **DTO**: field `extraData?: Record<string, unknown>` (`@ExtraDataField()`, base-core). Không gửi thì không đổi.
+- **Ghi**: tạo mặc định `{}`. Sửa header merge cấp 1 (`null` xóa key). Dòng chứng từ ghi theo payload, không merge.
+- **Giới hạn**: 16 KB, sâu 5 cấp, key ≤ 64 ký tự, cấm `__proto__`/`constructor`/`prototype` (400 qua `RejectUnsafeExtraDataPipe` và service).
+- **Response**: luôn có `extraData` (object).

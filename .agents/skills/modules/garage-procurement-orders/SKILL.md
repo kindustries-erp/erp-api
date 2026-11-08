@@ -90,3 +90,11 @@ Quyền resource: `garage_procurement_orders`. Seed từ `garage_purchase_orders
 - `GET /` nhận thêm `sort`, `column_filters`, `column_search`, `column_operators`, `date_ranges` (từ `TableQueryDto`). Sắp xếp mặc định `createdAt DESC`.
 - Lỗi đã sửa: endpoint trước đây trả `{ columns }`, khiến web crash `reading 'value'` khi mở popup lọc cột.
 - `createdBy` (uuid) được lọc, sắp xếp và gợi ý theo **email** từ `core_users` (subquery trong `TABLE_COLUMNS`). Danh sách trả thêm `createdByEmail` (tra một lần cho cả trang qua `helpers/resolve-created-by-email.ts`). Chi tiết (`findOne`) không có `createdByEmail`. Không đổi schema.
+
+## extraData (JSON tùy biến, 2026-11-08)
+
+- **DB**: cột `extra_data jsonb NOT NULL DEFAULT '{}'` (CHECK: object) trên: `proc_orders_garage`, `proc_order_lines_garage`, `proc_order_acceptances_garage`. Migration `20261108120000-add-extra-data-to-v2-tables.ts`. Dữ liệu cũ là `{}`.
+- **DTO**: field `extraData?: Record<string, unknown>` (`@ExtraDataField()`, base-core). Không gửi thì không đổi.
+- **Ghi**: tạo mặc định `{}`. Sửa header merge cấp 1 (`null` xóa key). Dòng chứng từ ghi theo payload, không merge.
+- **Giới hạn**: 16 KB, sâu 5 cấp, key ≤ 64 ký tự, cấm `__proto__`/`constructor`/`prototype` (400 qua `RejectUnsafeExtraDataPipe` và service).
+- **Response**: luôn có `extraData` (object).

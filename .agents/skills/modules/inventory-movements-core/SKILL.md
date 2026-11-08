@@ -46,3 +46,11 @@ description: Lõi v2 nhập / xuất / điều chỉnh kho dùng chung (sổ s�
 - Đã áp dụng lên `erp_greenway_staging`: `20261106130000` (tạo `stock_*`, sau đó đã được thay thế), `20261106130100` (bảng phiếu garage), `20261106140000` (xóa `stock_*` rỗng, tạo `garage_stock_*`).
 - Dữ liệu tồn garage cũ đã chuyển sang `garage_stock_balances` trên staging (1 dòng, qty 0), bằng `scripts/migrate-inventory-movements-garage-balances.ts`.
 - UI (erp-web) chưa làm.
+
+## extraData (JSON tùy biến, 2026-11-08)
+
+- **DB**: cột `extra_data jsonb NOT NULL DEFAULT '{}'` (CHECK: object) trên: `garage_stock_receipts`, `garage_stock_receipt_lines`, `garage_stock_issues`, `garage_stock_issue_lines`, `garage_stock_adjustments`, `garage_stock_adjustment_lines`. Migration `20261108120000-add-extra-data-to-v2-tables.ts`. Dữ liệu cũ là `{}`.
+- **DTO**: field `extraData?: Record<string, unknown>` (`@ExtraDataField()`, base-core). Không gửi thì không đổi.
+- **Ghi**: tạo mặc định `{}`. Sửa header merge cấp 1 (`null` xóa key). Dòng chứng từ ghi theo payload, không merge.
+- **Giới hạn**: 16 KB, sâu 5 cấp, key ≤ 64 ký tự, cấm `__proto__`/`constructor`/`prototype` (400 qua `RejectUnsafeExtraDataPipe` và service).
+- **Response**: luôn có `extraData` (object).
