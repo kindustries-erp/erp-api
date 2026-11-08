@@ -67,7 +67,7 @@ bunx plop api-module-v2 customer-claims-core CustomerClaim "code:string:required
 - Input sai bị chặn trước khi ghi file nào.
 - Test generator: `bun test plop-helpers`.
 - Hợp đồng sinh ra: list `{ items, total, page, pageSize, totalPages, summaries }`, bản ghi đơn `{ message, data }`, `GET column-options` và lọc/sắp xếp/tổng qua `src/common/utils/table-query/`. Chi tiết xem `api-structure` mục 2b.
-- Cột `number`/`decimal` được cộng vào `summaries` (SUM trên toàn bộ dòng khớp bộ lọc).
+- Cột `number`/`decimal` có thể tổng qua `summary_keys`: list trả `summaries[key] = { total, pageSubtotal, cumulative }` (hoặc `null`) nhờ helper `applyListSummaries`. Generator không tự viết SUM; sau khi sinh, khai báo `SUMMARY_COLUMNS` trong service và nối tie-breaker id. Chi tiết: `erp-api-structure` mục 2b.
 - Resource RBAC đã có trong enum thì generator không chèn lại (`enumEntryExists`).
 - Entity nullable (`string | null`) được map sang `undefined` trong response.
 - Module đã có entity/service cũ: không chạy trực tiếp lên thư mục đó. Làm theo `api-structure` mục 3b.
@@ -75,6 +75,10 @@ bunx plop api-module-v2 customer-claims-core CustomerClaim "code:string:required
 ### 🧱 Generator: `api-voucher-v2` (Chứng từ Header + Lines, không có lõi)
 
 Giữ nguyên để tương thích. Khi họ đã có `src/v2/core/<họ>/core.manifest.json`, generator chỉ in cảnh báo: dùng `api-thin-module` thay cho module đứng riêng.
+
+- Template `plop-templates/voucher-v2/` đã đồng bộ với helper `table-query` hiện hành (query service dùng `applyListSummaries`). Được chốt bởi `plop-helpers/apiVoucherData.test.mjs`.
+- Output sinh ra chưa được format: chạy `bunx prettier --write "src/v2/modules/<module>-core/**/*.ts"` trước khi lint.
+- Đã kiểm chứng với module tạm `zz-smoke-voucher-core` (đã xóa): `tsc --noEmit` 0 lỗi, jest 14/14, eslint sạch sau prettier.
 
 ---
 

@@ -115,6 +115,34 @@ describe('findTableColumnOptions', () => {
   });
 });
 
+describe('applyTableSort tie-breaker', () => {
+  it('appends the tie-breaker after the sort clauses', () => {
+    const qb = createFakeQb();
+
+    applyTableSort(
+      qb,
+      '-name',
+      columns,
+      { sql: 'bp.createdAt', direction: 'DESC' },
+      'bp.id',
+    );
+
+    expect(qb.orderBy).toHaveBeenCalledWith('bp.name', 'DESC');
+    expect(qb.addOrderBy).toHaveBeenCalledWith('bp.id', 'ASC');
+  });
+
+  it('adds no extra clause when no tie-breaker is given', () => {
+    const qb = createFakeQb();
+
+    applyTableSort(qb, 'name', columns, {
+      sql: 'bp.createdAt',
+      direction: 'DESC',
+    });
+
+    expect(qb.addOrderBy).not.toHaveBeenCalled();
+  });
+});
+
 describe('computeTableSummaries', () => {
   it('sums each column over the filtered rows, clearing order and paging', async () => {
     const qb = createFakeQb();

@@ -67,7 +67,7 @@ Index unique trên `code` chỉ áp dụng cho bản ghi chưa xóa mềm (parti
 | `POST /sync-from-invoices` | Body `{ dryRun?: boolean }` → `{ message, dryRun, count, items: [{taxCode, name, address, partnerType}] }`. Tạo đối tác cho từng MST còn thiếu (1 MST = 1 đối tác, loại theo chiều có nhiều hóa đơn hơn, hòa → CUSTOMER). Chạy lại không tạo trùng. Quyền: `business_partners` CREATE |
 
 - `data` là response DTO: `id, code, name, displayName, partnerType, taxCode, phone, email, address, contactName, status, notes, createdAt, updatedAt`. Không có `isDeleted` (V1 có trả trường này).
-- `summaries` là `{}` vì BP không có cột số. Web tự đặt `summaries.code = total` cho ô đếm.
+- `summaries`: BP không có cột số nên whitelist rỗng. Gửi `summary_keys` thì mọi key trả `null`; không gửi thì `{}`. Web tự đặt metric đếm cho cột `code` (`countMetric` trong `useBusinessPartnersQuery`).
 - `status` validate `IsIn(ACTIVE, INACTIVE)` (sinh từ fieldSpec `status`). V1 nhận chuỗi tự do.
 
 ### 4.1 Lọc, sắp xếp, tìm kiếm

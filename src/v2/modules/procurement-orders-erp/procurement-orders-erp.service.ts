@@ -49,7 +49,11 @@ export class ErpProcurementOrdersService {
   async list(
     dto: ListProcurementOrdersDto,
   ): Promise<ProcurementOrderListResponseDto> {
-    const out = await this.query.list(dto.page ?? 1, dto.pageSize ?? 20);
+    const out = await this.query.list(
+      dto.page ?? 1,
+      dto.pageSize ?? 20,
+      dto.summary_keys,
+    );
     const emailOf = await resolveApprovalEmails(this.actors, out.rows);
     return toPaginatedResult(
       out.rows.map((h) => toProcurementOrderResponse(h, [], emailOf)),

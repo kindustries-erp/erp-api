@@ -10,7 +10,9 @@ import {
   applyDateBounds,
   applyTableFilters,
   applyTableSort,
-  computeTableSummaries,
+  applyListSummaries,
+  parseSummaryKeys,
+  SummaryMetric,
   findTableColumnOptions,
   parseListFilterPayload,
   resolveTableColumn,
@@ -56,7 +58,7 @@ export class GarageProcurementRequestQueryService {
     total: number;
     page: number;
     pageSize: number;
-    summaries: Record<string, number>;
+    summaries: Record<string, SummaryMetric | null>;
   }>;
   async list(
     page: number,
@@ -67,7 +69,7 @@ export class GarageProcurementRequestQueryService {
     total: number;
     page: number;
     pageSize: number;
-    summaries: Record<string, number>;
+    summaries: Record<string, SummaryMetric | null>;
   }>;
   async list(
     dtoOrPage: ListProcurementRequestsDto | number = 1,
@@ -108,13 +110,22 @@ export class GarageProcurementRequestQueryService {
 
     applyDateBounds(qb, 'h.createdAt', dto.date_from, dto.date_to, 'legacy');
 
-    applyTableSort(qb, dto.sort, TABLE_COLUMNS, {
-      sql: 'h.createdAt',
-      direction: 'DESC',
-    });
+    applyTableSort(
+      qb,
+      dto.sort,
+      TABLE_COLUMNS,
+      { sql: 'h.createdAt', direction: 'DESC' },
+      'h.id',
+    );
 
-    // Tổng tính trên toàn bộ dòng khớp, nên phải gọi trước khi phân trang
-    const summaries = await computeTableSummaries(qb, SUMMARY_COLUMNS);
+    // Tổng theo summary_keys trên toàn bộ dòng khớp, nên phải gọi trước khi phân trang
+    const summaries = await applyListSummaries(qb, {
+      columns: SUMMARY_COLUMNS,
+      keys: parseSummaryKeys(dto.summary_keys),
+      page,
+      pageSize,
+      tieBreaker: 'h.id',
+    });
 
     const [rows, total] = await qb
       .skip((page - 1) * pageSize)

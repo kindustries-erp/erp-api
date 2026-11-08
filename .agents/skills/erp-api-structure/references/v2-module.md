@@ -78,9 +78,11 @@ Lõi `src/v2/core/base-core` (barrel `@/v2/core/base-core`) là chuỗi entity n
 | `GET /column-options` | `{ items: [{label, value}], total, next }` |
 
 - **Lọc, sắp xếp, tổng** dùng helper chung `src/common/utils/table-query/` (`applyTableFilters`, `applyTableSort`, `findTableColumnOptions`, `computeTableSummaries`). Whitelist cột sinh từ fieldSpec (`TABLE_COLUMNS`), có cả key camelCase và snake_case. Kiểu cột quyết định toán tử hợp lệ: `text`/`status` (contains, equals, is_empty...), `number` (eq, gt, between...), `date` (eq, before, after, between). Toán tử sai kiểu bị bỏ qua.
-- **`summaries`**: SUM của mọi cột `number`/`decimal` trên toàn bộ dòng khớp bộ lọc (không phân trang). Key là tên trường, khớp `V2Column.key` phía web. Tổng được tính trước khi phân trang.
+- **`summaries` theo key (chuẩn mới, bắt buộc cho list có cột số)**: web gửi `summary_keys=key1,key2` (tối đa 10 key, CSV). Với mỗi key hợp lệ, API trả `{ total, pageSubtotal, cumulative }`: `total` = tổng toàn bộ dòng khớp bộ lọc, `pageSubtotal` = tổng trang hiện tại, `cumulative` = tổng từ dòng 1 đến hết trang hiện tại. Key ngoài whitelist hoặc rỗng trả `null` (không lỗi 400). Không có `summary_keys` thì `summaries = {}`.
+- **Helper dùng chung duy nhất**: `applyListSummaries(qb, { columns, keys, page, pageSize, tieBreaker })` trong `src/common/utils/table-query/table-query.summary.ts`. Module KHÔNG tự viết SUM/subtotal. Whitelist cột là `SUMMARY_COLUMNS` của module (chỉ cột số, không lấy từ input người dùng). Query list phải `applyTableSort(..., tieBreaker)` với tie-breaker là id để subtotal khớp đúng các dòng hiển thị.
+- **DTO**: response dùng `@ApiProperty(SUMMARIES_SWAGGER_SCHEMA)` và kiểu `Record<string, SummaryMetricDto | null>` (`src/common/dto/summary-metric.dto.ts`). Query DTO nhận `summary_keys` (`IsOptional`, `IsString`).
 - **Phân trang trong object `pagination`** (chuẩn mới, đã áp dụng cho procurement garage và erp): dựng bằng `toPaginatedResult(items, page, pageSize, total, summaries)` (`src/common/utils/paginated-result.ts`), `totalPages = max(1, ceil(total / pageSize))`. DTO list dùng `PaginationMetaDto` (`src/common/dto/pagination-meta.dto.ts`). Gọi `computeTableSummaries` trước `.skip().take()`.
-- **Nợ kỹ thuật**: các module v2 khác (goods-receipts, invoices, business-partners, branches, rbac-roles, tồn kho) còn trả `{ items, total, page, pageSize, totalPages, summaries }` phẳng. Chuyển sang `pagination` là việc riêng, phải đi cùng web (breaking change).
+- **Nợ kỹ thuật**: các module v2 khác (branches, rbac-roles, tồn kho) còn trả `{ items, total, page, pageSize, totalPages }` phẳng. Chuyển sang `pagination` là việc riêng, phải đi cùng web (breaking change). Goods-receipts garage, invoices và business-partners đã dùng `applyListSummaries` nhưng vẫn trả envelope phẳng.
 - **`DTO query`** kế thừa `TableQueryDto` (`src/common/dto/table-query.dto.ts`), gồm `column_filters`, `column_search`, `column_operators`, `date_ranges`, `date_from`, `date_to`, `sort`, `search`.
 - **Route tĩnh** (`column-options`, và `next-code` khi module cần) đặt trước `:id`, nếu không `ParseUUIDPipe` trả 400.
 
@@ -114,7 +116,7 @@ Generator không ghi đè file đã có (`plop add` lỗi). Trình tự đã dù
 ## 4. Checklist sau khi sinh
 
 - [ ] `bunx prettier --write "src/v2/<module>-core/**/*.ts"`
-- [ ] Nếu module có cột số: `summaries` có trong response list (không thì web không có ô tổng)
+- [ ] Nếu module có cột số: khai báo `SUMMARY_COLUMNS`, gọi `applyListSummaries` (không tự viết SUM), có tie-breaker id trong sort và `summaries` có trong response list. Test: `bunx jest src/common/utils/table-query/table-query.summary.spec.ts` và spec của service.
 - [ ] Route không trùng controller khác (`grep -rn "@Controller('<route>')" src`)
 - [ ] `ErpResource` có entry mới (luôn được thêm bởi generator). Xác nhận seed quyền ở `rbac-core` không cần bước tay khác.
 - [ ] `wire` đã nối đúng `app.module.ts` và `data-source.ts` (nếu chọn `true`). Nếu chọn `false`, phải nối tay.
@@ -151,7 +153,10 @@ bunx plop api-voucher-v2
   - Kiểm tra trạng thái: `validateVoucherTransition` (`DRAFT` -> `POSTED` -> `CANCELLED`).
   - Xóa mềm: Chỉ cho phép xóa khi ở trạng thái `DRAFT`.
   - Transaction an toàn: Lưu cả Header và Lines trong một transaction.
+- **Query service (contract hiện hành)**: lọc, sắp xếp, phân trang và tổng đi qua `src/common/utils/table-query/` (`applyTableFilters`, `applyTableSort(..., 'e.id')`, `applyListSummaries`). Tổng theo `summary_keys` dùng `SUMMARY_COLUMNS`, không tự viết SUM. Gợi ý cột dùng `findTableColumnOptions(qb, def, search, page, pageSize)`. Không dùng `computeTableSummaries`, `TableColumnConfig` hay `baseQb` (đã bỏ).
+- **Mapper**: ngày trả về là `Date` (khớp `BaseGoodsReceiptResponseDto`), `receiptDate` nhận chuỗi từ DTO tạo và đổi sang `Date` khi ghi entity; response có `extraData` (`?? {}`).
 - **Specs co-located**: Đầy đủ unit test cho Mapper, QueryService, CommandService, Facade, Controller (kèm RBAC verification test).
+- **Sau khi sinh**: chạy `bunx prettier --write "src/v2/modules/<module>-core/**/*.ts"` (checklist mục 4), rồi `bunx tsc --noEmit`, `bunx jest src/v2/modules/<module>-core --forceExit`, `bunx eslint --max-warnings=0`.
 
 ---
 
@@ -161,7 +166,9 @@ bunx plop api-voucher-v2
 bun test plop-helpers
 ```
 
-Các file trong `plop-helpers/` là hàm thuần: `apiV2Fields`, `apiV2Data`, `apiV2Files`, `apiV2Wiring`. Dùng `bun:test`. Jest của repo không chạy được ở đây vì `rootDir` là `src`.
+Các file trong `plop-helpers/` là hàm thuần: `apiV2Fields`, `apiV2Data`, `apiV2Files`, `apiV2Wiring`, `apiVoucherData`. Dùng `bun:test`. Jest của repo không chạy được ở đây vì `rootDir` là `src`.
+
+`plop-helpers/apiVoucherData.test.mjs` là chốt chặn cho template `plop-templates/voucher-v2/`: mọi template phải nằm trong `voucherFileMap`, không chứa `computeTableSummaries`, `TableColumnConfig`, `baseQb`, và mọi import `@/…` phải tồn tại dưới `src/`. Nếu thêm helper mới vào `src/common/utils/table-query/`, cập nhật danh sách cấm khi cần.
 
 ## 5b. Trạng thái migrate (cập nhật mỗi lần migrate)
 

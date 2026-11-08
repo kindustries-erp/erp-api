@@ -9,10 +9,11 @@ import { GarageProcurementOrderAcceptance } from '../entities/procurement-order-
 import { GARAGE_PROCUREMENT_ORDER_PREFIX } from '../procurement-orders-garage.constants';
 import {
   applyTableFilters,
+  applyListSummaries,
   applyTableSort,
-  computeTableSummaries,
   findTableColumnOptions,
   parseListFilterPayload,
+  parseSummaryKeys,
   resolveTableColumn,
   TableOptionsPage,
 } from '@/common/utils/table-query';
@@ -39,6 +40,7 @@ export interface GarageProcurementOrderFilter {
   column_search?: unknown;
   column_operators?: unknown;
   date_ranges?: unknown;
+  summary_keys?: string;
 }
 
 @Injectable()
@@ -95,12 +97,21 @@ export class GarageProcurementOrderQueryService {
       TABLE_COLUMNS,
       'filter',
     );
-    applyTableSort(qb, filter.sort, TABLE_COLUMNS, {
-      sql: 'h.createdAt',
-      direction: 'DESC',
+    applyTableSort(
+      qb,
+      filter.sort,
+      TABLE_COLUMNS,
+      { sql: 'h.createdAt', direction: 'DESC' },
+      'h.id',
+    );
+    // Tổng theo summary_keys trên toàn bộ dòng khớp, nên phải gọi trước khi phân trang
+    const summaries = await applyListSummaries(qb, {
+      columns: SUMMARY_COLUMNS,
+      keys: parseSummaryKeys(filter.summary_keys),
+      page: filter.page,
+      pageSize: filter.pageSize,
+      tieBreaker: 'h.id',
     });
-    // Tổng tính trên toàn bộ dòng khớp, nên phải gọi trước khi phân trang
-    const summaries = await computeTableSummaries(qb, SUMMARY_COLUMNS);
     const [rows, total] = await qb
       .skip((filter.page - 1) * filter.pageSize)
       .take(filter.pageSize)

@@ -73,6 +73,7 @@ export class GarageProcurementOrdersService {
       column_search: dto.column_search,
       column_operators: dto.column_operators,
       date_ranges: dto.date_ranges,
+      summary_keys: dto.summary_keys,
     });
     const emailOf = await resolveApprovalEmails(this.actors, out.rows);
     return toPaginatedResult(

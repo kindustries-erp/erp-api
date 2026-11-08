@@ -1,5 +1,11 @@
 import { Brackets } from 'typeorm';
+import { applyListSummaries } from '@/common/utils/table-query';
 import { GarageProcurementRequestQueryService } from './procurement-request-query.service';
+
+jest.mock('@/common/utils/table-query', () => {
+  const actual = jest.requireActual('@/common/utils/table-query');
+  return { ...actual, applyListSummaries: jest.fn() };
+});
 
 describe('GarageProcurementRequestQueryService', () => {
   let service: GarageProcurementRequestQueryService;
@@ -66,13 +72,48 @@ describe('GarageProcurementRequestQueryService', () => {
     expect(result.rows[0].requestNo).toBe('DNM-2026-001');
   });
 
-  it('tính summaries trên toàn bộ dòng khớp, trước khi phân trang', async () => {
-    const result = await service.list({ page: 2, pageSize: 20 });
+  it('gọi applyListSummaries với summary_keys, trước khi phân trang', async () => {
+    const metric = {
+      total: 7500000,
+      pageSubtotal: 1200000,
+      cumulative: 9000000,
+    };
+    (applyListSummaries as jest.Mock).mockResolvedValueOnce({
+      estimatedTotal: metric,
+    });
 
-    expect(result.summaries).toEqual({ estimatedTotal: 7500000 });
-    const cloneOrder = qb.clone.mock.invocationCallOrder[0];
+    const result = await service.list({
+      page: 2,
+      pageSize: 20,
+      summary_keys: 'estimatedTotal,unknownKey',
+    });
+
+    expect(result.summaries).toEqual({ estimatedTotal: metric });
+    expect(applyListSummaries).toHaveBeenCalledWith(
+      qb,
+      expect.objectContaining({
+        keys: ['estimatedTotal', 'unknownKey'],
+        page: 2,
+        pageSize: 20,
+        tieBreaker: 'h.id',
+      }),
+    );
+    const summaryOrder = (applyListSummaries as jest.Mock).mock
+      .invocationCallOrder[0];
     const skipOrder = qb.skip.mock.invocationCallOrder[0];
-    expect(cloneOrder).toBeLessThan(skipOrder);
+    expect(summaryOrder).toBeLessThan(skipOrder);
+  });
+
+  it('không có summary_keys thì summaries rỗng', async () => {
+    (applyListSummaries as jest.Mock).mockResolvedValueOnce({});
+
+    const result = await service.list({ page: 1, pageSize: 20 });
+
+    expect(applyListSummaries).toHaveBeenCalledWith(
+      qb,
+      expect.objectContaining({ keys: [] }),
+    );
+    expect(result.summaries).toEqual({});
   });
 
   it('áp dụng lọc theo branchId và status trực tiếp', async () => {

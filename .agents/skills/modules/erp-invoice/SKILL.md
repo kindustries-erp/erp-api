@@ -287,7 +287,7 @@ Kiến trúc phân tách theo chuẩn:
 
 | Method | Endpoint | Resource | Action | Ghi chú |
 | :--- | :--- | :--- | :--- | :--- |
-| `GET` | `/api/v2/invoices` | `invoices` | `read` | Envelope `{ items, total, page, pageSize, totalPages, summaries }`; mỗi item có thêm `netOffAmount`, `remainingAmount`; lọc qua `TableQueryDto` + `direction`, `partner_tax_code`, `tag_id`; `sort=-key,key`; mặc định `invoiceDate DESC`; luôn `is_deleted = false` |
+| `GET` | `/api/v2/invoices` | `invoices` | `read` | Envelope `{ items, total, page, pageSize, totalPages, summaries }`, `summaries` theo `summary_keys` (`{ total, pageSubtotal, cumulative }` hoặc `null`); mỗi item có thêm `netOffAmount`, `remainingAmount`; lọc qua `TableQueryDto` + `direction`, `partner_tax_code`, `tag_id`; `sort=-key,key`; mặc định `invoiceDate DESC`; luôn `is_deleted = false` |
 | `GET` | `/api/v2/invoices/column-options` | `invoices` | `read` | Khai báo trước `:id` |
 | `GET` | `/api/v2/invoices/:id` | `invoices` | `read` | `{ message, data }`, `data.items` có dòng hàng |
 | `POST` | `/api/v2/invoices` | `invoices` | `create` | `createdBy` lấy từ JWT (`req.user.sub`), không nhận từ body |

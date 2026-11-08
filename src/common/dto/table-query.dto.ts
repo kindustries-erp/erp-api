@@ -21,4 +21,12 @@ export class TableQueryDto extends PaginationDto {
   @IsOptional()
   @IsString()
   date_to?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Các key cột cần tổng, CSV (ví dụ `totalAmount,estimatedTotal`), tối đa 10. Key không tính được trả null trong summaries.',
+  })
+  @IsOptional()
+  @IsString()
+  summary_keys?: string;
 }

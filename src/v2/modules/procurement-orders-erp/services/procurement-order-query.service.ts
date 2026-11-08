@@ -6,7 +6,8 @@ import { ProcurementOrderLine } from '../entities/procurement-order-line.entity'
 import { ProcurementOrderAcceptance } from '../entities/procurement-order-acceptance.entity';
 import { ApprovalEvent } from '@/v2/core/approval-core/entities/approval-event.entity';
 import {
-  computeTableSummaries,
+  applyListSummaries,
+  parseSummaryKeys,
   TableSummaryColumn,
 } from '@/common/utils/table-query';
 
@@ -39,13 +40,20 @@ export class ProcurementOrderQueryService {
     });
   }
 
-  async list(page: number, pageSize: number) {
+  async list(page: number, pageSize: number, summaryKeys?: string) {
     const qb = this.headers
       .createQueryBuilder('h')
       .where('h.isDeleted = :notDeleted', { notDeleted: false })
-      .orderBy('h.createdAt', 'DESC');
-    // Tổng tính trên toàn bộ dòng khớp, nên phải gọi trước khi phân trang
-    const summaries = await computeTableSummaries(qb, SUMMARY_COLUMNS);
+      .orderBy('h.createdAt', 'DESC')
+      .addOrderBy('h.id', 'ASC');
+    // Tổng theo summary_keys trên toàn bộ dòng khớp, nên phải gọi trước khi phân trang
+    const summaries = await applyListSummaries(qb, {
+      columns: SUMMARY_COLUMNS,
+      keys: parseSummaryKeys(summaryKeys),
+      page,
+      pageSize,
+      tieBreaker: 'h.id',
+    });
     const [rows, total] = await qb
       .skip((page - 1) * pageSize)
       .take(pageSize)

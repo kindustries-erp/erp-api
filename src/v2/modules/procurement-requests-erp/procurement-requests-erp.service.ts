@@ -52,7 +52,7 @@ export class ErpProcurementRequestsService {
   ): Promise<PurchaseRequestListResponseDto> {
     const page = dto.page ?? 1;
     const pageSize = dto.pageSize ?? 20;
-    const out = await this.query.list(page, pageSize);
+    const out = await this.query.list(page, pageSize, dto.summary_keys);
     const emailOf = await resolveApprovalEmails(this.actors, out.rows);
     return toPaginatedResult(
       out.rows.map((h) => toPurchaseRequestResponse(h, [], emailOf)),
