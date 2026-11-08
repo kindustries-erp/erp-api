@@ -1,20 +1,12 @@
-import {
-  Column,
-  CreateDateColumn,
-  Index,
-  PrimaryGeneratedColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { Column, Index } from 'typeorm';
 import { BaseApprovalFields } from '../../approval-core/entities/base-approval-fields';
 
 /**
  * Header Đơn mua hàng (lõi PO mới, không kế thừa PO v1).
+ * Kế thừa id, extraData, timestamps, isDeleted, status, createdBy từ lớp header chung.
  * Duyệt (`status`) và giao nhận (`fulfillment_status`) là hai trục tách biệt.
  */
 export abstract class BaseProcurementOrderEntity extends BaseApprovalFields {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
-
   @Index({ unique: true })
   @Column({ type: 'varchar', length: 255, name: 'order_no' })
   orderNo: string;
@@ -50,10 +42,6 @@ export abstract class BaseProcurementOrderEntity extends BaseApprovalFields {
   @Index()
   @Column({ type: 'uuid', name: 'request_id', nullable: true })
   requestId: string | null;
-
-  @Index()
-  @Column({ type: 'varchar', length: 32, name: 'status', default: 'DRAFT' })
-  status: string;
 
   @Index()
   @Column({
@@ -106,18 +94,4 @@ export abstract class BaseProcurementOrderEntity extends BaseApprovalFields {
 
   @Column({ type: 'text', name: 'remarks', nullable: true })
   remarks: string | null;
-
-  /** Lấy từ JWT (req.user.sub), không nhận từ body. */
-  @Column({ type: 'uuid', name: 'created_by', nullable: true })
-  createdBy: string | null;
-
-  @Index()
-  @Column({ type: 'boolean', name: 'is_deleted', default: false })
-  isDeleted: boolean;
-
-  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
-  createdAt: Date;
-
-  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
-  updatedAt: Date;
 }

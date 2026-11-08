@@ -2,6 +2,8 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class ProcurementOrderLineResponseDto {
   @ApiProperty() id: string;
+  @ApiProperty({ type: 'object', additionalProperties: true })
+  extraData: Record<string, unknown>;
   @ApiProperty() lineNo: number;
   @ApiProperty({ enum: ['GOODS', 'SERVICE'] }) lineType: 'GOODS' | 'SERVICE';
   @ApiProperty({ nullable: true }) itemId: string | null;
@@ -17,6 +19,8 @@ export class ProcurementOrderLineResponseDto {
 
 export class ProcurementOrderResponseDto {
   @ApiProperty() id: string;
+  @ApiProperty({ type: 'object', additionalProperties: true })
+  extraData: Record<string, unknown>;
   @ApiProperty() orderNo: string;
   @ApiProperty() orderDate: string;
   @ApiProperty({ nullable: true }) expectedDate: string | null;

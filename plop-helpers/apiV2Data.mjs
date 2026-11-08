@@ -223,6 +223,10 @@ export function buildApiV2Data(answers) {
   if (hasRequiredField) classValidatorImports.add('IsNotEmpty');
   if (hasOptionalField) classValidatorImports.add('IsOptional');
 
+  // Import typeorm theo đúng decorator đang dùng: Column luôn có vì có ít nhất một trường, Index chỉ khi có cột @Index.
+  const typeormImports = ['Column', 'Entity'];
+  if (fields.some((f) => f.entityColumn.includes('@Index()'))) typeormImports.push('Index');
+
   const swaggerImports = [];
   if (hasRequiredField) swaggerImports.push('ApiProperty');
   if (hasOptionalField) swaggerImports.push('ApiPropertyOptional');
@@ -247,6 +251,7 @@ export function buildApiV2Data(answers) {
     customFields: fields,
     classValidatorImports: [...classValidatorImports].sort(),
     swaggerImports,
+    typeormImports: typeormImports.sort(),
     hasOptionalField,
     searchColumns,
     // Biểu thức SQL có alias `e.` để dùng trực tiếp trong query builder

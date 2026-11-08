@@ -11,6 +11,7 @@ export function toGarageGoodsReceiptLineResponse(
 ): GarageGoodsReceiptLineResponseDto {
   return {
     id: line.id,
+    extraData: line.extraData ?? {},
     lineNo: line.lineNo,
     itemCode: line.itemCode ?? undefined,
     itemName: line.itemName,
@@ -30,6 +31,7 @@ export function toGarageGoodsReceiptResponse(
 ): GarageGoodsReceiptResponseDto {
   return {
     id: entity.id,
+    extraData: entity.extraData ?? {},
     receiptNo: entity.receiptNo,
     receiptDate: entity.receiptDate,
     supplierId: entity.supplierId ?? undefined,

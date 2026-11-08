@@ -3,15 +3,12 @@ import {
   CreateDateColumn,
   Entity,
   Index,
-  PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { CoreBaseEntity } from '../../base-core/entities/core-base.entity';
 
 @Entity({ name: 'erp_branches' })
-export class ErpBranch {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
-
+export class ErpBranch extends CoreBaseEntity {
   @Index({ unique: true })
   @Column({ type: 'varchar', length: 100, name: 'code' })
   code: string;

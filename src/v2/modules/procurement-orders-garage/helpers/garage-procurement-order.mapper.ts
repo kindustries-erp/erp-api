@@ -6,6 +6,7 @@ import {
 
 interface GarageHeaderLike {
   id: string;
+  extraData: Record<string, unknown> | null;
   orderNo: string;
   orderDate: string;
   expectedDate: string | null;

@@ -138,6 +138,35 @@ describe('InvoiceCommandService', () => {
       expect(savedItems()[0].itemCode).toBe('PT-MA-OLD');
     });
 
+    it('extraData khi sửa hóa đơn: merge cấp 1, null xóa key, thiếu field thì giữ nguyên', async () => {
+      const entity = posted({
+        postingStatus: 'UNPOSTED',
+        extraData: { a: 1, b: 2 },
+      } as Partial<Invoice>);
+
+      await service.update(entity, {
+        extraData: { b: 3, a: null },
+      } as UpdateInvoiceDto);
+      expect(savedInvoice().extraData).toEqual({ b: 3 });
+
+      manager.save.mockClear();
+      const kept = posted({
+        postingStatus: 'UNPOSTED',
+        extraData: { a: 1 },
+      } as Partial<Invoice>);
+      await service.update(kept, { notes: 'x' } as UpdateInvoiceDto);
+      expect(savedInvoice().extraData).toEqual({ a: 1 });
+    });
+
+    it('từ chối extraData sai định dạng trước khi mở transaction', async () => {
+      await expect(
+        service.update(posted({ postingStatus: 'UNPOSTED' }), {
+          extraData: 'x',
+        } as unknown as UpdateInvoiceDto),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(manager.save).not.toHaveBeenCalled();
+    });
+
     it('normalizes the invoice number when it changes', async () => {
       const entity = posted({ postingStatus: 'UNPOSTED' });
 

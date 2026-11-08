@@ -5,6 +5,7 @@ describe('ErpBranch mapper', () => {
   const createdAt = new Date('2026-01-01T00:00:00.000Z');
   const entity = {
     id: 'id-1',
+    extraData: {},
     code: 'sample',
     name: 'sample',
     address: null,
@@ -16,6 +17,7 @@ describe('ErpBranch mapper', () => {
   it('preserves the exact JSON shape including a null address and inactive state', () => {
     expect(toErpBranchResponse(entity)).toEqual({
       id: 'id-1',
+      extraData: {},
       code: 'sample',
       name: 'sample',
       address: null,

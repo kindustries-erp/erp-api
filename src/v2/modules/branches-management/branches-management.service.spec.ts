@@ -4,6 +4,7 @@ describe('BranchesManagementService', () => {
   const createdAt = new Date('2026-01-01T00:00:00.000Z');
   const row = {
     id: 'id-1',
+    extraData: {},
     code: 'HN',
     name: 'Ha Noi',
     address: null,

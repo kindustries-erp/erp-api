@@ -2,6 +2,8 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class StockVoucherLineResponseDto {
   @ApiProperty() id: string;
+  @ApiProperty({ type: 'object', additionalProperties: true })
+  extraData: Record<string, unknown>;
   @ApiProperty() lineNo: number;
   @ApiProperty() itemCode: string;
   @ApiProperty() itemName: string;
@@ -18,6 +20,8 @@ export class StockVoucherLineResponseDto {
 /** Chứng từ kho trả về cho client: chỉ dữ liệu, không trả entity. */
 export class StockVoucherResponseDto {
   @ApiProperty() id: string;
+  @ApiProperty({ type: 'object', additionalProperties: true })
+  extraData: Record<string, unknown>;
   @ApiProperty() voucherNo: string;
   @ApiProperty() voucherDate: Date;
   @ApiProperty() status: string;

@@ -10,6 +10,7 @@ export interface InvoiceItemContext {
 
 /** Dòng hàng đã sẵn sàng ghi xuống DB (chưa có `invoiceId`). */
 export type InvoiceItemRow = {
+  extraData: Record<string, unknown>;
   invoiceSubcategory: string;
   description: string | null;
   unit: string | null;
@@ -56,6 +57,7 @@ export function buildInvoiceItems(
     });
 
     return {
+      extraData: i.extraData ?? {},
       invoiceSubcategory: i.invoiceSubcategory ?? 'NORMAL',
       description,
       unit: normalizeUom(i.unit),

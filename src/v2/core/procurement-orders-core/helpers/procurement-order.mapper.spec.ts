@@ -25,6 +25,7 @@ describe('toProcurementOrderResponse', () => {
       [
         {
           id: 'l1',
+          extraData: {},
           lineNo: 1,
           lineType: 'GOODS',
           itemId: 'i1',

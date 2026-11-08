@@ -9,6 +9,7 @@ describe('GarageGoodsReceipt mapper', () => {
   const createdAt = new Date('2026-01-01T00:00:00.000Z');
   const lineEntity: GarageGoodsReceiptLine = {
     id: 'line-1',
+    extraData: {},
     garageGoodsReceiptId: 'id-1',
     lineNo: 1,
     itemCode: 'ITEM-01',
@@ -24,6 +25,7 @@ describe('GarageGoodsReceipt mapper', () => {
 
   const entity: GarageGoodsReceipt = {
     id: 'id-1',
+    extraData: {},
     receiptNo: 'GGR-20261103-001',
     receiptDate: new Date('2026-11-03T00:00:00.000Z'),
     supplierId: 'sup-1',
@@ -34,6 +36,7 @@ describe('GarageGoodsReceipt mapper', () => {
     status: 'DRAFT',
     paymentStatus: 'UNPAID',
     remarks: 'Phiếu nhập đầu kỳ',
+    createdBy: null,
     isDeleted: false,
     createdAt,
     updatedAt: createdAt,
@@ -43,6 +46,7 @@ describe('GarageGoodsReceipt mapper', () => {
   it('maps the entity to the response DTO without isDeleted', () => {
     expect(toGarageGoodsReceiptResponse(entity)).toEqual({
       id: 'id-1',
+      extraData: {},
       receiptNo: 'GGR-20261103-001',
       receiptDate: new Date('2026-11-03T00:00:00.000Z'),
       supplierId: 'sup-1',
@@ -56,6 +60,7 @@ describe('GarageGoodsReceipt mapper', () => {
       lines: [
         {
           id: 'line-1',
+          extraData: {},
           lineNo: 1,
           itemCode: 'ITEM-01',
           itemName: 'Bố thắng',

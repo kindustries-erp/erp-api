@@ -69,6 +69,7 @@ function build(lines: Array<Record<string, unknown>>, status = 'DRAFT') {
     status,
     branchId: null,
     totalAmount: '0',
+    extraData: { a: 1, b: 2 },
   };
   const lineRepo = {
     find: jest.fn(async () => lines.map((l) => ({ ...l }))),
@@ -166,6 +167,41 @@ describe('AbstractStockLineVoucherCommandService', () => {
       service.createDraft(actor, {
         voucherDate: '2026-11-06',
         lines: [{ itemCode: 'P1', itemName: 'Lọc', qty: 2 }],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('tạo nháp không gửi extraData thì header và dòng lưu {}', async () => {
+    const { service } = build([]);
+    const saved = (await service.createDraft(actor, {
+      voucherDate: '2026-11-06',
+      lines: [{ itemCode: 'P1', itemName: 'Lọc', qty: 2, unitCost: 10 }],
+    })) as unknown as { extraData: unknown };
+    expect(saved.extraData).toEqual({});
+  });
+
+  it('sửa nháp: extraData merge cấp 1, null xóa key, thiếu field thì giữ nguyên', async () => {
+    const { service } = build([]);
+    const updated = (await service.updateDraft('h1', {
+      extraData: { b: 3, a: null },
+    })) as unknown as { extraData: unknown };
+    expect(updated.extraData).toEqual({ b: 3 });
+  });
+
+  it('extraData của dòng sai định dạng bị chặn 400', async () => {
+    const { service } = build([]);
+    await expect(
+      service.createDraft(actor, {
+        voucherDate: '2026-11-06',
+        lines: [
+          {
+            itemCode: 'P1',
+            itemName: 'Lọc',
+            qty: 2,
+            unitCost: 10,
+            extraData: [1],
+          },
+        ],
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });

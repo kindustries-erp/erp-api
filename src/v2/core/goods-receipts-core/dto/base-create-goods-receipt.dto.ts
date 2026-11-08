@@ -9,6 +9,7 @@ import {
   IsString,
   ValidateNested,
 } from 'class-validator';
+import { ExtraDataField } from '../../base-core/dto/extra-data.decorator';
 import { BaseCreateGoodsReceiptLineDto } from './base-create-goods-receipt-line.dto';
 
 export class BaseCreateGoodsReceiptDto {
@@ -58,6 +59,9 @@ export class BaseCreateGoodsReceiptDto {
   @IsOptional()
   @IsString()
   remarks?: string;
+
+  @ExtraDataField()
+  extraData?: Record<string, unknown>;
 
   @ApiPropertyOptional({ type: () => [BaseCreateGoodsReceiptLineDto] })
   @IsOptional()

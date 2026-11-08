@@ -21,7 +21,7 @@ Kiến trúc API V2 được tổ chức phân cấp tương tự Web V2 (`erp-w
 
 | Lớp | File | Quy tắc |
 | :--- | :--- | :--- |
-| Entity | `entities/*.entity.ts` | Cột snake_case qua `name:`; cờ `isDeleted` (không dùng `DeleteDateColumn`) |
+| Entity | `entities/*.entity.ts` | Kế thừa chuỗi base trong `src/v2/core/base-core` (xem mục 1b). Cột snake_case qua `name:`; cờ `isDeleted` (không dùng `DeleteDateColumn`) |
 | DTO vào | `dto/create-*.dto.ts`, `update-*` (PartialType), `query-*` (PaginationDto) | class-validator + Swagger |
 | DTO ra | `dto/*-response.dto.ts` | Không trả entity ra ngoài module |
 | Mapper | `helpers/*.mapper.ts` | Hàm thuần. Hai chiều: entity→response, DTO→entity (bỏ `undefined`) |
@@ -31,6 +31,28 @@ Kiến trúc API V2 được tổ chức phân cấp tương tự Web V2 (`erp-w
 | Controller | `controllers/*.controller.ts` | `@RequirePermissions({ resource: ErpResource.X, action: ErpAction.READ\|CREATE\|UPDATE\|DELETE\|PURGE })`; xóa cứng dùng `PURGE` và route `:id/permanent` |
 
 Enum quyền: `src/v2/core/rbac-core/enums/erp-action.enum.ts` (`ErpAction`), `src/v2/core/rbac-core/enums/erp-resource.enum.ts` (`ErpResource`), xuất qua `@/v2/core/rbac-core`. Không dùng chuỗi literal cho quyền.
+
+## 1b. Chuỗi base chung và `extraData`
+
+Lõi `src/v2/core/base-core` (barrel `@/v2/core/base-core`) là chuỗi entity nền dùng chung. Mỗi lớp thêm đúng một nhóm cột:
+
+| Lớp | Cột thêm | Dùng cho |
+| :--- | :--- | :--- |
+| `CoreBaseEntity` | `id` (uuid), `extra_data` (jsonb, mặc định `{}`) | danh mục, dòng không có timestamp, lõi không xóa mềm |
+| `CoreAuditedEntity` | `created_at`, `updated_at` (timestamptz) | dòng chứng từ |
+| `CoreSoftDeletableEntity` | `is_deleted` (có `@Index`) | entity module v2 (plop `module-v2`) |
+| `CoreHeaderEntity` | `status` (mặc định `DRAFT`), `created_by` | header chứng từ có vòng đời (plop `workflow-common`) |
+
+- TypeORM 0.3: khi cột trùng tên, **cột của lớp cha thắng**. Entity legacy có cột `timestamp` (hóa đơn, dòng hóa đơn, chi nhánh, đối tác) chỉ kế thừa `CoreBaseEntity` và giữ khai báo riêng, không override.
+- `extraData` là dữ liệu tùy biến để bổ sung field sau này mà không đổi cột cũ. Quy tắc:
+  - DTO create/update khai báo bằng `@ExtraDataField()` (`base-core/dto/extra-data.decorator.ts`); client cũ không gửi field vẫn hợp lệ.
+  - Tạo: không gửi thì lưu `{}`.
+  - Sửa header/danh mục: **merge cấp 1** qua `mergeExtraData` (`base-core/helpers/extra-data.util.ts`); giá trị `null` xóa key; không gửi field thì giữ nguyên.
+  - Dòng chứng từ được thay theo bộ nên ghi theo payload, không merge.
+  - Giới hạn (`assertValidExtraData`, 400 khi vi phạm): object, tối đa 16 KB, sâu 5 cấp, key tối đa 64 ký tự, cấm `__proto__`, `constructor`, `prototype`.
+  - Chặn ở hai lớp: `RejectUnsafeExtraDataPipe` (`base-core/pipes`, đăng ký trong `main.ts` TRƯỚC ValidationPipe) kiểm body thô, vì ValidationPipe của Nest tự xóa key `__proto__` mà không báo lỗi; và service kiểm lại cho mọi caller không đi qua HTTP.
+  - Logic kiểm và merge nằm ở lớp command/service, không ở controller. Response luôn trả `extraData` là object (không null).
+- Migration thêm cột: `ADD COLUMN IF NOT EXISTS "extra_data" jsonb NOT NULL DEFAULT '{}'::jsonb` kèm `CHECK (jsonb_typeof("extra_data") = 'object')`. Không đổi kiểu cột cũ.
 
 ## 2. Kiểu trường (`fieldSpec`)
 

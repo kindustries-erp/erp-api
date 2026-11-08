@@ -16,6 +16,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { ExtraDataField } from '@/v2/core/base-core/dto/extra-data.decorator';
 
 export class ProcurementRequestLineDto {
   @ApiProperty({ enum: ['GOODS', 'SERVICE'] })
@@ -47,6 +48,9 @@ export class ProcurementRequestLineDto {
   estUnitPrice?: number;
 
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
+
+  @ExtraDataField()
+  extraData?: Record<string, unknown>;
 }
 
 export class CreateProcurementRequestDto {
@@ -59,6 +63,9 @@ export class CreateProcurementRequestDto {
   title?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() requesterEmployeeId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() remarks?: string;
+
+  @ExtraDataField()
+  extraData?: Record<string, unknown>;
 
   @ApiProperty({ type: [ProcurementRequestLineDto] })
   @IsArray()

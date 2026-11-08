@@ -1,5 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsNumber, IsOptional, IsString } from 'class-validator';
+import { ExtraDataField } from '../../base-core/dto/extra-data.decorator';
 
 export class BaseCreateInvoiceLineDto {
   @ApiPropertyOptional()
@@ -56,4 +57,7 @@ export class BaseCreateInvoiceLineDto {
   @IsOptional()
   @IsString()
   invoiceSubcategory?: string;
+
+  @ExtraDataField()
+  extraData?: Record<string, unknown>;
 }

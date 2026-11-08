@@ -1,32 +1,8 @@
-import {
-  Column,
-  CreateDateColumn,
-  PrimaryGeneratedColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { CoreHeaderEntity } from '../../base-core/entities/core-header.entity';
 
 /**
  * Entity nền họ inventory-movements-core (chứng từ có vòng đời trạng thái).
  * Module con extend class này, thêm `@Entity(...)` và các cột riêng.
- * Xóa mềm bằng `isDeleted` theo quy chuẩn ERP.
+ * Kế thừa id, extraData, timestamps `timestamptz`, isDeleted, status (DRAFT), createdBy từ lớp header chung.
  */
-export abstract class BaseStockVoucherEntity {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
-
-  @Column({ type: 'boolean', default: false, name: 'is_deleted' })
-  isDeleted: boolean;
-
-  /** CUSTOM: trạng thái ban đầu mặc định là DRAFT; đổi nếu họ có quy ước khác. */
-  @Column({ type: 'varchar', length: 50, default: 'DRAFT', name: 'status' })
-  status: string;
-
-  @Column({ type: 'uuid', nullable: true, name: 'created_by' })
-  createdBy: string | null;
-
-  @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
-
-  @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
-}
+export abstract class BaseStockVoucherEntity extends CoreHeaderEntity {}

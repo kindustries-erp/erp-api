@@ -6,6 +6,7 @@ import {
 /** Hình dạng đọc từ entity. Khai báo tối thiểu để mapper không phụ thuộc TypeORM. */
 export interface RequestHeaderLike {
   id: string;
+  extraData: Record<string, unknown> | null;
   requestNo: string;
   requestDate: string;
   neededDate: string | null;
@@ -32,6 +33,7 @@ export interface PurchaseRequestPeople {
 
 export interface RequestLineLike {
   id: string;
+  extraData: Record<string, unknown> | null;
   lineNo: number;
   lineType: 'GOODS' | 'SERVICE';
   itemId: string | null;
@@ -58,6 +60,7 @@ export function toPurchaseRequestResponse(
 ): PurchaseRequestResponseDto {
   return {
     id: header.id,
+    extraData: header.extraData ?? {},
     requestNo: header.requestNo,
     requestDate: header.requestDate,
     neededDate: header.neededDate,
@@ -81,6 +84,7 @@ export function toPurchaseRequestResponse(
       .map(
         (l): PurchaseRequestLineResponseDto => ({
           id: l.id,
+          extraData: l.extraData ?? {},
           lineNo: l.lineNo,
           lineType: l.lineType,
           itemId: l.itemId,

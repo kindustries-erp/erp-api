@@ -2,6 +2,10 @@ import { BadRequestException, ConflictException } from '@nestjs/common';
 import { DataSource, DeepPartial, EntityManager, EntityTarget } from 'typeorm';
 import { ApprovalEventService } from '@/v2/core/approval-core/approval-event.service';
 import {
+  assertValidExtraData,
+  mergeExtraData,
+} from '@/v2/core/base-core/helpers/extra-data.util';
+import {
   StockDirection,
   StockLedgerConfig,
   StockTransactionType,
@@ -64,13 +68,15 @@ export abstract class AbstractStockLineVoucherCommandService<
     actor: StockVoucherActor,
     data: object,
   ): Promise<H> {
-    const { lines = [], ...header } = data as StockVoucherDraftInput;
+    const { lines = [], extraData, ...header } = data as StockVoucherDraftInput;
+    this.assertExtraData(extraData, lines as BaseCreateStockVoucherLineDto[]);
     return this.dataSource.transaction(async (manager) => {
       const entity = manager.create(this.headerEntity, {
         ...header,
         status: this.initialStatus,
         createdBy: actor.id,
         isDeleted: false,
+        extraData: (extraData as Record<string, unknown> | undefined) ?? {},
       } as DeepPartial<H>);
       const saved = await manager.save(this.headerEntity, entity);
       await this.replaceLines(
@@ -85,15 +91,25 @@ export abstract class AbstractStockLineVoucherCommandService<
   /** Sửa nháp: chỉ khi còn DRAFT. Dòng được thay toàn bộ nếu có gửi lên. */
   async updateDraft(
     id: string,
-    data: { lines?: BaseCreateStockVoucherLineDto[] } & object,
+    data: {
+      lines?: BaseCreateStockVoucherLineDto[];
+      extraData?: Record<string, unknown>;
+    } & object,
   ): Promise<H> {
-    const { lines, ...header } = data as StockVoucherDraftInput;
+    const { lines, extraData, ...header } = data as StockVoucherDraftInput;
+    this.assertExtraData(extraData, lines);
     return this.dataSource.transaction(async (manager) => {
       const voucher = await this.lockHeader(manager, id);
       if (voucher.status !== 'DRAFT') {
         throw new ConflictException('Chỉ sửa được chứng từ ở trạng thái nháp');
       }
       Object.assign(voucher, header);
+      if (extraData !== undefined) {
+        voucher.extraData = mergeExtraData(
+          voucher.extraData,
+          extraData as Record<string, unknown>,
+        );
+      }
       if (lines !== undefined) {
         await this.replaceLines(manager, voucher, lines);
       }
@@ -161,6 +177,19 @@ export abstract class AbstractStockLineVoucherCommandService<
     header.totalAmount = String(total);
   }
 
+  /** Kiểm `extraData` của header và các dòng trước khi ghi. Giá trị sai định dạng bị chặn 400. */
+  private assertExtraData(
+    header: unknown,
+    lines: BaseCreateStockVoucherLineDto[] | undefined,
+  ): void {
+    if (header !== undefined) {
+      assertValidExtraData(header);
+    }
+    lines?.forEach((l) => {
+      if (l.extraData !== undefined) assertValidExtraData(l.extraData);
+    });
+  }
+
   /** Thay toàn bộ dòng của phiếu nháp và cập nhật tổng tiền trên header. */
   private async replaceLines(
     manager: EntityManager,
@@ -183,7 +212,13 @@ export abstract class AbstractStockLineVoucherCommandService<
         );
       }
       const row = fromCreateLineDto(dto, lineNo++, direction);
-      await repo.save(repo.create({ ...row, voucherId: voucher.id } as never));
+      await repo.save(
+        repo.create({
+          ...row,
+          voucherId: voucher.id,
+          extraData: dto.extraData ?? {},
+        } as never),
+      );
       total += Number(row.amount ?? 0);
     }
     voucher.totalAmount = String(total);

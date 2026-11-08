@@ -5,6 +5,7 @@ import {
 
 export interface OrderHeaderLike {
   id: string;
+  extraData: Record<string, unknown> | null;
   orderNo: string;
   orderDate: string;
   expectedDate: string | null;
@@ -25,6 +26,7 @@ export interface OrderHeaderLike {
 
 export interface OrderLineLike {
   id: string;
+  extraData: Record<string, unknown> | null;
   lineNo: number;
   lineType: 'GOODS' | 'SERVICE';
   itemId: string | null;
@@ -47,6 +49,7 @@ export function toProcurementOrderResponse(
 ): ProcurementOrderResponseDto {
   return {
     id: header.id,
+    extraData: header.extraData ?? {},
     orderNo: header.orderNo,
     orderDate: header.orderDate,
     expectedDate: header.expectedDate,
@@ -68,6 +71,7 @@ export function toProcurementOrderResponse(
       .map(
         (l): ProcurementOrderLineResponseDto => ({
           id: l.id,
+          extraData: l.extraData ?? {},
           lineNo: l.lineNo,
           lineType: l.lineType,
           itemId: l.itemId,

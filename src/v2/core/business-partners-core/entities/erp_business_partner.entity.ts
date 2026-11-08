@@ -3,15 +3,12 @@ import {
   CreateDateColumn,
   Entity,
   Index,
-  PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { CoreBaseEntity } from '../../base-core/entities/core-base.entity';
 
 @Entity({ name: 'erp_business_partners' })
-export class ErpBusinessPartner {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
-
+export class ErpBusinessPartner extends CoreBaseEntity {
   // Chỉ các bản ghi chưa xóa mềm mới giữ mã duy nhất, để mã đã xóa dùng lại được
   @Index('UQ_erp_business_partners_code_active', ['code'], {
     unique: true,

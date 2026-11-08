@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { DataSource, Repository } from 'typeorm';
 import { GarageGoodsReceipt } from '../entities/garage-goods-receipt.entity';
 import { CreateGarageGoodsReceiptDto } from '../dto/create-garage-goods-receipt.dto';
@@ -117,6 +118,44 @@ describe('GarageGoodsReceiptCommandService', () => {
 
     expect(dataSource.transaction).toHaveBeenCalledTimes(1);
     expect(repo.save).toHaveBeenCalledWith(entity);
+  });
+
+  it('extraData khi sửa phiếu nháp: merge cấp 1, null xóa key', async () => {
+    const entity = {
+      id: 'id-1',
+      status: 'DRAFT',
+      isDeleted: false,
+      extraData: { a: 1, b: 2 },
+    } as unknown as GarageGoodsReceipt;
+    lockedReceipt = { ...entity } as GarageGoodsReceipt;
+
+    await service.update(entity, { extraData: { b: 3, a: null } });
+
+    expect(repo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ extraData: { b: 3 } }),
+    );
+  });
+
+  it('tạo phiếu không gửi extraData thì lưu {}', async () => {
+    const saved = await service.create({
+      receiptNo: 'GGR-1',
+      receiptDate: '2026-11-03',
+      supplierName: 'NCC',
+      lines: [{ itemName: 'Bố thắng', qtyReceived: 1, unitCost: 10 }],
+    } as never);
+
+    expect(saved.extraData).toEqual({});
+  });
+
+  it('từ chối extraData sai định dạng trước khi mở transaction', async () => {
+    await expect(
+      service.create({
+        receiptNo: 'GGR-2',
+        receiptDate: '2026-11-03',
+        extraData: 'x' as never,
+      } as never),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(dataSource.transaction).not.toHaveBeenCalled();
   });
 
   it('update kiểm trạng thái trên bản đã khóa (DRAFT trong entity, POSTED trong DB) và không ghi gì', async () => {

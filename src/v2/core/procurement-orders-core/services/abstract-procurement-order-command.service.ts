@@ -25,6 +25,11 @@ import {
   ProcurementOrderAction,
   ProcurementOrderStatus,
 } from '../contracts/procurement-orders.contract';
+import {
+  assertValidExtraData,
+  ExtraData,
+  mergeExtraData,
+} from '../../base-core/helpers/extra-data.util';
 import { BaseProcurementOrderEntity } from '../entities/base-procurement-order.entity';
 import { BaseProcurementOrderLineEntity } from '../entities/base-procurement-order-line.entity';
 import {
@@ -45,6 +50,8 @@ export interface OrderDraftHeaderInput {
   supplierName?: string | null;
   remarks?: string | null;
   requestId?: string | null;
+  /** Dữ liệu tùy biến. Khi tạo: mặc định `{}`. */
+  extraData?: ExtraData;
 }
 
 export interface OrderDraftLineFields {
@@ -52,13 +59,19 @@ export interface OrderDraftLineFields {
   itemCode?: string | null;
   itemName?: string | null;
   description?: string | null;
+  extraData?: ExtraData;
 }
 
 /** Các trường đầu đơn được phép sửa khi DRAFT (không gồm requestId, status, số phiếu). */
 export type OrderHeaderPatch = Partial<
   Pick<
     OrderDraftHeaderInput,
-    'orderDate' | 'expectedDate' | 'supplierId' | 'supplierName' | 'remarks'
+    | 'orderDate'
+    | 'expectedDate'
+    | 'supplierId'
+    | 'supplierName'
+    | 'remarks'
+    | 'extraData'
   >
 >;
 
@@ -183,6 +196,7 @@ export abstract class AbstractProcurementOrderCommandService<
     lines: Array<OrderDraftLineInput & OrderDraftLineFields>,
   ): Promise<H> {
     assertValidOrderLines(lines, input.requestId ?? null);
+    if (input.extraData !== undefined) assertValidExtraData(input.extraData);
     return this.dataSource.transaction(async (manager) => {
       const orderNo = await nextDocumentNo(
         manager,
@@ -202,6 +216,7 @@ export abstract class AbstractProcurementOrderCommandService<
           totalAmount: String(orderTotalOf(lines)),
           createdBy: actor.id,
           isDeleted: false,
+          extraData: input.extraData ?? {},
         } as DeepPartial<H>),
       );
       await this.writeLines(manager, header, lines);
@@ -256,13 +271,18 @@ export abstract class AbstractProcurementOrderCommandService<
     id: string,
     patch: P,
   ): Promise<H> {
+    const { extraData, ...fields } = patch;
+    if (extraData !== undefined) assertValidExtraData(extraData);
     return this.dataSource.transaction(async (manager) => {
       const header = await this.lockHeader(manager, id);
       assertEditable(header.status as ProcurementOrderStatus);
       const changes = Object.fromEntries(
-        Object.entries(patch).filter(([, value]) => value !== undefined),
+        Object.entries(fields).filter(([, value]) => value !== undefined),
       );
       Object.assign(header, changes);
+      if (extraData !== undefined) {
+        header.extraData = mergeExtraData(header.extraData, extraData);
+      }
       return manager.save(this.headerEntity, header);
     });
   }
@@ -328,6 +348,9 @@ export abstract class AbstractProcurementOrderCommandService<
     header: H,
     lines: Array<OrderDraftLineInput & OrderDraftLineFields>,
   ): Promise<void> {
+    lines.forEach((l) => {
+      if (l.extraData !== undefined) assertValidExtraData(l.extraData);
+    });
     const rows = lines.map((l, i) => {
       const amount =
         l.unitPrice == null
@@ -342,6 +365,7 @@ export abstract class AbstractProcurementOrderCommandService<
         unitPrice: l.unitPrice == null ? null : String(l.unitPrice),
         amount,
         requestLineId: l.requestLineId ?? null,
+        extraData: l.extraData ?? {},
       } as DeepPartial<L>);
     });
     await manager.save(this.lineEntity, rows);

@@ -36,6 +36,11 @@ import {
   estimatedTotalOf,
   RequestLineQty,
 } from './procurement-request-engine.service';
+import {
+  assertValidExtraData,
+  ExtraData,
+  mergeExtraData,
+} from '../../base-core/helpers/extra-data.util';
 
 export interface DraftHeaderInput {
   requestDate: string;
@@ -43,11 +48,19 @@ export interface DraftHeaderInput {
   title?: string | null;
   requesterEmployeeId?: string | null;
   remarks?: string | null;
+  /** Dữ liệu tùy biến. Khi tạo: mặc định `{}`. */
+  extraData?: ExtraData;
 }
 
-/** Các trường đầu đề sửa được khi nháp (không gồm chi nhánh, số phiếu, trạng thái). */
+/**
+ * Các trường đầu đề sửa được khi nháp (không gồm chi nhánh, số phiếu, trạng thái).
+ * `extraData` được merge cấp 1 với dữ liệu đang lưu, không thay thế toàn bộ.
+ */
 export type DraftHeaderPatch = Partial<
-  Pick<DraftHeaderInput, 'requestDate' | 'neededDate' | 'title' | 'remarks'>
+  Pick<
+    DraftHeaderInput,
+    'requestDate' | 'neededDate' | 'title' | 'remarks' | 'extraData'
+  >
 >;
 
 export interface DraftLineFields {
@@ -56,6 +69,7 @@ export interface DraftLineFields {
   itemName?: string | null;
   description?: string | null;
   notes?: string | null;
+  extraData?: ExtraData;
 }
 
 export interface RequestActor {
@@ -162,6 +176,7 @@ export abstract class AbstractPurchaseRequestCommandService<
     lines: Array<DraftLineInput & DraftLineFields>,
   ): Promise<H> {
     assertValidDraftLines(lines);
+    if (input.extraData !== undefined) assertValidExtraData(input.extraData);
     return this.dataSource.transaction(async (manager) => {
       const requestNo = await nextDocumentNo(
         manager,
@@ -178,6 +193,7 @@ export abstract class AbstractPurchaseRequestCommandService<
         estimatedTotal: String(estimatedTotalOf(lines)),
         createdBy: actor.id,
         isDeleted: false,
+        extraData: input.extraData ?? {},
       } as DeepPartial<H>);
       const saved = await manager.save(this.headerEntity, header);
       await this.writeLines(manager, saved.id, lines);
@@ -190,13 +206,18 @@ export abstract class AbstractPurchaseRequestCommandService<
    * Chi nhánh không nằm trong patch vì PO đã liên kết có thể đang dùng chi nhánh cũ.
    */
   async updateHeader(id: string, patch: DraftHeaderPatch): Promise<H> {
+    const { extraData, ...fields } = patch;
+    if (extraData !== undefined) assertValidExtraData(extraData);
     return this.dataSource.transaction(async (manager) => {
       const header = await this.lockHeader(manager, id);
       assertLinesEditable(header.status as PurchaseRequestStatus);
       const changes = Object.fromEntries(
-        Object.entries(patch).filter(([, value]) => value !== undefined),
+        Object.entries(fields).filter(([, value]) => value !== undefined),
       );
       Object.assign(header, changes);
+      if (extraData !== undefined) {
+        header.extraData = mergeExtraData(header.extraData, extraData);
+      }
       return manager.save(this.headerEntity, header);
     });
   }
@@ -266,6 +287,9 @@ export abstract class AbstractPurchaseRequestCommandService<
     headerId: string,
     lines: Array<DraftLineInput & DraftLineFields>,
   ): Promise<void> {
+    lines.forEach((l) => {
+      if (l.extraData !== undefined) assertValidExtraData(l.extraData);
+    });
     const rows = lines.map((l, i) =>
       manager.create(this.lineEntity, {
         ...l,
@@ -278,6 +302,7 @@ export abstract class AbstractPurchaseRequestCommandService<
           l.estUnitPrice == null
             ? null
             : String(l.qtyRequested * l.estUnitPrice),
+        extraData: l.extraData ?? {},
       } as DeepPartial<L>),
     );
     await manager.save(this.lineEntity, rows);

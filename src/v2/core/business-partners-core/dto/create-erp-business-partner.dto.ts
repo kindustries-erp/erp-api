@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { ExtraDataField } from '../../base-core/dto/extra-data.decorator';
 
 export class CreateErpBusinessPartnerDto {
   @ApiPropertyOptional()
@@ -56,4 +57,7 @@ export class CreateErpBusinessPartnerDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ExtraDataField()
+  extraData?: Record<string, unknown>;
 }

@@ -2,6 +2,7 @@ import { toPurchaseRequestResponse } from './procurement-request.mapper';
 
 const header = {
   id: 'h1',
+  extraData: {},
   requestNo: 'DNM-20261105-001',
   requestDate: '2026-11-05',
   neededDate: null,
@@ -25,6 +26,7 @@ describe('toPurchaseRequestResponse', () => {
     const out = toPurchaseRequestResponse(header, [
       {
         id: 'l2',
+        extraData: {},
         lineNo: 2,
         lineType: 'SERVICE',
         itemId: null,
@@ -39,6 +41,7 @@ describe('toPurchaseRequestResponse', () => {
       },
       {
         id: 'l1',
+        extraData: {},
         lineNo: 1,
         lineType: 'GOODS',
         itemId: 'i1',

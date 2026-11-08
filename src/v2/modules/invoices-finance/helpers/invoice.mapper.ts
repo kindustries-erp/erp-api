@@ -14,6 +14,7 @@ export function toInvoiceResponse(
 ): InvoiceResponseDto {
   return {
     id: entity.id,
+    extraData: entity.extraData ?? {},
     invoiceNo: entity.invoiceNo,
     invoiceNoNormalized: entity.invoiceNoNormalized ?? undefined,
     serialNo: entity.serialNo ?? undefined,
@@ -75,6 +76,7 @@ export function toInvoiceItemResponse(
 ): InvoiceItemResponseDto {
   return {
     id: item.id,
+    extraData: item.extraData ?? {},
     invoiceSubcategory: item.invoiceSubcategory,
     description: item.description ?? undefined,
     unit: item.unit ?? undefined,
