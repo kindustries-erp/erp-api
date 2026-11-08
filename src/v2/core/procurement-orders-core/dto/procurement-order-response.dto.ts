@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { ApprovalSummaryDto } from '@/v2/core/approval-core/dto/approval-summary.dto';
 
 export class ProcurementOrderLineResponseDto {
   @ApiProperty() id: string;
@@ -34,11 +35,11 @@ export class ProcurementOrderResponseDto {
   @ApiProperty() fulfillmentStatus: string;
   @ApiProperty() totalAmount: number;
   @ApiProperty({ nullable: true }) approvedTotal: number | null;
-  @ApiProperty({ nullable: true }) approverId: string | null;
   @ApiProperty({ nullable: true }) remarks: string | null;
-  @ApiProperty({ nullable: true }) rejectReason: string | null;
-  @ApiProperty({ nullable: true }) cancelReason: string | null;
-  @ApiProperty({ nullable: true }) closeReason: string | null;
+  @ApiProperty({ nullable: true, description: 'Email người tạo' })
+  createdByEmail: string | null;
+  @ApiProperty({ type: ApprovalSummaryDto })
+  approval: ApprovalSummaryDto;
   @ApiProperty({ type: [ProcurementOrderLineResponseDto] })
   lines: ProcurementOrderLineResponseDto[];
 }

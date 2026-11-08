@@ -1,34 +1,19 @@
-import { toProcurementOrderResponse } from '@/v2/core/procurement-orders-core/helpers/procurement-order.mapper';
+import {
+  OrderHeaderLike,
+  toProcurementOrderResponse,
+} from '@/v2/core/procurement-orders-core/helpers/procurement-order.mapper';
+import { ApprovalEmailLookup } from '@/v2/core/approval-core/helpers/approval-summary.mapper';
 import {
   GarageProcurementOrderAcceptanceDto,
   GarageProcurementOrderResponseDto,
 } from '../dto/garage-procurement-order-response.dto';
 
-interface GarageHeaderLike {
-  id: string;
-  extraData: Record<string, unknown> | null;
-  orderNo: string;
-  orderDate: string;
-  expectedDate: string | null;
-  supplierId: string | null;
-  supplierName: string | null;
-  sourceType: 'DIRECT' | 'REQUEST';
-  requestId: string | null;
-  status: string;
-  fulfillmentStatus: string;
-  totalAmount: string;
-  approvedTotal: string | null;
-  approverId: string | null;
-  remarks: string | null;
-  rejectReason: string | null;
-  cancelReason: string | null;
-  closeReason: string | null;
+/** Header PO garage: lõi PO cộng các cột riêng của garage. */
+export interface GarageHeaderLike extends OrderHeaderLike {
   branchId: string | null;
   branchName: string | null;
   paymentStatus: string;
   supplierInvoiceNo: string | null;
-  createdBy: string | null;
-  issuedAt: Date | null;
 }
 
 interface GarageAcceptanceLike {
@@ -45,8 +30,9 @@ export function toGarageProcurementOrderResponse(
   header: GarageHeaderLike,
   lines: Parameters<typeof toProcurementOrderResponse>[1],
   acceptances: GarageAcceptanceLike[] = [],
+  emailOf: ApprovalEmailLookup = () => null,
 ): GarageProcurementOrderResponseDto {
-  const base = toProcurementOrderResponse(header, lines);
+  const base = toProcurementOrderResponse(header, lines, emailOf);
   return {
     ...base,
     branchId: header.branchId,
@@ -54,7 +40,7 @@ export function toGarageProcurementOrderResponse(
     paymentStatus: header.paymentStatus,
     supplierInvoiceNo: header.supplierInvoiceNo,
     createdBy: header.createdBy,
-    issuedAt: header.issuedAt,
+    issuedAt: header.issuedAt ?? null,
     acceptances: acceptances.map(
       (a): GarageProcurementOrderAcceptanceDto => ({
         id: a.id,

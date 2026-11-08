@@ -2,8 +2,14 @@ import {
   ProcurementOrderLineResponseDto,
   ProcurementOrderResponseDto,
 } from '../dto/procurement-order-response.dto';
+import {
+  ApprovalEmailLookup,
+  ApprovalHeaderLike,
+  toApprovalSummary,
+} from '@/v2/core/approval-core/helpers/approval-summary.mapper';
 
-export interface OrderHeaderLike {
+/** Header PO đọc từ entity. Cột duyệt kế thừa từ ApprovalHeaderLike. */
+export interface OrderHeaderLike extends ApprovalHeaderLike {
   id: string;
   extraData: Record<string, unknown> | null;
   orderNo: string;
@@ -17,11 +23,8 @@ export interface OrderHeaderLike {
   fulfillmentStatus: string;
   totalAmount: string;
   approvedTotal: string | null;
-  approverId: string | null;
   remarks: string | null;
-  rejectReason: string | null;
-  cancelReason: string | null;
-  closeReason: string | null;
+  createdBy: string | null;
 }
 
 export interface OrderLineLike {
@@ -42,10 +45,14 @@ export interface OrderLineLike {
 
 const num = (v: string | null): number | null => (v == null ? null : Number(v));
 
-/** Chuyển entity sang response DTO. Không trả entity ra ngoài. */
+/**
+ * Chuyển entity sang response DTO. Không trả entity ra ngoài.
+ * `emailOf` tra email theo lô ở facade; thiếu thì email để null.
+ */
 export function toProcurementOrderResponse(
   header: OrderHeaderLike,
   lines: OrderLineLike[],
+  emailOf: ApprovalEmailLookup = () => null,
 ): ProcurementOrderResponseDto {
   return {
     id: header.id,
@@ -61,11 +68,9 @@ export function toProcurementOrderResponse(
     fulfillmentStatus: header.fulfillmentStatus,
     totalAmount: Number(header.totalAmount),
     approvedTotal: num(header.approvedTotal),
-    approverId: header.approverId,
     remarks: header.remarks,
-    rejectReason: header.rejectReason,
-    cancelReason: header.cancelReason,
-    closeReason: header.closeReason,
+    createdByEmail: emailOf(header.createdBy),
+    approval: toApprovalSummary(header, emailOf),
     lines: [...lines]
       .sort((a, b) => a.lineNo - b.lineNo)
       .map(

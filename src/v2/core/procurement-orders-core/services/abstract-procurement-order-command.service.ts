@@ -457,6 +457,7 @@ export abstract class AbstractProcurementOrderCommandService<
         header.cancelReason = reason;
         break;
       case 'close':
+        header.closedBy = actorId;
         header.closedAt = now;
         header.closeReason = reason;
         break;

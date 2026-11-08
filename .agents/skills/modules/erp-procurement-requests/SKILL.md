@@ -69,6 +69,15 @@ PO không import module này. Cổng `RequestLinkPort` do `ProcurementRequestLin
 - Lõi `AbstractPurchaseRequestOrderingService` chỉ ghi `orderingStatus`. Đặt đủ không đổi `status`; `CLOSED` chỉ do Đóng thủ công (có lý do).
 - Migration `20261105105000` đưa PR tự đóng cũ (`CLOSED`, `close_reason IS NULL`, `ordering_status = FULL`) về `APPROVED`.
 
+## Response duyệt: khối `approval` (2026-11-08)
+
+- Header PR/PO (list, detail, kết quả transition) trả `approval`: `{ approverId, approverEmail, submit, approve, reject, cancel, close, issue }`. Mỗi bước là `{ by, byEmail, at, reason? }` hoặc `null` khi chưa xảy ra. PR không có `issue`. `reason` chỉ có ở reject/cancel/close.
+- `approverEmail` = người đã duyệt; chưa duyệt thì người được giao (`approvedBy ?? approverId`).
+- Đã bỏ key phẳng (breaking, web đã sửa cùng đợt). PR: `submittedBy, approvedBy, approverId, approverEmail, rejectedBy, rejectReason, cancelReason, closeReason`. PO: `approverId, rejectReason, cancelReason, closeReason`.
+- `closed_by` (migration `20261108130000`) ghi người đóng; tự đóng khi đủ hàng giữ `null`.
+- Email resolve theo lô qua `resolveApprovalEmails` (approval-core), một lần cho cả trang, không N+1.
+- Mapper dùng chung: `toApprovalSummary` (`core/approval-core/helpers/approval-summary.mapper.ts`).
+
 ## extraData (JSON tùy biến, 2026-11-08)
 
 - **DB**: cột `extra_data jsonb NOT NULL DEFAULT '{}'` (CHECK: object) trên: `erp_proc_requests`, `erp_proc_request_lines`. Migration `20261108120000-add-extra-data-to-v2-tables.ts`. Dữ liệu cũ là `{}`.

@@ -91,6 +91,15 @@ Quyền resource: `garage_procurement_orders`. Seed từ `garage_purchase_orders
 - Lỗi đã sửa: endpoint trước đây trả `{ columns }`, khiến web crash `reading 'value'` khi mở popup lọc cột.
 - `createdBy` (uuid) được lọc, sắp xếp và gợi ý theo **email** từ `core_users` (subquery trong `TABLE_COLUMNS`). Danh sách trả thêm `createdByEmail` (tra một lần cho cả trang qua `helpers/resolve-created-by-email.ts`). Chi tiết (`findOne`) không có `createdByEmail`. Không đổi schema.
 
+## Response duyệt: khối `approval` (2026-11-08)
+
+- Header PR/PO (list, detail, kết quả transition) trả `approval`: `{ approverId, approverEmail, submit, approve, reject, cancel, close, issue }`. Mỗi bước là `{ by, byEmail, at, reason? }` hoặc `null` khi chưa xảy ra. PR không có `issue`. `reason` chỉ có ở reject/cancel/close.
+- `approverEmail` = người đã duyệt; chưa duyệt thì người được giao (`approvedBy ?? approverId`).
+- Đã bỏ key phẳng (breaking, web đã sửa cùng đợt). PR: `submittedBy, approvedBy, approverId, approverEmail, rejectedBy, rejectReason, cancelReason, closeReason`. PO: `approverId, rejectReason, cancelReason, closeReason`.
+- `closed_by` (migration `20261108130000`) ghi người đóng; tự đóng khi đủ hàng giữ `null`.
+- Email resolve theo lô qua `resolveApprovalEmails` (approval-core), một lần cho cả trang, không N+1.
+- Mapper dùng chung: `toApprovalSummary` (`core/approval-core/helpers/approval-summary.mapper.ts`).
+
 ## extraData (JSON tùy biến, 2026-11-08)
 
 - **DB**: cột `extra_data jsonb NOT NULL DEFAULT '{}'` (CHECK: object) trên: `proc_orders_garage`, `proc_order_lines_garage`, `proc_order_acceptances_garage`. Migration `20261108120000-add-extra-data-to-v2-tables.ts`. Dữ liệu cũ là `{}`.

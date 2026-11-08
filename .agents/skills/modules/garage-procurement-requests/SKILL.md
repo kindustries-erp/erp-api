@@ -35,7 +35,7 @@ Giống hệt họ thường: `DRAFT → PENDING_APPROVAL → APPROVED → CLOSE
 Cùng bộ endpoint với họ thường: `POST /`, `GET /`, `GET /:id`, `GET /:id/approval-events`, `GET /:id/po-draft`, `PATCH /:id/lines`, `POST /:id/submit|recall|approve|reject|cancel|close`.
 
 **Response & nhật ký (cập nhật 2026-11-07)**:
-- `PurchaseRequestResponseDto` có thêm `createdByEmail` và `approverEmail` (nullable; resolve theo lô qua `resolvePurchaseRequestPeople`). `approverEmail` = người đã duyệt, chưa duyệt thì người được giao (`COALESCE(approvedBy, approverId)`). Không trả UUID `createdBy` ra API.
+- Khối duyệt thống nhất `approval` (xem mục "Response duyệt" cuối file). Không còn key phẳng `approverEmail`/`approvedBy`/`rejectReason`... Không trả UUID `createdBy` ra API; có `createdByEmail`.
 - `ApprovalEventResponseDto` (`GET /:id/approval-events`) có thêm `actorName` (họ tên nhân viên) và `actorEmail`, resolve bởi `ApprovalActorService`. Không có `id` nội bộ của nhật ký.
 - `TABLE_COLUMNS` (`procurement-request-table.constants.ts`): `createdBy`/`created_by` và `approver` lọc, sắp xếp và liệt kê option theo email (subselect `core_users.email`), không theo UUID.
 - Module đăng ký `CoreUser` trong `TypeOrmModule.forFeature` để `ApprovalActorService` inject được (xem `approval-actor-wiring.spec.ts`).
@@ -83,6 +83,15 @@ Quyền resource: `garage_procurement_requests`. Seed từ `garage_purchase_orde
 - Danh sách người duyệt: `GET /api/v2/approval-config/garage-procurement-requests/approvers` (loại người đang gọi).
 - Logic dùng chung ở `src/v2/core/approval-core` (`approval-gate.helper.ts`, `approval-settings.service.ts`, `approver-directory.service.ts`); module chỉ khai báo `docType` và resource.
 - Migration: `20261106110000-AddApprovalSettingsAndApprover.ts`.
+
+## Response duyệt: khối `approval` (2026-11-08)
+
+- Header PR/PO (list, detail, kết quả transition) trả `approval`: `{ approverId, approverEmail, submit, approve, reject, cancel, close, issue }`. Mỗi bước là `{ by, byEmail, at, reason? }` hoặc `null` khi chưa xảy ra. PR không có `issue`. `reason` chỉ có ở reject/cancel/close.
+- `approverEmail` = người đã duyệt; chưa duyệt thì người được giao (`approvedBy ?? approverId`).
+- Đã bỏ key phẳng (breaking, web đã sửa cùng đợt). PR: `submittedBy, approvedBy, approverId, approverEmail, rejectedBy, rejectReason, cancelReason, closeReason`. PO: `approverId, rejectReason, cancelReason, closeReason`.
+- `closed_by` (migration `20261108130000`) ghi người đóng; tự đóng khi đủ hàng giữ `null`.
+- Email resolve theo lô qua `resolveApprovalEmails` (approval-core), một lần cho cả trang, không N+1.
+- Mapper dùng chung: `toApprovalSummary` (`core/approval-core/helpers/approval-summary.mapper.ts`).
 
 ## extraData (JSON tùy biến, 2026-11-08)
 

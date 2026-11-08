@@ -86,6 +86,9 @@ export abstract class BaseProcurementOrderEntity extends BaseApprovalFields {
   @Column({ type: 'text', name: 'cancel_reason', nullable: true })
   cancelReason: string | null;
 
+  @Column({ type: 'uuid', name: 'closed_by', nullable: true })
+  closedBy: string | null;
+
   @Column({ type: 'timestamptz', name: 'closed_at', nullable: true })
   closedAt: Date | null;
 

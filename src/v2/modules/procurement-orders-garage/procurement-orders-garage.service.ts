@@ -10,6 +10,7 @@ import { DataSource } from 'typeorm';
 import { GarageProcurementRequest } from '../procurement-requests-garage/entities/procurement-request.entity';
 import { ErpResource, RbacCoreService } from '@/v2/core/rbac-core';
 import { ApproverDirectoryService } from '@/v2/core/approval-core/approver-directory.service';
+import { resolveApprovalEmails } from '@/v2/core/approval-core/helpers/approval-people';
 import { ProcurementOrderAction } from '@/v2/core/procurement-orders-core/contracts/procurement-orders.contract';
 import {
   AcceptServicesDto,
@@ -69,15 +70,12 @@ export class GarageProcurementOrdersService {
       column_operators: dto.column_operators,
       date_ranges: dto.date_ranges,
     });
-    const { createdByEmails, ...page } = out;
+    const emailOf = await resolveApprovalEmails(this.actors, out.rows);
     return {
-      ...page,
-      rows: out.rows.map((h) => ({
-        ...toGarageProcurementOrderResponse(h, [], []),
-        createdByEmail: h.createdBy
-          ? (createdByEmails.get(h.createdBy) ?? null)
-          : null,
-      })),
+      ...out,
+      rows: out.rows.map((h) =>
+        toGarageProcurementOrderResponse(h, [], [], emailOf),
+      ),
     };
   }
 
@@ -103,7 +101,13 @@ export class GarageProcurementOrdersService {
 
   async findOne(id: string): Promise<GarageProcurementOrderResponseDto> {
     const { header, lines, acceptances } = await this.query.findOne(id);
-    return toGarageProcurementOrderResponse(header, lines, acceptances);
+    const emailOf = await resolveApprovalEmails(this.actors, [header]);
+    return toGarageProcurementOrderResponse(
+      header,
+      lines,
+      acceptances,
+      emailOf,
+    );
   }
 
   async updateHeader(

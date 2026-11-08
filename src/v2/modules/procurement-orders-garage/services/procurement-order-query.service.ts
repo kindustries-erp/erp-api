@@ -7,8 +7,6 @@ import { GarageProcurementOrder } from '../entities/procurement-order.entity';
 import { GarageProcurementOrderLine } from '../entities/procurement-order-line.entity';
 import { GarageProcurementOrderAcceptance } from '../entities/procurement-order-acceptance.entity';
 import { GARAGE_PROCUREMENT_ORDER_PREFIX } from '../procurement-orders-garage.constants';
-import { CoreUser } from '../../../../users/entities/core-user.entity';
-import { resolveCreatedByEmails } from '../helpers/resolve-created-by-email';
 import {
   applyTableFilters,
   applyTableSort,
@@ -55,8 +53,6 @@ export class GarageProcurementOrderQueryService {
     private readonly acceptances: Repository<GarageProcurementOrderAcceptance>,
     @InjectRepository(ApprovalEvent)
     private readonly events: Repository<ApprovalEvent>,
-    @InjectRepository(CoreUser)
-    private readonly users: Repository<CoreUser>,
   ) {}
 
   /** Nhật ký duyệt của một đơn mua Garage, theo thứ tự thời gian. */
@@ -120,16 +116,11 @@ export class GarageProcurementOrderQueryService {
       .skip((filter.page - 1) * filter.pageSize)
       .take(filter.pageSize)
       .getManyAndCount();
-    const createdByEmails = await resolveCreatedByEmails(
-      this.users,
-      rows.map((row) => row.createdBy),
-    );
     return {
       rows,
       total,
       page: filter.page,
       pageSize: filter.pageSize,
-      createdByEmails,
     };
   }
 

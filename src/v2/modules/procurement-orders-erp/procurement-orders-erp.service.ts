@@ -5,6 +5,7 @@ import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { RbacCoreService } from '@/v2/core/rbac-core';
 import { toProcurementOrderResponse } from '@/v2/core/procurement-orders-core/helpers/procurement-order.mapper';
+import { resolveApprovalEmails } from '@/v2/core/approval-core/helpers/approval-people';
 import { ProcurementOrderAction } from '@/v2/core/procurement-orders-core/contracts/procurement-orders.contract';
 import { ProcurementOrderResponseDto } from '@/v2/core/procurement-orders-core/dto/procurement-order-response.dto';
 import {
@@ -45,15 +46,17 @@ export class ErpProcurementOrdersService {
 
   async list(dto: ListProcurementOrdersDto) {
     const out = await this.query.list(dto.page ?? 1, dto.pageSize ?? 20);
+    const emailOf = await resolveApprovalEmails(this.actors, out.rows);
     return {
       ...out,
-      rows: out.rows.map((h) => toProcurementOrderResponse(h, [])),
+      rows: out.rows.map((h) => toProcurementOrderResponse(h, [], emailOf)),
     };
   }
 
   async findOne(id: string): Promise<ProcurementOrderResponseDto> {
     const { header, lines } = await this.query.findOne(id);
-    return toProcurementOrderResponse(header, lines);
+    const emailOf = await resolveApprovalEmails(this.actors, [header]);
+    return toProcurementOrderResponse(header, lines, emailOf);
   }
 
   async replaceLines(

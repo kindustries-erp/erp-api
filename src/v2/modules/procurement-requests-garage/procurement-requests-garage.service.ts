@@ -10,7 +10,7 @@ import {
   PurchaseRequestPoDraftDto,
   PurchaseRequestResponseDto,
 } from '@/v2/core/procurement-requests-core/dto/procurement-request-response.dto';
-import { resolvePurchaseRequestPeople } from '@/v2/core/procurement-requests-core/helpers/procurement-request-people';
+import { resolveApprovalEmails } from '@/v2/core/approval-core/helpers/approval-people';
 import { remainingPoDraftLinesOf } from '@/v2/core/procurement-requests-core/services/procurement-request-engine.service';
 import { toApprovalEventResponse } from '@/v2/core/approval-core/helpers/approval-event.mapper';
 import { ApprovalActorService } from '@/v2/core/approval-core/approval-actor.service';
@@ -50,12 +50,10 @@ export class GarageProcurementRequestsService {
 
   async list(dto: ListProcurementRequestsDto) {
     const out = await this.query.list(dto);
-    const people = await resolvePurchaseRequestPeople(this.actors, out.rows);
+    const emailOf = await resolveApprovalEmails(this.actors, out.rows);
     return {
       ...out,
-      rows: out.rows.map((h) =>
-        toPurchaseRequestResponse(h, [], people.get(h.id)),
-      ),
+      rows: out.rows.map((h) => toPurchaseRequestResponse(h, [], emailOf)),
     };
   }
 
@@ -77,8 +75,8 @@ export class GarageProcurementRequestsService {
 
   async findOne(id: string): Promise<PurchaseRequestResponseDto> {
     const { header, lines } = await this.query.findOne(id);
-    const people = await resolvePurchaseRequestPeople(this.actors, [header]);
-    return toPurchaseRequestResponse(header, lines, people.get(header.id));
+    const emailOf = await resolveApprovalEmails(this.actors, [header]);
+    return toPurchaseRequestResponse(header, lines, emailOf);
   }
 
   async updateHeader(
