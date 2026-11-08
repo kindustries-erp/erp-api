@@ -2,6 +2,7 @@ import {
   parseFilterRecord,
   TableColumnMap,
   TableFilterPayload,
+  TableSummaryColumn,
 } from '@/common/utils/table-query';
 
 const CREATED_BY_EMAIL_SQL =
@@ -31,9 +32,16 @@ export const TABLE_COLUMNS: TableColumnMap = {
   createdBy: { sql: CREATED_BY_EMAIL_SQL, type: 'text' },
   created_by: { sql: CREATED_BY_EMAIL_SQL, type: 'text' },
   approver: { sql: APPROVER_EMAIL_SQL, type: 'text' },
+  estimatedTotal: { sql: 'h.estimatedTotal', type: 'number' },
+  estimated_total: { sql: 'h.estimatedTotal', type: 'number' },
 };
 
 export const SEARCH_COLUMNS = ['h.requestNo', 'h.title', 'h.branchName'];
+
+/** Cột số được cộng vào `summaries` (tổng toàn bộ dòng khớp bộ lọc). */
+export const SUMMARY_COLUMNS: TableSummaryColumn[] = [
+  { key: 'estimatedTotal', sql: 'h.estimatedTotal' },
+];
 
 /** Chuyển raw filter JSON thành envelope TableFilterPayload cho options query. */
 export function toFilterPayload(raw: unknown): TableFilterPayload {

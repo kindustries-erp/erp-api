@@ -9,6 +9,8 @@ import {
   PurchaseRequestPoDraftDto,
   PurchaseRequestResponseDto,
 } from '@/v2/core/procurement-requests-core/dto/procurement-request-response.dto';
+import { PurchaseRequestListResponseDto } from '@/v2/core/procurement-requests-core/dto/procurement-request-list-response.dto';
+import { toPaginatedResult } from '@/common/utils/paginated-result';
 import { resolveApprovalEmails } from '@/v2/core/approval-core/helpers/approval-people';
 import { remainingPoDraftLinesOf } from '@/v2/core/procurement-requests-core/services/procurement-request-engine.service';
 import { toApprovalEventResponse } from '@/v2/core/approval-core/helpers/approval-event.mapper';
@@ -45,15 +47,20 @@ export class ErpProcurementRequestsService {
     return this.findOne(saved.id);
   }
 
-  async list(dto: ListProcurementRequestsDto) {
+  async list(
+    dto: ListProcurementRequestsDto,
+  ): Promise<PurchaseRequestListResponseDto> {
     const page = dto.page ?? 1;
     const pageSize = dto.pageSize ?? 20;
     const out = await this.query.list(page, pageSize);
     const emailOf = await resolveApprovalEmails(this.actors, out.rows);
-    return {
-      ...out,
-      rows: out.rows.map((h) => toPurchaseRequestResponse(h, [], emailOf)),
-    };
+    return toPaginatedResult(
+      out.rows.map((h) => toPurchaseRequestResponse(h, [], emailOf)),
+      out.page,
+      out.pageSize,
+      out.total,
+      out.summaries,
+    );
   }
 
   async findOne(id: string): Promise<PurchaseRequestResponseDto> {

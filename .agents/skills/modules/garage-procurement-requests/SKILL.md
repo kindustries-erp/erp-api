@@ -87,6 +87,7 @@ Quyền resource: `garage_procurement_requests`. Seed từ `garage_purchase_orde
 ## Response duyệt: khối `approval` (2026-11-08)
 
 - Header PR/PO (list, detail, kết quả transition) trả `approval`: `{ approverId, approverEmail, submit, approve, reject, cancel, close, issue }`. Mỗi bước là `{ by, byEmail, at, reason? }` hoặc `null` khi chưa xảy ra. PR không có `issue`. `reason` chỉ có ở reject/cancel/close.
+- Danh sách (`GET /`) trả `{ items, pagination: { page, pageSize, total, totalPages }, summaries }`. `summaries` = `{ estimatedTotal }`, tính trên toàn bộ dòng khớp bộ lọc trước khi phân trang. Hàng tổng hiển thị ở cột `estimatedTotal` (web). `estimatedTotal` có trong `TABLE_COLUMNS` nên lọc số được.
 - `approverEmail` = người đã duyệt; chưa duyệt thì người được giao (`approvedBy ?? approverId`).
 - Đã bỏ key phẳng (breaking, web đã sửa cùng đợt). PR: `submittedBy, approvedBy, approverId, approverEmail, rejectedBy, rejectReason, cancelReason, closeReason`. PO: `approverId, rejectReason, cancelReason, closeReason`.
 - `closed_by` (migration `20261108130000`) ghi người đóng; tự đóng khi đủ hàng giữ `null`.

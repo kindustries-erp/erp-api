@@ -10,14 +10,14 @@ import { GARAGE_PROCUREMENT_ORDER_PREFIX } from '../procurement-orders-garage.co
 import {
   applyTableFilters,
   applyTableSort,
+  computeTableSummaries,
   findTableColumnOptions,
-  parseFilterRecord,
+  parseListFilterPayload,
   resolveTableColumn,
-  TableDateRange,
-  TableOperatorFilter,
   TableOptionsPage,
 } from '@/common/utils/table-query';
 import {
+  SUMMARY_COLUMNS,
   TABLE_COLUMNS,
   toFilterPayload,
 } from '../constants/procurement-order-table.constants';
@@ -91,20 +91,7 @@ export class GarageProcurementOrderQueryService {
     }
     applyTableFilters(
       qb,
-      {
-        columnFilters: parseFilterRecord<Record<string, string[]>>(
-          filter.column_filters,
-        ),
-        columnSearch: parseFilterRecord<Record<string, string>>(
-          filter.column_search,
-        ),
-        columnOperators: parseFilterRecord<Record<string, TableOperatorFilter>>(
-          filter.column_operators,
-        ),
-        dateRanges: parseFilterRecord<Record<string, TableDateRange>>(
-          filter.date_ranges,
-        ),
-      },
+      parseListFilterPayload(filter),
       TABLE_COLUMNS,
       'filter',
     );
@@ -112,6 +99,8 @@ export class GarageProcurementOrderQueryService {
       sql: 'h.createdAt',
       direction: 'DESC',
     });
+    // Tổng tính trên toàn bộ dòng khớp, nên phải gọi trước khi phân trang
+    const summaries = await computeTableSummaries(qb, SUMMARY_COLUMNS);
     const [rows, total] = await qb
       .skip((filter.page - 1) * filter.pageSize)
       .take(filter.pageSize)
@@ -121,6 +110,7 @@ export class GarageProcurementOrderQueryService {
       total,
       page: filter.page,
       pageSize: filter.pageSize,
+      summaries,
     };
   }
 

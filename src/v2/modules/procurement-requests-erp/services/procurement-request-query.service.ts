@@ -5,6 +5,15 @@ import { ProcurementRequest } from '../entities/procurement-request.entity';
 import { ProcurementRequestLine } from '../entities/procurement-request-line.entity';
 import { ApprovalEvent } from '@/v2/core/approval-core/entities/approval-event.entity';
 import { PURCHASE_REQUEST_DOC_TYPE } from '@/v2/core/procurement-requests-core/contracts/procurement-requests.contract';
+import {
+  computeTableSummaries,
+  TableSummaryColumn,
+} from '@/common/utils/table-query';
+
+/** Cột số được cộng vào `summaries` của danh sách PR erp. */
+const SUMMARY_COLUMNS: TableSummaryColumn[] = [
+  { key: 'estimatedTotal', sql: 'h.estimatedTotal' },
+];
 
 @Injectable()
 export class ProcurementRequestQueryService {
@@ -26,13 +35,17 @@ export class ProcurementRequestQueryService {
   }
 
   async list(page: number, pageSize: number) {
-    const [rows, total] = await this.headers.findAndCount({
-      where: { isDeleted: false },
-      order: { createdAt: 'DESC' },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-    });
-    return { rows, total, page, pageSize };
+    const qb = this.headers
+      .createQueryBuilder('h')
+      .where('h.isDeleted = :notDeleted', { notDeleted: false })
+      .orderBy('h.createdAt', 'DESC');
+    // Tổng tính trên toàn bộ dòng khớp, nên phải gọi trước khi phân trang
+    const summaries = await computeTableSummaries(qb, SUMMARY_COLUMNS);
+    const [rows, total] = await qb
+      .skip((page - 1) * pageSize)
+      .take(pageSize)
+      .getManyAndCount();
+    return { rows, total, page, pageSize, summaries };
   }
 
   async findOne(

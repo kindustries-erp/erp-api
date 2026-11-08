@@ -10,15 +10,15 @@ import {
   applyDateBounds,
   applyTableFilters,
   applyTableSort,
+  computeTableSummaries,
   findTableColumnOptions,
-  parseFilterRecord,
+  parseListFilterPayload,
   resolveTableColumn,
-  TableDateRange,
-  TableOperatorFilter,
   TableOptionsPage,
 } from '@/common/utils/table-query';
 import {
   SEARCH_COLUMNS,
+  SUMMARY_COLUMNS,
   TABLE_COLUMNS,
   toFilterPayload,
 } from '../constants/procurement-request-table.constants';
@@ -56,6 +56,7 @@ export class GarageProcurementRequestQueryService {
     total: number;
     page: number;
     pageSize: number;
+    summaries: Record<string, number>;
   }>;
   async list(
     page: number,
@@ -66,6 +67,7 @@ export class GarageProcurementRequestQueryService {
     total: number;
     page: number;
     pageSize: number;
+    summaries: Record<string, number>;
   }>;
   async list(
     dtoOrPage: ListProcurementRequestsDto | number = 1,
@@ -102,25 +104,7 @@ export class GarageProcurementRequestQueryService {
       );
     }
 
-    applyTableFilters(
-      qb,
-      {
-        columnFilters: parseFilterRecord<Record<string, string[]>>(
-          dto.column_filters,
-        ),
-        columnSearch: parseFilterRecord<Record<string, string>>(
-          dto.column_search,
-        ),
-        columnOperators: parseFilterRecord<Record<string, TableOperatorFilter>>(
-          dto.column_operators,
-        ),
-        dateRanges: parseFilterRecord<Record<string, TableDateRange>>(
-          dto.date_ranges,
-        ),
-      },
-      TABLE_COLUMNS,
-      'filter',
-    );
+    applyTableFilters(qb, parseListFilterPayload(dto), TABLE_COLUMNS, 'filter');
 
     applyDateBounds(qb, 'h.createdAt', dto.date_from, dto.date_to, 'legacy');
 
@@ -129,12 +113,15 @@ export class GarageProcurementRequestQueryService {
       direction: 'DESC',
     });
 
+    // Tổng tính trên toàn bộ dòng khớp, nên phải gọi trước khi phân trang
+    const summaries = await computeTableSummaries(qb, SUMMARY_COLUMNS);
+
     const [rows, total] = await qb
       .skip((page - 1) * pageSize)
       .take(pageSize)
       .getManyAndCount();
 
-    return { rows, total, page, pageSize };
+    return { rows, total, page, pageSize, summaries };
   }
 
   /** Gợi ý danh sách giá trị của một cột cho Popover Filter trên Header bảng V2. */

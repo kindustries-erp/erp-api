@@ -20,6 +20,8 @@ import {
   UpdateProcurementOrderHeaderDto,
 } from './dto/procurement-order.dto';
 import { GarageProcurementOrderResponseDto } from './dto/garage-procurement-order-response.dto';
+import { GarageProcurementOrderListResponseDto } from './dto/garage-procurement-order-list-response.dto';
+import { toPaginatedResult } from '@/common/utils/paginated-result';
 import { toGarageProcurementOrderResponse } from './helpers/garage-procurement-order.mapper';
 import { GarageProcurementOrderCommandService } from './services/procurement-order-command.service';
 import { GarageProcurementOrderFulfilmentService } from './services/procurement-order-fulfilment.service';
@@ -54,7 +56,9 @@ export class GarageProcurementOrdersService {
     return this.findOne(saved.id);
   }
 
-  async list(dto: ListProcurementOrdersDto) {
+  async list(
+    dto: ListProcurementOrdersDto,
+  ): Promise<GarageProcurementOrderListResponseDto> {
     const out = await this.query.list({
       page: dto.page ?? 1,
       pageSize: dto.pageSize ?? 20,
@@ -71,12 +75,13 @@ export class GarageProcurementOrdersService {
       date_ranges: dto.date_ranges,
     });
     const emailOf = await resolveApprovalEmails(this.actors, out.rows);
-    return {
-      ...out,
-      rows: out.rows.map((h) =>
-        toGarageProcurementOrderResponse(h, [], [], emailOf),
-      ),
-    };
+    return toPaginatedResult(
+      out.rows.map((h) => toGarageProcurementOrderResponse(h, [], [], emailOf)),
+      out.page,
+      out.pageSize,
+      out.total,
+      out.summaries,
+    );
   }
 
   async nextNo(date?: string) {

@@ -7,6 +7,14 @@ describe('GarageProcurementRequestQueryService', () => {
   let qb: any;
 
   beforeEach(() => {
+    const aggregate: any = {
+      orderBy: jest.fn().mockReturnThis(),
+      offset: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      getRawOne: jest.fn().mockResolvedValue({ estimatedTotal: 7500000 }),
+    };
     qb = {
       where: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
@@ -14,6 +22,7 @@ describe('GarageProcurementRequestQueryService', () => {
       addOrderBy: jest.fn().mockReturnThis(),
       skip: jest.fn().mockReturnThis(),
       take: jest.fn().mockReturnThis(),
+      clone: jest.fn().mockReturnValue(aggregate),
       getManyAndCount: jest.fn().mockResolvedValue([
         [
           {
@@ -55,6 +64,15 @@ describe('GarageProcurementRequestQueryService', () => {
     expect(qb.andWhere).toHaveBeenCalledWith(expect.any(Brackets));
     expect(result.total).toBe(1);
     expect(result.rows[0].requestNo).toBe('DNM-2026-001');
+  });
+
+  it('tính summaries trên toàn bộ dòng khớp, trước khi phân trang', async () => {
+    const result = await service.list({ page: 2, pageSize: 20 });
+
+    expect(result.summaries).toEqual({ estimatedTotal: 7500000 });
+    const cloneOrder = qb.clone.mock.invocationCallOrder[0];
+    const skipOrder = qb.skip.mock.invocationCallOrder[0];
+    expect(cloneOrder).toBeLessThan(skipOrder);
   });
 
   it('áp dụng lọc theo branchId và status trực tiếp', async () => {

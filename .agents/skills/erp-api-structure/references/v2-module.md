@@ -70,7 +70,7 @@ Lõi `src/v2/core/base-core` (barrel `@/v2/core/base-core`) là chuỗi entity n
 
 | Endpoint | Response |
 | :--- | :--- |
-| `GET /` (list) | `{ items, total, page, pageSize, totalPages, summaries }` |
+| `GET /` (list) | `{ items, pagination: { page, pageSize, total, totalPages }, summaries }` (chuẩn mới, xem bullet dưới) |
 | `GET /:id` | `{ message, data: ResponseDto }` |
 | `POST /` | `{ message, data: ResponseDto }` |
 | `PATCH /:id` | `{ message, data: ResponseDto }` |
@@ -79,6 +79,8 @@ Lõi `src/v2/core/base-core` (barrel `@/v2/core/base-core`) là chuỗi entity n
 
 - **Lọc, sắp xếp, tổng** dùng helper chung `src/common/utils/table-query/` (`applyTableFilters`, `applyTableSort`, `findTableColumnOptions`, `computeTableSummaries`). Whitelist cột sinh từ fieldSpec (`TABLE_COLUMNS`), có cả key camelCase và snake_case. Kiểu cột quyết định toán tử hợp lệ: `text`/`status` (contains, equals, is_empty...), `number` (eq, gt, between...), `date` (eq, before, after, between). Toán tử sai kiểu bị bỏ qua.
 - **`summaries`**: SUM của mọi cột `number`/`decimal` trên toàn bộ dòng khớp bộ lọc (không phân trang). Key là tên trường, khớp `V2Column.key` phía web. Tổng được tính trước khi phân trang.
+- **Phân trang trong object `pagination`** (chuẩn mới, đã áp dụng cho procurement garage và erp): dựng bằng `toPaginatedResult(items, page, pageSize, total, summaries)` (`src/common/utils/paginated-result.ts`), `totalPages = max(1, ceil(total / pageSize))`. DTO list dùng `PaginationMetaDto` (`src/common/dto/pagination-meta.dto.ts`). Gọi `computeTableSummaries` trước `.skip().take()`.
+- **Nợ kỹ thuật**: các module v2 khác (goods-receipts, invoices, business-partners, branches, rbac-roles, tồn kho) còn trả `{ items, total, page, pageSize, totalPages, summaries }` phẳng. Chuyển sang `pagination` là việc riêng, phải đi cùng web (breaking change).
 - **`DTO query`** kế thừa `TableQueryDto` (`src/common/dto/table-query.dto.ts`), gồm `column_filters`, `column_search`, `column_operators`, `date_ranges`, `date_from`, `date_to`, `sort`, `search`.
 - **Route tĩnh** (`column-options`, và `next-code` khi module cần) đặt trước `:id`, nếu không `ParseUUIDPipe` trả 400.
 
