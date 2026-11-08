@@ -1,69 +1,96 @@
 import { Repository } from 'typeorm';
+import { applyListSummaries } from '@/common/utils/table-query';
 import { {{headerEntityName}} } from '../entities/{{headerEntityKebab}}.entity';
 import { Query{{headerEntityName}}Dto } from '../dto/query-{{headerEntityKebab}}.dto';
 import { {{headerEntityName}}QueryService } from './{{headerEntityKebab}}-query.service';
 
+jest.mock('@/common/utils/table-query', () => ({
+  ...jest.requireActual('@/common/utils/table-query'),
+  applyListSummaries: jest.fn(),
+}));
+
 describe('{{headerEntityName}}QueryService', () => {
-  let repo: {
-    createQueryBuilder: jest.Mock;
-    findOne: jest.Mock;
-  };
+  let repo: { createQueryBuilder: jest.Mock; findOne: jest.Mock };
   let qb: {
     where: jest.Mock;
     andWhere: jest.Mock;
-    skip: jest.Mock;
-    take: jest.Mock;
     orderBy: jest.Mock;
     addOrderBy: jest.Mock;
+    skip: jest.Mock;
+    take: jest.Mock;
     getManyAndCount: jest.Mock;
-    clone: jest.Mock;
-    select: jest.Mock;
-    addSelect: jest.Mock;
-    getRawOne: jest.Mock;
   };
   let service: {{headerEntityName}}QueryService;
 
   beforeEach(() => {
+    jest.clearAllMocks();
     qb = {
       where: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
-      skip: jest.fn().mockReturnThis(),
-      take: jest.fn().mockReturnThis(),
       orderBy: jest.fn().mockReturnThis(),
       addOrderBy: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
       getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
-      clone: jest.fn().mockReturnThis(),
-      select: jest.fn().mockReturnThis(),
-      addSelect: jest.fn().mockReturnThis(),
-      getRawOne: jest.fn().mockResolvedValue({ totalAmount_sum: '0' }),
     };
-
     repo = {
       createQueryBuilder: jest.fn().mockReturnValue(qb),
       findOne: jest.fn().mockResolvedValue(null),
     };
+    (applyListSummaries as jest.Mock).mockResolvedValue({});
 
     service = new {{headerEntityName}}QueryService(
       repo as unknown as Repository<{{headerEntityName}}>,
     );
   });
 
-  it('filters active rows with isDeleted = false', async () => {
-    const dto: Query{{headerEntityName}}Dto = { page: 1, pageSize: 20 };
-    await service.findAll(dto);
-    expect(qb.where).toHaveBeenCalledWith('voucher.isDeleted = :isDeleted', {
-      isDeleted: false,
-    });
+  it('filters active rows with isDeleted = false and paginates', async () => {
+    const dto: Query{{headerEntityName}}Dto = { page: 2, pageSize: 10 };
+    const result = await service.findAll(dto);
+
+    expect(qb.where).toHaveBeenCalledWith('e.isDeleted = :isDeleted', { isDeleted: false });
+    expect(qb.skip).toHaveBeenCalledWith(10);
+    expect(qb.take).toHaveBeenCalledWith(10);
+    expect(result).toMatchObject({ items: [], total: 0, page: 2, pageSize: 10, summaries: {} });
   });
 
-  it('eager loads lines on findById', async () => {
-    await service.findById('sample-id');
-    expect(repo.findOne).toHaveBeenCalledWith(
+  it('orders by createdAt DESC with e.id as tie-breaker when no sort is given', async () => {
+    await service.findAll({} as Query{{headerEntityName}}Dto);
+
+    expect(qb.orderBy).toHaveBeenCalledWith('e.createdAt', 'DESC');
+    expect(qb.addOrderBy).toHaveBeenCalledWith('e.id', 'ASC');
+  });
+
+  it('computes summaries via the shared helper before paging, with e.id as tie-breaker', async () => {
+    const metric = { total: 9, pageSubtotal: 4, cumulative: 9 };
+    (applyListSummaries as jest.Mock).mockResolvedValue({ totalAmount: metric });
+
+    const result = await service.findAll({
+      page: 3,
+      pageSize: 10,
+      summary_keys: 'totalAmount',
+    } as Query{{headerEntityName}}Dto);
+
+    expect(applyListSummaries).toHaveBeenCalledWith(
+      qb,
       expect.objectContaining({
-        where: { id: 'sample-id', isDeleted: false },
-        relations: ['lines'],
+        keys: ['totalAmount'],
+        page: 3,
+        pageSize: 10,
+        tieBreaker: 'e.id',
       }),
     );
+    expect(result.summaries).toEqual({ totalAmount: metric });
+  });
+
+  it('finds an active row by id and eager loads lines', async () => {
+    repo.findOne.mockResolvedValue({ id: 'sample-id' });
+
+    await expect(service.findById('sample-id')).resolves.toEqual({ id: 'sample-id' });
+    expect(repo.findOne).toHaveBeenCalledWith({
+      where: { id: 'sample-id', isDeleted: false },
+      relations: ['lines'],
+      order: { lines: { lineNo: 'ASC' } },
+    });
   });
 });
-

@@ -57,11 +57,11 @@ describe('{{moduleClass}}Service (Facade)', () => {
     const entity = {
       id: 'id-1',
       receiptNo: '{{voucherPrefix}}-001',
-      receiptDate: '2026-01-01',
+      receiptDate: new Date('2026-01-01'),
       totalAmount: '0',
       status: 'DRAFT',
       paymentStatus: 'UNPAID',
-    } as {{headerEntityName}};
+    } as unknown as {{headerEntityName}};
     command.create.mockResolvedValue(entity);
 
     const res = await service.create({} as any);
