@@ -27,7 +27,7 @@ describe('{{moduleClass}}Service (Facade)', () => {
         total: 0,
         page: 1,
         pageSize: 20,
-        summaries: {},
+        summaries: { totalAmount: { total: 0, pageSubtotal: 0, cumulative: 0 } },
       }),
       findById: jest.fn(),
       findColumnOptions: jest.fn(),
