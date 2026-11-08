@@ -1,6 +1,6 @@
 ---
 name: garage-procurement-requests
-description: Module tri thức Đề nghị mua (Purchase Request) họ Garage trong erp-api. Chứa bảng erp_garage_proc_requests / erp_garage_proc_request_lines (có branch_id, branch_name), vòng đời duyệt giống họ thường, tiền tố số GDNM, quyền garage_procurement_requests, endpoint và cổng liên kết PO Garage.
+description: Module tri thức Đề nghị mua (Purchase Request) họ Garage trong erp-api. Chứa bảng proc_requests_garage / proc_request_lines_garage (có branch_id, branch_name), vòng đời duyệt giống họ thường, tiền tố số GDNM, quyền garage_procurement_requests, endpoint và cổng liên kết PO Garage.
 ---
 
 # Module Tri Thức: Đề nghị mua (Garage)
@@ -9,7 +9,7 @@ Module `src/v2/modules/procurement-requests-garage`. Dùng chung lõi `src/v2/co
 
 ## 1. Database
 
-- Bảng `erp_garage_proc_requests` (header) và `erp_garage_proc_request_lines` (dòng, FK `request_id` ON DELETE CASCADE).
+- Bảng `proc_requests_garage` (header) và `proc_request_lines_garage` (dòng, FK `request_id` ON DELETE CASCADE).
 - Migration: `20261105101000-CreateGarageProcurementTables.ts`.
 - Cột giống họ thường (xem [`erp-procurement-requests`](../erp-procurement-requests/SKILL.md) mục 1), cộng thêm:
   - Header: `branch_id` (uuid), `branch_name`.
@@ -78,7 +78,7 @@ Quyền resource: `garage_procurement_requests`. Seed từ `garage_purchase_orde
 ## 11. Khóa duyệt và chọn người duyệt (2026-11-06)
 
 - Khóa bật/tắt nằm ở BE, không có UI: bảng `erp_approval_settings`, `doc_type = GARAGE_PROCUREMENT_REQUEST`, mặc định **bật**. Đọc: `GET /api/v2/approval-config/garage-procurement-requests/setting` (đăng nhập là đọc được). Đổi: `PATCH` cùng path (quyền `admin_users:update`).
-- Khóa **bật**: `POST /:id/submit` nhận body `{ approverId }` (bắt buộc). Người duyệt phải ACTIVE, có `APPROVE` và `REJECT` trên `garage_procurement_requests`, khác người gửi. Lưu `approver_id` (cột mới trên `erp_garage_proc_requests`). Chỉ đúng người đó approve/reject được, người khác nhận 403. Recall/reject về DRAFT xóa `approver_id`.
+- Khóa **bật**: `POST /:id/submit` nhận body `{ approverId }` (bắt buộc). Người duyệt phải ACTIVE, có `APPROVE` và `REJECT` trên `garage_procurement_requests`, khác người gửi. Lưu `approver_id` (cột mới trên `proc_requests_garage`). Chỉ đúng người đó approve/reject được, người khác nhận 403. Recall/reject về DRAFT xóa `approver_id`.
 - Khóa **tắt**: submit tự duyệt trong cùng transaction, ghi event `AUTO_APPROVED`, không cần người duyệt.
 - Danh sách người duyệt: `GET /api/v2/approval-config/garage-procurement-requests/approvers` (loại người đang gọi).
 - Logic dùng chung ở `src/v2/core/approval-core` (`approval-gate.helper.ts`, `approval-settings.service.ts`, `approver-directory.service.ts`); module chỉ khai báo `docType` và resource.

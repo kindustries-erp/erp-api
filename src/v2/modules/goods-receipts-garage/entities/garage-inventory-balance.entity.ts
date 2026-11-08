@@ -7,7 +7,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
-@Entity('erp_garage_inventory_balances')
+@Entity('inventory_balances_garage')
 export class GarageInventoryBalance {
   @PrimaryGeneratedColumn('uuid')
   id: string;

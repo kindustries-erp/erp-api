@@ -31,7 +31,7 @@ description: Lõi v2 nhập / xuất / điều chỉnh kho dùng chung (sổ s�
 - Mọi cộng/trừ tồn chạy trong transaction của chứng từ, sau khi đã khóa header.
 - Phương pháp giá vốn khai báo ở cấu hình ledger (`INVENTORY_MOVEMENTS_GARAGE_LEDGER`: `WEIGHTED_AVG`), không đổi theo request. Đổi phương pháp khi đã có số dư là sai số tồn cũ.
 - Đảo phiếu (`cancel`) không xóa bút toán gốc; chỉ ghi thêm `*_CANCEL`.
-- Bảng mới không có tiền tố `erp_`. Bảng nhập garage cũ (`erp_garage_*`, module `goods-receipts-garage`) **không** được đổi và **không** nằm trong sổ này: tồn garage cũ và tồn garage mới là hai nguồn riêng cho tới khi có bước hợp nhất.
+- Bảng mới không có tiền tố `erp_`. Bảng nhập garage (module `goods-receipts-garage`) đã đổi tên sang `goods_receipts_garage`, `goods_receipt_lines_garage`, `inventory_balances_garage` (migration `20261108100000`), vẫn **không** nằm trong sổ này: tồn garage cũ và tồn garage mới là hai nguồn riêng cho tới khi có bước hợp nhất.
 - Tên bảng, `docType` (`GARAGE_STOCK_*`) và giá trị resource RBAC (`garage_stock_*`) đã lưu dữ liệu, không đổi theo tên module.
 
 ## 3. Thứ tự đọc khi sửa

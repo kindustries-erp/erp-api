@@ -1,7 +1,7 @@
 import { Column, Entity, Index } from 'typeorm';
 import { BaseProcurementOrderEntity } from '@/v2/core/procurement-orders-core/entities/base-procurement-order.entity';
 
-@Entity('erp_garage_proc_orders')
+@Entity('proc_orders_garage')
 export class GarageProcurementOrder extends BaseProcurementOrderEntity {
   @Index()
   @Column({ type: 'uuid', name: 'branch_id', nullable: true })

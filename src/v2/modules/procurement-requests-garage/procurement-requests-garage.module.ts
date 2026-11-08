@@ -26,7 +26,7 @@ const GarageProcurementRequestApprovalConfigController =
     tag: 'procurement_requests',
   });
 
-/** Module đề nghị mua thường (bảng erp_garage_proc_requests). Lõi nằm ở src/v2/core/procurement-requests. */
+/** Module đề nghị mua thường (bảng proc_requests_garage). Lõi nằm ở src/v2/core/procurement-requests. */
 @Module({
   imports: [
     TypeOrmModule.forFeature([

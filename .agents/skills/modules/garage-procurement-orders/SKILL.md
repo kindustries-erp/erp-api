@@ -1,6 +1,6 @@
 ---
 name: garage-procurement-orders
-description: Module tri thức Đơn mua (Procurement Order, PO) họ Garage trong erp-api. Chứa bảng erp_garage_proc_orders / lines / acceptances (có branch_id, branch_name), vòng đời DRAFT → ISSUED → CLOSED, giao nhận GOODS, nghiệm thu SERVICE, tiền tố GDMH, quyền garage_procurement_orders và cổng liên kết PR Garage.
+description: Module tri thức Đơn mua (Procurement Order, PO) họ Garage trong erp-api. Chứa bảng proc_orders_garage / lines / acceptances (có branch_id, branch_name), vòng đời DRAFT → ISSUED → CLOSED, giao nhận GOODS, nghiệm thu SERVICE, tiền tố GDMH, quyền garage_procurement_orders và cổng liên kết PR Garage.
 ---
 
 # Module Tri Thức: Đơn mua (Garage)
@@ -9,7 +9,7 @@ Module `src/v2/modules/procurement-orders-garage`. Dùng chung lõi `src/v2/core
 
 ## 1. Database
 
-- `erp_garage_proc_orders` (header), `erp_garage_proc_order_lines` (dòng, FK `order_id`), `erp_garage_proc_order_acceptances` (nghiệm thu, FK `order_id`, `order_line_id`).
+- `proc_orders_garage` (header), `proc_order_lines_garage` (dòng, FK `order_id`), `proc_order_acceptances_garage` (nghiệm thu, FK `order_id`, `order_line_id`).
 - Migration: `20261105101000-CreateGarageProcurementTables.ts`.
 - Cột giống họ thường (xem [`erp-procurement-orders`](../erp-procurement-orders/SKILL.md) mục 1), cộng `branch_id`, `branch_name` trên header.
 - CHECK giống họ thường.
@@ -58,7 +58,7 @@ Quyền resource: `garage_procurement_orders`. Seed từ `garage_purchase_orders
 
 - Khóa BE, không có UI, `doc_type = GARAGE_PROCUREMENT_ORDER`, mặc định **tắt** (migration `20261106120000-SetGarageProcurementOrderApprovalOff`). Đọc: `GET /api/v2/approval-config/garage-procurement-orders/setting`. Đổi: `PATCH` cùng path (quyền `admin_users:update`).
 - Khóa **tắt**: submit tự duyệt (`AUTO_APPROVED`) và vẫn chốt `approved_total`. Người dùng không chọn người duyệt.
-- Khóa **bật**: `POST /:id/submit` nhận `{ approverId }` bắt buộc; chỉ người đó approve/reject (403 nếu khác); lưu `approver_id` trên `erp_garage_proc_orders`. Quy tắc giống đề nghị Garage (mục 11 bên đó).
+- Khóa **bật**: `POST /:id/submit` nhận `{ approverId }` bắt buộc; chỉ người đó approve/reject (403 nếu khác); lưu `approver_id` trên `proc_orders_garage`. Quy tắc giống đề nghị Garage (mục 11 bên đó).
 - Danh sách người duyệt: `GET /api/v2/approval-config/garage-procurement-orders/approvers`.
 - Migration bật khóa: `20261106110000-AddApprovalSettingsAndApprover.ts`; đổi mặc định PO: `20261106120000-SetGarageProcurementOrderApprovalOff.ts`.
 

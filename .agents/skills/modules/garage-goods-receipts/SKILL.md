@@ -1,6 +1,6 @@
 ---
 name: garage-goods-receipts
-description: Module tri thức Quản lý Nhập kho và Quản lý kho Garage (Garage Goods Receipts & Inventory) trong erp-api (v2/modules/goods-receipts-garage) và erp-web. Chứa database schema (erp_garage_goods_receipts, erp_garage_goods_receipt_lines, erp_garage_inventory_balances), DTOs, API endpoints, logic ghi sổ POSTED (tăng tồn kho), logic hủy CANCELLED (giảm hoàn tồn kho), và kiến trúc Web V2 theo chuẩn Atomic Design.
+description: Module tri thức Quản lý Nhập kho và Quản lý kho Garage (Garage Goods Receipts & Inventory) trong erp-api (v2/modules/goods-receipts-garage) và erp-web. Chứa database schema (goods_receipts_garage, goods_receipt_lines_garage, inventory_balances_garage), DTOs, API endpoints, logic ghi sổ POSTED (tăng tồn kho), logic hủy CANCELLED (giảm hoàn tồn kho), và kiến trúc Web V2 theo chuẩn Atomic Design.
 ---
 
 # 🏬 Module Tri Thức: Nhập Kho & Quản Lý Kho Garage (Garage Goods Receipts & Inventory)
@@ -13,9 +13,9 @@ Các nghiệp vụ trọng tâm:
 - **Lập phiếu nhập kho Garage**: Nhập thông tin nhà cung cấp, ngày nhập kho, chi nhánh tiếp nhận, ghi chú và danh sách phụ tùng chi tiết (Mã SKU, tên phụ tùng, đơn vị tính, số lượng, đơn giá, thành tiền).
 - **Trạng thái phiếu**:
   - `DRAFT`: Phiếu nháp, có thể chỉnh sửa chi tiết phụ tùng hoặc xóa phiếu.
-  - `POSTED`: Đã ghi sổ nhập kho. Tự động cộng dồn số lượng phụ tùng vào số dư tồn kho Garage (`erp_garage_inventory_balances`). Không thể chỉnh sửa trực tiếp.
+  - `POSTED`: Đã ghi sổ nhập kho. Tự động cộng dồn số lượng phụ tùng vào số dư tồn kho Garage (`inventory_balances_garage`). Không thể chỉnh sửa trực tiếp.
   - `CANCELLED`: Hủy phiếu nhập kho đã ghi sổ. Tự động trừ hoàn trả số lượng đã tăng trong số dư tồn kho Garage.
-- **Quản lý Tồn kho Garage (`erp_garage_inventory_balances`)**: Theo dõi số lượng tồn kho phụ tùng (`item_code`) theo từng chi nhánh (`branch_id`).
+- **Quản lý Tồn kho Garage (`inventory_balances_garage`)**: Theo dõi số lượng tồn kho phụ tùng (`item_code`) theo từng chi nhánh (`branch_id`).
 
 ---
 
@@ -24,7 +24,7 @@ Các nghiệp vụ trọng tâm:
 > [!NOTE]
 > Trong mã nguồn TypeScript, `GarageGoodsReceipt` kế thừa từ `BaseGoodsReceiptEntity` và `GarageGoodsReceiptLine` kế thừa từ `BaseGoodsReceiptLineEntity` (tại `@/v2/core/goods-receipts-core/entities/`), giúp tái sử dụng toàn bộ schema cột chung trong khi tên bảng PostgreSQL và index vẫn duy trì độc lập hoàn toàn.
 
-### Bảng `erp_garage_goods_receipts` (Header)
+### Bảng `goods_receipts_garage` (Header)
 | Cột | Kiểu dữ liệu | Nullable | Default | Mô tả |
 | :--- | :--- | :--- | :--- | :--- |
 | `id` | `uuid` | NO | `gen_random_uuid()` | Khóa chính (PK) |
@@ -43,11 +43,11 @@ Các nghiệp vụ trọng tâm:
 | `updated_at` | `timestamptz` | NO | `now()` | Thời điểm cập nhật |
 | `deleted_at` | `timestamptz` | YES | `NULL` | Thời điểm xóa mềm |
 
-### Bảng `erp_garage_goods_receipt_lines` (Detail Lines)
+### Bảng `goods_receipt_lines_garage` (Detail Lines)
 | Cột | Kiểu dữ liệu | Nullable | Default | Mô tả |
 | :--- | :--- | :--- | :--- | :--- |
 | `id` | `uuid` | NO | `gen_random_uuid()` | Khóa chính (PK) |
-| `receipt_id` | `uuid` | NO | — | FK trỏ về `erp_garage_goods_receipts.id` (CASCADE) |
+| `receipt_id` | `uuid` | NO | — | FK trỏ về `goods_receipts_garage.id` (CASCADE) |
 | `item_code` | `varchar(100)` | NO | — | Mã phụ tùng (SKU) |
 | `item_name` | `varchar(255)` | NO | — | Tên phụ tùng |
 | `unit` | `varchar(50)` | YES | `'Cái'` | Đơn vị tính |
@@ -58,7 +58,7 @@ Các nghiệp vụ trọng tâm:
 | `created_at` | `timestamptz` | NO | `now()` | Thời điểm tạo |
 | `updated_at` | `timestamptz` | NO | `now()` | Thời điểm cập nhật |
 
-### Bảng `erp_garage_inventory_balances` (Số Dư Kho Garage)
+### Bảng `inventory_balances_garage` (Số Dư Kho Garage)
 | Cột | Kiểu dữ liệu | Nullable | Default | Mô tả |
 | :--- | :--- | :--- | :--- | :--- |
 | `id` | `uuid` | NO | `gen_random_uuid()` | Khóa chính (PK) |
@@ -106,12 +106,12 @@ Các nghiệp vụ trọng tâm:
 
 ### Kế thừa V2 Core Base Voucher Engine
 Module `garage-goods-receipts` (`src/v2/modules/goods-receipts-garage/`) sử dụng cơ chế **Mô hình 2 (Bảng DB riêng biệt, Kế thừa Engine ở Tầng Code)**:
-- **DB riêng biệt**: Dùng các bảng `erp_garage_goods_receipts`, `erp_garage_goods_receipt_lines` và `erp_garage_inventory_balances`.
+- **DB riêng biệt**: Dùng các bảng `goods_receipts_garage`, `goods_receipt_lines_garage` và `inventory_balances_garage`.
 - **Tái sử dụng Engine từ V2 Core**: Inject `BaseVoucherEngineService` từ `src/v2/core/goods-receipts-core/`:
   - `generateDailyReceiptNo`: Tự động sinh mã `GGR-YYYYMMDD-XXX`.
   - `sumLineAmounts`: Tính tổng tiền chi tiết từ các dòng hàng.
   - `validateVoucherTransition`: Xác thực chuyển trạng thái DRAFT -> POSTED -> CANCELLED và chặn sửa/xóa khi không hợp lệ.
-  - Chiến lược cập nhật kho chuyên biệt: Tự động cập nhật số dư tồn kho phụ tùng xưởng vào `erp_garage_inventory_balances`.
+  - Chiến lược cập nhật kho chuyên biệt: Tự động cập nhật số dư tồn kho phụ tùng xưởng vào `inventory_balances_garage`.
 
 ### Phân quyền RBAC
 - **Migration**: `SeedGarageGoodsReceiptsPermissions20261103085000` tự động sao chép các quyền READ, CREATE, UPDATE, DELETE từ resource `garage` sang `garage_goods_receipts`.

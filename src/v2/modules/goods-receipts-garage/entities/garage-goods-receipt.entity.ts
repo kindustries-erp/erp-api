@@ -2,7 +2,7 @@ import { Column, Entity, Index, OneToMany, type Relation } from 'typeorm';
 import { BaseGoodsReceiptEntity } from '@/v2/core/goods-receipts-core/entities/base-goods-receipt.entity';
 import type { GarageGoodsReceiptLine } from './garage-goods-receipt-line.entity';
 
-@Entity('erp_garage_goods_receipts')
+@Entity('goods_receipts_garage')
 export class GarageGoodsReceipt extends BaseGoodsReceiptEntity {
   @Index()
   @Column({
