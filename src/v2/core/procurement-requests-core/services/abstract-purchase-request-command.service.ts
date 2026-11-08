@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { nextDocumentNo } from '../../../../common/numbering/document-numbering';
 import {
   DataSource,
@@ -101,6 +101,13 @@ export abstract class AbstractPurchaseRequestCommandService<
       const from = header.status as PurchaseRequestStatus;
       const mode = await loadApprovalMode(manager, this.docType);
 
+      if (
+        action === 'submit' &&
+        header.createdBy &&
+        header.createdBy !== actor.id
+      ) {
+        throw new ForbiddenException('Chỉ người tạo mới được gửi duyệt');
+      }
       if (PURCHASE_REQUEST_ACTIONS_REQUIRING_APPROVER.includes(action)) {
         assertNotSelfApproval(actor.id, header.createdBy);
         assertCanDecide(header.approverId, actor.id);
