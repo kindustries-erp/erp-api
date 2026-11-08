@@ -1,0 +1,100 @@
+---
+name: garage-procurement-orders
+description: Module tri thức Đơn mua (Procurement Order, PO) họ Garage trong erp-api. Chứa bảng proc_orders_garage / lines / acceptances (có branch_id, branch_name), vòng đời DRAFT → ISSUED → CLOSED, giao nhận GOODS, nghiệm thu SERVICE, tiền tố GDMH, quyền garage_procurement_orders và cổng liên kết PR Garage.
+---
+
+# Module Tri Thức: Đơn mua (Garage)
+
+Module `src/v2/modules/procurement-orders-garage`. Dùng chung lõi `src/v2/core/procurement-orders-core` với họ thường. Khác biệt: bảng, quyền, tiền tố `GDMH`, chi nhánh, route, và cổng liên kết PR Garage.
+
+## 1. Database
+
+- `proc_orders_garage` (header), `proc_order_lines_garage` (dòng, FK `order_id`), `proc_order_acceptances_garage` (nghiệm thu, FK `order_id`, `order_line_id`).
+- Migration: `20261105101000-CreateGarageProcurementTables.ts`.
+- Cột giống họ thường (xem [`erp-procurement-orders`](../erp-procurement-orders/SKILL.md) mục 1), cộng `branch_id`, `branch_name` trên header.
+- CHECK giống họ thường.
+
+## 2. Vòng đời
+
+Giống họ thường: DRAFT, PENDING_APPROVAL, APPROVED, ISSUED, CLOSED, CANCELLED. Các quy tắc submit, approve (chốt `approved_total`), reject, recall, issue, cancel, close giữ nguyên. `fulfillment_status` suy ra từ dòng.
+
+- `approve`/`reject` cần `APPROVE`/`REJECT`, chặn tự duyệt.
+- Nhật ký `erp_approval_events` với `doc_type = GARAGE_PROCUREMENT_ORDER`.
+- Số phiếu: tiền tố `GDMH`.
+
+## 3. Giao nhận và nghiệm thu
+
+- GOODS: `POST :id/receipts` (`applyGoodsReceipt`), từ chối SERVICE, PO phải ISSUED.
+- SERVICE: `POST :id/acceptances`, hủy bằng `POST :id/acceptances/:acceptanceId/void` (cần lý do, đánh dấu `is_voided`).
+- Giống họ thường, `receipts` là endpoint tạm chờ module phiếu nhập kho Garage.
+
+## 4. Chi nhánh
+
+- `POST`: `branchId` **tùy chọn** (bỏ trống được). `GET /` lọc theo `branchId` nếu có.
+- Đơn có PR nguồn (`request_id`): chi nhánh đơn phải khớp chi nhánh PR, kể cả cùng trống. Kiểm tra ở `POST` (`assertRequestSameBranch`, so sánh có xử lý null) và ở `PATCH` khi có đổi `branchId`.
+- `PATCH /:id` nhận `branchId` (nullable) và `branchName` (nullable) khi còn DRAFT. Gửi `null` để bỏ trống.
+
+## 5. Liên kết PR Garage
+
+- Tạo PO từ đề nghị Garage (`request_id`, `request_line_id`). Đề nghị phải APPROVED, cùng họ Garage, không vượt phần còn lại.
+- Cổng `GARAGE_PROCUREMENT_REQUEST_LINK` cài bởi `GarageProcurementRequestLinkAdapter` (`services/garage-procurement-request-link.adapter.ts`), trỏ vào `GarageProcurementRequestOrderingService` của module `garage-procurement-requests`.
+
+## 6. Endpoint (`/api/v2/garage-procurement-orders`)
+
+Cùng bộ endpoint họ thường: `POST /`, `GET /`, `GET /:id`, `GET /:id/approval-events`, `PATCH /:id/lines`, `POST` cho submit, recall, approve, reject, issue, cancel, close, receipts, acceptances, và void.
+
+Quyền resource: `garage_procurement_orders`. Seed từ `garage_purchase_orders` (quyền cũ đã gỡ ở migration `20261106100000`).
+
+## 7. Tests
+
+`procurement-order.controller.spec.ts` (RBAC), `procurement-order.di.spec.ts` (DI cổng `GARAGE_PROCUREMENT_REQUEST_LINK`).
+
+## Liên quan
+
+- Đề nghị Garage: [`garage-procurement-requests`](../garage-procurement-requests/SKILL.md)
+- Họ thường: [`erp-procurement-orders`](../erp-procurement-orders/SKILL.md)
+
+## 12. Khóa duyệt và chọn người duyệt (2026-11-06)
+
+- Khóa BE, không có UI, `doc_type = GARAGE_PROCUREMENT_ORDER`, mặc định **tắt** (migration `20261106120000-SetGarageProcurementOrderApprovalOff`). Đọc: `GET /api/v2/approval-config/garage-procurement-orders/setting`. Đổi: `PATCH` cùng path (quyền `admin_users:update`).
+- Khóa **tắt**: submit tự duyệt (`AUTO_APPROVED`) và vẫn chốt `approved_total`. Người dùng không chọn người duyệt.
+- Khóa **bật**: `POST /:id/submit` nhận `{ approverId }` bắt buộc; chỉ người đó approve/reject (403 nếu khác); lưu `approver_id` trên `proc_orders_garage`. Quy tắc giống đề nghị Garage (mục 11 bên đó).
+- Danh sách người duyệt: `GET /api/v2/approval-config/garage-procurement-orders/approvers`.
+- Migration bật khóa: `20261106110000-AddApprovalSettingsAndApprover.ts`; đổi mặc định PO: `20261106120000-SetGarageProcurementOrderApprovalOff.ts`.
+
+## 8. Cập nhật 2026-11-05: sửa nháp, xóa, thanh toán, GR
+
+- Migration `20261105103000-AddPaymentFieldsToGarageProcOrders`: `payment_status varchar(50) NOT NULL DEFAULT 'UNPAID'` (có chỉ mục) và `supplier_invoice_no varchar(100) NULL`. Chưa có luồng ghi `payment_status`; chỉ hiển thị.
+- Endpoint mới: `PATCH /:id` (sửa đầu đơn khi DRAFT, `UpdateProcurementOrderHeaderDto`), `DELETE /:id` (xóa mềm nháp, trả số lượng đã giữ trên PR), `GET /next-no`, `GET /column-options`.
+- `GET /` lọc thêm `status`, `supplierId`, `dateFrom`, `dateTo`, `search` (số đơn hoặc tên NCC).
+- Response có `branchId`, `branchName`, `paymentStatus`, `supplierInvoiceNo`, `createdBy`, `issuedAt`, `acceptances`.
+- Quyền duyệt: `approve`/`reject` đã seed cho vai trò có `update` trên `garage_procurement_orders` (migration `20261105104000-SeedGarageProcurementApprovalPermissions`).
+- Phiếu nhập kho Garage nối PO: `GarageGoodsReceiptCommandService.post` gọi `applyGoodsReceipt`, `cancel` gọi `revertGoodsReceipt` trong cùng transaction. Xem [`garage-goods-receipts`](../garage-goods-receipts/SKILL.md) mục nối PO.
+- Rủi ro còn lại: `POST :id/receipts` vẫn cộng số đã nhận. Dùng song song với phiếu nhập có thể cộng trùng. Chưa chặn.
+
+## 9. Cập nhật 2026-11-05: bỏ nhận hàng trực tiếp trên PO
+
+- Đã gỡ `POST /api/v2/garage-procurement-orders/:id/receipts` và `ReceiveGoodsDto`. Nhận hàng GOODS chỉ qua phiếu nhập kho (GR) `post`; hủy GR đã post hoàn số đã nhận.
+- Nghiệm thu dịch vụ (`acceptances`) không đổi.
+- `erp-procurement-orders` (luồng thường) vẫn giữ `receipts` vì chưa nối GR.
+
+## 10. Xóa mềm và xóa cứng (2026-11-05)
+
+- `DELETE /api/v2/garage-procurement-orders/:id`: xóa mềm nháp, trả SL giữ về PR nguồn. Quyền `DELETE`.
+- `DELETE /api/v2/garage-procurement-orders/:id/permanent`: xóa cứng nháp, trả SL giữ về PR nguồn trước khi xóa. Quyền `PURGE` (chỉ admin). Chặn khi còn phiếu nhập tham chiếu, kể cả phiếu đã hủy (khóa ngoại RESTRICT). Xóa dòng rồi đầu đơn; nghiệm thu đi theo dòng (CASCADE); lịch sử duyệt được giữ.
+- Chính sách và điều kiện chung: `.agents/workflows/api-structure.md` mục "Chính sách xóa".
+
+## 11. Lọc cột và gợi ý giá trị (2026-11-05)
+
+- `GET /api/v2/garage-procurement-orders/column-options?column&search&page&pageSize&filters`: trả `{ items, total, next }` (cùng contract với `garage-procurement-requests`). Cột ngoài whitelist trả rỗng. Nguồn cột: `constants/procurement-order-table.constants.ts` (`TABLE_COLUMNS`), khớp `key` của `procurementOrderColumns` phía web.
+- `GET /` nhận thêm `sort`, `column_filters`, `column_search`, `column_operators`, `date_ranges` (từ `TableQueryDto`). Sắp xếp mặc định `createdAt DESC`.
+- Lỗi đã sửa: endpoint trước đây trả `{ columns }`, khiến web crash `reading 'value'` khi mở popup lọc cột.
+- `createdBy` (uuid) được lọc, sắp xếp và gợi ý theo **email** từ `core_users` (subquery trong `TABLE_COLUMNS`). Danh sách trả thêm `createdByEmail` (tra một lần cho cả trang qua `helpers/resolve-created-by-email.ts`). Chi tiết (`findOne`) không có `createdByEmail`. Không đổi schema.
+
+## extraData (JSON tùy biến, 2026-11-08)
+
+- **DB**: cột `extra_data jsonb NOT NULL DEFAULT '{}'` (CHECK: object) trên: `proc_orders_garage`, `proc_order_lines_garage`, `proc_order_acceptances_garage`. Migration `20261108120000-add-extra-data-to-v2-tables.ts`. Dữ liệu cũ là `{}`.
+- **DTO**: field `extraData?: Record<string, unknown>` (`@ExtraDataField()`, base-core). Không gửi thì không đổi.
+- **Ghi**: tạo mặc định `{}`. Sửa header merge cấp 1 (`null` xóa key). Dòng chứng từ ghi theo payload, không merge.
+- **Giới hạn**: 16 KB, sâu 5 cấp, key ≤ 64 ký tự, cấm `__proto__`/`constructor`/`prototype` (400 qua `RejectUnsafeExtraDataPipe` và service).
+- **Response**: luôn có `extraData` (object).

@@ -1,13 +1,13 @@
 ---
 name: goods-receipts-core
-description: Module tri thức Nền tảng Chứng Từ Nhập Kho & Base Voucher Engine V2 (goods-receipts-core) trong erp-api (v2/core/goods-receipts). Chứa các hợp đồng chuẩn (IVoucherHeader, IVoucherLine, IStockMovementStrategy), BaseVoucherEngineService (sinh mã tăng dần theo ngày, máy trạng thái DRAFT/POSTED/CANCELLED, tính tổng dòng hàng), và generator PlopJS api-voucher-v2.
+description: Module tri thức Nền tảng Chứng Từ Nhập Kho & Base Voucher Engine V2 (goods-receipts-core) trong erp-api (v2/core/goods-receipts-core). Chứa các hợp đồng chuẩn (IVoucherHeader, IVoucherLine, IStockMovementStrategy), BaseVoucherEngineService (sinh mã tăng dần theo ngày, máy trạng thái DRAFT/POSTED/CANCELLED, tính tổng dòng hàng), và generator PlopJS api-voucher-v2.
 ---
 
 # 📦 Module Tri Thức: V2 Goods Receipts Core & Base Voucher Engine
 
 ## 1. Tổng quan Kiến trúc
 
-Phân hệ `src/v2/core/goods-receipts/` đóng vai trò là **Nền tảng Xử lý Chứng từ Dùng Chung (Base Voucher Engine)** cho toàn bộ hệ thống ERP V2. 
+Phân hệ `src/v2/core/goods-receipts-core/` đóng vai trò là **Nền tảng Xử lý Chứng từ Dùng Chung (Base Voucher Engine)** cho toàn bộ hệ thống ERP V2. 
 
 Module cung cấp các giải pháp nền tảng cho mô hình **Master-Detail (Header + Detail Lines)**:
 - **Base Contracts & Interfaces**: Khung chuẩn cho Header (`IVoucherHeader`), Dòng hàng (`IVoucherLine`), và Chiến lược vận động kho (`IStockMovementStrategy`).

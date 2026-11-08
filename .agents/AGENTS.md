@@ -10,8 +10,9 @@ Source of truth for this repo (`./erp-api`).
 
 ### 1. API Auto-TDD (Test Driven)
 
-- After creating or modifying a core function, service, controller, or critical logic, you **MUST** generate a corresponding `.spec.ts` file.
-- The unit test must cover the happy path and any obvious edge cases.
+- After creating or modifying a service or logic with business rules (tiền, công nợ, tồn kho, khóa `pessimistic_write`, trạng thái chứng từ), you **MUST** generate or update a corresponding `.spec.ts` file covering the happy path and obvious edge cases.
+- Luồng nghiệp vụ nhiều bước (netoff hóa đơn, voucher tồn kho, giao dịch có QueryRunner) ưu tiên **integration spec** (`*.integration.spec.ts`) bên cạnh unit spec. Mẫu: `src/erp-invoices-core/services/invoice-netoff-decoupling.integration.spec.ts`, `src/inventory-core/services/inventory-voucher-flow.integration.spec.ts`.
+- Controller mỏng (chỉ parse và gọi service) và CRUD đơn giản không bắt buộc spec riêng; phải có test khi thêm logic.
 
 ### 2. API Contract DB-First
 
@@ -65,13 +66,14 @@ Source of truth for this repo (`./erp-api`).
 - before commit/push, `cd` into the repo root (`./erp-api`)
 - **Strict Git Workflow**: You MUST follow the exact commit/push sequence defined below (test -> commit -> pull --rebase -> check:ci -> push, theo `erp-git-workflow`).
 - push this repo with `github-industries`
-- when debugging localhost, remember to run `bun start:dev` on port 10010 and use the admin account `admin@liouni.com` (mật khẩu lấy từ kênh bảo mật của team, không ghi vào repo)
+- when debugging localhost, run `bun start:dev` on the port defined by `PORT` in `.env` and log in with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` from `.env` (đọc giá trị từ `.env`, không ghi vào repo)
 - by default, work on the `DATABASE_URL` in `.env` (master; luôn đọc `.env` để xác nhận DB thực tế); use the matching `.env.<tenant>-<stage>` file (greenway/klotus) only when explicitly indicated; scripts must take the env file explicitly (a bare `.env` may point at a production DB)
 - before any DB scan or write, run `SELECT current_database();` to confirm the actual DB and report it before writing; never infer the DB from a file name
 - reuse existing components/modules/services/DTOs/helpers/utils/functions first
 - extend/adapt before forking parallel patterns
 - cancel or delete actions must have modal confirm (on UI side)
 - delete operations must be soft delete with `isDeleted` flag
+  - Ngoại lệ có điều kiện: xóa cứng chứng từ nháp (PO/PR garage) qua quyền `PURGE`, chỉ admin, chặn khi còn bản ghi phụ thuộc. Chi tiết: `.agents/workflows/api-structure.md` mục "Chính sách xóa".
 - **NEVER** leave ad-hoc `.ts` files at the repo root (they bypass `tsconfig.build.json` and shift `dist/` output structure from `dist/main.js` to `dist/src/main.js`, crashing the container). Root-level `.ts` files that are not `src/` code must be added to `.gitignore` or deleted before commit.
 - After `bun run build`, verify `dist/main.js` exists (not `dist/src/main.js`) before declaring build PASS.
 
@@ -108,7 +110,7 @@ Source of truth for this repo (`./erp-api`).
 - load `@.agents/skills/erp-api-truth/SKILL.md`
 - use repo-local context as default guidance
 - MUST use bun/bunx exclusively (do NOT use npm)
-- when debugging and testing API locally, always start dev on port 10010
+- when debugging and testing API locally, always start dev on the port defined by `PORT` in `erp/erp-api/.env`
 - by default, work on the `DATABASE_URL` in `.env` (master; luôn đọc `.env` để xác nhận DB thực tế); use the matching `.env.<tenant>-<stage>` file (greenway/klotus) only when explicitly indicated; scripts must take the env file explicitly (a bare `.env` may point at a production DB)
 - before any DB scan or write, run `SELECT current_database();` to confirm the actual DB and report it before writing; never infer the DB from a file name
 - follow DB -> API -> UI -> QC
@@ -127,7 +129,7 @@ Source of truth for this repo (`./erp-api`).
 
 ### Architecture & Development Standards
 
-- **TDD**: Prefer Test-Driven Development for new features and non-trivial fixes. If not practical, add or update the nearest affected automated test before closing the task.
+- **TDD**: Prefer Test-Driven Development for new features and non-trivial fixes. If not practical, add or update the nearest affected automated test before closing the task. Ưu tiên integration spec cho luồng nghiệp vụ nhiều bước (xem mục Auto-TDD).
 - **Modularity**: Apply a modular mindset to backend code. Split controllers, services, DTOs, mappers, and helper functions by domain responsibility; do not grow "god services".
 - **Imports**: Use alias imports. Group 3rd-party imports first, followed by a blank line, then custom code imports.
 - **Module boundaries**: New domain work should stay inside `src/<domain>/...`. Cross-domain orchestration is allowed, but hidden coupling and DTO leakage across domains are not.

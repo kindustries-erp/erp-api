@@ -15,7 +15,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
-import { ErpAction, ErpResource } from '../rbac-core/enums';
+import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
 import { AuditLog } from '../audit-core/decorators/audit-log.decorator';
 import { EntityValuesPermissionGuard } from './guards/entity-values-permission.guard';
 import { ModuleConfigService } from './module-config.service';

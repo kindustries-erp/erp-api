@@ -4,14 +4,19 @@ import { migrationChronologicalKey } from './migration-order';
 
 /** Tên class migration (TypeORM dùng tên class, không dùng tên file). */
 const migrationClassNames = (): string[] => {
-  const dir = join(__dirname, '..', 'migrations');
-  return readdirSync(dir)
-    .filter((file) => file.endsWith('.ts') && !file.endsWith('.spec.ts'))
-    .flatMap((file) => {
-      const source = readFileSync(join(dir, file), 'utf8');
-      const match = /export class (\w+)/.exec(source);
-      return match ? [match[1]] : [];
-    });
+  const dirs = [
+    join(__dirname, '..', 'migrations'),
+    join(__dirname, 'migrations'),
+  ];
+  return dirs.flatMap((dir) =>
+    readdirSync(dir)
+      .filter((file) => file.endsWith('.ts') && !file.endsWith('.spec.ts'))
+      .flatMap((file) => {
+        const source = readFileSync(join(dir, file), 'utf8');
+        const match = /export class (\w+)/.exec(source);
+        return match ? [match[1]] : [];
+      }),
+  );
 };
 
 /**

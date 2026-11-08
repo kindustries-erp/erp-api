@@ -1,0 +1,14 @@
+import { {{#each swaggerImports}}{{this}}{{#unless @last}}, {{/unless}}{{/each}} } from '@nestjs/swagger';
+import { {{#each classValidatorImports}}{{this}}{{#unless @last}}, {{/unless}}{{/each}} } from 'class-validator';
+import { {{baseCreateDto}} } from '{{coreBarrel}}';
+
+/** DTO tạo {{entityName}}: kế thừa DTO tạo của lõi họ {{family}}, thêm trường riêng của module. */
+export class Create{{entityName}}Dto extends {{baseCreateDto}} {
+{{#each customFields}}
+{{#each this.dtoDecorators}}
+  {{{this}}}
+{{/each}}
+  {{this.name}}{{{this.nullableMark}}}: {{{this.dtoType}}};
+
+{{/each}}
+}

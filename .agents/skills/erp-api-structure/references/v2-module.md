@@ -6,24 +6,53 @@ Workflow đầy đủ: [`../../../workflows/api-structure.md`](../../../workflow
 ## 0. Vị trí
 
 Kiến trúc API V2 được tổ chức phân cấp tương tự Web V2 (`erp-web/src/v2/`):
-- **Core Foundations & Shared Engines**: Nằm trong `src/v2/core/<core-name>/` (vd: `src/v2/core/goods-receipts/` chứa Base Voucher Engine, shared voucher contracts).
-- **Business Modules**: Nằm trong `src/v2/modules/<module-name>/` (vd: `src/v2/modules/garage-goods-receipts/`).
+- **Core Foundations & Shared Engines**: Nằm trong `src/v2/core/<core-name>/` (vd: `src/v2/core/goods-receipts-core/` chứa Base Voucher Engine, shared voucher contracts).
+- **Business Modules**: Nằm trong `src/v2/modules/<module-name>/` (vd: `src/v2/modules/goods-receipts-garage/`).
 - Tách biệt hoàn toàn khỏi các module V1 legacy (`src/<module>-core/`). Import trong module dùng alias `@/` (`@/common`, `@/auth`, `@/rbac-core`, `@/v2/core/...`). Generator `api-module-v2` và `api-voucher-v2` tự sinh đúng vị trí `src/v2/modules/...` và wiring `./v2/modules/...`.
+
+## 0a. Quy ước đặt tên thư mục v2
+
+- **Lõi** `src/v2/core/<họ>-core/`: tên luôn kết thúc `-core`. Generator `api-core` nhận tên có hoặc không có `-core` và tự thêm hậu tố. Tên class (`<Họ>CoreModule`, `Base<Entity>...`) và tên file service giữ theo phần gốc, không nhân đôi `-core`.
+- **Module** `src/v2/modules/<gốc>-<biến thể>/`: biến thể đặt ở hậu tố, ví dụ `procurement-orders-garage`, `procurement-orders-erp`, `invoices-finance`. Không dùng tiền tố `erp-`, `garage-`, `finance-`. `rbac` là tên miền (quản trị quyền), không phải tiền tố biến thể, nên module quản trị role là `rbac-roles`. Module không có biến thể (`business-partners-management`, `purchase-orders`) giữ nguyên.
+- **Hợp đồng không đổi khi đổi tên thư mục**: route (`@Controller`), `permissionPattern` và `ErpResource`, tên bảng (`@Entity`), tên class và symbol trong barrel. Khi triển khai module đã có, truyền tường minh `tableNameInput`, `routePathInput`, `permissionResourceInput` cho generator; không để generator suy ra từ tên thư mục.
+- Generator `api-voucher-v2` vẫn chuẩn hóa tên module thành `<gốc>-core`. Module đổi tên theo quy ước trên không đi qua generator này; khi tạo module mới theo quy ước suffix, đặt tên theo `<gốc>-<biến thể>` và kiểm tra lại `moduleName`/`moduleBase` sinh ra.
 
 ## 1. Quy ước v2
 
 | Lớp | File | Quy tắc |
 | :--- | :--- | :--- |
-| Entity | `entities/*.entity.ts` | Cột snake_case qua `name:`; cờ `isDeleted` (không dùng `DeleteDateColumn`) |
+| Entity | `entities/*.entity.ts` | Kế thừa chuỗi base trong `src/v2/core/base-core` (xem mục 1b). Cột snake_case qua `name:`; cờ `isDeleted` (không dùng `DeleteDateColumn`) |
 | DTO vào | `dto/create-*.dto.ts`, `update-*` (PartialType), `query-*` (PaginationDto) | class-validator + Swagger |
 | DTO ra | `dto/*-response.dto.ts` | Không trả entity ra ngoài module |
 | Mapper | `helpers/*.mapper.ts` | Hàm thuần. Hai chiều: entity→response, DTO→entity (bỏ `undefined`) |
 | Đọc | `services/*-query.service.ts` | Chỉ đọc, lọc `isDeleted = false` |
-| Ghi | `services/*-command.service.ts` | create / update / softDelete |
+| Ghi | `services/*-command.service.ts` | create / update / softDelete / hardDelete (có điều kiện, xem `api-structure` Phần B mục "Chính sách xóa") |
 | Facade | `<module>.service.ts` | Điều phối, `NotFoundException`, luôn trả response DTO |
-| Controller | `controllers/*.controller.ts` | `@RequirePermissions({ resource: ErpResource.X, action: ErpAction.READ\|CREATE\|UPDATE\|DELETE })` |
+| Controller | `controllers/*.controller.ts` | `@RequirePermissions({ resource: ErpResource.X, action: ErpAction.READ\|CREATE\|UPDATE\|DELETE\|PURGE })`; xóa cứng dùng `PURGE` và route `:id/permanent` |
 
-Enum quyền: `src/rbac-core/enums/erp-action.enum.ts` (`ErpAction`), `src/rbac-core/enums/erp-resource.enum.ts` (`ErpResource`). Không dùng chuỗi literal cho quyền.
+Enum quyền: `src/v2/core/rbac-core/enums/erp-action.enum.ts` (`ErpAction`), `src/v2/core/rbac-core/enums/erp-resource.enum.ts` (`ErpResource`), xuất qua `@/v2/core/rbac-core`. Không dùng chuỗi literal cho quyền.
+
+## 1b. Chuỗi base chung và `extraData`
+
+Lõi `src/v2/core/base-core` (barrel `@/v2/core/base-core`) là chuỗi entity nền dùng chung. Mỗi lớp thêm đúng một nhóm cột:
+
+| Lớp | Cột thêm | Dùng cho |
+| :--- | :--- | :--- |
+| `CoreBaseEntity` | `id` (uuid), `extra_data` (jsonb, mặc định `{}`) | danh mục, dòng không có timestamp, lõi không xóa mềm |
+| `CoreAuditedEntity` | `created_at`, `updated_at` (timestamptz) | dòng chứng từ |
+| `CoreSoftDeletableEntity` | `is_deleted` (có `@Index`) | entity module v2 (plop `module-v2`) |
+| `CoreHeaderEntity` | `status` (mặc định `DRAFT`), `created_by` | header chứng từ có vòng đời (plop `workflow-common`) |
+
+- TypeORM 0.3: khi cột trùng tên, **cột của lớp cha thắng**. Entity legacy có cột `timestamp` (hóa đơn, dòng hóa đơn, chi nhánh, đối tác) chỉ kế thừa `CoreBaseEntity` và giữ khai báo riêng, không override.
+- `extraData` là dữ liệu tùy biến để bổ sung field sau này mà không đổi cột cũ. Quy tắc:
+  - DTO create/update khai báo bằng `@ExtraDataField()` (`base-core/dto/extra-data.decorator.ts`); client cũ không gửi field vẫn hợp lệ.
+  - Tạo: không gửi thì lưu `{}`.
+  - Sửa header/danh mục: **merge cấp 1** qua `mergeExtraData` (`base-core/helpers/extra-data.util.ts`); giá trị `null` xóa key; không gửi field thì giữ nguyên.
+  - Dòng chứng từ được thay theo bộ nên ghi theo payload, không merge.
+  - Giới hạn (`assertValidExtraData`, 400 khi vi phạm): object, tối đa 16 KB, sâu 5 cấp, key tối đa 64 ký tự, cấm `__proto__`, `constructor`, `prototype`.
+  - Chặn ở hai lớp: `RejectUnsafeExtraDataPipe` (`base-core/pipes`, đăng ký trong `main.ts` TRƯỚC ValidationPipe) kiểm body thô, vì ValidationPipe của Nest tự xóa key `__proto__` mà không báo lỗi; và service kiểm lại cho mọi caller không đi qua HTTP.
+  - Logic kiểm và merge nằm ở lớp command/service, không ở controller. Response luôn trả `extraData` là object (không null).
+- Migration thêm cột: `ADD COLUMN IF NOT EXISTS "extra_data" jsonb NOT NULL DEFAULT '{}'::jsonb` kèm `CHECK (jsonb_typeof("extra_data") = 'object')`. Không đổi kiểu cột cũ.
 
 ## 2. Kiểu trường (`fieldSpec`)
 
@@ -112,10 +141,10 @@ bunx plop api-voucher-v2
 9. `wireInput`: Nối tự động vào AppModule và DataSource (`true`/`false`).
 
 ### Cấu trúc sinh ra (tại `src/v2/modules/<module-name>/`):
-- **Entities**: Header và Line kế thừa `BaseGoodsReceiptEntity` và `BaseGoodsReceiptLineEntity` từ `@/v2/core/goods-receipts/entities/`, tự động có sẵn các trường chuẩn chứng từ (`receiptNo`, `status`, `totalAmount`, timestamps, timestamps line, FK cascade).
-- **DTOs**: Create, Update, Query, Response DTOs kế thừa trực tiếp từ `@/v2/core/goods-receipts/dto/`, loại bỏ mã lặp class-validator & Swagger annotations.
+- **Entities**: Header và Line kế thừa `BaseGoodsReceiptEntity` và `BaseGoodsReceiptLineEntity` từ `@/v2/core/goods-receipts-core/entities/`, tự động có sẵn các trường chuẩn chứng từ (`receiptNo`, `status`, `totalAmount`, timestamps, timestamps line, FK cascade).
+- **DTOs**: Create, Update, Query, Response DTOs kế thừa trực tiếp từ `@/v2/core/goods-receipts-core/dto/`, loại bỏ mã lặp class-validator & Swagger annotations.
 - **Helpers**: Mapper hai chiều Header + nested Lines (tự tính tổng dòng hàng).
-- **Core Engine Integration**: Tự động kết nối `BaseVoucherEngineService` (`@/v2/core/goods-receipts`):
+- **Core Engine Integration**: Tự động kết nối `BaseVoucherEngineService` (`@/v2/core/goods-receipts-core`):
   - Sinh mã theo ngày: `generateDailyVoucherNo` (`PREFIX-YYYYMMDD-001`).
   - Kiểm tra trạng thái: `validateVoucherTransition` (`DRAFT` -> `POSTED` -> `CANCELLED`).
   - Xóa mềm: Chỉ cho phép xóa khi ở trạng thái `DRAFT`.
@@ -136,8 +165,13 @@ Các file trong `plop-helpers/` là hàm thuần: `apiV2Fields`, `apiV2Data`, `a
 
 | Module V1 | Module V2 (`src/v2/`) | Trạng thái |
 | :--- | :--- | :--- |
-| `business-partners-core` | `src/v2/business-partners-core/` (route `/api/v2/business-partners`, alias v1 còn dùng bởi web V1) | Đã v2 (module mẫu). Đối chiếu với plop: khác biệt còn lại đều là nghiệp vụ viết tay |
-| `erp-invoices-core` (lõi: list/get/create/update/bulk/soft-delete) | `src/v2/invoices/` (route `/api/v2/invoices`, chạy song song) | Đang migrate. Entity `Invoice`, `InvoiceItem` trỏ cùng bảng, không migration. v2 không import v1: helper copy sang `helpers/`. Giữ ở v1: attributes, stats, export, netoff, post/unpost/cancel/category, portal GDT, import XML, file/PDF, dashboard, debts, UC2 (accounting-core). |
+| `business-partners-core` | Lõi `src/v2/core/business-partners-core/` (entity `ErpBusinessPartner`, services, contracts, `core.manifest.json`) & module `src/v2/modules/business-partners-management/` (route `/api/v2/business-partners`, alias v1 `business-partners`) | Đã v2 chuẩn hóa 2 tầng Core & Module. Controller và route giữ nguyên 100%, UI không đổi. |
+| `branches-core` | Lõi `src/v2/core/branches-core/` (một entity `ErpBranch`, query/command, facade) & module `src/v2/modules/branches-management/` (controller/response mapper, route vẫn `/api/v1/branches`). | Đã chuyển cấu trúc v2, giữ nguyên DB/API/UI. Ngoại lệ legacy: JWT-only, body không siết validator, `DELETE /:id` xóa cứng, không có `is_deleted`; xem module skill `branches-core`. Manifest đánh dấu `legacy-compatible`, không dùng làm base cho `api-thin-module`. |
+| `erp-invoices-core` (lõi: list/get/create/update/bulk/soft-delete) | `src/v2/core/invoices-core/` (Core Foundation) & `src/v2/modules/invoices-finance/` (route `/api/v2/invoices`, chạy song song) | Đang migrate. Tách Core (Abstract entities, Engine tính toán dùng chung, DTOs) và Business Module `finance-invoices` (kế thừa Core, Controller V2, Query/Command). Entity `FinanceInvoice`, `FinanceInvoiceItem` trỏ cùng bảng `erp_invoices` / `erp_invoice_items`, không migration. |
+| `purchase-orders-core` (v2, đã gỡ) | Không còn module/lõi v2 `purchase-orders`. Đã kiểm tra: không có caller nào (erp-web, erp-api, test, scripts) gọi `/api/v2/purchase-orders`. Khôi phục từ commit `5b1ec29` nếu cần. PO dùng v1: `src/purchase-orders-core/`, route `/api/v1/purchase-orders`. | Đã gỡ cùng đợt đổi tên. |
+| `rbac-core` (kiểm quyền dùng chung + quản trị role) | Lõi `src/v2/core/rbac-core/` (entity `CoreRole`/`CorePermission`/`CoreUserRole`, `RbacCoreService` 5 method kiểm quyền, `enums/` xuất qua `@/v2/core/rbac-core`, `@Global`); module `src/v2/modules/rbac-roles/` (route vẫn `/api/v1/rbac-core`, chung UI). Đã xóa sạch `src/rbac-core`. | Đã v2, giữ nguyên hợp đồng v1. Khác biệt có chủ đích: `GET roles/:roleId/users` chỉ trả `{id, email}`; id/roleId sai UUID trả 400 (trước đây 500). Xóa role vẫn là xóa cứng (bảng `core_roles` không có `isDeleted`). |
+
+Khi làm module v2 mới không có lõi dùng chung và có bảng mới, dùng `api-module-v2`. Ví dụ PO v2 từng dựng tay theo cấu trúc này đã được gỡ; khôi phục từ commit `5b1ec29` nếu cần tham khảo.
 
 Route v2: `GLOBAL_PREFIX_EXCLUDE` cho phép controller `api/v2/...` không mang prefix `api/v1`. Plop sinh `@Controller('<routePath>')` có prefix `api/v1`, nên module v2 mới cần đổi tay path sang `api/v2/...` và cập nhật `global-prefix.config.ts` nếu cần.
 
@@ -149,3 +183,20 @@ Knowledge-Sync: mỗi lần migrate xong, thêm/đổi dòng ở bảng này và
 - Không kiểm tra trùng route hay trùng `ErpResource` lúc sinh. Lỗi trùng sẽ lộ khi `tsc` (enum) hoặc lúc chạy (route).
 - Scope theo loại (ví dụ `partnerType` của BP) không có trong template: thêm tay vào query service và controller (xem `business-partners-core`).
 - Trùng `code` với bản ghi đã xóa mềm: index unique DB không lọc `is_deleted`, nên mã cũ không dùng lại được (lỗi 500). Đây là hành vi V1, cần migration (partial unique index) để sửa.
+
+## 4. Họ workflow (`abstract-services`) và module chứng từ
+
+Dùng cho chứng từ có vòng đời trạng thái (ví dụ đơn mua, phiếu nhập). Họ CRUD dùng `api-core` kiểu `engine` và `api-thin-module`.
+
+1. **`api-core`** với style `abstract-services` sinh khung lõi trong `src/v2/core/<họ>/`:
+   - `contracts/<họ>.contract.ts`: kiểu `<Entity>Action` và bảng `<ENTITY>_TRANSITIONS` (mặc định rỗng).
+   - `entities/base-*.entity.ts`: cột `id`, `isDeleted`, `status` (mặc định `DRAFT`), `createdBy`, timestamp.
+   - `services/abstract-*-command.service.ts`: `transition()` và `createDraft()` chạy trong transaction, khóa `pessimistic_write`, ghi nhật ký `ApprovalEvent`. Hook rỗng đánh dấu `// CUSTOM`: `initialStatus`, `beforeTransition`, `applyFields`.
+2. **`api-workflow-module`** (chỉ nhận họ `abstract-services`) sinh module trong `src/v2/modules/<module>/`: entity con, DTO tạo, command con (điền `headerEntity`, `docType`), controller `POST /` và `POST /:id/transition/:action`, module, spec tối thiểu, và RBAC (`ErpResource`). Wiring `app.module.ts` và `data-source.ts` chỉ khi bật `wireInput`.
+
+Quy ước "điền chỗ trống":
+- Nghiệp vụ riêng viết ở các hook `// CUSTOM` của command con hoặc lõi, không sửa template.
+- Bảng chuyển trạng thái điền trong `contracts/<họ>.contract.ts`, kèm khai báo kiểu `<Entity>Action`.
+- Trường trùng với lõi (`status`, `createdBy`, `isDeleted`, `id`) bị từ chối khi sinh.
+- Module workflow không có đọc danh sách/chi tiết: dev thêm query service và endpoint `GET` theo nhu cầu.
+- Generator không ghi đè file đã có. Đổi mẫu về sau không tự cập nhật các họ/module đã sinh.

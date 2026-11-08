@@ -5,6 +5,7 @@ import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
+import { RejectUnsafeExtraDataPipe } from '@/v2/core/base-core/pipes/reject-unsafe-extra-data.pipe';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import {
   GLOBAL_PREFIX,
@@ -44,7 +45,9 @@ async function bootstrap() {
   });
 
   // Tự động validate & transform DTO dựa theo class-validator
+  // Kiểm extraData trên body thô trước: ValidationPipe sẽ xóa key __proto__ mà không báo lỗi
   app.useGlobalPipes(
+    new RejectUnsafeExtraDataPipe(),
     new ValidationPipe({
       whitelist: true, // Loại bỏ các field không khai báo trong DTO
       forbidNonWhitelisted: true,

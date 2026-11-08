@@ -6,6 +6,7 @@ import { {{entityName}}ResponseDto } from '../dto/{{entityKebab}}-response.dto';
 export function to{{entityName}}Response(entity: {{entityName}}): {{entityName}}ResponseDto {
   return {
     id: entity.id,
+    extraData: entity.extraData ?? {},
 {{#each customFields}}
     {{this.name}}: {{{this.mapExpression}}},
 {{/each}}

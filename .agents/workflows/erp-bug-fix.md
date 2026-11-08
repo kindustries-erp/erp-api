@@ -4,7 +4,7 @@ description: Quy trình sửa lỗi có kiểm chứng cho erp-api (đánh giá 
 
 # 🐞 ERP Backend Bug Fix Workflow (`/erp-bug-fix`)
 
-Dùng khi user báo lỗi hoặc yêu cầu sửa bug trong `erp-api`. Khác `/erp-review` (chỉ hỏi đáp, không sửa) và `/plan-and-task` (tính năng, refactor): workflow này đi từ tái hiện lỗi tới kết luận có bằng chứng. Phần plan, `OK` và theo dõi Plane vẫn theo `/plan-and-task`.
+Dùng khi user báo lỗi hoặc yêu cầu sửa bug trong `erp-api`. Khác `/erp-review` (chỉ hỏi đáp, không sửa) và `/erp-plan` (tính năng, refactor): workflow này đi từ tái hiện lỗi tới kết luận có bằng chứng. Phần plan, `OK` và theo dõi Plane vẫn theo `/erp-plan`.
 
 ---
 
@@ -31,7 +31,7 @@ Dùng khi user báo lỗi hoặc yêu cầu sửa bug trong `erp-api`. Khác `/e
 
 1. Trình bày: nguyên nhân gốc, cách sửa tối thiểu, file sẽ đổi, test sẽ thêm, rủi ro hồi quy.
 2. Tiêu chí chấp nhận dạng `AC-n` (ít nhất: lỗi không còn tái hiện, không hỏng hành vi lân cận).
-3. **DỪNG**: chờ user trả lời `OK` hoặc `Confirm`. Sau `OK`, hỏi về Plane theo mục "Sau `OK`" của `/plan-and-task`. Nếu lỗi nhỏ và user đã yêu cầu sửa thẳng, vẫn phải nêu nguyên nhân và cách sửa trong một đoạn ngắn trước khi sửa.
+3. **DỪNG**: chờ user trả lời `OK` hoặc `Confirm`. Sau `OK`, hỏi về Plane theo mục "Sau `OK`" của `/erp-plan`. Nếu lỗi nhỏ và user đã yêu cầu sửa thẳng, vẫn phải nêu nguyên nhân và cách sửa trong một đoạn ngắn trước khi sửa.
 
 ### 🔹 BƯỚC 3: Fix và Test
 

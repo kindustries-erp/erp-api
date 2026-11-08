@@ -9,8 +9,8 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
-import { ErpBranch } from '../../branches-core/entities/erp_branch.entity';
-import { ErpBusinessPartner } from '../../v2/business-partners-core/entities/erp_business_partner.entity';
+import { ErpBranch } from '@/v2/core/branches-core/entities/erp_branch.entity';
+import { ErpBusinessPartner } from '@/v2/core/business-partners-core';
 
 @Entity({ name: 'erp_operating_expenses' })
 export class ErpOperatingExpense {

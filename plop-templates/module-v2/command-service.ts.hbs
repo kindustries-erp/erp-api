@@ -5,6 +5,7 @@ import { {{entityName}} } from '../entities/{{entityKebab}}.entity';
 import { Create{{entityName}}Dto } from '../dto/create-{{entityKebab}}.dto';
 import { Update{{entityName}}Dto } from '../dto/update-{{entityKebab}}.dto';
 import { to{{entityName}}EntityFields } from '../helpers/{{entityKebab}}.mapper';
+import { assertValidExtraData, mergeExtraData } from '@/v2/core/base-core/helpers/extra-data.util';
 
 /** Ghi dữ liệu: tạo, cập nhật, xóa mềm. Việc kiểm tra tồn tại do Facade đảm nhiệm. */
 @Injectable()
@@ -14,13 +15,22 @@ export class {{entityName}}CommandService {
     private readonly repo: Repository<{{entityName}}>,
   ) {}
 
-  create(dto: Create{{entityName}}Dto): Promise<{{entityName}}> {
-    const entity = this.repo.create({ ...to{{entityName}}EntityFields(dto), isDeleted: false });
+  async create(dto: Create{{entityName}}Dto): Promise<{{entityName}}> {
+    if (dto.extraData !== undefined) assertValidExtraData(dto.extraData);
+    const entity = this.repo.create({
+      ...to{{entityName}}EntityFields(dto),
+      isDeleted: false,
+      extraData: dto.extraData ?? {},
+    });
     return this.repo.save(entity);
   }
 
-  update(entity: {{entityName}}, dto: Update{{entityName}}Dto): Promise<{{entityName}}> {
+  async update(entity: {{entityName}}, dto: Update{{entityName}}Dto): Promise<{{entityName}}> {
+    if (dto.extraData !== undefined) assertValidExtraData(dto.extraData);
     Object.assign(entity, to{{entityName}}EntityFields(dto));
+    if (dto.extraData !== undefined) {
+      entity.extraData = mergeExtraData(entity.extraData, dto.extraData);
+    }
     return this.repo.save(entity);
   }
 

@@ -1,0 +1,8 @@
+import { {{entityName}}CommandService } from './{{entityKebab}}-command.service';
+
+describe('{{entityName}}CommandService', () => {
+  it('được khai báo và kế thừa hàm chuyển trạng thái của lõi', () => {
+    expect({{entityName}}CommandService).toBeDefined();
+    expect(typeof {{entityName}}CommandService.prototype.transition).toBe('function');
+  });
+});

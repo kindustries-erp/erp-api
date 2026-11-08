@@ -56,7 +56,7 @@ Backend contract, auth, DTO, persistence, business rule, bằng chứng build/te
 
 ## 7. Quy tắc làm việc
 
-- Plan theo `/plan-and-task` (cơ chế plan của agent). Chỉ làm sau khi user xác nhận `OK`. Theo dõi task trên Plane bằng skill `plane-work-items`.
+- Plan theo `/erp-plan` (cơ chế plan của agent). Chỉ làm sau khi user xác nhận `OK`. Theo dõi task trên Plane bằng skill `plane-work-items`.
 - Module NestJS mới phải được import trong `src/app.module.ts`, nếu không endpoint sẽ 404.
 - Mỗi thay đổi service, controller hoặc logic quan trọng phải có `.spec.ts` đi kèm (Auto-TDD, theo `.agents/AGENTS.md`).
 - Dùng `must` cho chuẩn đã được enforce trong repo, `prefer` cho hướng đi mục tiêu.
@@ -80,7 +80,8 @@ Tài liệu chi tiết của từng module nằm tại `.agents/skills/modules/<
 - **Tài chính, dòng tiền, hóa đơn**: `bank-statement`, `cashflow-dashboard`, `erp-invoice`, `invoice-netoff`, `invoice-dashboard`, `invoice-debts`, `journal-entry`, `settings-accounts`
 - **Garage**: `garage-cases`, `garage-customers`, `garage-dashboard`, `garage-cashflow`, `garage-bank-reconciliation`, `garage-invoice-reconciliation`, `garage-goods-receipts`, `garage-opex`, `operating-expenses`
 - **Phụ tùng VinFast**: `vinfast-parts-stock`, `vinfast-parts-dashboard`
-- **Đối tác**: `business-partners-core`
+- **Đối tác**: `business-partners-core` (lõi `src/v2/core/business-partners-core`, module `src/v2/modules/business-partners-management`)
+- **Chi nhánh**: `branches-core` (lõi `src/v2/core/branches-core`, module `src/v2/modules/branches-management`; entity consumers import canonical v2, route v1 giữ nguyên)
 - **Hệ thống, cấu hình, phân quyền, nhật ký**: `admin-dashboard-core`, `ai-hub-core`, `app-config`, `audit-core`, `module-config`, `rbac-core`, `system-operations-core`
 
 Khi cần quét mới hoặc cập nhật tài liệu module: skill `scan-module-knowledge`.
