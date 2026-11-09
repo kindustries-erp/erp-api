@@ -74,6 +74,7 @@ export class GarageProcurementOrdersService {
       column_operators: dto.column_operators,
       date_ranges: dto.date_ranges,
       summary_keys: dto.summary_keys,
+      deleted: dto.deleted,
     });
     const emailOf = await resolveApprovalEmails(this.actors, out.rows);
     return toPaginatedResult(
@@ -95,6 +96,7 @@ export class GarageProcurementOrdersService {
     page: number,
     pageSize: number,
     filters: unknown,
+    deleted?: 'only',
   ) {
     return this.query.findColumnOptions(
       column,
@@ -102,6 +104,7 @@ export class GarageProcurementOrdersService {
       page,
       pageSize,
       filters,
+      deleted,
     );
   }
 

@@ -70,6 +70,7 @@ export class GarageProcurementRequestsService {
     page: number,
     pageSize: number,
     filters?: string,
+    deleted?: 'only',
   ) {
     return this.query.findColumnOptions(
       column,
@@ -77,6 +78,7 @@ export class GarageProcurementRequestsService {
       page,
       pageSize,
       filters,
+      deleted,
     );
   }
 

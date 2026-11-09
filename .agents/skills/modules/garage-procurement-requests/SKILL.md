@@ -101,3 +101,11 @@ Quyền resource: `garage_procurement_requests`. Seed từ `garage_purchase_orde
 - **Ghi**: tạo mặc định `{}`. Sửa header merge cấp 1 (`null` xóa key). Dòng chứng từ ghi theo payload, không merge.
 - **Giới hạn**: 16 KB, sâu 5 cấp, key ≤ 64 ký tự, cấm `__proto__`/`constructor`/`prototype` (400 qua `RejectUnsafeExtraDataPipe` và service).
 - **Response**: luôn có `extraData` (object).
+
+## Lọc phiếu đã xóa mềm (`deleted`)
+
+- **Query**: `GET /api/v2/garage-procurement-requests?deleted=only` chỉ trả phiếu `isDeleted = true`. Thiếu tham số thì giữ `isDeleted = false`. Giá trị khác `only` bị DTO từ chối (`@IsIn(['only'])`).
+- **Gợi ý cột**: `GET .../column-options?deleted=only` áp dụng cùng điều kiện. Số liệu `summaries` của list tự khớp vì cùng query builder.
+- **Xóa cứng phiếu đã xóa mềm**: `lockHeader(manager, id, includeDeleted=true)` trong `hardDeleteDraft` (cả PR và PO), không còn 404 với phiếu đã xóa mềm. Với PO, không trả lại số lượng giữ lần nữa vì `softDeleteDraft` đã trả (`if (!header.isDeleted) releaseHeldQty`).
+- **Quyền**: `deleted=only` chỉ dùng quyền đọc danh sách; xóa cứng vẫn yêu cầu `PURGE` ở controller (`DELETE :id/permanent`).
+- **Không có restore**: chưa có endpoint khôi phục phiếu đã xóa mềm.

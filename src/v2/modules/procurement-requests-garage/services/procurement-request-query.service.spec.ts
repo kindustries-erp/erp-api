@@ -64,12 +64,40 @@ describe('GarageProcurementRequestQueryService', () => {
     });
 
     expect(headersRepo.createQueryBuilder).toHaveBeenCalledWith('h');
-    expect(qb.where).toHaveBeenCalledWith('h.isDeleted = :notDeleted', {
-      notDeleted: false,
+    expect(qb.where).toHaveBeenCalledWith('h.isDeleted = :deleted', {
+      deleted: false,
     });
     expect(qb.andWhere).toHaveBeenCalledWith(expect.any(Brackets));
     expect(result.total).toBe(1);
     expect(result.rows[0].requestNo).toBe('DNM-2026-001');
+  });
+
+  it('deleted=only chỉ liệt kê đề nghị đã xóa mềm', async () => {
+    await service.list({ page: 1, pageSize: 20, deleted: 'only' });
+
+    expect(qb.where).toHaveBeenCalledWith('h.isDeleted = :deleted', {
+      deleted: true,
+    });
+  });
+
+  it('findColumnOptions áp dụng cùng điều kiện deleted với list', async () => {
+    const spy = jest
+      .spyOn(require('@/common/utils/table-query'), 'findTableColumnOptions')
+      .mockResolvedValue({ items: [], total: 0, next: null } as any);
+
+    await service.findColumnOptions(
+      'status',
+      undefined,
+      1,
+      20,
+      undefined,
+      'only',
+    );
+
+    expect(qb.where).toHaveBeenCalledWith('h.isDeleted = :deleted', {
+      deleted: true,
+    });
+    spy.mockRestore();
   });
 
   it('gọi applyListSummaries với summary_keys, trước khi phân trang', async () => {

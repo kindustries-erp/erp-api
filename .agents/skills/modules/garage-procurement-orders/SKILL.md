@@ -108,3 +108,8 @@ Quyền resource: `garage_procurement_orders`. Seed từ `garage_purchase_orders
 - **Ghi**: tạo mặc định `{}`. Sửa header merge cấp 1 (`null` xóa key). Dòng chứng từ ghi theo payload, không merge.
 - **Giới hạn**: 16 KB, sâu 5 cấp, key ≤ 64 ký tự, cấm `__proto__`/`constructor`/`prototype` (400 qua `RejectUnsafeExtraDataPipe` và service).
 - **Response**: luôn có `extraData` (object).
+
+## Lọc phiếu đã xóa mềm (`deleted`)
+
+- **Query**: `GET /api/v2/garage-procurement-orders?deleted=only` chỉ trả đơn `isDeleted = true`; thiếu tham số thì giữ `isDeleted = false`. Gợi ý cột (`column-options`) nhận cùng tham số.
+- **Xóa cứng**: `hardDeleteDraft` dùng `lockHeader(..., includeDeleted=true)` và chỉ trả số lượng giữ khi đơn chưa xóa mềm, tránh trả trùng với `softDeleteDraft`.

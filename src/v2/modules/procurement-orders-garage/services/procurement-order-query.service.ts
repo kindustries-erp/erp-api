@@ -41,6 +41,7 @@ export interface GarageProcurementOrderFilter {
   column_operators?: unknown;
   date_ranges?: unknown;
   summary_keys?: string;
+  deleted?: 'only';
 }
 
 @Injectable()
@@ -68,7 +69,7 @@ export class GarageProcurementOrderQueryService {
   async list(filter: GarageProcurementOrderFilter) {
     const qb = this.headers
       .createQueryBuilder('h')
-      .where('h.isDeleted = :notDeleted', { notDeleted: false });
+      .where('h.isDeleted = :deleted', { deleted: filter.deleted === 'only' });
     if (filter.branchId) {
       qb.andWhere('h.branchId = :branchId', { branchId: filter.branchId });
     }
@@ -132,13 +133,14 @@ export class GarageProcurementOrderQueryService {
     page: number,
     pageSize: number,
     filters: unknown,
+    deleted?: 'only',
   ): Promise<TableOptionsPage> {
     const def = resolveTableColumn(TABLE_COLUMNS, column);
     if (!def) return { items: [], total: 0, next: null };
 
     const qb = this.headers
       .createQueryBuilder('h')
-      .where('h.isDeleted = :notDeleted', { notDeleted: false });
+      .where('h.isDeleted = :deleted', { deleted: deleted === 'only' });
 
     applyTableFilters(
       qb,

@@ -81,6 +81,7 @@ export class GarageProcurementRequestController {
     @Query('page') page = '1',
     @Query('pageSize') pageSize = '20',
     @Query('filters') filters?: string,
+    @Query('deleted') deleted?: string,
   ) {
     return this.service.findColumnOptions(
       column,
@@ -88,6 +89,7 @@ export class GarageProcurementRequestController {
       Math.max(1, parseInt(page, 10) || 1),
       Math.max(1, Math.min(200, parseInt(pageSize, 10) || 20)),
       filters,
+      deleted === 'only' ? 'only' : undefined,
     );
   }
 

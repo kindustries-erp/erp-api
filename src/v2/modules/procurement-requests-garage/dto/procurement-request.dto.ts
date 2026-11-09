@@ -99,6 +99,15 @@ export class ListProcurementRequestsDto extends TableQueryDto {
   @IsOptional()
   @IsUUID()
   branchId?: string;
+
+  @ApiPropertyOptional({
+    enum: ['only'],
+    description:
+      'only: chỉ liệt kê đề nghị đã xóa mềm (cần quyền purge để xóa cứng)',
+  })
+  @IsOptional()
+  @IsIn(['only'])
+  deleted?: 'only';
 }
 
 export class ReasonBodyDto {

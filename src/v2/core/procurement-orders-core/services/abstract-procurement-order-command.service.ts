@@ -307,10 +307,11 @@ export abstract class AbstractProcurementOrderCommandService<
    */
   async hardDeleteDraft(id: string): Promise<void> {
     return this.dataSource.transaction(async (manager) => {
-      const header = await this.lockHeader(manager, id);
+      const header = await this.lockHeader(manager, id, true);
       assertEditable(header.status as ProcurementOrderStatus);
       await this.assertNoDependentReceipts(manager, id);
-      await this.releaseHeldQty(manager, header);
+      // Đơn đã xóa mềm đã trả số lượng giữ ở softDeleteDraft; không trả lần nữa.
+      if (!header.isDeleted) await this.releaseHeldQty(manager, header);
       await manager.delete(this.lineEntity, {
         [this.lineForeignKey]: id,
       } as never);
@@ -402,9 +403,16 @@ export abstract class AbstractProcurementOrderCommandService<
     };
   }
 
-  protected async lockHeader(manager: EntityManager, id: string): Promise<H> {
+  /** Khóa dòng đơn mua. `includeDeleted` chỉ dùng cho xóa cứng phiếu đã xóa mềm. */
+  protected async lockHeader(
+    manager: EntityManager,
+    id: string,
+    includeDeleted = false,
+  ): Promise<H> {
     const header = await manager.findOne(this.headerEntity, {
-      where: { id, isDeleted: false } as FindOptionsWhere<H>,
+      where: (includeDeleted
+        ? { id }
+        : { id, isDeleted: false }) as FindOptionsWhere<H>,
       lock: { mode: 'pessimistic_write' },
     });
     if (!header) throw new NotFoundException('Không tìm thấy đơn mua');

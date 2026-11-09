@@ -176,6 +176,15 @@ export class ListProcurementOrdersDto extends TableQueryDto {
   @IsUUID()
   branchId?: string;
 
+  @ApiPropertyOptional({
+    enum: ['only'],
+    description:
+      'only: chỉ liệt kê đơn đã xóa mềm (cần quyền purge để xóa cứng)',
+  })
+  @IsOptional()
+  @IsIn(['only'])
+  deleted?: 'only';
+
   @ApiPropertyOptional({ description: 'Lọc theo nhà cung cấp' })
   @IsOptional()
   @IsUUID()

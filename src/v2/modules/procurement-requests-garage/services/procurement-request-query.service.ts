@@ -86,7 +86,7 @@ export class GarageProcurementRequestQueryService {
 
     const qb = this.headers
       .createQueryBuilder('h')
-      .where('h.isDeleted = :notDeleted', { notDeleted: false });
+      .where('h.isDeleted = :deleted', { deleted: dto.deleted === 'only' });
 
     if (dto.branchId) {
       qb.andWhere('h.branchId = :branchId', { branchId: dto.branchId });
@@ -142,13 +142,14 @@ export class GarageProcurementRequestQueryService {
     page: number,
     pageSize: number,
     filters: unknown,
+    deleted?: 'only',
   ): Promise<TableOptionsPage> {
     const def = resolveTableColumn(TABLE_COLUMNS, column);
     if (!def) return { items: [], total: 0, next: null };
 
     const qb = this.headers
       .createQueryBuilder('h')
-      .where('h.isDeleted = :notDeleted', { notDeleted: false });
+      .where('h.isDeleted = :deleted', { deleted: deleted === 'only' });
 
     applyTableFilters(
       qb,

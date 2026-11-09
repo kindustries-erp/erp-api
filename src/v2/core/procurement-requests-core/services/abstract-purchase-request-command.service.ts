@@ -260,7 +260,7 @@ export abstract class AbstractPurchaseRequestCommandService<
    */
   async hardDeleteDraft(id: string): Promise<void> {
     return this.dataSource.transaction(async (manager) => {
-      const header = await this.lockHeader(manager, id);
+      const header = await this.lockHeader(manager, id, true);
       assertLinesEditable(header.status as PurchaseRequestStatus);
       assertNoHeldQty(await this.loadLineQty(manager, id));
       await this.assertNoDependentOrders(manager, id);
@@ -308,9 +308,16 @@ export abstract class AbstractPurchaseRequestCommandService<
     await manager.save(this.lineEntity, rows);
   }
 
-  protected async lockHeader(manager: EntityManager, id: string): Promise<H> {
+  /** Khóa dòng đề nghị. `includeDeleted` chỉ dùng cho xóa cứng phiếu đã xóa mềm. */
+  protected async lockHeader(
+    manager: EntityManager,
+    id: string,
+    includeDeleted = false,
+  ): Promise<H> {
     const header = await manager.findOne(this.headerEntity, {
-      where: { id, isDeleted: false } as FindOptionsWhere<H>,
+      where: (includeDeleted
+        ? { id }
+        : { id, isDeleted: false }) as FindOptionsWhere<H>,
       lock: { mode: 'pessimistic_write' },
     });
     if (!header) throw new NotFoundException('Không tìm thấy đề nghị mua');
