@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { BranchCommandService } from './branch-command.service';
 
 describe('BranchCommandService', () => {
@@ -66,5 +67,32 @@ describe('BranchCommandService', () => {
     const error = new Error('foreign key violation');
     repository.delete.mockRejectedValueOnce(error);
     await expect(service.remove('referenced')).rejects.toBe(error);
+  });
+
+  it('extraData khi sửa chi nhánh: merge cấp 1 với dữ liệu đang lưu, null xóa key', async () => {
+    repository.findOne.mockResolvedValue({ ...row, extraData: { a: 1, b: 2 } });
+
+    await service.update('branch-id', { extraData: { b: 3, a: null } });
+
+    expect(repository.update).toHaveBeenCalledWith(
+      'branch-id',
+      expect.objectContaining({ extraData: { b: 3 } }),
+    );
+  });
+
+  it('sửa chi nhánh không gửi extraData thì không ghi cột này', async () => {
+    await service.update('branch-id', { name: 'Mới' });
+
+    expect(repository.update).toHaveBeenCalledWith(
+      'branch-id',
+      expect.not.objectContaining({ extraData: expect.anything() }),
+    );
+  });
+
+  it('từ chối extraData sai định dạng khi tạo chi nhánh', async () => {
+    await expect(
+      service.create({ code: 'HN', name: 'Ha Noi', extraData: [1] }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(repository.save).not.toHaveBeenCalled();
   });
 });

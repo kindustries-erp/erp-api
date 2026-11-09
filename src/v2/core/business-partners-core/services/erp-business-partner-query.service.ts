@@ -11,11 +11,13 @@ import { applyMultiKeywordMultiFieldFilter } from '@/common/utils/query-builder.
 import {
   applyDateBounds,
   applyTableFilters,
+  applyListSummaries,
   applyTableSort,
-  computeTableSummaries,
   findTableColumnOptions,
   parseFilterRecord,
+  parseSummaryKeys,
   resolveTableColumn,
+  SummaryMetric,
   TableColumnMap,
   TableDateRange,
   TableFilterPayload,
@@ -64,7 +66,7 @@ export interface ErpBusinessPartnerPageResult {
   total: number;
   page: number;
   pageSize: number;
-  summaries: Record<string, number>;
+  summaries: Record<string, SummaryMetric | null>;
 }
 
 /** Đọc dữ liệu: lọc, sắp xếp, phân trang, gợi ý giá trị cột và tổng. Chỉ đọc các dòng chưa xóa mềm. */
@@ -109,13 +111,23 @@ export class ErpBusinessPartnerQueryService {
       query.date_to,
       'legacy',
     );
-    applyTableSort(qb, query.sort, TABLE_COLUMNS, {
-      sql: 'e.createdAt',
-      direction: 'DESC',
-    });
+    applyTableSort(
+      qb,
+      query.sort,
+      TABLE_COLUMNS,
+      { sql: 'e.createdAt', direction: 'DESC' },
+      'e.id',
+    );
 
-    // Tổng tính trên toàn bộ dòng khớp, nên phải gọi trước khi phân trang
-    const summaries = await computeTableSummaries(qb, SUMMARY_COLUMNS);
+    // Tổng theo summary_keys trên toàn bộ dòng khớp, nên phải gọi trước khi phân trang.
+    // Hiện chưa có cột số nào được phép tổng, nên mọi key trả null.
+    const summaries = await applyListSummaries(qb, {
+      columns: SUMMARY_COLUMNS,
+      keys: parseSummaryKeys(query.summary_keys),
+      page,
+      pageSize,
+      tieBreaker: 'e.id',
+    });
 
     const [items, total] = await qb
       .skip((page - 1) * pageSize)

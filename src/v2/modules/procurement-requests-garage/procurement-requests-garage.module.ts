@@ -17,6 +17,8 @@ import { GarageProcurementRequestsService } from './procurement-requests-garage.
 import { GarageProcurementRequestCommandService } from './services/procurement-request-command.service';
 import { GarageProcurementRequestQueryService } from './services/procurement-request-query.service';
 import { GarageProcurementRequestOrderingService } from './services/garage-procurement-request-ordering.service';
+import { ProcurementRequestNotifierService } from './services/procurement-request-notifier.service';
+import { NotificationsInboxModule } from '@/v2/modules/notifications-inbox/notifications-inbox.module';
 
 const GarageProcurementRequestApprovalConfigController =
   createApprovalConfigController({
@@ -26,7 +28,7 @@ const GarageProcurementRequestApprovalConfigController =
     tag: 'procurement_requests',
   });
 
-/** Module đề nghị mua thường (bảng erp_garage_proc_requests). Lõi nằm ở src/v2/core/procurement-requests. */
+/** Module đề nghị mua thường (bảng proc_requests_garage). Lõi nằm ở src/v2/core/procurement-requests. */
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -37,6 +39,7 @@ const GarageProcurementRequestApprovalConfigController =
       CoreUser,
     ]),
     RbacCoreModule,
+    NotificationsInboxModule,
   ],
   controllers: [
     GarageProcurementRequestController,
@@ -51,6 +54,7 @@ const GarageProcurementRequestApprovalConfigController =
     GarageProcurementRequestQueryService,
     GarageProcurementRequestsService,
     GarageProcurementRequestOrderingService,
+    ProcurementRequestNotifierService,
   ],
   exports: [
     GarageProcurementRequestQueryService,

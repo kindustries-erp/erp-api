@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class BaseGoodsReceiptLineResponseDto {
+  @ApiProperty({ type: 'object', additionalProperties: true })
+  extraData: Record<string, unknown>;
   @ApiProperty()
   id: string;
 
@@ -33,6 +35,8 @@ export class BaseGoodsReceiptLineResponseDto {
 }
 
 export class BaseGoodsReceiptResponseDto {
+  @ApiProperty({ type: 'object', additionalProperties: true })
+  extraData: Record<string, unknown>;
   @ApiProperty()
   id: string;
 

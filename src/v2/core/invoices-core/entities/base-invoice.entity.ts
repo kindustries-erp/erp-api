@@ -1,19 +1,17 @@
-import {
-  Column,
-  CreateDateColumn,
-  PrimaryGeneratedColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { CoreBaseEntity } from '../../base-core/entities/core-base.entity';
 import { IInvoiceHeader } from '../contracts/invoice.contract';
 
 /**
  * Abstract Base Entity cho bảng Header hóa đơn.
  * KHÔNG gắn @Entity() ở đây để các module con tự định nghĩa tên bảng riêng biệt.
+ * Chỉ kế thừa id và extraData. Timestamp giữ kiểu `timestamp` của bảng cũ
+ * (không đổi kiểu cột DB): TypeORM ưu tiên cột lớp cha nên không thể override ở đây.
  */
-export abstract class BaseInvoiceEntity implements IInvoiceHeader {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
-
+export abstract class BaseInvoiceEntity
+  extends CoreBaseEntity
+  implements IInvoiceHeader
+{
   // --- Chi nhánh ---
   @Column({ type: 'uuid', name: 'branch_id', nullable: true })
   branchId: string | null;

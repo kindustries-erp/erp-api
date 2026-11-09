@@ -10,6 +10,10 @@ import { GarageGoodsReceiptLine } from '../entities/garage-goods-receipt-line.en
 import { CreateGarageGoodsReceiptDto } from '../dto/create-garage-goods-receipt.dto';
 import { UpdateGarageGoodsReceiptDto } from '../dto/update-garage-goods-receipt.dto';
 import { toGarageGoodsReceiptEntityFields } from '../helpers/garage-goods-receipt.mapper';
+import {
+  assertValidExtraData,
+  mergeExtraData,
+} from '@/v2/core/base-core/helpers/extra-data.util';
 import { BaseVoucherEngineService } from '@/v2/core/goods-receipts-core/services/base-voucher-engine.service';
 import { GarageProcurementOrder } from '@/v2/modules/procurement-orders-garage/entities/procurement-order.entity';
 import { GarageProcurementOrderFulfilmentService } from '@/v2/modules/procurement-orders-garage/services/procurement-order-fulfilment.service';
@@ -39,6 +43,7 @@ export class GarageGoodsReceiptCommandService {
   }
 
   async create(dto: CreateGarageGoodsReceiptDto): Promise<GarageGoodsReceipt> {
+    this.assertExtraData(dto.extraData, dto.lines);
     return this.dataSource.transaction(async (manager) => {
       const receiptRepo = manager.getRepository(GarageGoodsReceipt);
       const lineRepo = manager.getRepository(GarageGoodsReceiptLine);
@@ -73,6 +78,7 @@ export class GarageGoodsReceiptCommandService {
           amount: String(amount),
           notes: l.notes ?? undefined,
           procurementOrderLineId: l.procurementOrderLineId ?? null,
+          extraData: l.extraData ?? {},
         });
         lineEntities.push(line);
       }
@@ -88,6 +94,7 @@ export class GarageGoodsReceiptCommandService {
       const receipt = receiptRepo.create({
         ...entityFields,
         isDeleted: false,
+        extraData: dto.extraData ?? {},
       });
       const savedReceipt = await receiptRepo.save(receipt);
 
@@ -109,6 +116,7 @@ export class GarageGoodsReceiptCommandService {
     entity: GarageGoodsReceipt,
     dto: UpdateGarageGoodsReceiptDto,
   ): Promise<GarageGoodsReceipt> {
+    this.assertExtraData(dto.extraData, dto.lines);
     return this.dataSource.transaction(async (manager) => {
       const receipt = await this.lockReceipt(manager, entity.id);
       this.voucherEngine.validateVoucherTransition(receipt.status, 'update');
@@ -116,9 +124,12 @@ export class GarageGoodsReceiptCommandService {
       const receiptRepo = manager.getRepository(GarageGoodsReceipt);
       const lineRepo = manager.getRepository(GarageGoodsReceiptLine);
 
-      const { lines, ...headerDto } = dto;
+      const { lines, extraData, ...headerDto } = dto;
       const entityFields = toGarageGoodsReceiptEntityFields(headerDto);
       Object.assign(receipt, entityFields);
+      if (extraData !== undefined) {
+        receipt.extraData = mergeExtraData(receipt.extraData, extraData);
+      }
 
       if (lines !== undefined) {
         // Xóa các lines cũ và chèn lại
@@ -143,6 +154,7 @@ export class GarageGoodsReceiptCommandService {
             amount: String(amount),
             notes: l.notes ?? undefined,
             procurementOrderLineId: l.procurementOrderLineId ?? null,
+            extraData: l.extraData ?? {},
           });
           lineEntities.push(await lineRepo.save(line));
         }
@@ -227,6 +239,17 @@ export class GarageGoodsReceiptCommandService {
 
       receipt.status = 'CANCELLED';
       return receiptRepo.save(receipt);
+    });
+  }
+
+  /** Kiểm `extraData` của phiếu và các dòng trước khi mở transaction. */
+  private assertExtraData(
+    header: Record<string, unknown> | undefined,
+    lines: Array<{ extraData?: Record<string, unknown> }> | undefined,
+  ): void {
+    if (header !== undefined) assertValidExtraData(header);
+    lines?.forEach((l) => {
+      if (l.extraData !== undefined) assertValidExtraData(l.extraData);
     });
   }
 

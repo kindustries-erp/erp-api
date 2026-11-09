@@ -51,6 +51,7 @@ export function toLineResponse(
 ): StockVoucherLineResponseDto {
   return {
     id: line.id,
+    extraData: line.extraData ?? {},
     lineNo: line.lineNo,
     itemCode: line.itemCode,
     itemName: line.itemName,
@@ -66,6 +67,7 @@ export function toLineResponse(
 export function toVoucherResponse(
   header: {
     id: string;
+    extraData?: Record<string, unknown> | null;
     voucherNo: string;
     voucherDate: Date;
     status: string;
@@ -80,6 +82,7 @@ export function toVoucherResponse(
 ): StockVoucherResponseDto {
   return {
     id: header.id,
+    extraData: header.extraData ?? {},
     voucherNo: header.voucherNo,
     voucherDate: header.voucherDate,
     status: header.status,

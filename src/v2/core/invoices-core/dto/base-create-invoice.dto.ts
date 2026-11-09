@@ -15,6 +15,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { BaseCreateInvoiceLineDto } from './base-create-invoice-line.dto';
+import { ExtraDataField } from '../../base-core/dto/extra-data.decorator';
 
 export class BaseCreateInvoiceDto {
   @ApiProperty()
@@ -224,4 +225,7 @@ export class BaseCreateInvoiceDto {
   @ValidateNested({ each: true })
   @Type(() => BaseCreateInvoiceLineDto)
   items?: BaseCreateInvoiceLineDto[];
+
+  @ExtraDataField()
+  extraData?: Record<string, unknown>;
 }

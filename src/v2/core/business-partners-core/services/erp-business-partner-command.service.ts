@@ -5,6 +5,10 @@ import { ErpBusinessPartner } from '../entities/erp_business_partner.entity';
 import { CreateErpBusinessPartnerDto } from '../dto/create-erp-business-partner.dto';
 import { UpdateErpBusinessPartnerDto } from '../dto/update-erp-business-partner.dto';
 import { toErpBusinessPartnerEntityFields } from '../helpers/erp-business-partner.mapper';
+import {
+  assertValidExtraData,
+  mergeExtraData,
+} from '../../base-core/helpers/extra-data.util';
 
 /** Ghi dữ liệu: kiểm tra trùng mã, tạo, cập nhật, xóa mềm. Việc kiểm tra tồn tại theo id do Facade đảm nhiệm. */
 @Injectable()
@@ -48,19 +52,25 @@ export class ErpBusinessPartnerCommandService {
     }
   }
 
-  create(dto: CreateErpBusinessPartnerDto): Promise<ErpBusinessPartner> {
+  async create(dto: CreateErpBusinessPartnerDto): Promise<ErpBusinessPartner> {
+    if (dto.extraData !== undefined) assertValidExtraData(dto.extraData);
     const entity = this.repo.create({
       ...toErpBusinessPartnerEntityFields(dto),
       isDeleted: false,
+      extraData: dto.extraData ?? {},
     });
     return this.repo.save(entity);
   }
 
-  update(
+  async update(
     entity: ErpBusinessPartner,
     dto: UpdateErpBusinessPartnerDto,
   ): Promise<ErpBusinessPartner> {
+    if (dto.extraData !== undefined) assertValidExtraData(dto.extraData);
     Object.assign(entity, toErpBusinessPartnerEntityFields(dto));
+    if (dto.extraData !== undefined) {
+      entity.extraData = mergeExtraData(entity.extraData, dto.extraData);
+    }
     return this.repo.save(entity);
   }
 

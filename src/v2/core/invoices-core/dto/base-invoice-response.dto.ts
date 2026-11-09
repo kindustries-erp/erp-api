@@ -2,6 +2,9 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 /** Một dòng hàng hóa trả ra API. */
 export class BaseInvoiceLineResponseDto {
+  @ApiProperty({ type: 'object', additionalProperties: true })
+  extraData!: Record<string, unknown>;
+
   @ApiProperty()
   id!: string;
 
@@ -41,6 +44,9 @@ export class BaseInvoiceLineResponseDto {
 
 /** Hình dạng dữ liệu trả ra API. Không trả entity trực tiếp. */
 export class BaseInvoiceResponseDto {
+  @ApiProperty({ type: 'object', additionalProperties: true })
+  extraData!: Record<string, unknown>;
+
   @ApiProperty()
   id!: string;
 

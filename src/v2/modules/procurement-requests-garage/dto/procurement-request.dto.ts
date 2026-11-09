@@ -16,6 +16,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { ExtraDataField } from '@/v2/core/base-core/dto/extra-data.decorator';
 import { TableQueryDto } from '@/common/dto/table-query.dto';
 
 export class GarageProcurementRequestLineDto {
@@ -48,6 +49,9 @@ export class GarageProcurementRequestLineDto {
   estUnitPrice?: number;
 
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
+
+  @ExtraDataField()
+  extraData?: Record<string, unknown>;
 }
 
 export class CreateProcurementRequestDto {
@@ -69,6 +73,9 @@ export class CreateProcurementRequestDto {
   title?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() requesterEmployeeId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() remarks?: string;
+
+  @ExtraDataField()
+  extraData?: Record<string, unknown>;
 
   @ApiProperty({ type: [GarageProcurementRequestLineDto] })
   @IsArray()
@@ -92,6 +99,15 @@ export class ListProcurementRequestsDto extends TableQueryDto {
   @IsOptional()
   @IsUUID()
   branchId?: string;
+
+  @ApiPropertyOptional({
+    enum: ['only'],
+    description:
+      'only: chỉ liệt kê đề nghị đã xóa mềm (cần quyền purge để xóa cứng)',
+  })
+  @IsOptional()
+  @IsIn(['only'])
+  deleted?: 'only';
 }
 
 export class ReasonBodyDto {
@@ -136,4 +152,8 @@ export class UpdateProcurementRequestHeaderDto {
   @IsString()
   @MaxLength(1000)
   remarks?: string | null;
+
+  /** Merge cấp 1 với dữ liệu hiện có; giá trị null xóa key. */
+  @ExtraDataField()
+  extraData?: Record<string, unknown>;
 }

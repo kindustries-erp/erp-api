@@ -1,19 +1,12 @@
-import {
-  Column,
-  CreateDateColumn,
-  Index,
-  PrimaryGeneratedColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { Column, Index } from 'typeorm';
+import { CoreAuditedEntity } from '../../base-core/entities/core-audited.entity';
 
 /**
  * Dòng Đơn mua hàng (lõi PO mới). `line_type` bắt buộc.
  * `qty_fulfilled` chỉ được ghi bởi cổng giao nhận (GOODS) hoặc nghiệm thu (SERVICE).
+ * Kế thừa id, extraData, created_at, updated_at từ lớp nền chung.
  */
-export abstract class BaseProcurementOrderLineEntity {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
-
+export abstract class BaseProcurementOrderLineEntity extends CoreAuditedEntity {
   @Column({ type: 'int', name: 'line_no' })
   lineNo: number;
 
@@ -68,10 +61,4 @@ export abstract class BaseProcurementOrderLineEntity {
   @Index()
   @Column({ type: 'uuid', name: 'request_line_id', nullable: true })
   requestLineId: string | null;
-
-  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
-  createdAt: Date;
-
-  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
-  updatedAt: Date;
 }

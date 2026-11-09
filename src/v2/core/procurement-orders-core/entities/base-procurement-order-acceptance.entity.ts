@@ -1,17 +1,11 @@
-import {
-  Column,
-  CreateDateColumn,
-  Index,
-  PrimaryGeneratedColumn,
-} from 'typeorm';
+import { Column, CreateDateColumn, Index } from 'typeorm';
+import { CoreBaseEntity } from '../../base-core/entities/core-base.entity';
 
 /**
  * Biên bản nghiệm thu dịch vụ (chỉ cho dòng SERVICE). Không xóa: hủy bằng `is_voided`.
+ * Chỉ có `created_at` (không có `updated_at`), nên kế thừa lớp nền chung và tự khai báo timestamp.
  */
-export abstract class BaseProcurementOrderAcceptanceEntity {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
-
+export abstract class BaseProcurementOrderAcceptanceEntity extends CoreBaseEntity {
   @Index()
   @Column({ type: 'uuid', name: 'order_id' })
   orderId: string;

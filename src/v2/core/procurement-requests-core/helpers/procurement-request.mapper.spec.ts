@@ -2,6 +2,7 @@ import { toPurchaseRequestResponse } from './procurement-request.mapper';
 
 const header = {
   id: 'h1',
+  extraData: {},
   requestNo: 'DNM-20261105-001',
   requestDate: '2026-11-05',
   neededDate: null,
@@ -11,12 +12,20 @@ const header = {
   orderingStatus: 'NONE',
   estimatedTotal: '150.50',
   remarks: null,
-  submittedBy: null,
-  approvedBy: null,
+  createdBy: 'u1',
   approverId: null,
+  submittedBy: null,
+  submittedAt: null,
+  approvedBy: null,
+  approvedAt: null,
   rejectedBy: null,
+  rejectedAt: null,
   rejectReason: null,
+  cancelledBy: null,
+  cancelledAt: null,
   cancelReason: null,
+  closedBy: null,
+  closedAt: null,
   closeReason: null,
 };
 
@@ -25,6 +34,7 @@ describe('toPurchaseRequestResponse', () => {
     const out = toPurchaseRequestResponse(header, [
       {
         id: 'l2',
+        extraData: {},
         lineNo: 2,
         lineType: 'SERVICE',
         itemId: null,
@@ -39,6 +49,7 @@ describe('toPurchaseRequestResponse', () => {
       },
       {
         id: 'l1',
+        extraData: {},
         lineNo: 1,
         lineType: 'GOODS',
         itemId: 'i1',
@@ -69,17 +80,50 @@ describe('toPurchaseRequestResponse', () => {
       [],
     ) as unknown as Record<string, unknown>;
     expect(out).not.toHaveProperty('isDeleted');
-    expect(out).not.toHaveProperty('createdBy');
+    expect(out.createdBy).toBe('u1');
   });
-  it('gắn email người tạo và người duyệt khi có people, mặc định null', () => {
-    const withPeople = toPurchaseRequestResponse({ ...header } as never, [], {
-      createdByEmail: 'a@x.vn',
-      approverEmail: 'b@x.vn',
-    });
+  it('createdBy là id người tạo, null khi header không có', () => {
+    const out = toPurchaseRequestResponse(
+      { ...header, createdBy: null } as never,
+      [],
+    );
+    expect(out.createdBy).toBeNull();
+  });
+  it('gắn email qua emailOf cho createdByEmail và approval, mặc định null', () => {
+    const lookup = (id: string | null | undefined) =>
+      id === 'u1' ? 'a@x.vn' : id === 'u2' ? 'b@x.vn' : null;
+    const withPeople = toPurchaseRequestResponse(
+      {
+        ...header,
+        approverId: 'u2',
+        submittedBy: 'u1',
+        submittedAt: new Date('2026-11-05T01:00:00Z'),
+      } as never,
+      [],
+      lookup,
+    );
     expect(withPeople.createdByEmail).toBe('a@x.vn');
-    expect(withPeople.approverEmail).toBe('b@x.vn');
+    expect(withPeople.approval.approverEmail).toBe('b@x.vn');
+    expect(withPeople.approval.submit?.byEmail).toBe('a@x.vn');
     const without = toPurchaseRequestResponse({ ...header } as never, []);
     expect(without.createdByEmail).toBeNull();
-    expect(without.approverEmail).toBeNull();
+    expect(without.approval.approverEmail).toBeNull();
+  });
+
+  it('shape approval luôn có đủ 7 bước, PR có issue = null', () => {
+    const out = toPurchaseRequestResponse({ ...header } as never, []);
+    expect(Object.keys(out.approval).sort()).toEqual(
+      [
+        'approverEmail',
+        'approverId',
+        'approve',
+        'cancel',
+        'close',
+        'issue',
+        'reject',
+        'submit',
+      ].sort(),
+    );
+    expect(out.approval.issue).toBeNull();
   });
 });

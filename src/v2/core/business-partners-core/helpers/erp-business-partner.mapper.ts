@@ -8,6 +8,7 @@ export function toErpBusinessPartnerResponse(
 ): ErpBusinessPartnerResponseDto {
   return {
     id: entity.id,
+    extraData: entity.extraData ?? {},
     code: entity.code ?? undefined,
     name: entity.name,
     displayName: entity.displayName ?? undefined,

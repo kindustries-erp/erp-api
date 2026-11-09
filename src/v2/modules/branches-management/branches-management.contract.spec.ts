@@ -21,6 +21,7 @@ describe('branches v2 HTTP contract', () => {
   };
   const branch = {
     id: '00000000-0000-4000-8000-000000000001',
+    extraData: {},
     code: 'HCM',
     name: 'Ho Chi Minh',
     address: null,

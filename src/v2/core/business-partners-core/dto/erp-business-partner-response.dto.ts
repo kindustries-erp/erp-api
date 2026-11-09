@@ -2,6 +2,9 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 /** Hình dạng dữ liệu trả ra API. Không trả entity trực tiếp. */
 export class ErpBusinessPartnerResponseDto {
+  @ApiProperty({ type: 'object', additionalProperties: true })
+  extraData: Record<string, unknown>;
+
   @ApiProperty()
   id: string;
 

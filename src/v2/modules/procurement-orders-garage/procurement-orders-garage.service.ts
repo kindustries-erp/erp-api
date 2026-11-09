@@ -10,6 +10,7 @@ import { DataSource } from 'typeorm';
 import { GarageProcurementRequest } from '../procurement-requests-garage/entities/procurement-request.entity';
 import { ErpResource, RbacCoreService } from '@/v2/core/rbac-core';
 import { ApproverDirectoryService } from '@/v2/core/approval-core/approver-directory.service';
+import { resolveApprovalEmails } from '@/v2/core/approval-core/helpers/approval-people';
 import { ProcurementOrderAction } from '@/v2/core/procurement-orders-core/contracts/procurement-orders.contract';
 import {
   AcceptServicesDto,
@@ -19,6 +20,8 @@ import {
   UpdateProcurementOrderHeaderDto,
 } from './dto/procurement-order.dto';
 import { GarageProcurementOrderResponseDto } from './dto/garage-procurement-order-response.dto';
+import { GarageProcurementOrderListResponseDto } from './dto/garage-procurement-order-list-response.dto';
+import { toPaginatedResult } from '@/common/utils/paginated-result';
 import { toGarageProcurementOrderResponse } from './helpers/garage-procurement-order.mapper';
 import { GarageProcurementOrderCommandService } from './services/procurement-order-command.service';
 import { GarageProcurementOrderFulfilmentService } from './services/procurement-order-fulfilment.service';
@@ -53,7 +56,9 @@ export class GarageProcurementOrdersService {
     return this.findOne(saved.id);
   }
 
-  async list(dto: ListProcurementOrdersDto) {
+  async list(
+    dto: ListProcurementOrdersDto,
+  ): Promise<GarageProcurementOrderListResponseDto> {
     const out = await this.query.list({
       page: dto.page ?? 1,
       pageSize: dto.pageSize ?? 20,
@@ -68,17 +73,17 @@ export class GarageProcurementOrdersService {
       column_search: dto.column_search,
       column_operators: dto.column_operators,
       date_ranges: dto.date_ranges,
+      summary_keys: dto.summary_keys,
+      deleted: dto.deleted,
     });
-    const { createdByEmails, ...page } = out;
-    return {
-      ...page,
-      rows: out.rows.map((h) => ({
-        ...toGarageProcurementOrderResponse(h, [], []),
-        createdByEmail: h.createdBy
-          ? (createdByEmails.get(h.createdBy) ?? null)
-          : null,
-      })),
-    };
+    const emailOf = await resolveApprovalEmails(this.actors, out.rows);
+    return toPaginatedResult(
+      out.rows.map((h) => toGarageProcurementOrderResponse(h, [], [], emailOf)),
+      out.page,
+      out.pageSize,
+      out.total,
+      out.summaries,
+    );
   }
 
   async nextNo(date?: string) {
@@ -91,6 +96,7 @@ export class GarageProcurementOrdersService {
     page: number,
     pageSize: number,
     filters: unknown,
+    deleted?: 'only',
   ) {
     return this.query.findColumnOptions(
       column,
@@ -98,12 +104,19 @@ export class GarageProcurementOrdersService {
       page,
       pageSize,
       filters,
+      deleted,
     );
   }
 
   async findOne(id: string): Promise<GarageProcurementOrderResponseDto> {
     const { header, lines, acceptances } = await this.query.findOne(id);
-    return toGarageProcurementOrderResponse(header, lines, acceptances);
+    const emailOf = await resolveApprovalEmails(this.actors, [header]);
+    return toGarageProcurementOrderResponse(
+      header,
+      lines,
+      acceptances,
+      emailOf,
+    );
   }
 
   async updateHeader(

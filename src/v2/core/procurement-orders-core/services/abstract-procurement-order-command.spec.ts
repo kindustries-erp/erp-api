@@ -90,6 +90,26 @@ describe('AbstractProcurementOrderCommandService', () => {
     expect(manager.save).toHaveBeenCalled();
   });
 
+  it('extraData khi sửa đầu đơn: merge cấp 1, null xóa key, thiếu field thì giữ nguyên', async () => {
+    const { svc } = setup(makeHeader({ extraData: { a: 1, b: 2 } }), []);
+    const merged = (await svc.updateHeader('o1', {
+      extraData: { b: 3, c: 4, a: null },
+    })) as Header;
+    expect(merged.extraData).toEqual({ b: 3, c: 4 });
+
+    const { svc: svc2 } = setup(makeHeader({ extraData: { a: 1 } }), []);
+    const kept = (await svc2.updateHeader('o1', { remarks: 'x' })) as Header;
+    expect(kept.extraData).toEqual({ a: 1 });
+  });
+
+  it('extraData sai định dạng bị từ chối trước khi ghi DB', async () => {
+    const { svc, manager } = setup(makeHeader(), []);
+    await expect(
+      svc.updateHeader('o1', { extraData: 'abc' as never }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(manager.save).not.toHaveBeenCalled();
+  });
+
   it('không cho sửa đầu đơn khi không còn DRAFT', async () => {
     const { svc, manager } = setup(makeHeader({ status: 'ISSUED' }), []);
     await expect(svc.updateHeader('o1', { supplierId: 's2' })).rejects.toThrow(

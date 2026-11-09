@@ -27,6 +27,7 @@ describe('ErpBusinessPartner mapper', () => {
   it('maps the entity to the response DTO without isDeleted', () => {
     expect(toErpBusinessPartnerResponse(entity)).toEqual({
       id: 'id-1',
+      extraData: {},
       code: 'sample',
       name: 'sample',
       displayName: 'sample',

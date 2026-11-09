@@ -1,11 +1,13 @@
 import { Column } from 'typeorm';
+import { CoreHeaderEntity } from '../../base-core/entities/core-header.entity';
 
 /**
  * Cột duyệt dùng chung cho chứng từ có vòng đời duyệt (PR, PO).
- * Mọi cột đều nullable: chứng từ chưa đi tới bước đó thì để trống.
+ * Kế thừa lớp header chung (id, extraData, timestamps, isDeleted, status, createdBy).
+ * Mọi cột duyệt đều nullable: chứng từ chưa đi tới bước đó thì để trống.
  * Người thực hiện luôn lấy từ JWT (req.user.sub), không nhận từ body.
  */
-export abstract class BaseApprovalFields {
+export abstract class BaseApprovalFields extends CoreHeaderEntity {
   @Column({ type: 'uuid', name: 'submitted_by', nullable: true })
   submittedBy: string | null;
 

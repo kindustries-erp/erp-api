@@ -6,6 +6,7 @@ import {
   MaxLength,
   ValidateIf,
 } from 'class-validator';
+import { ExtraDataField } from '@/v2/core/base-core/dto/extra-data.decorator';
 
 // Body của POST /api/v1/branches. Không dùng trực tiếp làm @Body() vì
 // ValidationPipe toàn cục có forbidNonWhitelisted; xem ParseBranchBodyPipe.
@@ -26,6 +27,9 @@ export class CreateErpBranchDto {
   @ValidateIf((_, value) => value !== undefined)
   @IsBoolean()
   is_active?: boolean;
+
+  @ExtraDataField()
+  extraData?: Record<string, unknown>;
 }
 
 // Type đầu vào cho tầng service/facade (giữ permissive để không đổi contract runtime).

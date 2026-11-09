@@ -31,7 +31,7 @@ const GarageProcurementOrderApprovalConfigController =
     tag: 'procurement_orders',
   });
 
-/** Module đơn mua thường (bảng erp_garage_proc_orders). Lõi nằm ở src/v2/core/procurement-orders. */
+/** Module đơn mua thường (bảng proc_orders_garage). Lõi nằm ở src/v2/core/procurement-orders. */
 @Module({
   imports: [
     TypeOrmModule.forFeature([

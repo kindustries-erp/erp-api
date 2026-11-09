@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 import { ProcurementOrderResponseDto } from '@/v2/core/procurement-orders-core/dto/procurement-order-response.dto';
 
 export class GarageProcurementOrderAcceptanceDto {
@@ -16,12 +16,6 @@ export class GarageProcurementOrderResponseDto extends ProcurementOrderResponseD
   @ApiProperty({ nullable: true }) branchName: string | null;
   @ApiProperty() paymentStatus: string;
   @ApiProperty({ nullable: true }) supplierInvoiceNo: string | null;
-  @ApiProperty({ nullable: true }) createdBy: string | null;
-  @ApiPropertyOptional({
-    nullable: true,
-    description: 'Email người tạo. Chỉ có trong danh sách.',
-  })
-  createdByEmail?: string | null;
   @ApiProperty({ nullable: true }) issuedAt: Date | null;
   @ApiProperty({ type: [GarageProcurementOrderAcceptanceDto] })
   acceptances: GarageProcurementOrderAcceptanceDto[];

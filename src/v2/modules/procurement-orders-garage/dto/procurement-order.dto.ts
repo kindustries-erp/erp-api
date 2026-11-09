@@ -16,6 +16,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { ExtraDataField } from '@/v2/core/base-core/dto/extra-data.decorator';
 
 export class GarageProcurementOrderLineDto {
   @ApiProperty({ enum: ['GOODS', 'SERVICE'] })
@@ -50,6 +51,8 @@ export class GarageProcurementOrderLineDto {
   @IsOptional()
   @IsUUID()
   requestLineId?: string;
+  @ExtraDataField()
+  extraData?: Record<string, unknown>;
 }
 
 export class CreateProcurementOrderDto {
@@ -72,6 +75,8 @@ export class CreateProcurementOrderDto {
   supplierName?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() requestId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() remarks?: string;
+  @ExtraDataField()
+  extraData?: Record<string, unknown>;
 
   @ApiProperty({ type: [GarageProcurementOrderLineDto] })
   @IsArray()
@@ -159,6 +164,10 @@ export class UpdateProcurementOrderHeaderDto {
   @IsString()
   @MaxLength(100)
   supplierInvoiceNo?: string | null;
+
+  /** Merge cấp 1 với dữ liệu hiện có; giá trị null xóa key. */
+  @ExtraDataField()
+  extraData?: Record<string, unknown>;
 }
 
 export class ListProcurementOrdersDto extends TableQueryDto {
@@ -166,6 +175,15 @@ export class ListProcurementOrdersDto extends TableQueryDto {
   @IsOptional()
   @IsUUID()
   branchId?: string;
+
+  @ApiPropertyOptional({
+    enum: ['only'],
+    description:
+      'only: chỉ liệt kê đơn đã xóa mềm (cần quyền purge để xóa cứng)',
+  })
+  @IsOptional()
+  @IsIn(['only'])
+  deleted?: 'only';
 
   @ApiPropertyOptional({ description: 'Lọc theo nhà cung cấp' })
   @IsOptional()

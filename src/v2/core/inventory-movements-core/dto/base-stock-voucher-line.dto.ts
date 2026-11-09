@@ -6,6 +6,7 @@ import {
   IsString,
   Min,
 } from 'class-validator';
+import { ExtraDataField } from '../../base-core/dto/extra-data.decorator';
 
 /** Dòng nền khi tạo/sửa chứng từ kho. Module con thêm `direction` nếu cần (phiếu điều chỉnh). */
 export class BaseCreateStockVoucherLineDto {
@@ -41,4 +42,7 @@ export class BaseCreateStockVoucherLineDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ExtraDataField()
+  extraData?: Record<string, unknown>;
 }

@@ -1,7 +1,7 @@
 import { Column, Entity, Index } from 'typeorm';
 import { BasePurchaseRequestEntity } from '@/v2/core/procurement-requests-core/entities/base-purchase-request.entity';
 
-@Entity('erp_garage_proc_requests')
+@Entity('proc_requests_garage')
 export class GarageProcurementRequest extends BasePurchaseRequestEntity {
   @Index()
   @Column({ type: 'uuid', name: 'branch_id', nullable: true })

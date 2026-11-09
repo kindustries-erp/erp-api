@@ -19,7 +19,7 @@ const thinAnswers = {
   entityInput: 'GarageGoodsReceipt',
   fieldSpecInput: 'code:string:required,status:status',
   // Tên thật của module đã triển khai: truyền tường minh, không để generator suy ra từ tên thư mục.
-  tableNameInput: 'erp_garage_goods_receipts',
+  tableNameInput: 'garage_goods_receipts',
   routePathInput: 'garage-goods-receipts',
   permissionResourceInput: 'garage_goods_receipts',
   wireInput: false,
@@ -41,10 +41,17 @@ describe('buildApiThinData', () => {
     expect(data.modulePath).toBe('src/v2/modules/goods-receipts-garage');
     expect(data.moduleClass).toBe('GoodsReceiptsGarage');
     expect(data.coreBarrel).toBe('@/v2/core/goods-receipts-core');
+    // Họ sinh mới không có module lõi: module mỏng không import gì từ lõi
+    expect(data.coreModule).toBe('');
+  });
+
+  it('họ cũ còn khai báo module lõi vẫn được module mỏng import (tương thích ngược)', () => {
+    const legacy = { ...engineManifest, module: 'GoodsReceiptsCoreModule' };
+    const data = buildApiThinData(thinAnswers, legacy);
     expect(data.coreModule).toBe('GoodsReceiptsCoreModule');
     expect(data.baseEntity).toBe('BaseGoodsReceiptEntity');
     expect(data.baseCreateDto).toBe('BaseCreateGoodsReceiptDto');
-    expect(data.tableName).toBe('erp_garage_goods_receipts');
+    expect(data.tableName).toBe('garage_goods_receipts');
     expect(data.resourceKey).toBe('GARAGE_GOODS_RECEIPTS');
     expect(data.customFields.map((f) => f.name)).toEqual(['code', 'status']);
     expect(data.wire).toBe(false);

@@ -60,7 +60,7 @@ export class GarageInventoryBalanceService {
       ? '("branch_id", "item_code") WHERE "branch_id" IS NOT NULL'
       : '("item_code") WHERE "branch_id" IS NULL';
     await manager.query(
-      `INSERT INTO "erp_garage_inventory_balances"
+      `INSERT INTO "inventory_balances_garage"
          ("id", "branch_id", "item_code", "item_name", "unit", "qty_on_hand", "avg_cost", "created_at", "updated_at")
        VALUES (uuid_generate_v4(), $1, $2, $3, $4, 0, 0, now(), now())
        ON CONFLICT ${conflict} DO NOTHING`,

@@ -31,7 +31,7 @@ description: Lõi v2 nhập / xuất / điều chỉnh kho dùng chung (sổ s�
 - Mọi cộng/trừ tồn chạy trong transaction của chứng từ, sau khi đã khóa header.
 - Phương pháp giá vốn khai báo ở cấu hình ledger (`INVENTORY_MOVEMENTS_GARAGE_LEDGER`: `WEIGHTED_AVG`), không đổi theo request. Đổi phương pháp khi đã có số dư là sai số tồn cũ.
 - Đảo phiếu (`cancel`) không xóa bút toán gốc; chỉ ghi thêm `*_CANCEL`.
-- Bảng mới không có tiền tố `erp_`. Bảng nhập garage cũ (`erp_garage_*`, module `goods-receipts-garage`) **không** được đổi và **không** nằm trong sổ này: tồn garage cũ và tồn garage mới là hai nguồn riêng cho tới khi có bước hợp nhất.
+- Bảng mới không có tiền tố `erp_`. Bảng nhập garage (module `goods-receipts-garage`) đã đổi tên sang `goods_receipts_garage`, `goods_receipt_lines_garage`, `inventory_balances_garage` (migration `20261108100000`), vẫn **không** nằm trong sổ này: tồn garage cũ và tồn garage mới là hai nguồn riêng cho tới khi có bước hợp nhất.
 - Tên bảng, `docType` (`GARAGE_STOCK_*`) và giá trị resource RBAC (`garage_stock_*`) đã lưu dữ liệu, không đổi theo tên module.
 
 ## 3. Thứ tự đọc khi sửa
@@ -46,3 +46,11 @@ description: Lõi v2 nhập / xuất / điều chỉnh kho dùng chung (sổ s�
 - Đã áp dụng lên `erp_greenway_staging`: `20261106130000` (tạo `stock_*`, sau đó đã được thay thế), `20261106130100` (bảng phiếu garage), `20261106140000` (xóa `stock_*` rỗng, tạo `garage_stock_*`).
 - Dữ liệu tồn garage cũ đã chuyển sang `garage_stock_balances` trên staging (1 dòng, qty 0), bằng `scripts/migrate-inventory-movements-garage-balances.ts`.
 - UI (erp-web) chưa làm.
+
+## extraData (JSON tùy biến, 2026-11-08)
+
+- **DB**: cột `extra_data jsonb NOT NULL DEFAULT '{}'` (CHECK: object) trên: `garage_stock_receipts`, `garage_stock_receipt_lines`, `garage_stock_issues`, `garage_stock_issue_lines`, `garage_stock_adjustments`, `garage_stock_adjustment_lines`. Migration `20261108120000-add-extra-data-to-v2-tables.ts`. Dữ liệu cũ là `{}`.
+- **DTO**: field `extraData?: Record<string, unknown>` (`@ExtraDataField()`, base-core). Không gửi thì không đổi.
+- **Ghi**: tạo mặc định `{}`. Sửa header merge cấp 1 (`null` xóa key). Dòng chứng từ ghi theo payload, không merge.
+- **Giới hạn**: 16 KB, sâu 5 cấp, key ≤ 64 ký tự, cấm `__proto__`/`constructor`/`prototype` (400 qua `RejectUnsafeExtraDataPipe` và service).
+- **Response**: luôn có `extraData` (object).

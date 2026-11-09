@@ -115,7 +115,7 @@ export default function (plop) {
       {
         type: 'input',
         name: 'tableNameInput',
-        message: 'Tên bảng PostgreSQL (để trống = erp_<module>):',
+        message: 'Tên bảng PostgreSQL (để trống = <module>; bảng thuộc module, không dùng hậu tố _core):',
         default: '',
       },
       {
@@ -197,7 +197,7 @@ export default function (plop) {
       {
         type: 'input',
         name: 'tableNameInput',
-        message: 'Tên bảng PostgreSQL (để trống = erp_<module>):',
+        message: 'Tên bảng PostgreSQL (để trống = <module>; bảng thuộc module, không dùng hậu tố _core):',
         default: '',
       },
       {
@@ -258,8 +258,8 @@ export default function (plop) {
       {
         type: 'input',
         name: 'tableName',
-        message: 'Tên bảng PostgreSQL (snake_case, vd: erp_customer_claims):',
-        default: (answers) => `erp_${answers.moduleName.replace(/-core$/, '').replace(/-/g, '_')}`,
+        message: 'Tên bảng PostgreSQL (snake_case, vd: customer_claims, không prefix erp_):',
+        default: (answers) => answers.moduleName.replace(/-core$/, '').replace(/-/g, '_'),
       },
       {
         type: 'input',
@@ -345,7 +345,7 @@ export default function (plop) {
       {
         type: 'input',
         name: 'tableNameInput',
-        message: 'Tên bảng PostgreSQL (để trống = erp_<module không -core>):',
+        message: 'Tên bảng PostgreSQL (để trống = <module không -core>, không prefix erp_):',
         default: '',
       },
       {
@@ -415,7 +415,7 @@ export default function (plop) {
       {
         type: 'input',
         name: 'tableNameInput',
-        message: 'Tên bảng PostgreSQL Header (để trống = erp_<module không -core>):',
+        message: 'Tên bảng PostgreSQL Header (để trống = <module không -core>, không prefix erp_):',
         default: '',
       },
       {
@@ -477,7 +477,7 @@ export default function (plop) {
       {
         type: 'input',
         name: 'tableName',
-        message: 'Tên bảng (snake_case, vd: erp_customer_claims):',
+        message: 'Tên bảng (snake_case, vd: customer_claims, không prefix erp_):',
         validate: (value) => (/.+/.test(value) ? true : 'Vui lòng nhập tên bảng'),
       },
     ],

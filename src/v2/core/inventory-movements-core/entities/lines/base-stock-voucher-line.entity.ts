@@ -1,13 +1,12 @@
-import { Column, PrimaryGeneratedColumn } from 'typeorm';
+import { Column } from 'typeorm';
+import { CoreBaseEntity } from '../../../base-core/entities/core-base.entity';
 
 /**
  * Dòng nền của chứng từ kho. Module con extend, thêm khóa ngoại tới header và @Entity(...).
  * `direction` luôn được ghi khi tạo dòng (IN/OUT): với nhập và xuất là cố định, với điều chỉnh lấy từ đầu vào.
+ * Kế thừa id và extraData từ lớp nền chung (dòng không có timestamp).
  */
-export abstract class BaseStockVoucherLineEntity {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
-
+export abstract class BaseStockVoucherLineEntity extends CoreBaseEntity {
   @Column({ type: 'int', name: 'line_no' })
   lineNo: number;
 

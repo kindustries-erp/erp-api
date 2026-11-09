@@ -70,4 +70,35 @@ describe('ErpBusinessPartnerCommandService', () => {
     expect(entity.isDeleted).toBe(true);
     expect(repo.save).toHaveBeenCalledWith(entity);
   });
+
+  it('extraData khi sửa đối tác: merge cấp 1, null xóa key, thiếu field thì giữ nguyên', async () => {
+    const entity = {
+      id: 'p1',
+      code: 'KH-1',
+      name: 'A',
+      extraData: { a: 1, b: 2 },
+    } as unknown as ErpBusinessPartner;
+
+    const merged = await service.update(entity, {
+      extraData: { b: 3, a: null },
+    });
+    expect(merged.extraData).toEqual({ b: 3 });
+
+    const kept = await service.update(
+      { ...entity, extraData: { a: 1 } } as ErpBusinessPartner,
+      { name: 'B' },
+    );
+    expect(kept.extraData).toEqual({ a: 1 });
+  });
+
+  it('từ chối extraData sai định dạng khi tạo đối tác', async () => {
+    await expect(
+      service.create({
+        name: 'A',
+        partnerType: 'CUSTOMER',
+        extraData: 'x',
+      } as never),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(repo.save).not.toHaveBeenCalled();
+  });
 });

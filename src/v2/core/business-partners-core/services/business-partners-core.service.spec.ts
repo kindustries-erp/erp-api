@@ -11,6 +11,7 @@ describe('BusinessPartnersCoreService', () => {
   const createdAt = new Date('2026-01-01T00:00:00.000Z');
   const row = {
     id: 'id-1',
+    extraData: {},
     code: 'KH-001',
     name: 'Công ty ABC',
     displayName: null,
@@ -210,6 +211,7 @@ describe('BusinessPartnersCoreService', () => {
         [
           'address',
           'code',
+          'extraData',
           'contactName',
           'createdAt',
           'displayName',

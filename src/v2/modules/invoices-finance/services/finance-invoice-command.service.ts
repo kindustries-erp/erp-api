@@ -5,6 +5,10 @@ import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
 import { CreateInvoiceDto } from '../dto/create-invoice.dto';
 import { UpdateInvoiceDto } from '../dto/update-invoice.dto';
+import {
+  assertValidExtraData,
+  mergeExtraData,
+} from '@/v2/core/base-core/helpers/extra-data.util';
 import { toInvoiceEntityFields } from '../helpers/invoice.mapper';
 import {
   primaryBranchId,
@@ -17,6 +21,17 @@ import { normalizeInvoiceNo } from '../helpers/invoice-no.helper';
 import { INVOICE_MESSAGES } from '../invoice-messages';
 
 /** Ghi dữ liệu: tạo, cập nhật, xóa mềm, và thao tác hàng loạt. Việc kiểm tra tồn tại do Facade đảm nhiệm. */
+/** Kiểm `extraData` của hóa đơn và từng dòng trước khi mở transaction. */
+function assertInvoiceExtraData(
+  header: unknown,
+  items: Array<{ extraData?: Record<string, unknown> }> | undefined,
+): void {
+  if (header !== undefined) assertValidExtraData(header);
+  items?.forEach((item) => {
+    if (item.extraData !== undefined) assertValidExtraData(item.extraData);
+  });
+}
+
 @Injectable()
 export class FinanceInvoiceCommandService {
   constructor(
@@ -28,7 +43,11 @@ export class FinanceInvoiceCommandService {
   ) {}
 
   /** Tạo hóa đơn và các dòng hàng trong cùng một transaction. */
-  create(dto: CreateInvoiceDto, createdBy: string | null): Promise<Invoice> {
+  async create(
+    dto: CreateInvoiceDto,
+    createdBy: string | null,
+  ): Promise<Invoice> {
+    assertInvoiceExtraData(dto.extraData, dto.items);
     return this.dataSource.transaction(async (manager) => {
       const branchIds = resolveBranchIds(dto) ?? [];
       const entity = manager.create(Invoice, {
@@ -38,6 +57,7 @@ export class FinanceInvoiceCommandService {
         invoiceNoNormalized: normalizeInvoiceNo(dto.invoiceNo),
         createdBy,
         isDeleted: false,
+        extraData: dto.extraData ?? {},
       });
       applyInvoiceMetadata(entity, dto.items ?? []);
 
@@ -63,7 +83,8 @@ export class FinanceInvoiceCommandService {
    * Cập nhật một phần. Nếu gửi `items`, thay toàn bộ dòng hàng (xóa rồi tạo lại) và giữ mã cũ theo diễn giải.
    * Hóa đơn đã ghi sổ (POSTED) không đổi được chi nhánh (UC2 chưa port sang v2).
    */
-  update(entity: Invoice, dto: UpdateInvoiceDto): Promise<Invoice> {
+  async update(entity: Invoice, dto: UpdateInvoiceDto): Promise<Invoice> {
+    assertInvoiceExtraData(dto.extraData, dto.items);
     return this.dataSource.transaction(async (manager) => {
       const nextBranchIds = resolveBranchIds(dto);
       if (
@@ -78,6 +99,9 @@ export class FinanceInvoiceCommandService {
       }
 
       Object.assign(entity, toInvoiceEntityFields(dto));
+      if (dto.extraData !== undefined) {
+        entity.extraData = mergeExtraData(entity.extraData, dto.extraData);
+      }
       if (dto.invoiceNo !== undefined) {
         entity.invoiceNoNormalized = normalizeInvoiceNo(dto.invoiceNo);
       }

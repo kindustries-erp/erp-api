@@ -11,8 +11,8 @@ export function buildCoreManifest(data) {
     entity: data.entity,
     style: data.style,
     barrel: `${data.coreDir}/index.ts`,
-    module: data.moduleClass,
-    moduleFile: `${data.moduleFile}.ts`,
+    module: data.moduleClass ?? null,
+    moduleFile: data.moduleFile ? `${data.moduleFile}.ts` : null,
     baseClasses: {
       entity: data.baseEntity,
       createDto: data.baseCreateDto,

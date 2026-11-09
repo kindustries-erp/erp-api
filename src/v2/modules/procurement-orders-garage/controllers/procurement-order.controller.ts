@@ -11,7 +11,13 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
+import { GarageProcurementOrderListResponseDto } from '../dto/garage-procurement-order-list-response.dto';
 import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
 import { RequirePermissions } from '@/auth/decorators/require-permissions.decorator';
@@ -34,7 +40,7 @@ interface RequestWithUser {
 @ApiTags('procurement_orders')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
-@Controller('api/v2/garage-procurement-orders')
+@Controller('api/v2/procurement-orders-garage')
 export class GarageProcurementOrderController {
   constructor(private readonly service: GarageProcurementOrdersService) {}
 
@@ -51,6 +57,7 @@ export class GarageProcurementOrderController {
     resource: ErpResource.GARAGE_PROCUREMENT_ORDERS,
     action: ErpAction.READ,
   })
+  @ApiOkResponse({ type: GarageProcurementOrderListResponseDto })
   @Get()
   list(@Query() dto: ListProcurementOrdersDto) {
     return this.service.list(dto);
@@ -80,6 +87,7 @@ export class GarageProcurementOrderController {
     @Query('page') page = '1',
     @Query('pageSize') pageSize = '20',
     @Query('filters') filters?: string,
+    @Query('deleted') deleted?: string,
   ) {
     return this.service.findColumnOptions(
       column,
@@ -87,6 +95,7 @@ export class GarageProcurementOrderController {
       Math.max(1, parseInt(page, 10) || 1),
       Math.max(1, Math.min(200, parseInt(pageSize, 10) || 20)),
       filters,
+      deleted === 'only' ? 'only' : undefined,
     );
   }
 

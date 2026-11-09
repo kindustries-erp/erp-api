@@ -6,6 +6,7 @@ import {
   IsString,
   Min,
 } from 'class-validator';
+import { ExtraDataField } from '../../base-core/dto/extra-data.decorator';
 
 export class BaseCreateGoodsReceiptLineDto {
   @ApiPropertyOptional()
@@ -45,4 +46,7 @@ export class BaseCreateGoodsReceiptLineDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ExtraDataField()
+  extraData?: Record<string, unknown>;
 }

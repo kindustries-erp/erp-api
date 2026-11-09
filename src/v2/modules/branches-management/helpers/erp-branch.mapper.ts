@@ -4,6 +4,7 @@ import { ErpBranchResponseDto } from '../dto/erp-branch-response.dto';
 export function toErpBranchResponse(entity: ErpBranch): ErpBranchResponseDto {
   return {
     id: entity.id,
+    extraData: entity.extraData ?? {},
     code: entity.code,
     name: entity.name,
     address: entity.address,

@@ -2,10 +2,16 @@ import {
   PurchaseRequestLineResponseDto,
   PurchaseRequestResponseDto,
 } from '../dto/procurement-request-response.dto';
+import {
+  ApprovalEmailLookup,
+  ApprovalHeaderLike,
+  toApprovalSummary,
+} from '@/v2/core/approval-core/helpers/approval-summary.mapper';
 
 /** Hình dạng đọc từ entity. Khai báo tối thiểu để mapper không phụ thuộc TypeORM. */
-export interface RequestHeaderLike {
+export interface RequestHeaderLike extends ApprovalHeaderLike {
   id: string;
+  extraData: Record<string, unknown> | null;
   requestNo: string;
   requestDate: string;
   neededDate: string | null;
@@ -15,23 +21,12 @@ export interface RequestHeaderLike {
   orderingStatus: string;
   estimatedTotal: string;
   remarks: string | null;
-  submittedBy: string | null;
-  approvedBy: string | null;
-  approverId: string | null;
-  rejectedBy: string | null;
-  rejectReason: string | null;
-  cancelReason: string | null;
-  closeReason: string | null;
-}
-
-/** Email người tạo và người duyệt, tra từ user (không lộ tên nội bộ khác). */
-export interface PurchaseRequestPeople {
-  createdByEmail: string | null;
-  approverEmail: string | null;
+  createdBy: string | null;
 }
 
 export interface RequestLineLike {
   id: string;
+  extraData: Record<string, unknown> | null;
   lineNo: number;
   lineType: 'GOODS' | 'SERVICE';
   itemId: string | null;
@@ -49,15 +44,16 @@ const num = (v: string | null): number | null => (v == null ? null : Number(v));
 
 /**
  * Chuyển entity sang response DTO. Không bao giờ trả entity ra ngoài.
- * `people` (email người tạo/duyệt) do facade tra theo lô; thiếu thì để null.
+ * `emailOf` tra email theo lô ở facade; thiếu thì email để null.
  */
 export function toPurchaseRequestResponse(
   header: RequestHeaderLike,
   lines: RequestLineLike[],
-  people?: PurchaseRequestPeople | null,
+  emailOf: ApprovalEmailLookup = () => null,
 ): PurchaseRequestResponseDto {
   return {
     id: header.id,
+    extraData: header.extraData ?? {},
     requestNo: header.requestNo,
     requestDate: header.requestDate,
     neededDate: header.neededDate,
@@ -67,20 +63,15 @@ export function toPurchaseRequestResponse(
     orderingStatus: header.orderingStatus,
     estimatedTotal: Number(header.estimatedTotal),
     remarks: header.remarks,
-    createdByEmail: people?.createdByEmail ?? null,
-    submittedBy: header.submittedBy,
-    approvedBy: header.approvedBy,
-    approverId: header.approverId,
-    approverEmail: people?.approverEmail ?? null,
-    rejectedBy: header.rejectedBy,
-    rejectReason: header.rejectReason,
-    cancelReason: header.cancelReason,
-    closeReason: header.closeReason,
+    createdBy: header.createdBy ?? null,
+    createdByEmail: emailOf(header.createdBy),
+    approval: toApprovalSummary(header, emailOf),
     lines: [...lines]
       .sort((a, b) => a.lineNo - b.lineNo)
       .map(
         (l): PurchaseRequestLineResponseDto => ({
           id: l.id,
+          extraData: l.extraData ?? {},
           lineNo: l.lineNo,
           lineType: l.lineType,
           itemId: l.itemId,

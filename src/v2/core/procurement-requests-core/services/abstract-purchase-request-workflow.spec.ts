@@ -107,6 +107,16 @@ describe('AbstractPurchaseRequestCommandService.transition', () => {
     );
   });
 
+  it('chặn người khác gửi duyệt phiếu không phải của mình', async () => {
+    const header = makeHeader({ createdBy: 'creator' });
+    const { manager } = fakeManager(header);
+    const svc = new TestCommand(fakeDataSource(manager), events);
+
+    await expect(
+      svc.transition('h1', 'submit', { id: 'other-user', roles: ['STAFF'] }),
+    ).rejects.toThrow('Chỉ người tạo mới được gửi duyệt');
+  });
+
   it('chặn người tạo tự duyệt', async () => {
     const header = makeHeader({ status: 'PENDING_APPROVAL' });
     const svc = new TestCommand(

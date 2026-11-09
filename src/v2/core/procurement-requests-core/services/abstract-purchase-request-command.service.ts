@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { nextDocumentNo } from '../../../../common/numbering/document-numbering';
 import {
   DataSource,
@@ -36,6 +36,11 @@ import {
   estimatedTotalOf,
   RequestLineQty,
 } from './procurement-request-engine.service';
+import {
+  assertValidExtraData,
+  ExtraData,
+  mergeExtraData,
+} from '../../base-core/helpers/extra-data.util';
 
 export interface DraftHeaderInput {
   requestDate: string;
@@ -43,11 +48,19 @@ export interface DraftHeaderInput {
   title?: string | null;
   requesterEmployeeId?: string | null;
   remarks?: string | null;
+  /** Dữ liệu tùy biến. Khi tạo: mặc định `{}`. */
+  extraData?: ExtraData;
 }
 
-/** Các trường đầu đề sửa được khi nháp (không gồm chi nhánh, số phiếu, trạng thái). */
+/**
+ * Các trường đầu đề sửa được khi nháp (không gồm chi nhánh, số phiếu, trạng thái).
+ * `extraData` được merge cấp 1 với dữ liệu đang lưu, không thay thế toàn bộ.
+ */
 export type DraftHeaderPatch = Partial<
-  Pick<DraftHeaderInput, 'requestDate' | 'neededDate' | 'title' | 'remarks'>
+  Pick<
+    DraftHeaderInput,
+    'requestDate' | 'neededDate' | 'title' | 'remarks' | 'extraData'
+  >
 >;
 
 export interface DraftLineFields {
@@ -56,6 +69,7 @@ export interface DraftLineFields {
   itemName?: string | null;
   description?: string | null;
   notes?: string | null;
+  extraData?: ExtraData;
 }
 
 export interface RequestActor {
@@ -101,6 +115,13 @@ export abstract class AbstractPurchaseRequestCommandService<
       const from = header.status as PurchaseRequestStatus;
       const mode = await loadApprovalMode(manager, this.docType);
 
+      if (
+        action === 'submit' &&
+        header.createdBy &&
+        header.createdBy !== actor.id
+      ) {
+        throw new ForbiddenException('Chỉ người tạo mới được gửi duyệt');
+      }
       if (PURCHASE_REQUEST_ACTIONS_REQUIRING_APPROVER.includes(action)) {
         assertNotSelfApproval(actor.id, header.createdBy);
         assertCanDecide(header.approverId, actor.id);
@@ -155,6 +176,7 @@ export abstract class AbstractPurchaseRequestCommandService<
     lines: Array<DraftLineInput & DraftLineFields>,
   ): Promise<H> {
     assertValidDraftLines(lines);
+    if (input.extraData !== undefined) assertValidExtraData(input.extraData);
     return this.dataSource.transaction(async (manager) => {
       const requestNo = await nextDocumentNo(
         manager,
@@ -171,6 +193,7 @@ export abstract class AbstractPurchaseRequestCommandService<
         estimatedTotal: String(estimatedTotalOf(lines)),
         createdBy: actor.id,
         isDeleted: false,
+        extraData: input.extraData ?? {},
       } as DeepPartial<H>);
       const saved = await manager.save(this.headerEntity, header);
       await this.writeLines(manager, saved.id, lines);
@@ -183,13 +206,18 @@ export abstract class AbstractPurchaseRequestCommandService<
    * Chi nhánh không nằm trong patch vì PO đã liên kết có thể đang dùng chi nhánh cũ.
    */
   async updateHeader(id: string, patch: DraftHeaderPatch): Promise<H> {
+    const { extraData, ...fields } = patch;
+    if (extraData !== undefined) assertValidExtraData(extraData);
     return this.dataSource.transaction(async (manager) => {
       const header = await this.lockHeader(manager, id);
       assertLinesEditable(header.status as PurchaseRequestStatus);
       const changes = Object.fromEntries(
-        Object.entries(patch).filter(([, value]) => value !== undefined),
+        Object.entries(fields).filter(([, value]) => value !== undefined),
       );
       Object.assign(header, changes);
+      if (extraData !== undefined) {
+        header.extraData = mergeExtraData(header.extraData, extraData);
+      }
       return manager.save(this.headerEntity, header);
     });
   }
@@ -232,7 +260,7 @@ export abstract class AbstractPurchaseRequestCommandService<
    */
   async hardDeleteDraft(id: string): Promise<void> {
     return this.dataSource.transaction(async (manager) => {
-      const header = await this.lockHeader(manager, id);
+      const header = await this.lockHeader(manager, id, true);
       assertLinesEditable(header.status as PurchaseRequestStatus);
       assertNoHeldQty(await this.loadLineQty(manager, id));
       await this.assertNoDependentOrders(manager, id);
@@ -259,6 +287,9 @@ export abstract class AbstractPurchaseRequestCommandService<
     headerId: string,
     lines: Array<DraftLineInput & DraftLineFields>,
   ): Promise<void> {
+    lines.forEach((l) => {
+      if (l.extraData !== undefined) assertValidExtraData(l.extraData);
+    });
     const rows = lines.map((l, i) =>
       manager.create(this.lineEntity, {
         ...l,
@@ -271,14 +302,22 @@ export abstract class AbstractPurchaseRequestCommandService<
           l.estUnitPrice == null
             ? null
             : String(l.qtyRequested * l.estUnitPrice),
+        extraData: l.extraData ?? {},
       } as DeepPartial<L>),
     );
     await manager.save(this.lineEntity, rows);
   }
 
-  protected async lockHeader(manager: EntityManager, id: string): Promise<H> {
+  /** Khóa dòng đề nghị. `includeDeleted` chỉ dùng cho xóa cứng phiếu đã xóa mềm. */
+  protected async lockHeader(
+    manager: EntityManager,
+    id: string,
+    includeDeleted = false,
+  ): Promise<H> {
     const header = await manager.findOne(this.headerEntity, {
-      where: { id, isDeleted: false } as FindOptionsWhere<H>,
+      where: (includeDeleted
+        ? { id }
+        : { id, isDeleted: false }) as FindOptionsWhere<H>,
       lock: { mode: 'pessimistic_write' },
     });
     if (!header) throw new NotFoundException('Không tìm thấy đề nghị mua');
@@ -326,6 +365,7 @@ export abstract class AbstractPurchaseRequestCommandService<
         header.cancelReason = reason;
         break;
       case 'close':
+        header.closedBy = actorId;
         header.closedAt = now;
         header.closeReason = reason;
         break;

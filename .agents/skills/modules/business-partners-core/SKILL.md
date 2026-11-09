@@ -67,7 +67,7 @@ Index unique trên `code` chỉ áp dụng cho bản ghi chưa xóa mềm (parti
 | `POST /sync-from-invoices` | Body `{ dryRun?: boolean }` → `{ message, dryRun, count, items: [{taxCode, name, address, partnerType}] }`. Tạo đối tác cho từng MST còn thiếu (1 MST = 1 đối tác, loại theo chiều có nhiều hóa đơn hơn, hòa → CUSTOMER). Chạy lại không tạo trùng. Quyền: `business_partners` CREATE |
 
 - `data` là response DTO: `id, code, name, displayName, partnerType, taxCode, phone, email, address, contactName, status, notes, createdAt, updatedAt`. Không có `isDeleted` (V1 có trả trường này).
-- `summaries` là `{}` vì BP không có cột số. Web tự đặt `summaries.code = total` cho ô đếm.
+- `summaries`: BP không có cột số nên whitelist rỗng. Gửi `summary_keys` thì mọi key trả `null`; không gửi thì `{}`. Web tự đặt metric đếm cho cột `code` (`countMetric` trong `useBusinessPartnersQuery`).
 - `status` validate `IsIn(ACTIVE, INACTIVE)` (sinh từ fieldSpec `status`). V1 nhận chuỗi tự do.
 
 ### 4.1 Lọc, sắp xếp, tìm kiếm
@@ -116,3 +116,11 @@ bun .agents/skills/erp-api-structure/scripts/scan-oversized-files.ts --strict --
 
 - Skill tổng: `api-structure` (hợp đồng, bẫy, quy trình chuyển module cũ).
 - Web: `erp-web/.agents/skills/modules/business-partners/SKILL.md`.
+
+## extraData (JSON tùy biến, 2026-11-08)
+
+- **DB**: cột `extra_data jsonb NOT NULL DEFAULT '{}'` (CHECK: object) trên: `erp_business_partners`. Migration `20261108120000-add-extra-data-to-v2-tables.ts`. Dữ liệu cũ là `{}`.
+- **DTO**: field `extraData?: Record<string, unknown>` (`@ExtraDataField()`, base-core). Không gửi thì không đổi.
+- **Ghi**: tạo mặc định `{}`. Sửa header merge cấp 1 (`null` xóa key). Dòng chứng từ ghi theo payload, không merge.
+- **Giới hạn**: 16 KB, sâu 5 cấp, key ≤ 64 ký tự, cấm `__proto__`/`constructor`/`prototype` (400 qua `RejectUnsafeExtraDataPipe` và service).
+- **Response**: luôn có `extraData` (object).

@@ -5,6 +5,7 @@ describe('Invoice mapper', () => {
   const createdAt = new Date('2026-01-01T00:00:00.000Z');
   const entity = {
     id: 'id-1',
+    extraData: {},
     branchId: null,
     invoiceNo: 'sample',
     invoiceNoNormalized: null,
@@ -42,6 +43,7 @@ describe('Invoice mapper', () => {
   it('maps the entity to the response DTO without isDeleted', () => {
     expect(toInvoiceResponse(entity)).toEqual({
       id: 'id-1',
+      extraData: {},
       invoiceNo: 'sample',
       serialNo: 'sample',
       invoiceDate: 'sample',

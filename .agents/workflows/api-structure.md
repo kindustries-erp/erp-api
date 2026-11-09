@@ -375,7 +375,24 @@ Generator: `api-module-v2` (xem [`plop-generate`](../skills/plop-generate/SKILL.
 | Chứng từ Header + Lines (không có lõi) | `api-voucher-v2` | Cảnh báo nếu họ đã có lõi; nên dùng `api-thin-module` |
 | Module V1 cũ | `api-module` | `[LEGACY-V1]`, chỉ giữ để tham khảo |
 
-Quy tắc: lõi (`src/v2/core/<họ>`) chứa nghiệp vụ dùng chung, module (`src/v2/modules/<module>`) chỉ chứa phần riêng. Không sinh lại Base entity hay engine của một họ đã có lõi.
+Quy tắc (áp cho mọi họ v2 trong erp-api):
+- **Lõi** (`src/v2/core/<họ>-core/`) chỉ là **base để kế thừa**: entity trừu tượng (`abstract`, không `@Entity`), service trừu tượng, type, helper thuần, `core.manifest.json`, barrel. Không chứa `@Entity`, `@Controller`, job `@Cron`, service cụ thể tiêm trực tiếp hay bảng DB.
+- **Module** (`src/v2/modules/<gốc>-<biến thể>/`) chứa mọi thứ cụ thể: entity có `@Entity`, service kế thừa base, job, controller, DTO, mapper, facade và module Nest.
+- Test `plop-helpers/apiCoreLayout.test.mjs` chặn vi phạm. Các họ cũ còn vi phạm nằm trong `LEGACY_CORE_ALLOWLIST` và được đánh dấu `[LEGACY-CORE]`; chuyển xong một họ thì gỡ khỏi danh sách. Chuyển từng họ khi có lệnh riêng.
+- Không sinh lại Base entity hay engine của một họ đã có lõi.
+
+**Cron và job định kỳ**: job là class trong module, kế thừa `ScheduledJob` (lớp nền trừu tượng ở `src/v2/core/scheduler-core/`), khai báo `jobName`, `cron`, `timeZone` và `run()`. Module `src/v2/modules/scheduler-jobs/` (`SchedulerJobsModule`, import một lần trong `AppModule`) tự tìm mọi job qua `DiscoveryService` và đăng ký. Không thêm `@Cron(...)` hay `setInterval` mới để chạy nền. Chi tiết: `.agents/skills/modules/scheduler-jobs/SKILL.md`.
+
+### 🏷️ Quy tắc đặt tên bảng (v2)
+
+- **Dạng chuẩn**: `<gốc>_<hậu tố>`, snake_case, **không** prefix `erp_`. Ví dụ: `notifications_inbox`, `goods_receipts_garage`, `proc_orders_garage`.
+- **Bảng thuộc module**, đặt theo tên module cộng hậu tố sau gốc. Ví dụ module `notifications-inbox` có bảng `notifications_inbox`.
+- **Lõi không có bảng**: không dùng hậu tố `_core` cho bảng mới. Bảng `notifications_core` cũ đã đổi thành `notifications_inbox`.
+- **Module**: hậu tố theo biến thể, khớp quy ước thư mục (`-garage`, `-erp`, `-finance`). Module không có biến thể thì dùng `<gốc>` trần.
+- **Entity con (dòng chứng từ)**: `<header>_lines` hoặc `<header>_lines_<hậu tố>`, theo mẫu bảng header.
+- **Không đổi tên bảng đang có** (`erp_*`, `core_*`). Quy tắc này chỉ áp dụng cho bảng tạo mới. Đổi tên bảng cũ là một task migration riêng, cần lệnh của người dùng.
+- Bảng nằm trong `src/v2/**` không dùng prefix `core_` hay `erp_` để tránh nhầm với bảng v1.
+- Khi chạy generator, luôn truyền `tableNameInput` tường minh (xem mục "Chọn generator"). Mặc định của plop tuân theo quy tắc này.
 
 ---
 
@@ -418,7 +435,7 @@ cd erp/erp-api
 bunx plop api-module-v2 <module-core> <Entity> "<fieldSpec>" "<tableName>" "<routePath>" "<permissionResource>" <wire>
 ```
 - Thứ tự tham số: `moduleInput`, `entityInput`, `fieldSpecInput`, `tableNameInput`, `routePathInput`, `permissionResourceInput`, `wireInput`.
-- Để chuỗi rỗng `""` để dùng giá trị mặc định (bảng `erp_<module>`, route và resource theo module bỏ `-core`).
+- Để chuỗi rỗng `""` để dùng giá trị mặc định: bảng `<gốc>` hoặc `<gốc>_<biến thể>` (xem "Quy tắc đặt tên bảng"), route và resource theo module bỏ `-core`.
 - `fieldSpec`: `name:type[:required],...`, type ∈ `string | text | number | decimal | boolean | date | status`. `createdAt` được sinh tự động.
 - `wire = true`: nối module vào `src/app.module.ts` và entity vào `src/db/data-source.ts`. Resource RBAC **luôn** được thêm vào `erp-resource.enum.ts`.
 - Input sai sẽ dừng trước khi ghi file nào.

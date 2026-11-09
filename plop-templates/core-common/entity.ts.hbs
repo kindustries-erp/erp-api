@@ -1,19 +1,8 @@
-import { Column, CreateDateColumn, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { CoreSoftDeletableEntity } from '@/v2/core/base-core';
 
 /**
- * Entity nền họ {{family}}. Module con extend class này, thêm `@Entity(...)` và các cột riêng.
+ * Entity nền họ {{family}}. Kế thừa chuỗi base chung (id, extraData, createdAt/updatedAt, isDeleted).
+ * Module con extend class này, thêm `@Entity(...)` và các cột riêng.
  * Xóa mềm bằng `isDeleted` theo quy chuẩn ERP.
  */
-export abstract class {{baseEntity}} {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
-
-  @Column({ type: 'boolean', default: false, name: 'is_deleted' })
-  isDeleted: boolean;
-
-  @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
-
-  @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
-}
+export abstract class {{baseEntity}} extends CoreSoftDeletableEntity {}

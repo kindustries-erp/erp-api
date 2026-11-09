@@ -1,24 +1,16 @@
-import {
-  Column,
-  CreateDateColumn,
-  Index,
-  PrimaryGeneratedColumn,
-  UpdateDateColumn,
-} from 'typeorm';
-import {
-  IVoucherHeader,
-  IVoucherLine,
-  VoucherStatus,
-} from '../contracts/voucher.contract';
+import { Column, Index } from 'typeorm';
+import { CoreHeaderEntity } from '../../base-core/entities/core-header.entity';
+import { IVoucherHeader } from '../contracts/voucher.contract';
 
 /**
  * Abstract Base Entity cho bảng Header chứng từ Nhập kho (Goods Receipt).
  * KHÔNG gắn @Entity() ở đây để các module con tự định nghĩa tên bảng riêng biệt.
+ * Kế thừa id, extraData, timestamps, isDeleted, status (DRAFT), createdBy từ lớp header chung.
  */
-export abstract class BaseGoodsReceiptEntity implements IVoucherHeader {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
-
+export abstract class BaseGoodsReceiptEntity
+  extends CoreHeaderEntity
+  implements IVoucherHeader
+{
   @Index({ unique: true })
   @Column({ type: 'varchar', length: 128, name: 'receipt_no' })
   receiptNo: string;
@@ -60,23 +52,6 @@ export abstract class BaseGoodsReceiptEntity implements IVoucherHeader {
   })
   totalAmount: string;
 
-  @Index()
-  @Column({ type: 'varchar', length: 50, default: 'DRAFT', name: 'status' })
-  status: VoucherStatus | string;
-
   @Column({ type: 'text', name: 'remarks', nullable: true })
   remarks?: string;
-
-  @Column({ type: 'uuid', name: 'created_by', nullable: true })
-  createdBy?: string | null;
-
-  @Index()
-  @Column({ name: 'is_deleted', type: 'boolean', default: false })
-  isDeleted: boolean;
-
-  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
-  createdAt: Date;
-
-  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
-  updatedAt: Date;
 }

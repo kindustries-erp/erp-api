@@ -10,15 +10,17 @@ import {
   applyDateBounds,
   applyTableFilters,
   applyTableSort,
+  applyListSummaries,
+  parseSummaryKeys,
+  SummaryMetric,
   findTableColumnOptions,
-  parseFilterRecord,
+  parseListFilterPayload,
   resolveTableColumn,
-  TableDateRange,
-  TableOperatorFilter,
   TableOptionsPage,
 } from '@/common/utils/table-query';
 import {
   SEARCH_COLUMNS,
+  SUMMARY_COLUMNS,
   TABLE_COLUMNS,
   toFilterPayload,
 } from '../constants/procurement-request-table.constants';
@@ -56,6 +58,7 @@ export class GarageProcurementRequestQueryService {
     total: number;
     page: number;
     pageSize: number;
+    summaries: Record<string, SummaryMetric | null>;
   }>;
   async list(
     page: number,
@@ -66,6 +69,7 @@ export class GarageProcurementRequestQueryService {
     total: number;
     page: number;
     pageSize: number;
+    summaries: Record<string, SummaryMetric | null>;
   }>;
   async list(
     dtoOrPage: ListProcurementRequestsDto | number = 1,
@@ -82,7 +86,7 @@ export class GarageProcurementRequestQueryService {
 
     const qb = this.headers
       .createQueryBuilder('h')
-      .where('h.isDeleted = :notDeleted', { notDeleted: false });
+      .where('h.isDeleted = :deleted', { deleted: dto.deleted === 'only' });
 
     if (dto.branchId) {
       qb.andWhere('h.branchId = :branchId', { branchId: dto.branchId });
@@ -102,31 +106,25 @@ export class GarageProcurementRequestQueryService {
       );
     }
 
-    applyTableFilters(
-      qb,
-      {
-        columnFilters: parseFilterRecord<Record<string, string[]>>(
-          dto.column_filters,
-        ),
-        columnSearch: parseFilterRecord<Record<string, string>>(
-          dto.column_search,
-        ),
-        columnOperators: parseFilterRecord<Record<string, TableOperatorFilter>>(
-          dto.column_operators,
-        ),
-        dateRanges: parseFilterRecord<Record<string, TableDateRange>>(
-          dto.date_ranges,
-        ),
-      },
-      TABLE_COLUMNS,
-      'filter',
-    );
+    applyTableFilters(qb, parseListFilterPayload(dto), TABLE_COLUMNS, 'filter');
 
     applyDateBounds(qb, 'h.createdAt', dto.date_from, dto.date_to, 'legacy');
 
-    applyTableSort(qb, dto.sort, TABLE_COLUMNS, {
-      sql: 'h.createdAt',
-      direction: 'DESC',
+    applyTableSort(
+      qb,
+      dto.sort,
+      TABLE_COLUMNS,
+      { sql: 'h.createdAt', direction: 'DESC' },
+      'h.id',
+    );
+
+    // Tổng theo summary_keys trên toàn bộ dòng khớp, nên phải gọi trước khi phân trang
+    const summaries = await applyListSummaries(qb, {
+      columns: SUMMARY_COLUMNS,
+      keys: parseSummaryKeys(dto.summary_keys),
+      page,
+      pageSize,
+      tieBreaker: 'h.id',
     });
 
     const [rows, total] = await qb
@@ -134,7 +132,7 @@ export class GarageProcurementRequestQueryService {
       .take(pageSize)
       .getManyAndCount();
 
-    return { rows, total, page, pageSize };
+    return { rows, total, page, pageSize, summaries };
   }
 
   /** Gợi ý danh sách giá trị của một cột cho Popover Filter trên Header bảng V2. */
@@ -144,13 +142,14 @@ export class GarageProcurementRequestQueryService {
     page: number,
     pageSize: number,
     filters: unknown,
+    deleted?: 'only',
   ): Promise<TableOptionsPage> {
     const def = resolveTableColumn(TABLE_COLUMNS, column);
     if (!def) return { items: [], total: 0, next: null };
 
     const qb = this.headers
       .createQueryBuilder('h')
-      .where('h.isDeleted = :notDeleted', { notDeleted: false });
+      .where('h.isDeleted = :deleted', { deleted: deleted === 'only' });
 
     applyTableFilters(
       qb,

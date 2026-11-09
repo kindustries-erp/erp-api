@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "layer": "api",
+  "family": "scheduler-core",
+  "entity": null,
+  "style": "v2-core",
+  "barrel": "src/v2/core/scheduler-core/index.ts",
+  "module": null,
+  "moduleFile": null,
+  "baseClasses": {
+    "entity": null,
+    "createDto": null,
+    "contract": null,
+    "service": "ScheduledJob"
+  },
+  "serviceFile": "jobs/scheduled-job.ts",
+  "permissionPattern": null,
+  "requiredModuleFiles": []
+}

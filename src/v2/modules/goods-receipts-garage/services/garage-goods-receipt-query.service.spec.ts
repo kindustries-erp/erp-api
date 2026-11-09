@@ -25,8 +25,13 @@ describe('GarageGoodsReceiptQueryService', () => {
       getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
       getRawOne: jest.fn().mockResolvedValue({}),
       getRawMany: jest.fn().mockResolvedValue([]),
+      from: jest.fn().mockReturnThis(),
+      setParameters: jest.fn().mockReturnThis(),
+      getQuery: jest.fn().mockReturnValue('SELECT 1'),
+      getParameters: jest.fn().mockReturnValue({}),
     };
     qb.clone = jest.fn(() => qb);
+    qb.createQueryBuilder = jest.fn(() => qb);
     repo = { createQueryBuilder: jest.fn(() => qb), findOne: jest.fn() };
     service = new GarageGoodsReceiptQueryService(
       repo as unknown as Repository<GarageGoodsReceipt>,
@@ -64,19 +69,32 @@ describe('GarageGoodsReceiptQueryService', () => {
     expect(qb.andWhere).toHaveBeenCalledTimes(1);
   });
 
-  it('sums numeric columns over the filtered rows before paging', async () => {
-    qb.getRawOne.mockResolvedValue({ totalAmount: 0 });
+  it('computes summaries for the requested keys, unknown keys as null', async () => {
+    qb.getRawOne
+      .mockResolvedValueOnce({ totalAmount: 500 })
+      .mockResolvedValueOnce({ s0: 200 })
+      .mockResolvedValueOnce({ s0: 100 });
 
     const result = await service.findAll({
       page: 3,
       pageSize: 10,
+      summary_keys: 'totalAmount,unknownKey',
     } as QueryGarageGoodsReceiptDto);
 
-    expect(qb.select).toHaveBeenCalledWith(
-      expect.stringContaining('COALESCE(SUM('),
-      expect.any(String),
-    );
-    expect(result.summaries).toEqual({ totalAmount: 0 });
+    expect(result.summaries).toEqual({
+      totalAmount: { total: 500, pageSubtotal: 100, cumulative: 200 },
+      unknownKey: null,
+    });
+  });
+
+  it('returns empty summaries and runs no sum query without summary_keys', async () => {
+    const result = await service.findAll({
+      page: 1,
+      pageSize: 10,
+    } as QueryGarageGoodsReceiptDto);
+
+    expect(result.summaries).toEqual({});
+    expect(qb.getRawOne).not.toHaveBeenCalled();
   });
 
   it('finds an active row by id', async () => {

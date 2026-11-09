@@ -1,20 +1,16 @@
-import {
-  Column,
-  CreateDateColumn,
-  Index,
-  PrimaryGeneratedColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { Column, Index } from 'typeorm';
+import { CoreAuditedEntity } from '../../base-core/entities/core-audited.entity';
 import { IVoucherLine } from '../contracts/voucher.contract';
 
 /**
  * Abstract Base Entity cho bảng Line chi tiết hàng hóa của chứng từ Nhập kho.
  * KHÔNG gắn @Entity() ở đây để các module con tự định nghĩa tên bảng riêng biệt.
+ * Kế thừa id, extraData, created_at, updated_at từ lớp nền chung.
  */
-export abstract class BaseGoodsReceiptLineEntity implements IVoucherLine {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
-
+export abstract class BaseGoodsReceiptLineEntity
+  extends CoreAuditedEntity
+  implements IVoucherLine
+{
   @Column({ type: 'int', name: 'line_no' })
   lineNo: number;
 
@@ -51,10 +47,4 @@ export abstract class BaseGoodsReceiptLineEntity implements IVoucherLine {
 
   @Column({ type: 'text', name: 'notes', nullable: true })
   notes?: string;
-
-  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
-  createdAt: Date;
-
-  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
-  updatedAt: Date;
 }

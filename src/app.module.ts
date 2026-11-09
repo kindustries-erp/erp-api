@@ -7,7 +7,8 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { CoreUser } from './users/entities/core-user.entity';
 import { CoreUserPreference } from './users/entities/core-user-preference.entity';
-import { CoreUserTablePreference } from './users/entities/core-user-table-preference.entity';
+import { CoreUserTablePreference } from './v2/core/table-preferences-core/entities/core-user-table-preference.entity';
+import { NotificationInbox } from './v2/modules/notifications-inbox/entities/notification-inbox.entity';
 import { CoreRole } from '@/v2/core/rbac-core/entities/core-role.entity';
 import { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from '@/v2/core/rbac-core/entities/core-user-role.entity';
@@ -23,6 +24,9 @@ import { GoodsIssuesCoreModule } from './goods-issues-core/goods-issues-core.mod
 import { SalesOrdersCoreModule } from './sales-orders-core/sales-orders-core.module';
 import { ProductionCoreModule } from './production-core/production-core.module';
 import { BranchesManagementModule } from './v2/modules/branches-management/branches-management.module';
+import { TablePreferencesModule } from './v2/modules/table-preferences/table-preferences.module';
+import { NotificationsInboxModule } from './v2/modules/notifications-inbox/notifications-inbox.module';
+import { SchedulerJobsModule } from './v2/modules/scheduler-jobs/scheduler-jobs.module';
 import { SalesServiceOrdersCoreModule } from './sales-service-orders-core/sales-service-orders-core.module';
 import { InventoryStockCoreModule } from './inventory-stock-core/inventory-stock-core.module';
 import { ErpMfgCoreModule } from './erp-mfg-core/erp-mfg-core.module';
@@ -94,6 +98,7 @@ import { InventoryMovementsGarageAdjustmentsModule } from './v2/modules/inventor
               CoreUser,
               CoreUserPreference,
               CoreUserTablePreference,
+              NotificationInbox,
               CoreRole,
               CorePermission,
               CoreUserRole,
@@ -118,6 +123,7 @@ import { InventoryMovementsGarageAdjustmentsModule } from './v2/modules/inventor
             CoreUser,
             CoreUserPreference,
             CoreUserTablePreference,
+            NotificationInbox,
             CoreRole,
             CorePermission,
             CoreUserRole,
@@ -152,6 +158,9 @@ import { InventoryMovementsGarageAdjustmentsModule } from './v2/modules/inventor
     SalesOrdersCoreModule,
     ProductionCoreModule,
     BranchesManagementModule,
+    TablePreferencesModule,
+    SchedulerJobsModule,
+    NotificationsInboxModule, // api-v2-module:notifications-inbox:module
     SalesServiceOrdersCoreModule,
     InventoryStockCoreModule,
     ErpMfgCoreModule,

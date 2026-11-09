@@ -42,3 +42,11 @@ Không thêm `CoreRbacGuard`, `ParseUUIDPipe`, endpoint chi tiết, column-optio
 ## Kiểm chứng
 
 `src/v2/modules/branches-management/branches-management.contract.spec.ts` khóa HTTP contract (dùng mock repository, không ghi DB). Các spec co-located ở hai thư mục v2 phủ query, command, mapper, facade, controller, DI và route. Chạy Jest theo phạm vi trên, `bun run type:check`, scanner `--strict` cho hai thư mục, lint/format, `bun run build`. DB runtime xác nhận qua `.env` và `SELECT current_database()` trước bất kỳ thao tác DB.
+
+## extraData (JSON tùy biến, 2026-11-08)
+
+- **DB**: cột `extra_data jsonb NOT NULL DEFAULT '{}'` (CHECK: object) trên: `erp_branches`. Migration `20261108120000-add-extra-data-to-v2-tables.ts`. Dữ liệu cũ là `{}`.
+- **DTO**: field `extraData?: Record<string, unknown>` (`@ExtraDataField()`, base-core). Không gửi thì không đổi.
+- **Ghi**: tạo mặc định `{}`. Sửa header merge cấp 1 (`null` xóa key). Dòng chứng từ ghi theo payload, không merge.
+- **Giới hạn**: 16 KB, sâu 5 cấp, key ≤ 64 ký tự, cấm `__proto__`/`constructor`/`prototype` (400 qua `RejectUnsafeExtraDataPipe` và service).
+- **Response**: luôn có `extraData` (object).

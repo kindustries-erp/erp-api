@@ -10,7 +10,13 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
+import { ProcurementOrderListResponseDto } from '@/v2/core/procurement-orders-core/dto/procurement-order-list-response.dto';
 import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
 import { RequirePermissions } from '@/auth/decorators/require-permissions.decorator';
@@ -49,6 +55,7 @@ export class ErpProcurementOrderController {
     resource: ErpResource.PROCUREMENT_ORDERS,
     action: ErpAction.READ,
   })
+  @ApiOkResponse({ type: ProcurementOrderListResponseDto })
   @Get()
   list(@Query() dto: ListProcurementOrdersDto) {
     return this.service.list(dto);

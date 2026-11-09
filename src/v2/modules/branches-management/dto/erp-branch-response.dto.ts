@@ -4,6 +4,9 @@ export class ErpBranchResponseDto {
   @ApiProperty()
   id: string;
 
+  @ApiProperty({ type: 'object', additionalProperties: true })
+  extraData: Record<string, unknown>;
+
   @ApiProperty()
   code: string;
 
