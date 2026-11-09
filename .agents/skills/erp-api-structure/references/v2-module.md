@@ -204,10 +204,10 @@ Knowledge-Sync: mỗi lần migrate xong, thêm/đổi dòng ở bảng này và
 ## 5c. Cron và job định kỳ (v2)
 
 - Job là class trong module, kế thừa `ScheduledJob` (`@/v2/core/scheduler-core`). Khai báo `jobName`, `cron`, `timeZone` và `run()`. Không tiêm scheduler vào job.
-- `JobSchedulerModule` (`src/v2/modules/job-scheduler/`) import một lần trong `AppModule`. Module này tự tìm mọi provider kế thừa `ScheduledJob` qua `DiscoveryService` và đăng ký.
+- `SchedulerJobsModule` (`src/v2/modules/scheduler-jobs/`) import một lần trong `AppModule`. Module này tự tìm mọi provider kế thừa `ScheduledJob` qua `DiscoveryService` và đăng ký.
 - Cổng bật/tắt là `ENABLE_CRON` (qua `isCronEnabled()`). Không thêm `@Cron(...)` hay `setInterval` mới để chạy nền trong `src/v2/**`.
 - Job phải an toàn khi lặp (chưa có khóa phân tán). Lỗi được cô lập trong `runSafeCronJob`.
-- Mẫu tham chiếu: `src/v2/modules/notifications-inbox/jobs/notification-purge.job.ts`. Chi tiết: `.agents/skills/modules/job-scheduler/SKILL.md`.
+- Mẫu tham chiếu: `src/v2/modules/notifications-inbox/jobs/notification-purge.job.ts`. Chi tiết: `.agents/skills/modules/scheduler-jobs/SKILL.md`.
 
 ## 6. Giới hạn
 

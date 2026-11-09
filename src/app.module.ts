@@ -26,7 +26,7 @@ import { ProductionCoreModule } from './production-core/production-core.module';
 import { BranchesManagementModule } from './v2/modules/branches-management/branches-management.module';
 import { TablePreferencesModule } from './v2/modules/table-preferences/table-preferences.module';
 import { NotificationsInboxModule } from './v2/modules/notifications-inbox/notifications-inbox.module';
-import { JobSchedulerModule } from './v2/modules/job-scheduler/job-scheduler.module';
+import { SchedulerJobsModule } from './v2/modules/scheduler-jobs/scheduler-jobs.module';
 import { SalesServiceOrdersCoreModule } from './sales-service-orders-core/sales-service-orders-core.module';
 import { InventoryStockCoreModule } from './inventory-stock-core/inventory-stock-core.module';
 import { ErpMfgCoreModule } from './erp-mfg-core/erp-mfg-core.module';
@@ -159,7 +159,7 @@ import { InventoryMovementsGarageAdjustmentsModule } from './v2/modules/inventor
     ProductionCoreModule,
     BranchesManagementModule,
     TablePreferencesModule,
-    JobSchedulerModule,
+    SchedulerJobsModule,
     NotificationsInboxModule, // api-v2-module:notifications-inbox:module
     SalesServiceOrdersCoreModule,
     InventoryStockCoreModule,

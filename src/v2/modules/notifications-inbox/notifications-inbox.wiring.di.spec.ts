@@ -2,9 +2,9 @@ import { Test } from '@nestjs/testing';
 import { ScheduleModule } from '@nestjs/schedule';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import {
-  JobSchedulerModule,
-  JobSchedulerService,
-} from '@/v2/modules/job-scheduler';
+  SchedulerJobsModule,
+  SchedulerJobsService,
+} from '@/v2/modules/scheduler-jobs';
 import { NotificationInbox } from './entities/notification-inbox.entity';
 import { NotificationsInboxModule } from './notifications-inbox.module';
 import { NotificationsPublisherService } from './services/notifications-publisher.service';
@@ -18,12 +18,12 @@ describe('NotificationsInboxModule wiring (DI thật, repo giả)', () => {
     else process.env.ENABLE_CRON = originalEnv;
   });
 
-  it('export publisher cho producer và đăng ký job purge qua job-scheduler', async () => {
+  it('export publisher cho producer và đăng ký job purge qua scheduler-jobs', async () => {
     process.env.ENABLE_CRON = 'false';
     const moduleRef = await Test.createTestingModule({
       imports: [
         ScheduleModule.forRoot(),
-        JobSchedulerModule,
+        SchedulerJobsModule,
         NotificationsInboxModule,
       ],
     })
@@ -40,7 +40,7 @@ describe('NotificationsInboxModule wiring (DI thật, repo giả)', () => {
     );
     expect(
       moduleRef
-        .get(JobSchedulerService)
+        .get(SchedulerJobsService)
         .getStatus()
         .map((s) => s.name),
     ).toContain('notifications-purge');

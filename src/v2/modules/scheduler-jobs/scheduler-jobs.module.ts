@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { DiscoveryModule } from '@nestjs/core';
-import { JobSchedulerService } from './services/job-scheduler.service';
+import { SchedulerJobsService } from './services/scheduler-jobs.service';
 
 /**
  * Module điều phối job định kỳ v2. Import một lần trong `AppModule`.
@@ -9,7 +9,7 @@ import { JobSchedulerService } from './services/job-scheduler.service';
  */
 @Module({
   imports: [DiscoveryModule],
-  providers: [JobSchedulerService],
-  exports: [JobSchedulerService],
+  providers: [SchedulerJobsService],
+  exports: [SchedulerJobsService],
 })
-export class JobSchedulerModule {}
+export class SchedulerJobsModule {}

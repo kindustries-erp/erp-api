@@ -31,10 +31,10 @@ interface JobEntry {
  * và đăng ký chúng. Một cổng `isCronEnabled()` duy nhất quyết định có tạo timer hay không.
  */
 @Injectable()
-export class JobSchedulerService
+export class SchedulerJobsService
   implements OnModuleInit, OnApplicationBootstrap, OnModuleDestroy
 {
-  private readonly logger = new Logger(JobSchedulerService.name);
+  private readonly logger = new Logger(SchedulerJobsService.name);
   private readonly jobs = new Map<string, JobEntry>();
   private bootstrapped = false;
 

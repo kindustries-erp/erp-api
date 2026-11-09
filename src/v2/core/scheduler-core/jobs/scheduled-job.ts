@@ -2,7 +2,7 @@ import { DEFAULT_JOB_TIMEZONE } from '../types/scheduler.types';
 
 /**
  * Lớp nền cho job định kỳ (abstract, không `@Cron`). Module cụ thể kế thừa, khai báo
- * tên, lịch và `run()`. `job-scheduler` tự phát hiện mọi provider kế thừa lớp này
+ * tên, lịch và `run()`. `scheduler-jobs` tự phát hiện mọi provider kế thừa lớp này
  * và đăng ký; cổng `isCronEnabled()` quyết định bật hay tắt.
  */
 export abstract class ScheduledJob {

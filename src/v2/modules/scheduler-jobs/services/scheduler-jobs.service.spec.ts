@@ -1,6 +1,6 @@
 import { CronJob } from 'cron';
 import { ScheduledJob } from '@/v2/core/scheduler-core';
-import { JobSchedulerService } from './job-scheduler.service';
+import { SchedulerJobsService } from './scheduler-jobs.service';
 
 jest.mock('cron', () => ({
   CronJob: jest.fn().mockImplementation((_cron, onTick) => ({
@@ -38,7 +38,7 @@ function lastCronJob(): MockedCron {
   return results[results.length - 1].value as MockedCron;
 }
 
-describe('JobSchedulerService', () => {
+describe('SchedulerJobsService', () => {
   const originalEnv = process.env.ENABLE_CRON;
 
   beforeEach(() => {
@@ -52,7 +52,7 @@ describe('JobSchedulerService', () => {
   });
 
   it('từ chối đăng ký trùng tên job (AC-2)', () => {
-    const service = new JobSchedulerService(
+    const service = new SchedulerJobsService(
       makeRegistry() as any,
       makeDiscovery() as any,
     );
@@ -64,7 +64,7 @@ describe('JobSchedulerService', () => {
   it('không tạo timer khi ENABLE_CRON=false (AC-1)', () => {
     process.env.ENABLE_CRON = 'false';
     const registry = makeRegistry();
-    const service = new JobSchedulerService(
+    const service = new SchedulerJobsService(
       registry as any,
       makeDiscovery() as any,
     );
@@ -83,7 +83,7 @@ describe('JobSchedulerService', () => {
 
   it('tạo CronJob với múi giờ mặc định Asia/Ho_Chi_Minh và bắt đầu chạy', () => {
     const registry = makeRegistry();
-    const service = new JobSchedulerService(
+    const service = new SchedulerJobsService(
       registry as any,
       makeDiscovery() as any,
     );
@@ -111,7 +111,7 @@ describe('JobSchedulerService', () => {
   });
 
   it('job đăng ký sau bootstrap được bật ngay', () => {
-    const service = new JobSchedulerService(
+    const service = new SchedulerJobsService(
       makeRegistry() as any,
       makeDiscovery() as any,
     );
@@ -125,7 +125,7 @@ describe('JobSchedulerService', () => {
   });
 
   it('không chạy chồng: tick thứ hai khi job còn chạy bị bỏ qua (AC-3)', async () => {
-    const service = new JobSchedulerService(
+    const service = new SchedulerJobsService(
       makeRegistry() as any,
       makeDiscovery() as any,
     );
@@ -147,7 +147,7 @@ describe('JobSchedulerService', () => {
   });
 
   it('lỗi một job không làm ảnh hưởng job khác (AC-3)', async () => {
-    const service = new JobSchedulerService(
+    const service = new SchedulerJobsService(
       makeRegistry() as any,
       makeDiscovery() as any,
     );
@@ -171,7 +171,7 @@ describe('JobSchedulerService', () => {
   });
 
   it('getStatus trả lịch, múi giờ và thời điểm chạy cuối', async () => {
-    const service = new JobSchedulerService(
+    const service = new SchedulerJobsService(
       makeRegistry() as any,
       makeDiscovery() as any,
     );
@@ -195,7 +195,7 @@ describe('JobSchedulerService', () => {
 
   it('tự phát hiện ScheduledJob trong container và bỏ qua provider khác', async () => {
     const job = new FakeJob();
-    const service = new JobSchedulerService(
+    const service = new SchedulerJobsService(
       makeRegistry() as any,
       makeDiscovery([job, { notAJob: true }, 'text']) as any,
     );
@@ -217,7 +217,7 @@ describe('JobSchedulerService', () => {
   });
 
   it('từ chối hai ScheduledJob trùng jobName khi discovery', () => {
-    const service = new JobSchedulerService(
+    const service = new SchedulerJobsService(
       makeRegistry() as any,
       makeDiscovery([new FakeJob(), new FakeJob()]) as any,
     );
@@ -226,7 +226,7 @@ describe('JobSchedulerService', () => {
 
   it('onModuleDestroy gỡ các job đã bật khỏi registry', () => {
     const registry = makeRegistry();
-    const service = new JobSchedulerService(
+    const service = new SchedulerJobsService(
       registry as any,
       makeDiscovery() as any,
     );

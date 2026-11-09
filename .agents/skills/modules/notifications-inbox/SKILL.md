@@ -57,7 +57,7 @@ Mỗi item có `target: { module, id, action } | null`. `null` khi thông báo k
 - Không có RBAC. Quyền duy nhất là đăng nhập và thao tác trên thông báo của chính mình.
 
 ## 3b. Xóa cứng định kỳ (job `notifications-purge`)
-- `NotificationPurgeJob` (`src/v2/modules/notifications-inbox/jobs/notification-purge.job.ts`) kế thừa `ScheduledJob`. Được đăng ký tự động bởi `JobSchedulerModule` (xem skill `job-scheduler`).
+- `NotificationPurgeJob` (`src/v2/modules/notifications-inbox/jobs/notification-purge.job.ts`) kế thừa `ScheduledJob`. Được đăng ký tự động bởi `SchedulerJobsModule` (xem skill `scheduler-jobs`).
 - Lịch: `0 30 2 * * *`, múi giờ `Asia/Ho_Chi_Minh`.
 - Điều kiện xóa: `is_deleted = true AND updated_at < now - N ngày`. Dòng chưa xóa mềm không bị đụng tới. `updated_at` là mốc xóa mềm vì TypeORM ghi lại khi `update()`.
 - Tên bảng lấy từ `repo.metadata.tableName`, không hard-code.
@@ -99,7 +99,7 @@ await this.notificationsPublisher.createForUsers(userIds, {
   - `jobs/notification-purge.di.spec.ts` — job được discovery, cổng `ENABLE_CRON`
   - `controllers/notification.routes.spec.ts`, `helpers/notification.mapper.spec.ts`, `notifications-inbox.service.spec.ts`, `notifications-inbox.module.di.spec.ts`
 
-Lệnh: `bunx jest src/v2/modules/notifications-inbox src/v2/modules/job-scheduler --forceExit`.
+Lệnh: `bunx jest src/v2/modules/notifications-inbox src/v2/modules/scheduler-jobs --forceExit`.
 Kiểm tra bố cục lõi: `bun test plop-helpers/apiCoreLayout.test.mjs`.
 
 ## 7. Liên kết

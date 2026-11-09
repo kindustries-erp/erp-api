@@ -21,7 +21,7 @@ export function resolveRetentionDays(raw: string | undefined): number {
 
 /**
  * Job xóa cứng thông báo đã xóa mềm quá N ngày. Kế thừa `ScheduledJob`;
- * `job-scheduler` tự đăng ký, việc bật/tắt do cổng `isCronEnabled()` quyết định.
+ * `scheduler-jobs` tự đăng ký, việc bật/tắt do cổng `isCronEnabled()` quyết định.
  */
 @Injectable()
 export class NotificationPurgeJob extends ScheduledJob {

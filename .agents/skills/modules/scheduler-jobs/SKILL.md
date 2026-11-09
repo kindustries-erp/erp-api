@@ -1,14 +1,14 @@
 ---
-name: job-scheduler
+name: scheduler-jobs
 description: Module v2 điều phối job định kỳ (cron) với một cổng ENABLE_CRON duy nhất, chống chạy chồng, cô lập lỗi và đo trạng thái. Tự tìm các job kế thừa ScheduledJob. Dùng cho mọi cron mới trong erp-api.
 ---
 
-# ⏱️ Module Backend Tri Thức: Job Scheduler (`job-scheduler`)
+# ⏱️ Module Backend Tri Thức: Job Scheduler (`scheduler-jobs`)
 
 ## 1. Tổng quan & trách nhiệm
-- **Module**: `JobSchedulerModule` (`src/v2/modules/job-scheduler/`). Import một lần trong `AppModule`. Không có entity, controller hay endpoint.
+- **Module**: `SchedulerJobsModule` (`src/v2/modules/scheduler-jobs/`). Import một lần trong `AppModule`. Không có entity, controller hay endpoint.
 - **Thành phần**:
-  - `JobSchedulerService`: khi khởi động, dùng `DiscoveryService` tìm mọi provider là `ScheduledJob` và đăng ký. Có `register(def)`, `getStatus()`, `onApplicationBootstrap`, `onModuleDestroy`.
+  - `SchedulerJobsService`: khi khởi động, dùng `DiscoveryService` tìm mọi provider là `ScheduledJob` và đăng ký. Có `register(def)`, `getStatus()`, `onApplicationBootstrap`, `onModuleDestroy`.
 - **Lớp nền** (lõi, chỉ base): `src/v2/core/scheduler-core/`
   - `ScheduledJob` (abstract, `jobs/scheduled-job.ts`): khai báo `jobName`, `cron`, `timeZone` (mặc định `Asia/Ho_Chi_Minh`) và `run()`.
   - `types/scheduler.types.ts`: `ScheduledJobDefinition`, `JobStatus`, `DEFAULT_JOB_TIMEZONE`.
@@ -51,13 +51,13 @@ export class TenJobPurge extends ScheduledJob {
 | :--- | :--- | :--- | :--- |
 | `notifications-purge` | `notifications-inbox` | `0 30 2 * * *` (Asia/Ho_Chi_Minh) | `NOTIFICATION_PURGE_RETENTION_DAYS` (mặc định 90) |
 
-**Chưa chuyển sang job-scheduler** (vẫn dùng cơ chế cũ, đang chạy theo cổng riêng): `auth.service` (`@Cron` dọn refresh token, không có cổng), `audit-retention.scheduler` (`@Cron` 02:00, cổng `ENABLE_AUDIT_LOG`), `kgara-sync.scheduler`, `erp-invoices-cron.service`, `sinvoice-cron.service`, `goods-receipts-cron.service`. Chuyển là task riêng, cần lệnh của người dùng.
+**Chưa chuyển sang scheduler-jobs** (vẫn dùng cơ chế cũ, đang chạy theo cổng riêng): `auth.service` (`@Cron` dọn refresh token, không có cổng), `audit-retention.scheduler` (`@Cron` 02:00, cổng `ENABLE_AUDIT_LOG`), `kgara-sync.scheduler`, `erp-invoices-cron.service`, `sinvoice-cron.service`, `goods-receipts-cron.service`. Chuyển là task riêng, cần lệnh của người dùng.
 
 ## 6. Co-located tests
-- `src/v2/modules/job-scheduler/services/job-scheduler.service.spec.ts` (gồm test tự phát hiện `ScheduledJob`, trùng `jobName`)
+- `src/v2/modules/scheduler-jobs/services/scheduler-jobs.service.spec.ts` (gồm test tự phát hiện `ScheduledJob`, trùng `jobName`)
 - `src/v2/modules/notifications-inbox/jobs/notification-purge.di.spec.ts` (discovery thật, cổng `ENABLE_CRON`)
 
-Lệnh: `bunx jest src/v2/modules/job-scheduler src/v2/modules/notifications-inbox/jobs --forceExit`.
+Lệnh: `bunx jest src/v2/modules/scheduler-jobs src/v2/modules/notifications-inbox/jobs --forceExit`.
 
 ## 7. Liên kết
 - Plan: `/home/lio/.claude/plans/anh-mu-n-t-o-api-v2-notification-glistening-reddy.md`
