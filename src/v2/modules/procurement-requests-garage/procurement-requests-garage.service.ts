@@ -25,6 +25,7 @@ import {
 } from './dto/procurement-request.dto';
 import { GarageProcurementRequestCommandService } from './services/procurement-request-command.service';
 import { GarageProcurementRequestQueryService } from './services/procurement-request-query.service';
+import { ProcurementRequestNotifierService } from './services/procurement-request-notifier.service';
 
 /** Facade: điều phối giữa command, query và chuyển sang response DTO. */
 @Injectable()
@@ -35,6 +36,7 @@ export class GarageProcurementRequestsService {
     private readonly rbac: RbacCoreService,
     private readonly actors: ApprovalActorService,
     private readonly approvers: ApproverDirectoryService,
+    private readonly notifier: ProcurementRequestNotifierService,
   ) {}
 
   async create(
@@ -118,13 +120,14 @@ export class GarageProcurementRequestsService {
         actorId,
       );
     }
-    await this.command.transition(
+    const header = await this.command.transition(
       id,
       action,
       { id: actorId, roles: await this.roles(actorId) },
       reason,
       approverId ?? null,
     );
+    await this.notifier.afterTransition(action, header, actorId, reason);
     return this.findOne(id);
   }
 

@@ -49,7 +49,7 @@ Mỗi item có `target: { module, id, action } | null`. `null` khi thông báo k
 - FE giữ bảng ánh xạ `(target_module, action)` → drawer/modal. DB không lưu tên component.
 - Mở chứng từ chỉ là mở màn hình. Dữ liệu vẫn qua API của module đó và chịu RBAC như bình thường. Thông báo không cấp thêm quyền.
 - Chứng từ đã xóa hoặc đổi: API trả 404, FE hiển thị "chứng từ không còn tồn tại" và không tự đánh dấu đã đọc.
-- Producer truyền đích qua `payload.target = { module, id, action }`. Thao tác đơn và hàng loạt: `{ message, data }`, với `data` là `null` hoặc `{ affected }`.
+- Producer truyền đích qua `payload.target = { module, id, action }`. Đích đang dùng: `PROCUREMENT_REQUEST_GARAGE` (đề nghị garage; `APPROVE` = mở modal duyệt, `VIEW` = mở drawer xem). Thao tác đơn và hàng loạt: `{ message, data }`, với `data` là `null` hoặc `{ affected }`.
 
 ## 3. Quy tắc bảo mật và sở hữu
 - Mọi truy vấn và cập nhật đều lọc `user_id = :sub` lấy từ JWT. Client không truyền được `userId`.

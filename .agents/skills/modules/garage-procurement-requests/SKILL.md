@@ -35,7 +35,7 @@ Giống hệt họ thường: `DRAFT → PENDING_APPROVAL → APPROVED → CLOSE
 Cùng bộ endpoint với họ thường: `POST /`, `GET /`, `GET /:id`, `GET /:id/approval-events`, `GET /:id/po-draft`, `PATCH /:id/lines`, `POST /:id/submit|recall|approve|reject|cancel|close`.
 
 **Response & nhật ký (cập nhật 2026-11-07)**:
-- Khối duyệt thống nhất `approval` (xem mục "Response duyệt" cuối file). Không còn key phẳng `approverEmail`/`approvedBy`/`rejectReason`... Không trả UUID `createdBy` ra API; có `createdByEmail`.
+- Khối duyệt thống nhất `approval` (xem mục "Response duyệt" cuối file). Không còn key phẳng `approverEmail`/`approvedBy`/`rejectReason`... Response trả cả `createdBy` (id người tạo, để nhận diện người tạo khi duyệt) và `createdByEmail` (để hiển thị).
 - `ApprovalEventResponseDto` (`GET /:id/approval-events`) có thêm `actorName` (họ tên nhân viên) và `actorEmail`, resolve bởi `ApprovalActorService`. Không có `id` nội bộ của nhật ký.
 - `TABLE_COLUMNS` (`procurement-request-table.constants.ts`): `createdBy`/`created_by` và `approver` lọc, sắp xếp và liệt kê option theo email (subselect `core_users.email`), không theo UUID.
 - Module đăng ký `CoreUser` trong `TypeOrmModule.forFeature` để `ApprovalActorService` inject được (xem `approval-actor-wiring.spec.ts`).
@@ -83,6 +83,7 @@ Quyền resource: `garage_procurement_requests`. Seed từ `garage_purchase_orde
 - Danh sách người duyệt: `GET /api/v2/approval-config/garage-procurement-requests/approvers` (loại người đang gọi).
 - Logic dùng chung ở `src/v2/core/approval-core` (`approval-gate.helper.ts`, `approval-settings.service.ts`, `approver-directory.service.ts`); module chỉ khai báo `docType` và resource.
 - Migration: `20261106110000-AddApprovalSettingsAndApprover.ts`.
+- Thông báo (2026-11-09): `services/procurement-request-notifier.service.ts` gọi sau transition thành công (facade `procurement-requests-garage.service.ts`). Gửi duyệt có người duyệt → báo `approverId` (`target.action = APPROVE`). Duyệt / từ chối → báo người tạo (`target.action = VIEW`, từ chối kèm lý do). Khóa tắt (AUTO), không có người duyệt, hoặc người thao tác trùng người nhận → không gửi. Đích: `PROCUREMENT_REQUEST_GARAGE`. Lỗi gửi chỉ log, không làm hỏng transition.
 
 ## Response duyệt: khối `approval` (2026-11-08)
 

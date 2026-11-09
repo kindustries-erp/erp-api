@@ -34,6 +34,9 @@ describe('GarageProcurementRequestsService (facade)', () => {
     };
 
     const approvers = { assertEligible: jest.fn() };
+    const notifier = {
+      afterTransition: jest.fn().mockResolvedValue(undefined),
+    };
 
     const svc = new GarageProcurementRequestsService(
       command as never,
@@ -41,6 +44,7 @@ describe('GarageProcurementRequestsService (facade)', () => {
       rbac as never,
       { resolve: jest.fn().mockResolvedValue(new Map()) } as never,
       approvers as never,
+      notifier as never,
     );
     const out = await svc.transition('h1', 'approve', 'boss');
 
@@ -54,5 +58,31 @@ describe('GarageProcurementRequestsService (facade)', () => {
     );
     expect(out.status).toBe('APPROVED');
     expect(out.approval.approve?.by).toBe('boss');
+    expect(notifier.afterTransition).toHaveBeenCalledWith(
+      'approve',
+      {},
+      'boss',
+      undefined,
+    );
+  });
+
+  it('không gửi thông báo khi chuyển trạng thái thất bại', async () => {
+    const command = {
+      transition: jest.fn().mockRejectedValue(new Error('khóa')),
+    };
+    const notifier = { afterTransition: jest.fn() };
+    const svc = new GarageProcurementRequestsService(
+      command as never,
+      { findOne: jest.fn() } as never,
+      { getUserRoleNames: jest.fn().mockResolvedValue([]) } as never,
+      { resolve: jest.fn() } as never,
+      { assertEligible: jest.fn() } as never,
+      notifier as never,
+    );
+
+    await expect(
+      svc.transition('h1', 'submit', 'u1', undefined, 'a1'),
+    ).rejects.toThrow('khóa');
+    expect(notifier.afterTransition).not.toHaveBeenCalled();
   });
 });

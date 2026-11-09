@@ -17,6 +17,8 @@ import { GarageProcurementRequestsService } from './procurement-requests-garage.
 import { GarageProcurementRequestCommandService } from './services/procurement-request-command.service';
 import { GarageProcurementRequestQueryService } from './services/procurement-request-query.service';
 import { GarageProcurementRequestOrderingService } from './services/garage-procurement-request-ordering.service';
+import { ProcurementRequestNotifierService } from './services/procurement-request-notifier.service';
+import { NotificationsInboxModule } from '@/v2/modules/notifications-inbox/notifications-inbox.module';
 
 const GarageProcurementRequestApprovalConfigController =
   createApprovalConfigController({
@@ -37,6 +39,7 @@ const GarageProcurementRequestApprovalConfigController =
       CoreUser,
     ]),
     RbacCoreModule,
+    NotificationsInboxModule,
   ],
   controllers: [
     GarageProcurementRequestController,
@@ -51,6 +54,7 @@ const GarageProcurementRequestApprovalConfigController =
     GarageProcurementRequestQueryService,
     GarageProcurementRequestsService,
     GarageProcurementRequestOrderingService,
+    ProcurementRequestNotifierService,
   ],
   exports: [
     GarageProcurementRequestQueryService,
