@@ -110,3 +110,5 @@ Quyền resource: `garage_procurement_requests`. Seed từ `garage_purchase_orde
 - **Xóa cứng phiếu đã xóa mềm**: `lockHeader(manager, id, includeDeleted=true)` trong `hardDeleteDraft` (cả PR và PO), không còn 404 với phiếu đã xóa mềm. Với PO, không trả lại số lượng giữ lần nữa vì `softDeleteDraft` đã trả (`if (!header.isDeleted) releaseHeldQty`).
 - **Quyền**: `deleted=only` chỉ dùng quyền đọc danh sách; xóa cứng vẫn yêu cầu `PURGE` ở controller (`DELETE :id/permanent`).
 - **Không có restore**: chưa có endpoint khôi phục phiếu đã xóa mềm.
+
+- **Đã xử lý trước đó (409)**: `approval.engine` `resolveTransition` trả `ConflictException` với body `{ code: 'INVALID_STATUS_TRANSITION', message, action, currentStatus }`. Web dùng `code` và `currentStatus` để hiện modal "đã xử lý" thay vì toast chung. Message giữ nguyên để tương thích ngược.

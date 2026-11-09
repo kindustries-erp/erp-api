@@ -24,9 +24,12 @@ export function resolveTransition<A extends string>(
     throw new BadRequestException(`Hành động không hợp lệ: ${action}`);
   }
   if (!rule.from.includes(current)) {
-    throw new ConflictException(
-      `Không thể ${action} khi đang ở trạng thái ${current}`,
-    );
+    throw new ConflictException({
+      code: 'INVALID_STATUS_TRANSITION',
+      message: `Không thể ${action} khi đang ở trạng thái ${current}`,
+      action,
+      currentStatus: current,
+    });
   }
   return rule.to;
 }
