@@ -30,7 +30,7 @@ Giống hệt họ thường: `DRAFT → PENDING_APPROVAL → APPROVED → CLOSE
 - Chi nhánh là một giá trị (không mảng). Cột `branch_id` nullable từ đầu, không cần migration khi đổi sang tùy chọn.
 - `GET /` lọc theo `branchId` nếu có. `findOne` không lọc chi nhánh, chỉ theo `id` và `is_deleted = false`.
 
-## 4. Endpoint (`/api/v2/garage-procurement-requests`)
+## 4. Endpoint (`/api/v2/procurement-requests-garage`)
 
 Cùng bộ endpoint với họ thường: `POST /`, `GET /`, `GET /:id`, `GET /:id/approval-events`, `GET /:id/po-draft`, `PATCH /:id/lines`, `POST /:id/submit|recall|approve|reject|cancel|close`.
 
@@ -58,7 +58,7 @@ Quyền resource: `garage_procurement_requests`. Seed từ `garage_purchase_orde
 
 ## 8. Cập nhật 2026-11-05: sửa đầu đề nháp
 
-- `PATCH /api/v2/garage-procurement-requests/:id`: sửa `requestDate`, `neededDate`, `title`, `remarks` khi còn DRAFT (lõi `updateHeader`, khóa header, `assertLinesEditable`).
+- `PATCH /api/v2/procurement-requests-garage/:id`: sửa `requestDate`, `neededDate`, `title`, `remarks` khi còn DRAFT (lõi `updateHeader`, khóa header, `assertLinesEditable`).
 - Chi nhánh (`branchId`, `branchName`, đều nullable) sửa được khi DRAFT, gửi `null` để bỏ trống. Override `updateHeader` trong `procurement-request-command.service.ts`: nếu chi nhánh thực sự đổi và đề nghị đã có đơn mua tham chiếu (kể cả đơn đã xóa mềm) thì trả `409 Conflict`. Không đổi thì không kiểm tra.
 - DTO: `UpdateProcurementRequestHeaderDto`. Spec: `core/procurement-requests/services/abstract-purchase-request-header.spec.ts`.
 - `GET /:id/po-draft` trả phần còn lại chưa đặt (`qtyRemaining`) để điền sẵn PO. Web dùng khi "Tạo PO từ PR".
@@ -71,8 +71,8 @@ Quyền resource: `garage_procurement_requests`. Seed từ `garage_purchase_orde
 
 ## 10. Xóa mềm và xóa cứng (2026-11-05)
 
-- `DELETE /api/v2/garage-procurement-requests/:id`: xóa mềm nháp. Quyền `DELETE`. Chặn khi không phải `DRAFT` hoặc còn số lượng đang được đơn mua giữ.
-- `DELETE /api/v2/garage-procurement-requests/:id/permanent`: xóa cứng nháp. Quyền `PURGE` (chỉ admin). Chặn khi còn đơn mua tham chiếu, kể cả đơn đã xóa mềm (khóa ngoại RESTRICT). Xóa dòng rồi đầu đề; lịch sử duyệt được giữ.
+- `DELETE /api/v2/procurement-requests-garage/:id`: xóa mềm nháp. Quyền `DELETE`. Chặn khi không phải `DRAFT` hoặc còn số lượng đang được đơn mua giữ.
+- `DELETE /api/v2/procurement-requests-garage/:id/permanent`: xóa cứng nháp. Quyền `PURGE` (chỉ admin). Chặn khi còn đơn mua tham chiếu, kể cả đơn đã xóa mềm (khóa ngoại RESTRICT). Xóa dòng rồi đầu đề; lịch sử duyệt được giữ.
 - Chính sách và điều kiện chung: `.agents/workflows/api-structure.md` mục "Chính sách xóa".
 
 ## 11. Khóa duyệt và chọn người duyệt (2026-11-06)
@@ -104,7 +104,7 @@ Quyền resource: `garage_procurement_requests`. Seed từ `garage_purchase_orde
 
 ## Lọc phiếu đã xóa mềm (`deleted`)
 
-- **Query**: `GET /api/v2/garage-procurement-requests?deleted=only` chỉ trả phiếu `isDeleted = true`. Thiếu tham số thì giữ `isDeleted = false`. Giá trị khác `only` bị DTO từ chối (`@IsIn(['only'])`).
+- **Query**: `GET /api/v2/procurement-requests-garage?deleted=only` chỉ trả phiếu `isDeleted = true`. Thiếu tham số thì giữ `isDeleted = false`. Giá trị khác `only` bị DTO từ chối (`@IsIn(['only'])`).
 - **Gợi ý cột**: `GET .../column-options?deleted=only` áp dụng cùng điều kiện. Số liệu `summaries` của list tự khớp vì cùng query builder.
 - **Xóa cứng phiếu đã xóa mềm**: `lockHeader(manager, id, includeDeleted=true)` trong `hardDeleteDraft` (cả PR và PO), không còn 404 với phiếu đã xóa mềm. Với PO, không trả lại số lượng giữ lần nữa vì `softDeleteDraft` đã trả (`if (!header.isDeleted) releaseHeldQty`).
 - **Quyền**: `deleted=only` chỉ dùng quyền đọc danh sách; xóa cứng vẫn yêu cầu `PURGE` ở controller (`DELETE :id/permanent`).

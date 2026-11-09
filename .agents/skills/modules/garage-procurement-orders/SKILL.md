@@ -39,7 +39,7 @@ Giống họ thường: DRAFT, PENDING_APPROVAL, APPROVED, ISSUED, CLOSED, CANCE
 - Tạo PO từ đề nghị Garage (`request_id`, `request_line_id`). Đề nghị phải APPROVED, cùng họ Garage, không vượt phần còn lại.
 - Cổng `GARAGE_PROCUREMENT_REQUEST_LINK` cài bởi `GarageProcurementRequestLinkAdapter` (`services/garage-procurement-request-link.adapter.ts`), trỏ vào `GarageProcurementRequestOrderingService` của module `garage-procurement-requests`.
 
-## 6. Endpoint (`/api/v2/garage-procurement-orders`)
+## 6. Endpoint (`/api/v2/procurement-orders-garage`)
 
 Cùng bộ endpoint họ thường: `POST /`, `GET /`, `GET /:id`, `GET /:id/approval-events`, `PATCH /:id/lines`, `POST` cho submit, recall, approve, reject, issue, cancel, close, receipts, acceptances, và void.
 
@@ -74,19 +74,19 @@ Quyền resource: `garage_procurement_orders`. Seed từ `garage_purchase_orders
 
 ## 9. Cập nhật 2026-11-05: bỏ nhận hàng trực tiếp trên PO
 
-- Đã gỡ `POST /api/v2/garage-procurement-orders/:id/receipts` và `ReceiveGoodsDto`. Nhận hàng GOODS chỉ qua phiếu nhập kho (GR) `post`; hủy GR đã post hoàn số đã nhận.
+- Đã gỡ `POST /api/v2/procurement-orders-garage/:id/receipts` và `ReceiveGoodsDto`. Nhận hàng GOODS chỉ qua phiếu nhập kho (GR) `post`; hủy GR đã post hoàn số đã nhận.
 - Nghiệm thu dịch vụ (`acceptances`) không đổi.
 - `erp-procurement-orders` (luồng thường) vẫn giữ `receipts` vì chưa nối GR.
 
 ## 10. Xóa mềm và xóa cứng (2026-11-05)
 
-- `DELETE /api/v2/garage-procurement-orders/:id`: xóa mềm nháp, trả SL giữ về PR nguồn. Quyền `DELETE`.
-- `DELETE /api/v2/garage-procurement-orders/:id/permanent`: xóa cứng nháp, trả SL giữ về PR nguồn trước khi xóa. Quyền `PURGE` (chỉ admin). Chặn khi còn phiếu nhập tham chiếu, kể cả phiếu đã hủy (khóa ngoại RESTRICT). Xóa dòng rồi đầu đơn; nghiệm thu đi theo dòng (CASCADE); lịch sử duyệt được giữ.
+- `DELETE /api/v2/procurement-orders-garage/:id`: xóa mềm nháp, trả SL giữ về PR nguồn. Quyền `DELETE`.
+- `DELETE /api/v2/procurement-orders-garage/:id/permanent`: xóa cứng nháp, trả SL giữ về PR nguồn trước khi xóa. Quyền `PURGE` (chỉ admin). Chặn khi còn phiếu nhập tham chiếu, kể cả phiếu đã hủy (khóa ngoại RESTRICT). Xóa dòng rồi đầu đơn; nghiệm thu đi theo dòng (CASCADE); lịch sử duyệt được giữ.
 - Chính sách và điều kiện chung: `.agents/workflows/api-structure.md` mục "Chính sách xóa".
 
 ## 11. Lọc cột và gợi ý giá trị (2026-11-05)
 
-- `GET /api/v2/garage-procurement-orders/column-options?column&search&page&pageSize&filters`: trả `{ items, total, next }` (cùng contract với `garage-procurement-requests`). Cột ngoài whitelist trả rỗng. Nguồn cột: `constants/procurement-order-table.constants.ts` (`TABLE_COLUMNS`), khớp `key` của `procurementOrderColumns` phía web.
+- `GET /api/v2/procurement-orders-garage/column-options?column&search&page&pageSize&filters`: trả `{ items, total, next }` (cùng contract với `garage-procurement-requests`). Cột ngoài whitelist trả rỗng. Nguồn cột: `constants/procurement-order-table.constants.ts` (`TABLE_COLUMNS`), khớp `key` của `procurementOrderColumns` phía web.
 - `GET /` nhận thêm `sort`, `column_filters`, `column_search`, `column_operators`, `date_ranges` (từ `TableQueryDto`). Sắp xếp mặc định `createdAt DESC`.
 - Lỗi đã sửa: endpoint trước đây trả `{ columns }`, khiến web crash `reading 'value'` khi mở popup lọc cột.
 - `createdBy` (uuid) được lọc, sắp xếp và gợi ý theo **email** từ `core_users` (subquery trong `TABLE_COLUMNS`). Danh sách trả thêm `createdByEmail` (tra một lần cho cả trang qua `helpers/resolve-created-by-email.ts`). Chi tiết (`findOne`) không có `createdByEmail`. Không đổi schema.
@@ -111,5 +111,5 @@ Quyền resource: `garage_procurement_orders`. Seed từ `garage_purchase_orders
 
 ## Lọc phiếu đã xóa mềm (`deleted`)
 
-- **Query**: `GET /api/v2/garage-procurement-orders?deleted=only` chỉ trả đơn `isDeleted = true`; thiếu tham số thì giữ `isDeleted = false`. Gợi ý cột (`column-options`) nhận cùng tham số.
+- **Query**: `GET /api/v2/procurement-orders-garage?deleted=only` chỉ trả đơn `isDeleted = true`; thiếu tham số thì giữ `isDeleted = false`. Gợi ý cột (`column-options`) nhận cùng tham số.
 - **Xóa cứng**: `hardDeleteDraft` dùng `lockHeader(..., includeDeleted=true)` và chỉ trả số lượng giữ khi đơn chưa xóa mềm, tránh trả trùng với `softDeleteDraft`.

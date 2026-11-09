@@ -40,7 +40,7 @@ interface RequestWithUser {
 @ApiTags('procurement_orders')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
-@Controller('api/v2/garage-procurement-orders')
+@Controller('api/v2/procurement-orders-garage')
 export class GarageProcurementOrderController {
   constructor(private readonly service: GarageProcurementOrdersService) {}
 
