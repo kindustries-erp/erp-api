@@ -15,7 +15,16 @@ Kiến trúc API V2 được tổ chức phân cấp tương tự Web V2 (`erp-w
 - **Lõi** `src/v2/core/<họ>-core/`: tên luôn kết thúc `-core`. Generator `api-core` nhận tên có hoặc không có `-core` và tự thêm hậu tố. Tên class (`<Họ>CoreModule`, `Base<Entity>...`) và tên file service giữ theo phần gốc, không nhân đôi `-core`.
 - **Module** `src/v2/modules/<gốc>-<biến thể>/`: biến thể đặt ở hậu tố, ví dụ `procurement-orders-garage`, `procurement-orders-erp`, `invoices-finance`. Không dùng tiền tố `erp-`, `garage-`, `finance-`. `rbac` là tên miền (quản trị quyền), không phải tiền tố biến thể, nên module quản trị role là `rbac-roles`. Module không có biến thể (`business-partners-management`, `purchase-orders`) giữ nguyên.
 - **Hợp đồng không đổi khi đổi tên thư mục**: route (`@Controller`), `permissionPattern` và `ErpResource`, tên bảng (`@Entity`), tên class và symbol trong barrel. Khi triển khai module đã có, truyền tường minh `tableNameInput`, `routePathInput`, `permissionResourceInput` cho generator; không để generator suy ra từ tên thư mục.
+- **Tên bảng (bảng tạo mới)** theo mục 0b. Không đổi tên bảng đang có.
 - Generator `api-voucher-v2` vẫn chuẩn hóa tên module thành `<gốc>-core`. Module đổi tên theo quy ước trên không đi qua generator này; khi tạo module mới theo quy ước suffix, đặt tên theo `<gốc>-<biến thể>` và kiểm tra lại `moduleName`/`moduleBase` sinh ra.
+
+## 0b. Quy tắc đặt tên bảng (v2)
+
+- Dạng chuẩn: `<gốc>_<hậu tố>`, snake_case, **không** prefix `erp_` (ví dụ `notifications_core`, `goods_receipts_garage`).
+- Lõi `src/v2/core/<họ>-core/`: hậu tố `_core`. Module: hậu tố biến thể (`_garage`, `_erp`, `_finance`); không biến thể thì `<gốc>`.
+- Dòng chứng từ: `<header>_lines` (hoặc `<header>_lines_<hậu tố>` khi header có hậu tố).
+- Bảng đang có (`erp_*`, `core_*`, `*_garage` cũ) giữ nguyên. Đổi tên là task migration riêng, cần lệnh của người dùng.
+- Generator truyền `tableNameInput` tường minh. Mặc định của plop tuân theo quy tắc này.
 
 ## 1. Quy ước v2
 
@@ -138,7 +147,7 @@ bunx plop api-voucher-v2
 2. `headerEntityInput`: Tên Entity Header chính (PascalCase, vd: `GarageGoodsIssue`).
 3. `lineEntityInput`: Tên Entity Line chi tiết (mặc định `<Header>Line`, vd: `GarageGoodsIssueLine`).
 4. `voucherPrefixInput`: Tiền tố mã chứng từ tự sinh theo ngày (vd: `GGI`, `GR`, `PO`).
-5. `tableNameInput`: Tên bảng PostgreSQL Header (mặc định `erp_<module>`).
+5. `tableNameInput`: Tên bảng PostgreSQL Header (mặc định `<gốc>`, lõi `<gốc>_core`; không prefix `erp_`, xem mục 0b).
 6. `lineTableNameInput`: Tên bảng PostgreSQL Lines (mặc định `<header_table>_lines`).
 7. `routePathInput`: Đường dẫn API (mặc định theo module).
 8. `permissionResourceInput`: Tên RBAC resource snake_case.

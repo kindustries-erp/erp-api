@@ -82,6 +82,7 @@ Tài liệu chi tiết của từng module nằm tại `.agents/skills/modules/<
 - **Phụ tùng VinFast**: `vinfast-parts-stock`, `vinfast-parts-dashboard`
 - **Đối tác**: `business-partners-core` (lõi `src/v2/core/business-partners-core`, module `src/v2/modules/business-partners-management`)
 - **Chi nhánh**: `branches-core` (lõi `src/v2/core/branches-core`, module `src/v2/modules/branches-management`; entity consumers import canonical v2, route v1 giữ nguyên)
+- **Thông báo (v2, theo user, không RBAC)**: `notifications-v2` (`/api/v2/notifications`, bảng `notifications_core`)
 - **Hệ thống, cấu hình, phân quyền, nhật ký**: `admin-dashboard-core`, `ai-hub-core`, `app-config`, `audit-core`, `module-config`, `rbac-core`, `system-operations-core`
 
 Khi cần quét mới hoặc cập nhật tài liệu module: skill `scan-module-knowledge`.

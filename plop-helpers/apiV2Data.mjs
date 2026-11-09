@@ -244,7 +244,7 @@ export function buildApiV2Data(answers) {
     entityName,
     entityKebab: toKebab(entityName),
     entityCamel: toCamel(entityName),
-    tableName: toSnake(answers.tableNameInput || `erp_${baseName}`),
+    tableName: toSnake(answers.tableNameInput || baseName),
     routePath: toKebab(answers.routePathInput || baseName),
     permissionResource,
     resourceKey: permissionResource.toUpperCase(),

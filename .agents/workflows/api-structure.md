@@ -377,6 +377,16 @@ Generator: `api-module-v2` (xem [`plop-generate`](../skills/plop-generate/SKILL.
 
 Quy tắc: lõi (`src/v2/core/<họ>`) chứa nghiệp vụ dùng chung, module (`src/v2/modules/<module>`) chỉ chứa phần riêng. Không sinh lại Base entity hay engine của một họ đã có lõi.
 
+### 🏷️ Quy tắc đặt tên bảng (v2)
+
+- **Dạng chuẩn**: `<gốc>_<hậu tố>`, snake_case, **không** prefix `erp_`. Ví dụ: `notifications_core`, `goods_receipts_garage`, `proc_orders_garage`.
+- **Lõi** (`src/v2/core/<họ>-core/`): hậu tố `_core`. Ví dụ `notifications_core`, `table_preferences_core`.
+- **Module**: hậu tố theo biến thể, khớp quy ước thư mục (`-garage`, `-erp`, `-finance`). Module không có biến thể thì dùng `<gốc>` trần.
+- **Entity con (dòng chứng từ)**: `<header>_lines` hoặc `<header>_lines_<hậu tố>`, theo mẫu bảng header.
+- **Không đổi tên bảng đang có** (`erp_*`, `core_*`). Quy tắc này chỉ áp dụng cho bảng tạo mới. Đổi tên bảng cũ là một task migration riêng, cần lệnh của người dùng.
+- Bảng nằm trong `src/v2/**` không dùng prefix `core_` hay `erp_` để tránh nhầm với bảng v1. Hậu tố `_core` chỉ dành cho lõi.
+- Khi chạy generator, luôn truyền `tableNameInput` tường minh (xem mục "Chọn generator"). Mặc định của plop tuân theo quy tắc này.
+
 ---
 
 ### 🎯 Định nghĩa API v2
@@ -418,7 +428,7 @@ cd erp/erp-api
 bunx plop api-module-v2 <module-core> <Entity> "<fieldSpec>" "<tableName>" "<routePath>" "<permissionResource>" <wire>
 ```
 - Thứ tự tham số: `moduleInput`, `entityInput`, `fieldSpecInput`, `tableNameInput`, `routePathInput`, `permissionResourceInput`, `wireInput`.
-- Để chuỗi rỗng `""` để dùng giá trị mặc định (bảng `erp_<module>`, route và resource theo module bỏ `-core`).
+- Để chuỗi rỗng `""` để dùng giá trị mặc định: bảng `<gốc>` hoặc `<gốc>_core` cho lõi (xem "Quy tắc đặt tên bảng"), route và resource theo module bỏ `-core`.
 - `fieldSpec`: `name:type[:required],...`, type ∈ `string | text | number | decimal | boolean | date | status`. `createdAt` được sinh tự động.
 - `wire = true`: nối module vào `src/app.module.ts` và entity vào `src/db/data-source.ts`. Resource RBAC **luôn** được thêm vào `erp-resource.enum.ts`.
 - Input sai sẽ dừng trước khi ghi file nào.

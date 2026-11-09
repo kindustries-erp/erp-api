@@ -22,7 +22,7 @@ describe('case helpers', () => {
 describe('buildApiV2Data', () => {
   it('derives table, route and permission names from the module name', () => {
     const data = buildApiV2Data(base);
-    expect(data.tableName).toBe('erp_customer_claims');
+    expect(data.tableName).toBe('customer_claims');
     expect(data.routePath).toBe('customer-claims');
     expect(data.permissionResource).toBe('customer_claims');
     expect(data.serviceClass).toBe('CustomerClaimsCoreService');

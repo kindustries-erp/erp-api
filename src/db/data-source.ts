@@ -3,6 +3,7 @@ import { DataSource } from 'typeorm';
 import { CoreUser } from '../users/entities/core-user.entity';
 import { CoreUserPreference } from '../users/entities/core-user-preference.entity';
 import { CoreUserTablePreference } from '@/v2/core/table-preferences-core/entities/core-user-table-preference.entity';
+import { NotificationCore } from '@/v2/core/notifications-core/entities/notification.entity';
 import { CoreRefreshToken } from '../auth/entities/core-refresh-token.entity';
 import { CoreRole } from '@/v2/core/rbac-core/entities/core-role.entity';
 import { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.entity';
@@ -211,6 +212,7 @@ const entities = [
   VinfastPartsCatalog,
   VinfastPartsLedger,
   FinanceInvoice, // api-v2-module:invoices-finance:entities
+  NotificationCore, // api-v2-module:notifications:entities
   FinanceInvoiceItem,
   GarageGoodsReceipt, // api-v2-module:goods-receipts-garage:entities
   GarageGoodsReceiptLine,

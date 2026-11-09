@@ -19,7 +19,7 @@ const thinAnswers = {
   entityInput: 'GarageGoodsReceipt',
   fieldSpecInput: 'code:string:required,status:status',
   // Tên thật của module đã triển khai: truyền tường minh, không để generator suy ra từ tên thư mục.
-  tableNameInput: 'erp_garage_goods_receipts',
+  tableNameInput: 'garage_goods_receipts',
   routePathInput: 'garage-goods-receipts',
   permissionResourceInput: 'garage_goods_receipts',
   wireInput: false,
@@ -44,7 +44,7 @@ describe('buildApiThinData', () => {
     expect(data.coreModule).toBe('GoodsReceiptsCoreModule');
     expect(data.baseEntity).toBe('BaseGoodsReceiptEntity');
     expect(data.baseCreateDto).toBe('BaseCreateGoodsReceiptDto');
-    expect(data.tableName).toBe('erp_garage_goods_receipts');
+    expect(data.tableName).toBe('garage_goods_receipts');
     expect(data.resourceKey).toBe('GARAGE_GOODS_RECEIPTS');
     expect(data.customFields.map((f) => f.name)).toEqual(['code', 'status']);
     expect(data.wire).toBe(false);

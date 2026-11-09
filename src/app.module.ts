@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module';
 import { CoreUser } from './users/entities/core-user.entity';
 import { CoreUserPreference } from './users/entities/core-user-preference.entity';
 import { CoreUserTablePreference } from './v2/core/table-preferences-core/entities/core-user-table-preference.entity';
+import { NotificationCore } from './v2/core/notifications-core/entities/notification.entity';
 import { CoreRole } from '@/v2/core/rbac-core/entities/core-role.entity';
 import { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from '@/v2/core/rbac-core/entities/core-user-role.entity';
@@ -24,6 +25,7 @@ import { SalesOrdersCoreModule } from './sales-orders-core/sales-orders-core.mod
 import { ProductionCoreModule } from './production-core/production-core.module';
 import { BranchesManagementModule } from './v2/modules/branches-management/branches-management.module';
 import { TablePreferencesModule } from './v2/modules/table-preferences/table-preferences.module';
+import { NotificationsV2Module } from './v2/modules/notifications/notifications.module';
 import { SalesServiceOrdersCoreModule } from './sales-service-orders-core/sales-service-orders-core.module';
 import { InventoryStockCoreModule } from './inventory-stock-core/inventory-stock-core.module';
 import { ErpMfgCoreModule } from './erp-mfg-core/erp-mfg-core.module';
@@ -95,6 +97,7 @@ import { InventoryMovementsGarageAdjustmentsModule } from './v2/modules/inventor
               CoreUser,
               CoreUserPreference,
               CoreUserTablePreference,
+              NotificationCore,
               CoreRole,
               CorePermission,
               CoreUserRole,
@@ -119,6 +122,7 @@ import { InventoryMovementsGarageAdjustmentsModule } from './v2/modules/inventor
             CoreUser,
             CoreUserPreference,
             CoreUserTablePreference,
+            NotificationCore,
             CoreRole,
             CorePermission,
             CoreUserRole,
@@ -154,6 +158,7 @@ import { InventoryMovementsGarageAdjustmentsModule } from './v2/modules/inventor
     ProductionCoreModule,
     BranchesManagementModule,
     TablePreferencesModule,
+    NotificationsV2Module, // api-v2-module:notifications:module
     SalesServiceOrdersCoreModule,
     InventoryStockCoreModule,
     ErpMfgCoreModule,

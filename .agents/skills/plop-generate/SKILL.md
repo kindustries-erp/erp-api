@@ -63,6 +63,7 @@ bunx plop api-module-v2 customer-claims-core CustomerClaim "code:string:required
 ```
 
 - Tham số theo thứ tự: `moduleInput`, `entityInput`, `fieldSpecInput`, `tableNameInput`, `routePathInput`, `permissionResourceInput`, `wireInput`. Chuỗi rỗng = mặc định.
+- Mặc định `tableNameInput`: `<gốc>` (lõi: `<gốc>_core`), không prefix `erp_`. Quy tắc đầy đủ: `api-structure` mục "Quy tắc đặt tên bảng".
 - `wire = true`: nối vào `app.module.ts` và `data-source.ts`. Resource RBAC luôn được đăng ký trong `erp-resource.enum.ts`.
 - Input sai bị chặn trước khi ghi file nào.
 - Test generator: `bun test plop-helpers`.
