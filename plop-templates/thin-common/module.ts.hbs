@@ -1,15 +1,15 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { {{coreModule}} } from '{{coreBarrel}}';
-import { {{entityName}} } from './entities/{{entityKebab}}.entity';
+{{#if coreModule}}import { {{coreModule}} } from '{{coreBarrel}}';
+{{/if}}import { {{entityName}} } from './entities/{{entityKebab}}.entity';
 import { {{entityName}}Controller } from './controllers/{{entityKebab}}.controller';
 import { {{serviceClass}} } from './{{moduleName}}.service';
 import { {{entityName}}CommandService } from './services/{{entityKebab}}-command.service';
 import { {{entityName}}QueryService } from './services/{{entityKebab}}-query.service';
 
-/** Module {{moduleName}} ghép lõi họ {{family}}: entity và DTO kế thừa lõi, module import lõi. */
+/** Module {{moduleName}} ghép lõi họ {{family}}: entity và DTO kế thừa lõi (lõi base không có module riêng). */
 @Module({
-  imports: [TypeOrmModule.forFeature([{{entityName}}]), {{coreModule}}],
+  imports: [TypeOrmModule.forFeature([{{entityName}}]){{#if coreModule}}, {{coreModule}}{{/if}}],
   controllers: [{{entityName}}Controller],
   providers: [{{serviceClass}}, {{entityName}}QueryService, {{entityName}}CommandService],
   exports: [{{serviceClass}}],

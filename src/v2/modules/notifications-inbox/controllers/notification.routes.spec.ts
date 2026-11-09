@@ -6,7 +6,7 @@ import {
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
-import { NotificationsV2Service } from '../notifications.service';
+import { NotificationsInboxService } from '../notifications-inbox.service';
 import { NotificationController } from './notification.controller';
 
 describe('NotificationController HTTP routes', () => {
@@ -25,7 +25,7 @@ describe('NotificationController HTTP routes', () => {
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [NotificationController],
-      providers: [{ provide: NotificationsV2Service, useValue: service }],
+      providers: [{ provide: NotificationsInboxService, useValue: service }],
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({

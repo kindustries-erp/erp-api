@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import { buildApiV2Data } from './apiV2Data.mjs';
 import { API_CORE_STYLES } from './apiCoreData.mjs';
 
-const MANIFEST_FIELDS = ['family', 'style', 'module', 'moduleFile', 'barrel'];
+// `module`/`moduleFile` không bắt buộc: lõi base mới không có module Nest.
+const MANIFEST_FIELDS = ['family', 'style', 'barrel'];
 const MANIFEST_CLASSES = ['entity', 'createDto', 'contract', 'service'];
 
 /** Đọc `core.manifest.json` của các họ trong `src/v2/core/` (chỉ họ có manifest hợp lệ). */
@@ -95,7 +96,7 @@ export function buildApiThinData(answers, manifest, coreFields = []) {
     family: manifest.family,
     style: manifest.style,
     coreBarrel: `@/v2/core/${manifest.family}`,
-    coreModule: manifest.module,
+    coreModule: manifest.module ?? '',
     baseEntity: manifest.baseClasses.entity,
     baseCreateDto: manifest.baseClasses.createDto,
     baseService: manifest.baseClasses.service,

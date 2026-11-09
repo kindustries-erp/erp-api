@@ -8,7 +8,7 @@ import { KgaraSyncService } from './kgara-sync.service';
 import { KgaraAuthService } from './kgara-auth.service';
 import { KgaraBulkSyncService } from './services/kgara-bulk-sync.service';
 import { KgaraAccountKey } from './enums/kgara-account.enum';
-import { NotificationsCoreService } from '@/v2/core/notifications-core';
+import { NotificationsPublisherService } from '@/v2/modules/notifications-inbox';
 import * as cronUtil from '../common/utils/cron.util';
 
 describe('KgaraSyncScheduler', () => {
@@ -111,7 +111,7 @@ describe('KgaraSyncScheduler', () => {
           useValue: bulkSyncService,
         },
         {
-          provide: NotificationsCoreService,
+          provide: NotificationsPublisherService,
           useValue: notificationsService,
         },
       ],

@@ -115,7 +115,7 @@ export default function (plop) {
       {
         type: 'input',
         name: 'tableNameInput',
-        message: 'Tên bảng PostgreSQL (để trống = <module>, lõi = <module>_core):',
+        message: 'Tên bảng PostgreSQL (để trống = <module>; bảng thuộc module, không dùng hậu tố _core):',
         default: '',
       },
       {
@@ -197,7 +197,7 @@ export default function (plop) {
       {
         type: 'input',
         name: 'tableNameInput',
-        message: 'Tên bảng PostgreSQL (để trống = <module>, lõi = <module>_core):',
+        message: 'Tên bảng PostgreSQL (để trống = <module>; bảng thuộc module, không dùng hậu tố _core):',
         default: '',
       },
       {

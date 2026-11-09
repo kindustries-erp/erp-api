@@ -41,6 +41,13 @@ describe('buildApiThinData', () => {
     expect(data.modulePath).toBe('src/v2/modules/goods-receipts-garage');
     expect(data.moduleClass).toBe('GoodsReceiptsGarage');
     expect(data.coreBarrel).toBe('@/v2/core/goods-receipts-core');
+    // Họ sinh mới không có module lõi: module mỏng không import gì từ lõi
+    expect(data.coreModule).toBe('');
+  });
+
+  it('họ cũ còn khai báo module lõi vẫn được module mỏng import (tương thích ngược)', () => {
+    const legacy = { ...engineManifest, module: 'GoodsReceiptsCoreModule' };
+    const data = buildApiThinData(thinAnswers, legacy);
     expect(data.coreModule).toBe('GoodsReceiptsCoreModule');
     expect(data.baseEntity).toBe('BaseGoodsReceiptEntity');
     expect(data.baseCreateDto).toBe('BaseCreateGoodsReceiptDto');

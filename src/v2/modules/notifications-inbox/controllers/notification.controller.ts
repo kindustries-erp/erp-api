@@ -13,7 +13,7 @@ import type { Request } from 'express';
 import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { NotificationParamsDto } from '../dto/notification-params.dto';
 import { QueryNotificationDto } from '../dto/query-notification.dto';
-import { NotificationsV2Service } from '../notifications.service';
+import { NotificationsInboxService } from '../notifications-inbox.service';
 
 /**
  * Thông báo của user đang đăng nhập. Không có RBAC: quyền là "xem thông báo của chính mình".
@@ -24,7 +24,7 @@ import { NotificationsV2Service } from '../notifications.service';
 @UseGuards(JwtAuthGuard)
 @Controller('api/v2/notifications')
 export class NotificationController {
-  constructor(private readonly service: NotificationsV2Service) {}
+  constructor(private readonly service: NotificationsInboxService) {}
 
   @Get()
   @ApiOperation({ summary: 'Danh sách thông báo của tôi (phân trang, lọc)' })

@@ -1,21 +1,21 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, SelectQueryBuilder } from 'typeorm';
-import { NotificationCore } from '../entities/notification.entity';
+import type { BaseNotificationEntity } from '../entities/base-notification.entity';
 import type { NotificationListFilter } from '../types/notification.types';
 
-@Injectable()
-export class NotificationQueryService {
-  constructor(
-    @InjectRepository(NotificationCore)
-    private readonly repo: Repository<NotificationCore>,
-  ) {}
+/**
+ * Truy vấn thông báo nền. Module cụ thể kế thừa và truyền `Repository<T>` của entity mình.
+ * Luôn lọc theo `userId` và `isDeleted = false`.
+ */
+export abstract class AbstractNotificationQueryService<
+  T extends BaseNotificationEntity,
+> {
+  protected constructor(protected readonly repo: Repository<T>) {}
 
-  /** Danh sách thông báo của đúng một user, mới nhất trước. Luôn lọc `userId` và `isDeleted`. */
+  /** Danh sách thông báo của đúng một user, mới nhất trước. */
   async listForUser(
     userId: string,
     filter: NotificationListFilter,
-  ): Promise<{ items: NotificationCore[]; total: number }> {
+  ): Promise<{ items: T[]; total: number }> {
     const qb = this.ownedQuery(userId);
     if (filter.unreadOnly) {
       qb.andWhere('n.isRead = :isRead', { isRead: false });
@@ -38,7 +38,7 @@ export class NotificationQueryService {
       .getCount();
   }
 
-  private ownedQuery(userId: string): SelectQueryBuilder<NotificationCore> {
+  protected ownedQuery(userId: string): SelectQueryBuilder<T> {
     return this.repo
       .createQueryBuilder('n')
       .where('n.userId = :userId', { userId })

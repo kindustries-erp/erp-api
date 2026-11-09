@@ -1,26 +1,12 @@
-import { Column, Entity, Index } from 'typeorm';
+import { Column } from 'typeorm';
 import { CoreSoftDeletableEntity } from '@/v2/core/base-core';
-
-export const NOTIFICATION_TYPES = [
-  'INFO',
-  'WARNING',
-  'ERROR',
-  'SUCCESS',
-] as const;
-export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+import type { NotificationType } from '../types/notification.types';
 
 /**
- * Thông báo theo user (v2). Mỗi dòng gắn đúng một `user_id`; producer fan-out
- * bằng `NotificationsCoreService.createForUsers`. Bảng tách hẳn khỏi `core_notifications` (v1).
+ * Lớp nền thông báo (abstract, không `@Entity`). Module cụ thể kế thừa và khai báo
+ * `@Entity` + `@Index` của riêng mình (ví dụ `notifications-inbox`).
  */
-@Entity({ name: 'notifications_core' })
-@Index('IDX_notifications_core_user_list', [
-  'userId',
-  'isDeleted',
-  'isRead',
-  'createdAt',
-])
-export class NotificationCore extends CoreSoftDeletableEntity {
+export abstract class BaseNotificationEntity extends CoreSoftDeletableEntity {
   @Column({ type: 'uuid', name: 'user_id' })
   userId: string;
 

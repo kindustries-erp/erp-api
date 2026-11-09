@@ -1,11 +1,11 @@
-import type { NotificationCore } from '@/v2/core/notifications-core';
+import type { NotificationInbox } from '../entities/notification-inbox.entity';
 import type { PaginationMetaDto } from '@/common/dto/pagination-meta.dto';
 import type { NotificationResponseDto } from '../dto/notification-response.dto';
 
 /** Entity -> response DTO. Không trả entity ra ngoài module. */
 export function toNotificationResponse(
   row: Pick<
-    NotificationCore,
+    NotificationInbox,
     | 'id'
     | 'title'
     | 'message'

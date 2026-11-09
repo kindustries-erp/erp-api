@@ -12,7 +12,7 @@ import { KgaraSyncService } from './kgara-sync.service';
 import { KgaraAuthService } from './kgara-auth.service';
 import { KgaraBulkSyncService } from './services/kgara-bulk-sync.service';
 import { KgaraAccountKey } from './enums/kgara-account.enum';
-import { NotificationsCoreService } from '@/v2/core/notifications-core';
+import { NotificationsPublisherService } from '@/v2/modules/notifications-inbox';
 import { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from '@/v2/core/rbac-core/entities/core-user-role.entity';
 import {
@@ -41,7 +41,7 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
     private readonly syncService: KgaraSyncService,
     private readonly authService: KgaraAuthService,
     private readonly bulkSyncService: KgaraBulkSyncService,
-    private readonly notificationsService: NotificationsCoreService,
+    private readonly notificationsService: NotificationsPublisherService,
   ) {}
 
   onModuleInit() {

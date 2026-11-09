@@ -13,7 +13,7 @@ import { InvoiceDashboardService } from './invoice-dashboard.service';
 import { InvoiceDashboardController } from './invoice-dashboard.controller';
 import { R2Module } from '../r2/r2.module';
 import { BankTransactionsCoreModule } from '../bank-transactions-core/bank-transactions-core.module';
-import { NotificationsCoreModule } from '@/v2/core/notifications-core';
+import { NotificationsInboxModule } from '@/v2/modules/notifications-inbox';
 import { AccountingCoreModule } from '../accounting-core/accounting-core.module';
 import { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from '@/v2/core/rbac-core/entities/core-user-role.entity';
@@ -102,7 +102,7 @@ import { XmlDownloadLinkAdapter } from './services/adapters/xml-download-link.ad
     ]),
     R2Module,
     BankTransactionsCoreModule,
-    NotificationsCoreModule,
+    NotificationsInboxModule,
     AccountingCoreModule,
     AiHubCoreModule,
     ErpAttachmentsCoreModule,

@@ -1,16 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { NotificationPayload } from '../types/notification.types';
-import { NotificationCommandService } from './notification-command.service';
+import type { NotificationPayload } from '@/v2/core/notifications-core';
+import { NotificationInboxCommandService } from './notification-inbox-command.service';
 
 /**
  * Điểm gọi cho module khác (producer). Lỗi ghi thông báo chỉ được log,
  * không làm hỏng luồng nghiệp vụ đang gọi (đúng hành vi v1).
  */
 @Injectable()
-export class NotificationsCoreService {
-  private readonly logger = new Logger(NotificationsCoreService.name);
+export class NotificationsPublisherService {
+  private readonly logger = new Logger(NotificationsPublisherService.name);
 
-  constructor(private readonly command: NotificationCommandService) {}
+  constructor(private readonly command: NotificationInboxCommandService) {}
 
   async createForUser(
     userId: string,

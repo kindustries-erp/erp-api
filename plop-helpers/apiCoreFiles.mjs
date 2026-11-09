@@ -17,7 +17,6 @@ export function coreFileMap(data) {
       path: `${dir}/entities/base-${data.entityKebab}.entity.ts`,
     },
     { template: 'core-common/create-dto.ts.hbs', path: `${dir}/dto/base-create-${data.entityKebab}.dto.ts` },
-    { template: 'core-common/module.ts.hbs', path: `${dir}/${data.moduleFile}.ts` },
     { template: 'core-common/barrel.ts.hbs', path: `${dir}/index.ts` },
     { template: 'core-common/manifest.json.hbs', path: `${dir}/core.manifest.json` },
     { template: `${svc}/service.ts.hbs`, path: `${dir}/services/${data.serviceFile}.ts` },

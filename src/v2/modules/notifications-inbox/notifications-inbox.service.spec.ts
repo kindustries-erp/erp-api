@@ -1,6 +1,6 @@
-import { NotificationsV2Service } from './notifications.service';
+import { NotificationsInboxService } from './notifications-inbox.service';
 
-describe('NotificationsV2Service (facade)', () => {
+describe('NotificationsInboxService (facade)', () => {
   const row = {
     id: 'n1',
     title: 'T',
@@ -24,7 +24,7 @@ describe('NotificationsV2Service (facade)', () => {
       softDeleteAll: jest.fn().mockResolvedValue(2),
     };
     return {
-      service: new NotificationsV2Service(query as any, command as any),
+      service: new NotificationsInboxService(query as any, command as any),
       query,
       command,
     };

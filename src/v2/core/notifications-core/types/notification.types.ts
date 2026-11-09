@@ -1,4 +1,10 @@
-import type { NotificationType } from '../entities/notification.entity';
+export const NOTIFICATION_TYPES = [
+  'INFO',
+  'WARNING',
+  'ERROR',
+  'SUCCESS',
+] as const;
+export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
 /** Dữ liệu tạo một thông báo. `extraData` chứa i18n key/params hoặc dữ liệu tùy biến. */
 export interface NotificationPayload {

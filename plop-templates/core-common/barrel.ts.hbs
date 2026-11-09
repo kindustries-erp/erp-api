@@ -2,4 +2,5 @@ export * from './contracts/{{family}}.contract';
 export * from './entities/base-{{entityKebab}}.entity';
 export * from './dto/base-create-{{entityKebab}}.dto';
 export * from './services/{{serviceFile}}';
-export * from './{{moduleFile}}';
+{{#if moduleFile}}export * from './{{moduleFile}}';
+{{/if}}

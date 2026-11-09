@@ -2,18 +2,18 @@
   "schemaVersion": 1,
   "layer": "api",
   "family": "notifications-core",
-  "entity": "NotificationCore",
+  "entity": "BaseNotificationEntity",
   "style": "v2-core",
   "barrel": "src/v2/core/notifications-core/index.ts",
-  "module": "NotificationsCoreModule",
-  "moduleFile": "notifications-core.module.ts",
+  "module": null,
+  "moduleFile": null,
   "baseClasses": {
-    "entity": "NotificationCore",
+    "entity": "BaseNotificationEntity",
     "createDto": null,
     "contract": null,
-    "service": "NotificationsCoreService"
+    "service": "AbstractNotificationCommandService"
   },
-  "serviceFile": "services/notifications-core.service.ts",
+  "serviceFile": "services/abstract-notification-command.service.ts",
   "permissionPattern": null,
-  "requiredModuleFiles": ["entities", "services"]
+  "requiredModuleFiles": []
 }

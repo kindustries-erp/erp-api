@@ -20,7 +20,7 @@ import { ErpBankTransaction } from '../bank-transactions-core/entities/erp_bank_
 import { CoreUser } from '../users/entities/core-user.entity';
 import { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from '@/v2/core/rbac-core/entities/core-user-role.entity';
-import { NotificationsCoreModule } from '@/v2/core/notifications-core';
+import { NotificationsInboxModule } from '@/v2/modules/notifications-inbox';
 import { CommonModule } from '../common/common.module';
 import { AuditCoreModule } from '../audit-core/audit-core.module';
 
@@ -116,7 +116,7 @@ import { GarageOpexExportController } from './controllers/garage-opex-export.con
       CoreUserRole,
     ]),
     ConfigModule,
-    NotificationsCoreModule,
+    NotificationsInboxModule,
     CommonModule,
     AuditCoreModule,
   ],

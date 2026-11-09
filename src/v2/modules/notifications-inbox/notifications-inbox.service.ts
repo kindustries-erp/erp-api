@@ -1,8 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import {
-  NotificationCommandService,
-  NotificationQueryService,
-} from '@/v2/core/notifications-core';
+import { NotificationInboxCommandService } from './services/notification-inbox-command.service';
+import { NotificationInboxQueryService } from './services/notification-inbox-query.service';
 import { QueryNotificationDto } from './dto/query-notification.dto';
 import {
   NotificationActionResponseDto,
@@ -16,10 +14,10 @@ import {
 
 /** Facade HTTP: gọi lõi, map sang response DTO. Mọi thao tác đều nhận userId từ token. */
 @Injectable()
-export class NotificationsV2Service {
+export class NotificationsInboxService {
   constructor(
-    private readonly query: NotificationQueryService,
-    private readonly command: NotificationCommandService,
+    private readonly query: NotificationInboxQueryService,
+    private readonly command: NotificationInboxCommandService,
   ) {}
 
   async list(

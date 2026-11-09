@@ -434,7 +434,7 @@ Ghi chú payload SSE `portal/progress`: thêm trường tùy chọn `currentItem
   - Khi thành công, tự động lưu Token mới và Cookie vào `company_profile` và tiếp tục luồng xử lý.
 - **Cơ chế Tự phục hồi trong Tiến trình Cron (`ErpInvoicesCronService`)**:
   - Khi tiến trình cron chạy định kỳ: nếu token chưa có hoặc `checkTokenValid` trả về `false`, Cron Job chủ động gọi `autoReloginWithRetry()` để tự lấy token mới.
-  - Chỉ khi cả 3 lần tự đăng nhập lại đều thất bại, hệ thống mới gửi thông báo lỗi `Token GDT hóa đơn hết hạn` tới người dùng qua `NotificationsCoreService` (v2, bảng `notifications_core`).
+  - Chỉ khi cả 3 lần tự đăng nhập lại đều thất bại, hệ thống mới gửi thông báo lỗi `Token GDT hóa đơn hết hạn` tới người dùng qua `NotificationsPublisherService` (v2, bảng `notifications_inbox`).
 - **Kiểm tra Hồ sơ Người nộp thuế (`validatePortalTaxpayer`)**:
   - Đối chiếu danh sách mã số thuế trả về từ hồ sơ GDT (`username`, `id`, `groupId`, `tinInfoTT86.mst`,...) với MST doanh nghiệp trong `company_profile` để chặn nguy cơ kéo nhầm dữ liệu đơn vị khác (`GDT_TAXPAYER_MISMATCH`).
 - **Cửa sổ ngày & Phân trang (`helpers/gdt-date-window.helper.ts`)**:
@@ -628,7 +628,7 @@ graph TD
     INVOICE -->|Post HĐM/HĐB Journal Entries| ACC["accounting-core<br/>(JournalEntry)"]
     INVOICE <-->|Net-Off Cấn trừ| BANK["bank-transactions-core<br/>(ErpBankTransaction)"]
     INVOICE -->|Trigger Recalc FIFO| VF["vinfast-parts<br/>(VinfastPartsStock)"]
-    INVOICE -->|Notify Expiry / Sync Status| NOTIF["notifications-v2<br/>(NotificationsCoreService)"]
+    INVOICE -->|Notify Expiry / Sync Status| NOTIF["notifications-inbox<br/>(NotificationsPublisherService)"]
     INVOICE -->|Resolve Branch| BRANCH["branches-core<br/>(ErpBranch)"]
     PO["purchase-orders-core<br/>(PurchaseOrder)"] -->|Link Invoice| INVOICE
 ```
@@ -637,7 +637,7 @@ graph TD
 2. **`bank-transactions-core`**: Quản lý cấn trừ giữa hóa đơn và giao dịch sao kê/sổ quỹ (`erp_invoice_voucher_netoff`).
 3. **`r2`**: Lưu trữ và phục vụ tải xuống tệp PDF, XML, đính kèm nhiều tệp dạng JSONB và nén ZIP trực tiếp.
 4. **`vinfast-parts`**: Tự động kích hoạt tính toán lại sổ cái phụ tùng FIFO khi có hóa đơn phụ tùng mới được đồng bộ.
-5. **`notifications-v2`**: Gửi thông báo hệ thống (qua `NotificationsCoreService`) khi token GDT hết hạn hoặc khi tác vụ đồng bộ/xuất file nền hoàn tất.
+5. **`notifications-inbox`**: Gửi thông báo hệ thống (qua `NotificationsPublisherService`) khi token GDT hết hạn hoặc khi tác vụ đồng bộ/xuất file nền hoàn tất.
 6. **`purchase-orders-core`**: Liên kết số hóa đơn nhà cung cấp (`supplier_invoice_no`) và ID hóa đơn vào đơn mua hàng.
 7. **`module-config`**: Quản lý danh mục phân loại (`category_id`) và các trường thuộc tính tùy chỉnh động (`erp_entity_attribute_values` với `entity_type = 'INVOICE'`). Được cấu hình qua Action Dropdown trang Hóa đơn / menu Thiết lập chung và hiển thị/chọn tại cột phải trong Drawer Hóa đơn.
 

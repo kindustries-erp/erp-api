@@ -8,7 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { sleep } from '../common/utils/delay.util';
 import { ErpInvoicesCoreService } from './erp-invoices-core.service';
-import { NotificationsCoreService } from '@/v2/core/notifications-core';
+import { NotificationsPublisherService } from '@/v2/modules/notifications-inbox';
 import { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from '@/v2/core/rbac-core/entities/core-user-role.entity';
 import {
@@ -34,7 +34,7 @@ export class ErpInvoicesCronService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private readonly erpInvoicesCoreService: ErpInvoicesCoreService,
-    private readonly notificationsService: NotificationsCoreService,
+    private readonly notificationsService: NotificationsPublisherService,
     @InjectRepository(CorePermission)
     private readonly permissionRepo: Repository<CorePermission>,
     @InjectRepository(CoreUserRole)

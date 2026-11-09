@@ -50,11 +50,11 @@ export function buildApiCoreData(answers) {
     baseContract: `Base${entity}Contract`,
     serviceClass,
     serviceFile,
-    // Lớp abstract không thể đăng ký làm provider của Nest: kiểu abstract-services
-    // không đăng ký gì, module mỏng sẽ kế thừa lớp abstract bằng lớp con cụ thể.
-    moduleProviders: style === 'engine' ? serviceClass : '',
-    moduleClass: `${familyPascal}CoreModule`,
-    moduleFile: `${family}.module`,
+    // Lõi chỉ là base để kế thừa: không có module Nest, không provider.
+    // Lớp cụ thể do module con kế thừa và tự đăng ký (xem plop-templates/*-common/module.ts.hbs).
+    moduleProviders: '',
+    moduleClass: null,
+    moduleFile: null,
     serviceTemplateDir: style === 'engine' ? 'core-engine' : 'workflow-common',
     // Hằng bảng chuyển trạng thái và tiền tố tên file, ví dụ PROCUREMENT_ORDER_TRANSITIONS
     entityUpperSnake: toSnake(entity).toUpperCase(),

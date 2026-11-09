@@ -1,5 +1,5 @@
 import { NotFoundException } from '@nestjs/common';
-import { NotificationCommandService } from './notification-command.service';
+import { NotificationInboxCommandService } from './notification-inbox-command.service';
 
 function makeRepo(affected = 1) {
   return {
@@ -9,11 +9,11 @@ function makeRepo(affected = 1) {
   };
 }
 
-describe('NotificationCommandService', () => {
+describe('NotificationInboxCommandService', () => {
   describe('createForUsers', () => {
     it('ghi một dòng cho mỗi user và bỏ trùng', async () => {
       const repo = makeRepo();
-      const service = new NotificationCommandService(repo as any);
+      const service = new NotificationInboxCommandService(repo as any);
 
       const count = await service.createForUsers(['a', 'b', 'a'], {
         title: 'T',
@@ -32,7 +32,7 @@ describe('NotificationCommandService', () => {
 
     it('danh sách rỗng không ghi gì', async () => {
       const repo = makeRepo();
-      const service = new NotificationCommandService(repo as any);
+      const service = new NotificationInboxCommandService(repo as any);
 
       await expect(
         service.createForUsers([], { title: 'T', message: 'M' }),
@@ -44,7 +44,7 @@ describe('NotificationCommandService', () => {
   describe('markRead / softDelete (sở hữu theo user)', () => {
     it('markRead lọc theo id + userId + isDeleted', async () => {
       const repo = makeRepo(1);
-      const service = new NotificationCommandService(repo as any);
+      const service = new NotificationInboxCommandService(repo as any);
 
       await service.markRead('n1', 'user-a');
 
@@ -56,7 +56,7 @@ describe('NotificationCommandService', () => {
 
     it('id của user khác (affected = 0) ⇒ NotFound, không lộ sự tồn tại', async () => {
       const repo = makeRepo(0);
-      const service = new NotificationCommandService(repo as any);
+      const service = new NotificationInboxCommandService(repo as any);
 
       await expect(service.markRead('n1', 'user-b')).rejects.toBeInstanceOf(
         NotFoundException,
@@ -68,7 +68,7 @@ describe('NotificationCommandService', () => {
 
     it('softDelete đặt isDeleted = true, không xóa cứng', async () => {
       const repo = makeRepo(1);
-      const service = new NotificationCommandService(repo as any);
+      const service = new NotificationInboxCommandService(repo as any);
 
       await service.softDelete('n1', 'user-a');
 
@@ -82,7 +82,7 @@ describe('NotificationCommandService', () => {
   describe('bulk', () => {
     it('markAllRead chỉ đụng dòng chưa đọc của user', async () => {
       const repo = makeRepo(4);
-      const service = new NotificationCommandService(repo as any);
+      const service = new NotificationInboxCommandService(repo as any);
 
       await expect(service.markAllRead('user-a')).resolves.toBe(4);
       expect(repo.update).toHaveBeenCalledWith(
@@ -93,7 +93,7 @@ describe('NotificationCommandService', () => {
 
     it('softDeleteAll chỉ đụng dòng của user', async () => {
       const repo = makeRepo(7);
-      const service = new NotificationCommandService(repo as any);
+      const service = new NotificationInboxCommandService(repo as any);
 
       await expect(service.softDeleteAll('user-a')).resolves.toBe(7);
       expect(repo.update).toHaveBeenCalledWith(
