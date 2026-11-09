@@ -69,6 +69,7 @@ export function toProcurementOrderResponse(
     totalAmount: Number(header.totalAmount),
     approvedTotal: num(header.approvedTotal),
     remarks: header.remarks,
+    createdBy: header.createdBy ?? null,
     createdByEmail: emailOf(header.createdBy),
     approval: toApprovalSummary(header, emailOf),
     lines: [...lines]

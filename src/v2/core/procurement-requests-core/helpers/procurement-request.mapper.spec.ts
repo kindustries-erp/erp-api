@@ -80,7 +80,14 @@ describe('toPurchaseRequestResponse', () => {
       [],
     ) as unknown as Record<string, unknown>;
     expect(out).not.toHaveProperty('isDeleted');
-    expect(out).not.toHaveProperty('createdBy');
+    expect(out.createdBy).toBe('u1');
+  });
+  it('createdBy là id người tạo, null khi header không có', () => {
+    const out = toPurchaseRequestResponse(
+      { ...header, createdBy: null } as never,
+      [],
+    );
+    expect(out.createdBy).toBeNull();
   });
   it('gắn email qua emailOf cho createdByEmail và approval, mặc định null', () => {
     const lookup = (id: string | null | undefined) =>

@@ -39,7 +39,6 @@ export function toGarageProcurementOrderResponse(
     branchName: header.branchName,
     paymentStatus: header.paymentStatus,
     supplierInvoiceNo: header.supplierInvoiceNo,
-    createdBy: header.createdBy,
     issuedAt: header.issuedAt ?? null,
     acceptances: acceptances.map(
       (a): GarageProcurementOrderAcceptanceDto => ({

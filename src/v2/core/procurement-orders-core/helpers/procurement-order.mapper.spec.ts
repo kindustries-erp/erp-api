@@ -1,7 +1,7 @@
 import { toProcurementOrderResponse } from './procurement-order.mapper';
 
 describe('toProcurementOrderResponse', () => {
-  it('đổi số chuỗi sang number, giữ liên kết PR, không lộ createdBy', () => {
+  it('đổi số chuỗi sang number, giữ liên kết PR, trả createdBy id', () => {
     const out = toProcurementOrderResponse(
       {
         id: 'o1',
@@ -48,7 +48,7 @@ describe('toProcurementOrderResponse', () => {
       amount: 250,
       requestLineId: 'rl1',
     });
-    expect(out).not.toHaveProperty('createdBy');
+    expect(out.createdBy).toBe('u1');
   });
 
   it('trả approval và createdByEmail qua emailOf, không còn key phẳng cũ', () => {

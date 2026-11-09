@@ -16,7 +16,6 @@ export class GarageProcurementOrderResponseDto extends ProcurementOrderResponseD
   @ApiProperty({ nullable: true }) branchName: string | null;
   @ApiProperty() paymentStatus: string;
   @ApiProperty({ nullable: true }) supplierInvoiceNo: string | null;
-  @ApiProperty({ nullable: true }) createdBy: string | null;
   @ApiProperty({ nullable: true }) issuedAt: Date | null;
   @ApiProperty({ type: [GarageProcurementOrderAcceptanceDto] })
   acceptances: GarageProcurementOrderAcceptanceDto[];

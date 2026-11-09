@@ -31,6 +31,8 @@ export class PurchaseRequestResponseDto {
   @ApiProperty() orderingStatus: string;
   @ApiProperty() estimatedTotal: number;
   @ApiProperty({ nullable: true }) remarks: string | null;
+  @ApiProperty({ nullable: true, description: 'Id người tạo' })
+  createdBy: string | null;
   @ApiProperty({ nullable: true, description: 'Email người tạo' })
   createdByEmail: string | null;
   @ApiProperty({ type: ApprovalSummaryDto })

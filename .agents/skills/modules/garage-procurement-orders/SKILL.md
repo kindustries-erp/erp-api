@@ -67,7 +67,7 @@ Quyền resource: `garage_procurement_orders`. Seed từ `garage_purchase_orders
 - Migration `20261105103000-AddPaymentFieldsToGarageProcOrders`: `payment_status varchar(50) NOT NULL DEFAULT 'UNPAID'` (có chỉ mục) và `supplier_invoice_no varchar(100) NULL`. Chưa có luồng ghi `payment_status`; chỉ hiển thị.
 - Endpoint mới: `PATCH /:id` (sửa đầu đơn khi DRAFT, `UpdateProcurementOrderHeaderDto`), `DELETE /:id` (xóa mềm nháp, trả số lượng đã giữ trên PR), `GET /next-no`, `GET /column-options`.
 - `GET /` lọc thêm `status`, `supplierId`, `dateFrom`, `dateTo`, `search` (số đơn hoặc tên NCC).
-- Response có `branchId`, `branchName`, `paymentStatus`, `supplierInvoiceNo`, `createdBy`, `issuedAt`, `acceptances`.
+- Response có `branchId`, `branchName`, `paymentStatus`, `supplierInvoiceNo`, `issuedAt`, `acceptances` (`createdBy` và `createdByEmail` nằm ở lõi PO, dùng chung cho list và detail).
 - Quyền duyệt: `approve`/`reject` đã seed cho vai trò có `update` trên `garage_procurement_orders` (migration `20261105104000-SeedGarageProcurementApprovalPermissions`).
 - Phiếu nhập kho Garage nối PO: `GarageGoodsReceiptCommandService.post` gọi `applyGoodsReceipt`, `cancel` gọi `revertGoodsReceipt` trong cùng transaction. Xem [`garage-goods-receipts`](../garage-goods-receipts/SKILL.md) mục nối PO.
 - Rủi ro còn lại: `POST :id/receipts` vẫn cộng số đã nhận. Dùng song song với phiếu nhập có thể cộng trùng. Chưa chặn.
@@ -89,7 +89,7 @@ Quyền resource: `garage_procurement_orders`. Seed từ `garage_purchase_orders
 - `GET /api/v2/procurement-orders-garage/column-options?column&search&page&pageSize&filters`: trả `{ items, total, next }` (cùng contract với `garage-procurement-requests`). Cột ngoài whitelist trả rỗng. Nguồn cột: `constants/procurement-order-table.constants.ts` (`TABLE_COLUMNS`), khớp `key` của `procurementOrderColumns` phía web.
 - `GET /` nhận thêm `sort`, `column_filters`, `column_search`, `column_operators`, `date_ranges` (từ `TableQueryDto`). Sắp xếp mặc định `createdAt DESC`.
 - Lỗi đã sửa: endpoint trước đây trả `{ columns }`, khiến web crash `reading 'value'` khi mở popup lọc cột.
-- `createdBy` (uuid) được lọc, sắp xếp và gợi ý theo **email** từ `core_users` (subquery trong `TABLE_COLUMNS`). Danh sách trả thêm `createdByEmail` (tra một lần cho cả trang qua `helpers/resolve-created-by-email.ts`). Chi tiết (`findOne`) không có `createdByEmail`. Không đổi schema.
+- `createdBy` (uuid) được lọc, sắp xếp và gợi ý theo **email** từ `core_users` (subquery trong `TABLE_COLUMNS`). Danh sách và chi tiết đều trả `createdBy` (id) và `createdByEmail` (tra email qua lô id của approval-core). Không đổi schema.
 
 ## Response duyệt: khối `approval` (2026-11-08)
 
