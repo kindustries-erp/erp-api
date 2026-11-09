@@ -1,8 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { CoreUserTablePreference } from '@/users/entities/core-user-table-preference.entity';
-import { UpdateTablePreferenceDto } from '../dto/update-table-preference.dto';
+import { CoreUserTablePreference } from '../entities/core-user-table-preference.entity';
+import type {
+  TablePreferenceColumnsPatch,
+  TablePreferencePatch,
+  TablePreferenceViewsPatch,
+} from '../types/table-preference.types';
 
 @Injectable()
 export class TablePreferenceCommandService {
@@ -18,7 +22,7 @@ export class TablePreferenceCommandService {
   async upsert(
     userId: string,
     tableId: string,
-    dto: UpdateTablePreferenceDto,
+    patch: TablePreferencePatch,
   ): Promise<CoreUserTablePreference> {
     const overwrite: string[] = ['updated_at'];
     const values: Partial<CoreUserTablePreference> = {
@@ -28,12 +32,12 @@ export class TablePreferenceCommandService {
       views: {},
     };
 
-    if (dto.columns !== undefined) {
-      values.columns = pickColumns(dto.columns);
+    if (patch.columns !== undefined) {
+      values.columns = pickColumns(patch.columns);
       overwrite.push('columns');
     }
-    if (dto.views !== undefined) {
-      values.views = pickViews(dto.views);
+    if (patch.views !== undefined) {
+      values.views = pickViews(patch.views);
       overwrite.push('views');
     }
 
@@ -50,18 +54,16 @@ export class TablePreferenceCommandService {
 }
 
 /** Chỉ giữ khóa đã khai báo, tránh lưu rác vào jsonb */
-function pickColumns(input: UpdateTablePreferenceDto['columns']) {
+function pickColumns(input: TablePreferenceColumnsPatch) {
   const out: Record<string, unknown> = {};
-  if (!input) return out;
   if (input.visibility !== undefined) out.visibility = { ...input.visibility };
   if (input.order !== undefined) out.order = [...input.order];
   if (input.sizing !== undefined) out.sizing = { ...input.sizing };
   return out;
 }
 
-function pickViews(input: UpdateTablePreferenceDto['views']) {
+function pickViews(input: TablePreferenceViewsPatch) {
   const out: Record<string, unknown> = {};
-  if (!input) return out;
   if (input.customViews !== undefined) {
     out.customViews = input.customViews.map((view) => ({
       key: view.key,

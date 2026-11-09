@@ -3,7 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import { AppConfigService } from './app-config.service';
 import { CoreUserPreference } from '../users/entities/core-user-preference.entity';
-import { CoreUserTablePreference } from '../users/entities/core-user-table-preference.entity';
+import { CoreUserTablePreference } from '@/v2/core/table-preferences-core/entities/core-user-table-preference.entity';
 
 describe('AppConfigService', () => {
   let service: AppConfigService;

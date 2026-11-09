@@ -1,7 +1,4 @@
-import {
-  escapeLikePattern,
-  toTablePreferenceResponse,
-} from './table-preference.mapper';
+import { toTablePreferenceResponse } from './table-preference.mapper';
 
 describe('table-preference mapper', () => {
   it('maps entity to response with ISO updatedAt and no entity fields', () => {
@@ -28,10 +25,5 @@ describe('table-preference mapper', () => {
     } as any);
     expect(result.columns).toEqual({});
     expect(result.views).toEqual({});
-  });
-
-  it('escapes LIKE wildcards and backslash', () => {
-    expect(escapeLikePattern('a%b_c\\d')).toBe('a\\%b\\_c\\\\d');
-    expect(escapeLikePattern('procurement-')).toBe('procurement-');
   });
 });

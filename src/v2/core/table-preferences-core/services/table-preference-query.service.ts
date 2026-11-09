@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { CoreUserTablePreference } from '@/users/entities/core-user-table-preference.entity';
-import { escapeLikePattern } from '../helpers/table-preference.mapper';
+import { CoreUserTablePreference } from '../entities/core-user-table-preference.entity';
+import { escapeLikePattern } from '../helpers/table-preference-like.helper';
 
 @Injectable()
 export class TablePreferenceQueryService {
