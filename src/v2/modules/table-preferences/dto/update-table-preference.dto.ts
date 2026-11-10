@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsDefined,
   IsOptional,
   IsString,
   MaxLength,
@@ -52,6 +53,74 @@ export class TablePreferenceCustomViewDto {
   @IsString({ each: true })
   @MaxLength(TABLE_PREFERENCE_LIMITS.orderItemMax, { each: true })
   order: string[];
+
+  /** Bộ lọc có sẵn (filter group) đi kèm view; view cũ không có trường này */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(TABLE_PREFERENCE_LIMITS.keyMax)
+  filterKey?: string;
+}
+
+/** Snapshot điều kiện bảng (cùng định dạng query string của URL V2) */
+export class TablePreferenceFilterQueryDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(TABLE_PREFERENCE_LIMITS.filterQueryFieldMax)
+  sort?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(TABLE_PREFERENCE_LIMITS.filterQueryFieldMax)
+  q?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(TABLE_PREFERENCE_LIMITS.filterQueryFieldMax)
+  cf?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(TABLE_PREFERENCE_LIMITS.filterQueryFieldMax)
+  cs?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(TABLE_PREFERENCE_LIMITS.filterQueryFieldMax)
+  co?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(TABLE_PREFERENCE_LIMITS.filterQueryFieldMax)
+  dr?: string;
+}
+
+/** Bộ lọc tùy chỉnh do user lưu từ điều kiện đang áp dụng trên bảng */
+export class TablePreferenceCustomFilterDto {
+  @IsString()
+  @MaxLength(TABLE_PREFERENCE_LIMITS.keyMax)
+  key: string;
+
+  @IsString()
+  @MaxLength(TABLE_PREFERENCE_LIMITS.labelMax)
+  label: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(TABLE_PREFERENCE_LIMITS.keyMax)
+  groupKey?: string;
+
+  @IsDefined()
+  @ValidateNested()
+  @Type(() => TablePreferenceFilterQueryDto)
+  query: TablePreferenceFilterQueryDto;
 }
 
 export class TablePreferenceViewsDto {
@@ -62,6 +131,14 @@ export class TablePreferenceViewsDto {
   @ValidateNested({ each: true })
   @Type(() => TablePreferenceCustomViewDto)
   customViews?: TablePreferenceCustomViewDto[];
+
+  @ApiPropertyOptional({ type: [TablePreferenceCustomFilterDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(TABLE_PREFERENCE_LIMITS.customFiltersMax)
+  @ValidateNested({ each: true })
+  @Type(() => TablePreferenceCustomFilterDto)
+  customFilters?: TablePreferenceCustomFilterDto[];
 
   @ApiPropertyOptional()
   @IsOptional()
