@@ -20,6 +20,8 @@ export const applyTableSort = <T extends ObjectLiteral>(
   sort: string | undefined,
   columns: TableColumnMap,
   fallback: TableSortDefault,
+  /** Cột thêm ở cuối để thứ tự ổn định khi sort trùng giá trị, ví dụ `h.id`. Cần cho phân trang và lũy kế. */
+  tieBreaker?: string,
 ): void => {
   const clauses = (sort ?? '')
     .split(',')
@@ -40,6 +42,7 @@ export const applyTableSort = <T extends ObjectLiteral>(
     if (index === 0) qb.orderBy(clause.sql, clause.direction);
     else qb.addOrderBy(clause.sql, clause.direction);
   });
+  if (tieBreaker) qb.addOrderBy(tieBreaker, 'ASC');
 };
 
 /** Biểu thức văn bản của một cột, dùng cho danh sách gợi ý và nhóm giá trị. */

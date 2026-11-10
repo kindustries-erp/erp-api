@@ -14,7 +14,7 @@ import { randomBytes, createHash } from 'crypto';
 import { UsersService } from '../users/users.service';
 import { AuditCoreService } from '../audit-core/audit-core.service';
 import { ChangePasswordSelfDto } from '../users-admin/dto/user-admin.dto';
-import { RbacCoreService } from '../rbac-core/rbac-core.service';
+import { RbacCoreService } from '@/v2/core/rbac-core';
 import { CoreRefreshToken } from './entities/core-refresh-token.entity';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { AppConfigService } from '../app-config/app-config.service';

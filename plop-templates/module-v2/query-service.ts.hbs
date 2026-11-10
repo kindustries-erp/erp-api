@@ -6,12 +6,14 @@ import { Query{{entityName}}Dto } from '../dto/query-{{entityKebab}}.dto';
 import { applyMultiKeywordMultiFieldFilter } from '@/common/utils/query-builder.util';
 import {
   applyDateBounds,
+  applyListSummaries,
   applyTableFilters,
   applyTableSort,
-  computeTableSummaries,
   findTableColumnOptions,
   parseFilterRecord,
+  parseSummaryKeys,
   resolveTableColumn,
+  SummaryMetric,
   TableColumnMap,
   TableDateRange,
   TableFilterPayload,
@@ -22,7 +24,7 @@ import {
 /** Cột lọc, sắp xếp và tổng (whitelist, không nhận biểu thức từ client). */
 const TABLE_COLUMNS: TableColumnMap = {{{tableColumnsLiteral}}};
 
-/** Cột số được cộng vào `summaries` (tổng toàn bộ dòng khớp bộ lọc). */
+/** Cột số được tổng qua `summary_keys` (whitelist SQL; key ngoài danh sách trả `null`). */
 const SUMMARY_COLUMNS: { key: string; sql: string }[] = {{{summaryColumnsLiteral}}};
 
 /** Cột dùng cho ô tìm kiếm chung (ILIKE, nhiều từ khóa cách nhau bằng dấu `;`). */
@@ -33,7 +35,8 @@ export interface {{entityName}}PageResult {
   total: number;
   page: number;
   pageSize: number;
-  summaries: Record<string, number>;
+  /** Theo key trong `summary_keys`: `{ total, pageSubtotal, cumulative }` hoặc `null` */
+  summaries: Record<string, SummaryMetric | null>;
 }
 
 /** Đọc dữ liệu: lọc, sắp xếp, phân trang, gợi ý giá trị cột và tổng. Chỉ đọc các dòng chưa xóa mềm. */
@@ -56,10 +59,16 @@ export class {{entityName}}QueryService {
 
     applyTableFilters(qb, this.readFilters(query), TABLE_COLUMNS, 'filter');
     applyDateBounds(qb, 'e.createdAt', query.date_from, query.date_to, 'legacy');
-    applyTableSort(qb, query.sort, TABLE_COLUMNS, { sql: 'e.createdAt', direction: 'DESC' });
+    applyTableSort(qb, query.sort, TABLE_COLUMNS, { sql: 'e.createdAt', direction: 'DESC' }, 'e.id');
 
-    // Tổng tính trên toàn bộ dòng khớp, nên phải gọi trước khi phân trang
-    const summaries = await computeTableSummaries(qb, SUMMARY_COLUMNS);
+    // Tổng theo summary_keys tính trên toàn bộ dòng khớp, nên phải gọi trước khi phân trang
+    const summaries = await applyListSummaries(qb, {
+      columns: SUMMARY_COLUMNS,
+      keys: parseSummaryKeys(query.summary_keys),
+      page,
+      pageSize,
+      tieBreaker: 'e.id',
+    });
 
     const [items, total] = await qb
       .skip((page - 1) * pageSize)

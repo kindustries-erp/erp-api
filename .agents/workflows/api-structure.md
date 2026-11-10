@@ -1,5 +1,5 @@
 ---
-description: Quy trình chuẩn tổ chức cấu trúc erp-api (NestJS). Phần A tách Controller/Service vượt ngưỡng (Sub-Controllers, Sub-Services Facade, Pure Engines, Clean DI, Zero-Regression). Phần B tạo hoặc chuyển module sang kiến trúc v2 (Facade + sub-services + helpers + response DTO + spec, bằng plop api-module-v2)
+description: Quy trình chuẩn tổ chức cấu trúc erp-api (NestJS). Phần A tách Controller/Service vượt ngưỡng (Sub-Controllers, Sub-Services Facade, Pure Engines, Clean DI, Zero-Regression). Phần B tạo hoặc chuyển module sang kiến trúc v2 (bằng plop: api-core, api-thin-module, api-workflow-module hoặc api-module-v2)
 ---
 
 # 🏗️ ERP API Structure Workflow (`/api-structure`)
@@ -363,12 +363,43 @@ Workflow này định nghĩa **API v2** trong `erp-api`: không đổi route, kh
 Skill đi kèm (quy ước, bẫy, checklist): [`./../skills/erp-api-structure/references/v2-module.md`](../skills/erp-api-structure/references/v2-module.md)
 Generator: `api-module-v2` (xem [`plop-generate`](../skills/plop-generate/SKILL.md), mục Generator 3)
 
+#### Chọn generator (đồng bộ với `ui-structure` Phần B)
+
+| Tình huống | Generator | Kết quả |
+| :--- | :--- | :--- |
+| Họ nghiệp vụ mới, CRUD (không có trạng thái) | `api-core` (chọn `engine`) | `src/v2/core/<họ>/` kèm `core.manifest.json` |
+| Họ chứng từ có vòng đời trạng thái mới | `api-core` (chọn `abstract-services`) | `src/v2/core/<họ>/`: contract với `<Entity>Action` và bảng `<ENTITY>_TRANSITIONS` (rỗng), entity có `status`/`createdBy`, command abstract có `transition()`/`createDraft()` và hook `// CUSTOM` |
+| Module CRUD thuộc họ đã có lõi `engine` | `api-thin-module` (chọn lõi, nhập module, entity, trường riêng, bật wire) | `src/v2/modules/<module>/`: entity và create DTO kế thừa Base của lõi; facade, query/command, mapper, controller, RBAC, spec (cùng pipeline `api-module-v2`); khi wire tự nối `app.module.ts` và `data-source.ts`. Trường riêng trùng cột của lõi bị từ chối. Sinh thử: `bunx plop api-thin-module` |
+| Module chứng từ thuộc họ `abstract-services` | `api-workflow-module` (chỉ nhận họ `abstract-services`) | `src/v2/modules/<module>/`: entity con, DTO tạo, command con (điền `headerEntity`, `docType`), controller `POST /` và `POST /:id/transition/:action`, module, spec tối thiểu, RBAC; khi wire tự nối `app.module.ts` và `data-source.ts`. Nghiệp vụ điền ở hook `// CUSTOM` và bảng transition của lõi. Chưa có endpoint đọc: dev tự thêm. Sinh thử: `bunx plop api-workflow-module` |
+| Entity đơn lẻ, không thuộc họ chứng từ | `api-module-v2` | `src/v2/modules/<module>/` đầy đủ Facade + sub-services |
+| Chứng từ Header + Lines (không có lõi) | `api-voucher-v2` | Cảnh báo nếu họ đã có lõi; nên dùng `api-thin-module` |
+| Module V1 cũ | `api-module` | `[LEGACY-V1]`, chỉ giữ để tham khảo |
+
+Quy tắc (áp cho mọi họ v2 trong erp-api):
+- **Lõi** (`src/v2/core/<họ>-core/`) chỉ là **base để kế thừa**: entity trừu tượng (`abstract`, không `@Entity`), service trừu tượng, type, helper thuần, `core.manifest.json`, barrel. Không chứa `@Entity`, `@Controller`, job `@Cron`, service cụ thể tiêm trực tiếp hay bảng DB.
+- **Module** (`src/v2/modules/<gốc>-<biến thể>/`) chứa mọi thứ cụ thể: entity có `@Entity`, service kế thừa base, job, controller, DTO, mapper, facade và module Nest.
+- Test `plop-helpers/apiCoreLayout.test.mjs` chặn vi phạm. Các họ cũ còn vi phạm nằm trong `LEGACY_CORE_ALLOWLIST` và được đánh dấu `[LEGACY-CORE]`; chuyển xong một họ thì gỡ khỏi danh sách. Chuyển từng họ khi có lệnh riêng.
+- Không sinh lại Base entity hay engine của một họ đã có lõi.
+
+**Cron và job định kỳ**: job là class trong module, kế thừa `ScheduledJob` (lớp nền trừu tượng ở `src/v2/core/scheduler-core/`), khai báo `jobName`, `cron`, `timeZone` và `run()`. Module `src/v2/modules/scheduler-jobs/` (`SchedulerJobsModule`, import một lần trong `AppModule`) tự tìm mọi job qua `DiscoveryService` và đăng ký. Không thêm `@Cron(...)` hay `setInterval` mới để chạy nền. Chi tiết: `.agents/skills/modules/scheduler-jobs/SKILL.md`.
+
+### 🏷️ Quy tắc đặt tên bảng (v2)
+
+- **Dạng chuẩn**: `<gốc>_<hậu tố>`, snake_case, **không** prefix `erp_`. Ví dụ: `notifications_inbox`, `goods_receipts_garage`, `proc_orders_garage`.
+- **Bảng thuộc module**, đặt theo tên module cộng hậu tố sau gốc. Ví dụ module `notifications-inbox` có bảng `notifications_inbox`.
+- **Lõi không có bảng**: không dùng hậu tố `_core` cho bảng mới. Bảng `notifications_core` cũ đã đổi thành `notifications_inbox`.
+- **Module**: hậu tố theo biến thể, khớp quy ước thư mục (`-garage`, `-erp`, `-finance`). Module không có biến thể thì dùng `<gốc>` trần.
+- **Entity con (dòng chứng từ)**: `<header>_lines` hoặc `<header>_lines_<hậu tố>`, theo mẫu bảng header.
+- **Không đổi tên bảng đang có** (`erp_*`, `core_*`). Quy tắc này chỉ áp dụng cho bảng tạo mới. Đổi tên bảng cũ là một task migration riêng, cần lệnh của người dùng.
+- Bảng nằm trong `src/v2/**` không dùng prefix `core_` hay `erp_` để tránh nhầm với bảng v1.
+- Khi chạy generator, luôn truyền `tableNameInput` tường minh (xem mục "Chọn generator"). Mặc định của plop tuân theo quy tắc này.
+
 ---
 
 ### 🎯 Định nghĩa API v2
 
 ```
-src/v2/<module>-core/
+src/v2/modules/<module>/
   entities/<entity>.entity.ts              # TypeORM, cột snake_case, cờ isDeleted
   dto/create-<e>.dto.ts                    # validation (class-validator)
   dto/update-<e>.dto.ts                    # PartialType(Create)
@@ -395,7 +426,7 @@ Bốn quy tắc cứng:
 #### Giai đoạn 1: Discovery (chỉ đọc)
 1. Xác định module đích và bảng: đọc `.agents/skills/modules/<module>/SKILL.md` nếu module đã có.
 2. Kiểm tra DB đúng với `.env` theo quy tắc workspace: chạy `SELECT current_database();` trước khi đọc schema, báo tên DB cho người dùng.
-3. Kiểm tra trùng: `routePath` (không trùng controller khác), `ErpResource` (không trùng key/value trong `src/rbac-core/enums/erp-resource.enum.ts`), tên entity.
+3. Kiểm tra trùng: `routePath` (không trùng controller khác), `ErpResource` (không trùng key/value trong `src/v2/core/rbac-core/enums/erp-resource.enum.ts`), tên entity.
 4. Chốt danh sách trường (`fieldSpec`) với người dùng. Mọi quyết định nghiệp vụ (mã duy nhất, trạng thái, số tiền) phải được chốt trước khi sinh.
 
 #### Giai đoạn 2: Scaffold bằng plop
@@ -404,11 +435,11 @@ cd erp/erp-api
 bunx plop api-module-v2 <module-core> <Entity> "<fieldSpec>" "<tableName>" "<routePath>" "<permissionResource>" <wire>
 ```
 - Thứ tự tham số: `moduleInput`, `entityInput`, `fieldSpecInput`, `tableNameInput`, `routePathInput`, `permissionResourceInput`, `wireInput`.
-- Để chuỗi rỗng `""` để dùng giá trị mặc định (bảng `erp_<module>`, route và resource theo module bỏ `-core`).
+- Để chuỗi rỗng `""` để dùng giá trị mặc định: bảng `<gốc>` hoặc `<gốc>_<biến thể>` (xem "Quy tắc đặt tên bảng"), route và resource theo module bỏ `-core`.
 - `fieldSpec`: `name:type[:required],...`, type ∈ `string | text | number | decimal | boolean | date | status`. `createdAt` được sinh tự động.
 - `wire = true`: nối module vào `src/app.module.ts` và entity vào `src/db/data-source.ts`. Resource RBAC **luôn** được thêm vào `erp-resource.enum.ts`.
 - Input sai sẽ dừng trước khi ghi file nào.
-- Sau khi sinh: `bunx prettier --write "src/v2/<module>-core/**/*.ts"`.
+- Sau khi sinh: `bunx prettier --write "src/v2/modules/<module>/**/*.ts"`.
 
 #### Giai đoạn 3: Nghiệp vụ (làm tay, có test)
 Code sinh ra là CRUD hoàn chỉnh nhưng **chưa có nghiệp vụ**. Bổ sung ở đúng lớp:
@@ -431,8 +462,8 @@ Code sinh ra là CRUD hoàn chỉnh nhưng **chưa có nghiệp vụ**. Bổ sun
 Chạy theo phạm vi thu hẹp trong lúc làm, rồi một lần duy nhất ở commit cuối:
 ```bash
 bun run type:check                                 # tsc --noEmit
-bunx jest src/v2/<module>-core --forceExit            # spec của module
-bunx eslint "src/v2/<module>-core/**/*.ts" --max-warnings=0
+bunx jest src/v2/modules/<module> --forceExit         # spec của module
+bunx eslint "src/v2/modules/<module>/**/*.ts" --max-warnings=0
 bun run verify:final                               # tùy chọn local; full QC chạy trên CI sau push
 ```
 - Test generator (chỉ khi sửa `plop-helpers/`): `bun test plop-helpers` (jest không chạy các file này vì `rootDir` là `src`).
@@ -456,3 +487,24 @@ Không tự động migrate. Chỉ làm khi người dùng ra lệnh cho từng 
 - Generator không sinh nghiệp vụ, phân quyền theo dữ liệu, hay audit log: phải làm ở Giai đoạn 3.
 - Generator không gán quyền cho vai trò trong RBAC. Thêm resource vào enum chỉ đăng ký khả năng, quyền cấp cho vai trò quản lý ở module RBAC.
 - Mô hình xóa dùng cờ `isDeleted` (đúng quy ước repo), không dùng `DeleteDateColumn`. Template `api-module` cũ dùng `deletedAt` và không nên dùng cho module mới.
+
+---
+
+### 🗑️ Chính sách xóa (module v2)
+
+Mặc định là **xóa mềm** (`isDeleted = true`), theo `.agents/AGENTS.md`. **Xóa cứng** là ngoại lệ, chỉ dùng khi người dùng yêu cầu rõ và thỏa đủ các điều kiện dưới đây.
+
+| Thao tác | Route | Quyền (`ErpAction`) | Điều kiện | Hành vi |
+| :--- | :--- | :--- | :--- | :--- |
+| Xóa mềm | `DELETE /:id` | `DELETE` | Chỉ `DRAFT`; không có số lượng đang được chứng từ khác giữ | `isDeleted = true`, không xóa dòng, không xóa lịch sử duyệt |
+| Xóa cứng | `DELETE /:id/permanent` | `PURGE` (chỉ cấp cho vai trò admin) | Chỉ `DRAFT`; không còn bản ghi phụ thuộc (kể cả đã xóa mềm) | Trả số lượng giữ về chứng từ nguồn, xóa dòng rồi xóa đầu đề, giữ lịch sử duyệt |
+
+Quy tắc bắt buộc:
+- **Kiểm phụ thuộc ở tầng service trước khi xóa.** Khóa ngoại từ chứng từ con tới chứng từ cha là `RESTRICT` (ví dụ đơn mua tới đề nghị, phiếu nhập tới đơn mua). Đếm bản ghi phụ thuộc trong cùng transaction, ghi lớp con ghi đè hook `assertNoDependent…`. Trả 409 có thông điệp rõ, không để DB báo lỗi thô.
+- **Đếm cả bản ghi đã xóa mềm.** Khóa ngoại không phụ thuộc cờ `isDeleted`.
+- **Dòng con xóa cùng transaction.** Khi quan hệ là `CASCADE` (dòng đề nghị, dòng và nghiệm thu đơn mua), vẫn xóa tường minh để không phụ thuộc cấu hình DB.
+- **Không xóa lịch sử duyệt** (`erp_approval_events`). Bảng này không có khóa ngoại, lưu theo `doc_id`, nên bản ghi cũ vẫn còn để kiểm toán.
+- **Quyền riêng:** xóa cứng dùng `ErpAction.PURGE`, không gộp vào `DELETE`. Action là chuỗi (`varchar`), không cần migration; vai trò có `*` hoặc `SUPER_ADMIN` tự khớp.
+- **Route riêng:** `:id/permanent` tách khỏi `:id` để không nhầm với xóa mềm. Spec RBAC kiểm cả hai route.
+- **UI:** thao tác xóa cứng và xóa mềm phải có modal xác nhận (theo `.agents/AGENTS.md`).
+- **Test bắt buộc:** nhánh thành công, nhánh bị chặn do trạng thái, nhánh bị chặn do phụ thuộc, và RBAC của từng route.

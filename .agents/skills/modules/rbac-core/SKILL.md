@@ -68,30 +68,50 @@ erDiagram
 
 ## 3. Cấu trúc Source Code
 
-### 3.1. Backend (`erp-api/src/rbac-core/`)
+### 3.1. Backend (kiến trúc v2)
+Lõi kiểm quyền và module quản trị tách riêng. Enums nằm tại `src/v2/core/rbac-core/enums/` và được export trực tiếp qua `@/v2/core/rbac-core`. Thư mục cũ `src/rbac-core` đã được xóa bỏ hoàn toàn.
 ```text
-erp-api/src/rbac-core/
-├── dto/
-│   └── rbac-core.dto.ts               # ListCoreRolesDto, CreateCoreRoleDto, UpdateCoreRoleDto, UpdateCoreRolePermissionsDto, UpdateCoreRoleUsersDto
+erp-api/src/v2/core/rbac-core/                       # Lõi họ rbac (@Global)
+├── enums/
+│   ├── erp-action.enum.ts            # ErpAction (READ, CREATE, UPDATE, DELETE, PURGE...)
+│   ├── erp-resource.enum.ts          # ErpResource (tất cả resources hệ thống)
+│   └── index.ts                      # Barrel export enums
 ├── entities/
-│   ├── core-role.entity.ts           # Entity bảng core_roles
+│   ├── core-role.entity.ts           # Entity bảng core_roles (xóa cứng, không có is_deleted)
 │   ├── core-permission.entity.ts     # Entity bảng core_permissions
 │   └── core-user-role.entity.ts      # Entity bảng core_user_roles
-├── enums/
-│   ├── erp-resource.enum.ts          # Enum các tài nguyên ErpResource (*, purchase_orders, sales_orders, invoices, etc.)
-│   ├── erp-action.enum.ts            # Enum các hành động ErpAction (read, create, update, delete, manage, *)
-│   └── index.ts
-├── rbac-core.controller.ts           # REST API endpoints (/api/v1/rbac-core/roles...)
-├── rbac-core.service.ts              # Business logic tra cứu quyền, gán quyền, phân trang vai trò
-├── rbac-core.module.ts               # NestJS Module đăng ký TypeORM và exports
-└── index.ts
+├── helpers/
+│   └── permission-match.helper.ts    # checkPermissionMatch: hàm thuần, wildcard * / SUPER_ADMIN / ALL
+├── services/
+│   └── rbac-core.service.ts          # RbacCoreService: hasPermission, hasAny/AllPermissions, getUserPermissions, getUserRoleNames
+├── rbac-core.module.ts               # RbacCoreModule (@Global), export RbacCoreService
+└── core.manifest.json, index.ts      # index.ts export toàn bộ enums, entities, helper, service, module
+
+erp-api/src/v2/modules/rbac-roles/              # Module quản trị role (API /api/v1/rbac-core)
+├── controllers/rbac-roles.controller.ts        # 10 route, RBAC ADMIN_USERS/MANAGE, ParseUUIDPipe cho id/roleId
+├── rbac-roles.service.ts                       # Facade: delegate sang 4 sub-service, trả response DTO
+├── services/
+│   ├── role-query.service.ts         # Danh sách role (phân trang, tìm kiếm, lọc, sắp xếp) và column-options
+│   ├── role-command.service.ts       # Tạo, sửa, xóa role
+│   ├── role-permissions.service.ts   # Đọc và thay toàn bộ quyền của role
+│   └── role-users.service.ts         # Đọc và thay toàn bộ người dùng của role
+├── helpers/
+│   ├── role-table-filter.helper.ts   # Logic lọc/tìm/sắp xếp bảng role (giữ tên tham số SQL của v1)
+│   ├── rbac-role.mapper.ts           # Entity -> response DTO (users chỉ {id, email})
+│   └── available-resources.data.ts   # Danh sách resource tĩnh cho UI gán quyền
+├── dto/
+│   ├── rbac-core.dto.ts              # ListCoreRolesDto, CreateCoreRoleDto, UpdateCoreRoleDto, UpdateCoreRolePermissionsDto, UpdateCoreRoleUsersDto
+│   └── rbac-response.dto.ts          # Response DTO: RoleListResponse, RoleResponse, PermissionResponse, RoleUserResponse
+└── rbac-roles.module.ts
 ```
+
+Enums: `erp-api/src/v2/core/rbac-core/enums/` (`erp-resource.enum.ts`, `erp-action.enum.ts`, `index.ts`), import qua `@/v2/core/rbac-core`.
 
 ### 3.2. Guards & Decorators Tích hợp (`erp-api/src/auth/`)
 ```text
 erp-api/src/auth/
 ├── guards/
-│   └── core-rbac.guard.ts            # CoreRbacGuard kiểm tra @RequirePermissions qua RbacCoreService
+│   └── core-rbac.guard.ts            # CoreRbacGuard kiểm tra @RequirePermissions qua RbacCoreService (@/v2/core/rbac-core)
 └── decorators/
     └── require-permissions.decorator.ts # Decorator khai báo { resource, action } trên endpoint
 ```
@@ -120,6 +140,12 @@ erp-web/src/
 
 Tất cả các endpoint dưới đây đều được bảo vệ bởi `JwtAuthGuard` và yêu cầu quyền `resource: ErpResource.ADMIN_USERS, action: ErpAction.MANAGE`:
 
+**Hợp đồng bổ sung (v2):**
+- Tham số `:id` và `:roleId` phải là UUID. Giá trị khác UUID trả `400` (`ParseUUIDPipe`), không đi xuống DB. Trước đây trả `500`.
+- `GET /roles/:roleId/users` chỉ trả `{ users: [{ id, email }] }`. Không lộ `password_hash`.
+- Response không trả entity TypeORM. Mọi response đi qua mapper/DTO trong `rbac-roles`.
+- Route và response khác của v1 giữ nguyên, nên `erp-web` không cần đổi (vẫn gọi `/api/v1/rbac-core/...`).
+
 | Phương thức | Endpoint | Mô tả |
 | :--- | :--- | :--- |
 | `GET` | `/api/v1/rbac-core/roles` | Lấy danh sách vai trò có phân trang, tìm kiếm, lọc theo cột và ngày |
@@ -131,7 +157,9 @@ Tất cả các endpoint dưới đây đều được bảo vệ bởi `JwtAuth
 | `PATCH` | `/api/v1/rbac-core/roles/:roleId/permissions` | Lưu ma trận quyền của vai trò (`permissions: [{ resource, action, conditions }]`) |
 | `GET` | `/api/v1/rbac-core/roles/:roleId/users` | Lấy danh sách người dùng được gán vào vai trò |
 | `PATCH` | `/api/v1/rbac-core/roles/:roleId/users` | Cập nhật danh sách người dùng gán vào vai trò (`userIds: string[]`) |
-| `GET` | `/api/v1/rbac-core/collections` | Lấy danh sách toàn bộ tài nguyên (resources) khả dụng trong hệ thống |
+| `GET` | `/api/v1/rbac-core/collections` | Lấy danh sách toàn bộ tài nguyên (resources) khả dụng trong hệ thống; resource có action bổ sung trả kèm `actions` (hiện: `approve`, `reject` cho 4 resource procurement). |
+
+> **Lưu ý ngữ nghĩa lưu quyền:** `PATCH .../permissions` thay toàn bộ quyền của vai trò (xóa rồi ghi lại). Client phải gửi đủ mọi dòng cần giữ, kể cả action UI không hiển thị (ví dụ `purge`, `manage`, `conditions`). Web V2 đã làm việc này từ bản sửa phân quyền Duyệt/Từ chối.
 
 ---
 
@@ -194,8 +222,9 @@ Các tài nguyên được gom thành 9 nhóm nghiệp vụ chính:
 - **Unit Test Backend**:
   ```bash
   cd erp/erp-api
-  bunx jest src/rbac-core/rbac-core.service.spec.ts
+  bunx jest src/v2/core/rbac-core src/v2/modules/rbac-roles
   ```
+  Gồm: spec kiểm quyền của lõi, spec hợp đồng route/RBAC/response, spec HTTP kiểm tra UUID (400), spec mapper và facade.
 - **CI / Type Check Frontend**:
   ```bash
   cd erp/erp-web

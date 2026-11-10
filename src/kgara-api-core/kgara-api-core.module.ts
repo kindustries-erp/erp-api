@@ -18,9 +18,9 @@ import { KgaraCashflowVoucher } from './entities/kgara_cashflow_voucher.entity';
 import { ErpModuleCategory } from '../module-config/entities/erp_module_category.entity';
 import { ErpBankTransaction } from '../bank-transactions-core/entities/erp_bank_transaction.entity';
 import { CoreUser } from '../users/entities/core-user.entity';
-import { CorePermission } from '../rbac-core/entities/core-permission.entity';
-import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
-import { NotificationsModule } from '../notifications/notifications.module';
+import { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.entity';
+import { CoreUserRole } from '@/v2/core/rbac-core/entities/core-user-role.entity';
+import { NotificationsInboxModule } from '@/v2/modules/notifications-inbox';
 import { CommonModule } from '../common/common.module';
 import { AuditCoreModule } from '../audit-core/audit-core.module';
 
@@ -116,7 +116,7 @@ import { GarageOpexExportController } from './controllers/garage-opex-export.con
       CoreUserRole,
     ]),
     ConfigModule,
-    NotificationsModule,
+    NotificationsInboxModule,
     CommonModule,
     AuditCoreModule,
   ],

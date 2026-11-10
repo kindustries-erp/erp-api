@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "layer": "api",
+  "family": "table-preferences-core",
+  "entity": "CoreUserTablePreference",
+  "style": "v2-core",
+  "barrel": "src/v2/core/table-preferences-core/index.ts",
+  "module": "TablePreferencesCoreModule",
+  "moduleFile": "table-preferences-core.module.ts",
+  "baseClasses": {
+    "entity": "CoreUserTablePreference",
+    "createDto": null,
+    "contract": null,
+    "service": "TablePreferencesCoreService"
+  },
+  "serviceFile": "services/table-preferences-core.service.ts",
+  "permissionPattern": null,
+  "requiredModuleFiles": [
+    "entities",
+    "services"
+  ]
+}

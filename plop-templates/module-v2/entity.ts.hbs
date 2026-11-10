@@ -1,29 +1,11 @@
-import {
-  Column,
-  CreateDateColumn,
-  Entity,
-  Index,
-  PrimaryGeneratedColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { {{#each typeormImports}}{{this}}{{#unless @last}}, {{/unless}}{{/each}} } from 'typeorm';
+import { CoreSoftDeletableEntity } from '@/v2/core/base-core';
 
 @Entity('{{tableName}}')
-export class {{entityName}} {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
-
+export class {{entityName}} extends CoreSoftDeletableEntity {
 {{#each customFields}}
   {{{this.entityColumn}}}
   {{this.name}}{{{this.nullableMark}}}: {{{this.tsType}}};
 
 {{/each}}
-  @Index()
-  @Column({ name: 'is_deleted', type: 'boolean', default: false })
-  isDeleted: boolean;
-
-  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
-  createdAt: Date;
-
-  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
-  updatedAt: Date;
 }

@@ -80,7 +80,10 @@ Tài liệu chi tiết của từng module nằm tại `.agents/skills/modules/<
 - **Tài chính, dòng tiền, hóa đơn**: `bank-statement`, `cashflow-dashboard`, `erp-invoice`, `invoice-netoff`, `invoice-dashboard`, `invoice-debts`, `journal-entry`, `settings-accounts`
 - **Garage**: `garage-cases`, `garage-customers`, `garage-dashboard`, `garage-cashflow`, `garage-bank-reconciliation`, `garage-invoice-reconciliation`, `garage-goods-receipts`, `garage-opex`, `operating-expenses`
 - **Phụ tùng VinFast**: `vinfast-parts-stock`, `vinfast-parts-dashboard`
-- **Đối tác**: `business-partners-core`
+- **Đối tác**: `business-partners-core` (lõi `src/v2/core/business-partners-core`, module `src/v2/modules/business-partners-management`)
+- **Chi nhánh**: `branches-core` (lõi `src/v2/core/branches-core`, module `src/v2/modules/branches-management`; entity consumers import canonical v2, route v1 giữ nguyên)
+- **Thông báo (v2, theo user, không RBAC)**: `notifications-inbox` (`/api/v2/notifications`, bảng `notifications_inbox`; job xóa cứng định kỳ; base dùng chung ở lõi `notifications-core`)
+- **Lịch chạy nền (v2)**: `scheduler-jobs` (tự tìm job kế thừa `ScheduledJob` từ lõi `scheduler-core`, cổng `ENABLE_CRON` duy nhất). Cron mới là class kế thừa `ScheduledJob` trong module
 - **Hệ thống, cấu hình, phân quyền, nhật ký**: `admin-dashboard-core`, `ai-hub-core`, `app-config`, `audit-core`, `module-config`, `rbac-core`, `system-operations-core`
 
 Khi cần quét mới hoặc cập nhật tài liệu module: skill `scan-module-knowledge`.

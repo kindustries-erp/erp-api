@@ -278,13 +278,16 @@ src/erp-invoices-core/
 
 ## 4. Danh sách API Endpoints & RBAC Contract
 
-### 4.0. API v2 lõi (`/api/v2/invoices`, module `src/v2/invoices/`)
+### 4.0. API v2 lõi (`/api/v2/invoices`, Core `src/v2/core/invoices-core/`, Module `src/v2/modules/invoices-finance/`)
 
-Chạy song song với v1 trên cùng bảng `erp_invoices`, không đổi schema. URL v2 dùng `api/v2` nhờ `GLOBAL_PREFIX_EXCLUDE` (`src/common/config/global-prefix.config.ts`); các route khác vẫn `/api/v1`. Entity `Invoice`, `InvoiceItem` là bản phản ánh cột thật (`synchronize: false`).
+Chạy song song với v1 trên cùng bảng `erp_invoices`, không đổi schema. URL v2 dùng `api/v2` nhờ `GLOBAL_PREFIX_EXCLUDE` (`src/common/config/global-prefix.config.ts`); các route khác vẫn `/api/v1`.
+Kiến trúc phân tách theo chuẩn:
+- **Core Foundation (`src/v2/core/invoices-core/`)**: Chứa Contracts (`invoice.contract.ts`), Abstract Base Entities (`BaseInvoiceEntity`, `BaseInvoiceItemEntity`), Base DTOs và `BaseInvoiceEngineService` (tính tổng, chuẩn hóa số HĐ, metadata, uom, state validator) được export qua `InvoicesCoreModule`.
+- **Business Module (`src/v2/modules/invoices-finance/`)**: Chứa Concrete Entities (`FinanceInvoice`, `FinanceInvoiceItem` gắn `@Entity`), REST Controller `@Controller('api/v2/invoices')`, Command/Query Services và Facade `FinanceInvoicesService` (export qua `FinanceInvoicesModule`).
 
 | Method | Endpoint | Resource | Action | Ghi chú |
 | :--- | :--- | :--- | :--- | :--- |
-| `GET` | `/api/v2/invoices` | `invoices` | `read` | Envelope `{ items, total, page, pageSize, totalPages, summaries }`; mỗi item có thêm `netOffAmount`, `remainingAmount`; lọc qua `TableQueryDto` + `direction`, `partner_tax_code`, `tag_id`; `sort=-key,key`; mặc định `invoiceDate DESC`; luôn `is_deleted = false` |
+| `GET` | `/api/v2/invoices` | `invoices` | `read` | Envelope `{ items, total, page, pageSize, totalPages, summaries }`, `summaries` theo `summary_keys` (`{ total, pageSubtotal, cumulative }` hoặc `null`); mỗi item có thêm `netOffAmount`, `remainingAmount`; lọc qua `TableQueryDto` + `direction`, `partner_tax_code`, `tag_id`; `sort=-key,key`; mặc định `invoiceDate DESC`; luôn `is_deleted = false` |
 | `GET` | `/api/v2/invoices/column-options` | `invoices` | `read` | Khai báo trước `:id` |
 | `GET` | `/api/v2/invoices/:id` | `invoices` | `read` | `{ message, data }`, `data.items` có dòng hàng |
 | `POST` | `/api/v2/invoices` | `invoices` | `create` | `createdBy` lấy từ JWT (`req.user.sub`), không nhận từ body |
@@ -303,9 +306,9 @@ Quy tắc:
 - Hóa đơn POSTED không đổi được chi nhánh trong v2 (`INVOICE_BRANCH_LOCKED_POSTED`) cho tới khi có accounting-core v2 (UC2 chưa port).
 - `invoice_no_normalized` do v2 tự tính khi ghi (`normalizeInvoiceNo`). v1 không ghi cột này nên một số dòng cũ đang NULL.
 - Metadata: `settlement_order`, `license_plate` được trích từ diễn giải/ghi chú/dòng hàng (ghi đè khi có khớp).
-- v2 không import bất cứ thứ gì từ `erp-invoices-core`. Helper được copy vào `src/v2/invoices/helpers/` (`uom`, `invoice-metadata`, `invoice-item-code`, `invoice-no`, `invoice-branch`, `invoice-items`).
+- v2 không import bất cứ thứ gì từ `erp-invoices-core`. Helper được quản lý tại `src/v2/core/invoices-core/` và `src/v2/modules/invoices-finance/helpers/`.
 
-`message` là mã (`src/v2/invoices/invoice-messages.ts`): `INVOICE_FETCHED`, `INVOICE_CREATED`, `INVOICE_UPDATED`, `INVOICE_DELETED`, `INVOICE_NOT_FOUND`, `INVOICE_DELETE_NOT_DRAFT`, `INVOICE_BRANCH_NOT_FOUND`, `INVOICE_BRANCH_LOCKED_POSTED`, `INVOICE_BULK_UPDATED`. Web map mã sang translation key.
+`message` là mã (`src/v2/modules/invoices-finance/finance-invoice-messages.ts`): `INVOICE_FETCHED`, `INVOICE_CREATED`, `INVOICE_UPDATED`, `INVOICE_DELETED`, `INVOICE_NOT_FOUND`, `INVOICE_DELETE_NOT_DRAFT`, `INVOICE_BRANCH_NOT_FOUND`, `INVOICE_BRANCH_LOCKED_POSTED`, `INVOICE_BULK_UPDATED`. Web map mã sang translation key.
 
 Chưa port (còn ở v1): attributes, stats, danh sách/export items, netoff, post/unpost/cancel/validate/category, portal GDT, import XML, files/PDF, dashboard, debts, UC2.
 
@@ -431,7 +434,7 @@ Ghi chú payload SSE `portal/progress`: thêm trường tùy chọn `currentItem
   - Khi thành công, tự động lưu Token mới và Cookie vào `company_profile` và tiếp tục luồng xử lý.
 - **Cơ chế Tự phục hồi trong Tiến trình Cron (`ErpInvoicesCronService`)**:
   - Khi tiến trình cron chạy định kỳ: nếu token chưa có hoặc `checkTokenValid` trả về `false`, Cron Job chủ động gọi `autoReloginWithRetry()` để tự lấy token mới.
-  - Chỉ khi cả 3 lần tự đăng nhập lại đều thất bại, hệ thống mới gửi thông báo lỗi `Token GDT hóa đơn hết hạn` tới người dùng qua `NotificationsService`.
+  - Chỉ khi cả 3 lần tự đăng nhập lại đều thất bại, hệ thống mới gửi thông báo lỗi `Token GDT hóa đơn hết hạn` tới người dùng qua `NotificationsPublisherService` (v2, bảng `notifications_inbox`).
 - **Kiểm tra Hồ sơ Người nộp thuế (`validatePortalTaxpayer`)**:
   - Đối chiếu danh sách mã số thuế trả về từ hồ sơ GDT (`username`, `id`, `groupId`, `tinInfoTT86.mst`,...) với MST doanh nghiệp trong `company_profile` để chặn nguy cơ kéo nhầm dữ liệu đơn vị khác (`GDT_TAXPAYER_MISMATCH`).
 - **Cửa sổ ngày & Phân trang (`helpers/gdt-date-window.helper.ts`)**:
@@ -625,7 +628,7 @@ graph TD
     INVOICE -->|Post HĐM/HĐB Journal Entries| ACC["accounting-core<br/>(JournalEntry)"]
     INVOICE <-->|Net-Off Cấn trừ| BANK["bank-transactions-core<br/>(ErpBankTransaction)"]
     INVOICE -->|Trigger Recalc FIFO| VF["vinfast-parts<br/>(VinfastPartsStock)"]
-    INVOICE -->|Notify Expiry / Sync Status| NOTIF["notifications<br/>(NotificationsService)"]
+    INVOICE -->|Notify Expiry / Sync Status| NOTIF["notifications-inbox<br/>(NotificationsPublisherService)"]
     INVOICE -->|Resolve Branch| BRANCH["branches-core<br/>(ErpBranch)"]
     PO["purchase-orders-core<br/>(PurchaseOrder)"] -->|Link Invoice| INVOICE
 ```
@@ -634,7 +637,7 @@ graph TD
 2. **`bank-transactions-core`**: Quản lý cấn trừ giữa hóa đơn và giao dịch sao kê/sổ quỹ (`erp_invoice_voucher_netoff`).
 3. **`r2`**: Lưu trữ và phục vụ tải xuống tệp PDF, XML, đính kèm nhiều tệp dạng JSONB và nén ZIP trực tiếp.
 4. **`vinfast-parts`**: Tự động kích hoạt tính toán lại sổ cái phụ tùng FIFO khi có hóa đơn phụ tùng mới được đồng bộ.
-5. **`notifications`**: Gửi thông báo hệ thống khi token GDT hết hạn hoặc khi tác vụ đồng bộ/xuất file nền hoàn tất.
+5. **`notifications-inbox`**: Gửi thông báo hệ thống (qua `NotificationsPublisherService`) khi token GDT hết hạn hoặc khi tác vụ đồng bộ/xuất file nền hoàn tất.
 6. **`purchase-orders-core`**: Liên kết số hóa đơn nhà cung cấp (`supplier_invoice_no`) và ID hóa đơn vào đơn mua hàng.
 7. **`module-config`**: Quản lý danh mục phân loại (`category_id`) và các trường thuộc tính tùy chỉnh động (`erp_entity_attribute_values` với `entity_type = 'INVOICE'`). Được cấu hình qua Action Dropdown trang Hóa đơn / menu Thiết lập chung và hiển thị/chọn tại cột phải trong Drawer Hóa đơn.
 
@@ -872,3 +875,11 @@ Script sửa mã đã gán sai: `src/erp-invoices-core/scripts/fix-vinfast-item-
 - Gán chi nhánh: luôn qua `InvoiceBranchService.assign` (ghi cả hai cột, kiểm tra `erp_branches.is_active`, tái phân bổ bút toán trong cùng transaction). Import/cổng thuế dùng `onlyIfUnassigned`.
 - `erp_branches` không có `is_deleted`; dùng `is_active`.
 - Chưa làm: 12 hóa đơn có `branch_id` khác phần tử đầu của `branch_ids` và ~278 hóa đơn đã ghi sổ có bút toán ở chi nhánh khác (xem audit); migration chuẩn hóa và CHECK constraint chờ quyết định.
+
+## extraData (JSON tùy biến, 2026-11-08)
+
+- **DB**: cột `extra_data jsonb NOT NULL DEFAULT '{}'` (CHECK: object) trên: `erp_invoices`, `erp_invoice_items`. Migration `20261108120000-add-extra-data-to-v2-tables.ts`. Dữ liệu cũ là `{}`.
+- **DTO**: field `extraData?: Record<string, unknown>` (`@ExtraDataField()`, base-core). Không gửi thì không đổi.
+- **Ghi**: tạo mặc định `{}`. Sửa header merge cấp 1 (`null` xóa key). Dòng chứng từ ghi theo payload, không merge.
+- **Giới hạn**: 16 KB, sâu 5 cấp, key ≤ 64 ký tự, cấm `__proto__`/`constructor`/`prototype` (400 qua `RejectUnsafeExtraDataPipe` và service).
+- **Response**: luôn có `extraData` (object).

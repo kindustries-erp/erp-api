@@ -214,9 +214,9 @@ Guards: `JwtAuthGuard`, `CoreRbacGuard`
 | | `POST` | `/transactions/:id/unpost` | `bank_statements` OR `cash_statements` (`update`) | Hủy hạch toán bút toán kế toán |
 | | `POST` | `/transactions/import` | `bank_statements` OR `cash_statements` (`create`) | Upload file sao kê (Multipart: tối đa 5 file .csv/.xlsx) |
 | | `DELETE`| `/transactions/batch/:batchId` | `bank_statements` OR `cash_statements` (`delete`) | Rollback (xóa) toàn bộ giao dịch theo lô import |
-| **Balances** | `GET` | `/bank-account-balances` | `{ resource: 'bank_statements', action: 'read' }` | Danh sách số dư đầu kỳ tài khoản ngân hàng |
+| **Balances** | `GET` | `/bank-account-balances` | `{ resource: 'bank_statements', action: 'read' }` | Danh sách số dư đầu kỳ tài khoản ngân hàng. Query `bankAccountId` phải là UUID (`ParseUUIDPipe`): thiếu hoặc sai → 400. Tương tự cho `PATCH/DELETE :id` |
 | | `POST` | `/bank-account-balances` | `{ resource: 'bank_statements', action: 'create' }` | Thiết lập số dư đầu kỳ tài khoản ngân hàng |
-| | `GET` | `/cash-book-balances` | `{ resource: 'cash_statements', action: 'read' }` | Danh sách số dư đầu kỳ sổ quỹ |
+| | `GET` | `/cash-book-balances` | `{ resource: 'cash_statements', action: 'read' }` | Danh sách số dư đầu kỳ sổ quỹ. Query `cashBookId` phải là UUID (`ParseUUIDPipe`): thiếu hoặc sai → 400. Tương tự cho `PATCH/DELETE :id` |
 | | `POST` | `/cash-book-balances` | `{ resource: 'cash_statements', action: 'create' }` | Thiết lập số dư đầu kỳ sổ quỹ |
 | **Statement Files** | `GET` | `/statement-files` | `bank_statements` OR `cash_statements` (`read`) | Danh sách file sao kê đã tải lên |
 | | `POST` | `/statement-files` | `bank_statements` OR `cash_statements` (`create`) | Ghi nhận metadata file sao kê |

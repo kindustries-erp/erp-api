@@ -12,7 +12,7 @@ import { splitEvenly } from '../../common/utils/money-split.util';
 import { UpdateBankTransactionDto } from '../dto/update-bank-transaction.dto';
 import { CreateBankTransactionDto } from '../dto/create-bank-transaction.dto';
 import { normalizeBranchColumns } from '../../common/utils/branch-ids.util';
-import { BusinessPartnersCoreService } from '../../v2/business-partners-core/business-partners-core.service';
+import { BusinessPartnersCoreService } from '@/v2/core/business-partners-core';
 import {
   CashflowClassification,
   CashflowPurpose,

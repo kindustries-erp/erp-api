@@ -16,7 +16,7 @@ import { ReportsCoreService } from './reports-core.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
-import { ErpResource, ErpAction } from '@/rbac-core/enums';
+import { ErpResource, ErpAction } from '@/v2/core/rbac-core';
 import type { Response } from 'express';
 import { Observable } from 'rxjs';
 import type { VinfastPartsExportQuery } from './services/vinfast-parts-export-background.service';

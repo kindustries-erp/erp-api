@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
+import { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity';
 
 import { ErpInvoice } from '../../entities/erp_invoice.entity';
 import { ErpModuleCategory } from '../../../module-config/entities/erp_module_category.entity';
@@ -180,7 +181,8 @@ export class InvoiceCategoryAutopostService {
           ? new Date(invoice.invoiceDate)
           : new Date();
 
-        const updatePayload: Partial<ErpJournalEntry> = {};
+        // Payload update chuẩn của TypeORM: chỉ ghi cột scalar
+        const updatePayload: QueryDeepPartialEntity<ErpJournalEntry> = {};
         if (
           !je.reference ||
           je.reference !== invoiceRef ||
@@ -225,8 +227,12 @@ export class InvoiceCategoryAutopostService {
           await this.journalEntryRepo.update(je.id, updatePayload);
         }
 
+        const entryNo =
+          typeof updatePayload.entryNo === 'string'
+            ? updatePayload.entryNo
+            : je.entryNo;
         this.logger.log(
-          `Re-aligned Journal Entry ${updatePayload.entryNo || je.entryNo} for Invoice ${invoice.invoiceNo} -> Debit Account: ${resolution.debitAccountCode} (Ref: ${invoiceRef})`,
+          `Re-aligned Journal Entry ${entryNo} for Invoice ${invoice.invoiceNo} -> Debit Account: ${resolution.debitAccountCode} (Ref: ${invoiceRef})`,
         );
         return invoice;
       }

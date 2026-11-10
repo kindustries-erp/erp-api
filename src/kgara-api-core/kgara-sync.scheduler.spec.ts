@@ -2,13 +2,13 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { KgaraSyncScheduler } from './kgara-sync.scheduler';
 import { KgaraBranch } from './entities/kgara_branch.entity';
-import { CorePermission } from '../rbac-core/entities/core-permission.entity';
-import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
+import { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.entity';
+import { CoreUserRole } from '@/v2/core/rbac-core/entities/core-user-role.entity';
 import { KgaraSyncService } from './kgara-sync.service';
 import { KgaraAuthService } from './kgara-auth.service';
 import { KgaraBulkSyncService } from './services/kgara-bulk-sync.service';
 import { KgaraAccountKey } from './enums/kgara-account.enum';
-import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsPublisherService } from '@/v2/modules/notifications-inbox';
 import * as cronUtil from '../common/utils/cron.util';
 
 describe('KgaraSyncScheduler', () => {
@@ -111,7 +111,7 @@ describe('KgaraSyncScheduler', () => {
           useValue: bulkSyncService,
         },
         {
-          provide: NotificationsService,
+          provide: NotificationsPublisherService,
           useValue: notificationsService,
         },
       ],

@@ -5,6 +5,9 @@ export class {{entityName}}ResponseDto {
   @ApiProperty()
   id: string;
 
+  @ApiProperty({ type: 'object', additionalProperties: true })
+  extraData: Record<string, unknown>;
+
 {{#each customFields}}
   {{{this.responseSwagger}}}
   {{this.name}}{{{this.nullableMark}}}: {{{this.responseType}}};

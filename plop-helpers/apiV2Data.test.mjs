@@ -22,7 +22,7 @@ describe('case helpers', () => {
 describe('buildApiV2Data', () => {
   it('derives table, route and permission names from the module name', () => {
     const data = buildApiV2Data(base);
-    expect(data.tableName).toBe('erp_customer_claims');
+    expect(data.tableName).toBe('customer_claims');
     expect(data.routePath).toBe('customer-claims');
     expect(data.permissionResource).toBe('customer_claims');
     expect(data.serviceClass).toBe('CustomerClaimsCoreService');
@@ -108,7 +108,7 @@ describe('wiringPlan', () => {
 describe('rbacPlan', () => {
   it('registers the RBAC resource even when wire is off', () => {
     const [item] = rbacPlan(buildApiV2Data(base));
-    expect(item.file).toBe('src/rbac-core/enums/erp-resource.enum.ts');
+    expect(item.file).toBe('src/v2/core/rbac-core/enums/erp-resource.enum.ts');
     expect(item.snippet).toBe("  CUSTOMER_CLAIMS = 'customer_claims',");
   });
 });

@@ -73,6 +73,10 @@ Controller Base Route: `/api/v1/app`
 | `PATCH`| `/api/v1/app/preferences` | `JwtAuthGuard` | Body: `UpdateUserPreferenceDto` | Cập nhật tùy chọn cá nhân (deep merge JSONB `tableConfigs`, `uiConfigs`) |
 | `GET` | `/api/v1/app/table-preferences` | `JwtAuthGuard` | Header Bearer Token | Lấy cấu hình V2 của mọi bảng: map `tableId -> { columns, views }` (bảng `core_user_table_preferences`) |
 | `PATCH`| `/api/v1/app/table-preferences/:tableId` | `JwtAuthGuard` | Body: `UpdateTablePreferenceDto` (`columns`, `views`) | Ghi đè từng phần của một bảng; phần không gửi giữ nguyên. Validate bằng `TablePreferenceColumnsDto` / `TablePreferenceViewsDto` |
+| `GET` | `/api/v2/table-preferences?tableIdPrefix=` | `JwtAuthGuard` | Query: `tableIdPrefix` (tùy chọn, escape LIKE) | **V2** (lõi `src/v2/core/table-preferences-core` + module `src/v2/modules/table-preferences`, `/api-structure`). Trả `{ items: [{ tableId, columns, views, updatedAt }] }`, không phong bì. Cùng bảng DB với V1 |
+| `PATCH`| `/api/v2/table-preferences/:tableId` | `JwtAuthGuard` | Body: `UpdateTablePreferenceDto` v2 (có giới hạn: customViews ≤ 50, customFilters ≤ 50 (`customFiltersMax`), mỗi customFilter bắt buộc `key`, `label`, `query`; `query` gồm `sort/q/cf/cs/co/dr` tùy chọn, mỗi trường ≤ 4000 ký tự (`filterQueryFieldMax`), order ≤ 300, record ≤ 300 khóa) | **V2** upsert `ON CONFLICT (user_id, table_id)`, chỉ ghi phần được gửi. `views.customFilters` lưu trong cùng `views` jsonb; `pickFilterQuery` chỉ giữ 6 khóa query. Trả `{ tableId, columns, views, updatedAt }`. `userId` lấy từ token |
+
+Ghi chú V2: FE đi v2 cho tableId có tiền tố `procurement-` (`V2_TABLE_PREFERENCES_V2_PREFIXES`); các bảng khác vẫn v1. Migration `20261109100000-rename-garage-procurement-table-preference-ids` đổi `table_id` cũ `erp-garage-procurement-*-table` sang `procurement-*-garage-table` (có `down`).
 
 ### Tích hợp Authentication Endpoints:
 - `POST /api/v1/auth/login`: Trả kèm `preferences: { theme, language, tableConfigs, uiConfigs }`

@@ -17,7 +17,7 @@ import { Observable } from 'rxjs';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
-import { ErpAction, ErpResource } from '@/rbac-core/enums';
+import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
 import { VinfastPartsService } from '../vinfast-parts.service';
 import { VinfastPartsStockExportBackgroundService } from '../services/vinfast-parts-stock-export-background.service';
 import { parseSelectedColumns } from '../services/vinfast-parts-stock-excel.builder';

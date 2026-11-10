@@ -3,7 +3,7 @@ import {
   RBAC_ANY_PERMISSIONS_KEY,
   RBAC_PERMISSIONS_KEY,
 } from '../../auth/decorators/require-permissions.decorator';
-import { ErpAction, ErpResource } from '@/rbac-core/enums';
+import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
 import { GarageDebtsAnalyticsController } from './garage-debts-analytics.controller';
 import { KgaraCustomersController } from './kgara-customers.controller';
 import { KgaraSuppliersController } from './kgara-suppliers.controller';

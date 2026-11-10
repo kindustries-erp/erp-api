@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { CoreUserPreference } from '../users/entities/core-user-preference.entity';
-import { CoreUserTablePreference } from '../users/entities/core-user-table-preference.entity';
+import { CoreUserTablePreference } from '@/v2/core/table-preferences-core/entities/core-user-table-preference.entity';
 import { UpdateUserPreferenceDto } from './dto/update-user-preference.dto';
 import { UpdateTablePreferenceDto } from './dto/table-preference.dto';
 import {

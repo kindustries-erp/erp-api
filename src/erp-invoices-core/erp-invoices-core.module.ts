@@ -13,10 +13,10 @@ import { InvoiceDashboardService } from './invoice-dashboard.service';
 import { InvoiceDashboardController } from './invoice-dashboard.controller';
 import { R2Module } from '../r2/r2.module';
 import { BankTransactionsCoreModule } from '../bank-transactions-core/bank-transactions-core.module';
-import { NotificationsModule } from '../notifications/notifications.module';
+import { NotificationsInboxModule } from '@/v2/modules/notifications-inbox';
 import { AccountingCoreModule } from '../accounting-core/accounting-core.module';
-import { CorePermission } from '../rbac-core/entities/core-permission.entity';
-import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
+import { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.entity';
+import { CoreUserRole } from '@/v2/core/rbac-core/entities/core-user-role.entity';
 import { ErpInvoicesCronService } from './erp-invoices-cron.service';
 import { InvoiceLifecycleService } from './services/invoice-lifecycle.service';
 import { InvoiceBranchService } from './services/invoice-branch.service';
@@ -31,7 +31,7 @@ import { InvoiceSmartNetoffService } from './services/invoice-smart-netoff.servi
 import { ErpInvoiceAttachment } from './entities/erp_invoice_attachment.entity';
 import { ErpInvoiceItemSubscriber } from './subscribers/erp-invoice-item.subscriber';
 import { ErpAttachmentsCoreModule } from '../erp-attachments-core/erp-attachments-core.module';
-import { ErpBranch } from '../branches-core/entities/erp_branch.entity';
+import { ErpBranch } from '@/v2/core/branches-core/entities/erp_branch.entity';
 import { ErpEntityAttributeValue } from '../module-config/entities/erp_entity_attribute_value.entity';
 
 import { VinfastPartsModule } from '../vinfast-parts/vinfast-parts.module';
@@ -102,7 +102,7 @@ import { XmlDownloadLinkAdapter } from './services/adapters/xml-download-link.ad
     ]),
     R2Module,
     BankTransactionsCoreModule,
-    NotificationsModule,
+    NotificationsInboxModule,
     AccountingCoreModule,
     AiHubCoreModule,
     ErpAttachmentsCoreModule,
