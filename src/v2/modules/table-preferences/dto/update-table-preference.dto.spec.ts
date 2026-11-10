@@ -56,6 +56,56 @@ describe('UpdateTablePreferenceDto limits', () => {
     ).not.toHaveLength(0);
   });
 
+  it('chấp nhận customFilters hợp lệ', async () => {
+    expect(
+      await check({
+        views: {
+          customFilters: [
+            {
+              key: 'cf_1',
+              label: 'Chờ duyệt',
+              groupKey: 'pending',
+              query: { sort: 'poNumber:asc', cf: 'poNumber=PO1' },
+            },
+          ],
+        },
+      }),
+    ).toHaveLength(0);
+  });
+
+  it('từ chối customFilters vượt số lượng tối đa', async () => {
+    const filter = { key: 'k', label: 'L', query: {} };
+    const customFilters = Array.from(
+      { length: TABLE_PREFERENCE_LIMITS.customFiltersMax + 1 },
+      () => filter,
+    );
+    expect(await check({ views: { customFilters } })).not.toHaveLength(0);
+  });
+
+  it('từ chối query.cf vượt độ dài tối đa', async () => {
+    expect(
+      await check({
+        views: {
+          customFilters: [
+            {
+              key: 'k',
+              label: 'L',
+              query: {
+                cf: 'x'.repeat(TABLE_PREFERENCE_LIMITS.filterQueryFieldMax + 1),
+              },
+            },
+          ],
+        },
+      }),
+    ).not.toHaveLength(0);
+  });
+
+  it('từ chối customFilters thiếu query', async () => {
+    expect(
+      await check({ views: { customFilters: [{ key: 'k', label: 'L' }] } }),
+    ).not.toHaveLength(0);
+  });
+
   it('từ chối customViews vượt số lượng tối đa', async () => {
     const view = {
       key: 'k',

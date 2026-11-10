@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { CoreUserTablePreference } from '../entities/core-user-table-preference.entity';
 import type {
   TablePreferenceColumnsPatch,
+  TablePreferenceFilterQueryPatch,
   TablePreferencePatch,
   TablePreferenceViewsPatch,
 } from '../types/table-preference.types';
@@ -71,9 +72,31 @@ function pickViews(input: TablePreferenceViewsPatch) {
       baseKey: view.baseKey,
       visibility: { ...view.visibility },
       order: [...view.order],
+      // Chỉ ghi khi có, để view cũ không sinh thêm khóa null trong jsonb
+      ...(view.filterKey !== undefined && { filterKey: view.filterKey }),
+    }));
+  }
+  if (input.customFilters !== undefined) {
+    out.customFilters = input.customFilters.map((filter) => ({
+      key: filter.key,
+      label: filter.label,
+      ...(filter.groupKey !== undefined && { groupKey: filter.groupKey }),
+      query: pickFilterQuery(filter.query),
     }));
   }
   if (input.activeKey !== undefined) out.activeKey = input.activeKey;
   if (input.filterKey !== undefined) out.filterKey = input.filterKey;
+  return out;
+}
+
+/** Chỉ giữ 6 khóa của query, bỏ khóa lạ và giá trị undefined */
+function pickFilterQuery(query: TablePreferenceFilterQueryPatch) {
+  const out: TablePreferenceFilterQueryPatch = {};
+  if (query.sort !== undefined) out.sort = query.sort;
+  if (query.q !== undefined) out.q = query.q;
+  if (query.cf !== undefined) out.cf = query.cf;
+  if (query.cs !== undefined) out.cs = query.cs;
+  if (query.co !== undefined) out.co = query.co;
+  if (query.dr !== undefined) out.dr = query.dr;
   return out;
 }

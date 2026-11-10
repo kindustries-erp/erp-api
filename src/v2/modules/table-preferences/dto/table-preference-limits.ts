@@ -3,6 +3,8 @@ export const TABLE_PREFERENCE_LIMITS = {
   tableIdMax: 200,
   tableIdPrefixMax: 100,
   customViewsMax: 50,
+  customFiltersMax: 50,
+  filterQueryFieldMax: 4000,
   orderMax: 300,
   orderItemMax: 100,
   recordKeysMax: 300,
