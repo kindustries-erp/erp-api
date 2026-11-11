@@ -56,6 +56,7 @@ loans_finance (Hợp đồng vay)
 | `remaining_principal` | `numeric(15,2)` | Dư nợ gốc còn lại |
 | `status` | `varchar(32)` | `DRAFT`, `ACTIVE`, `COMPLETED`, `OVERDUE` |
 | `notes` | `text` | Ghi chú hợp đồng |
+| `extra_data` | `jsonb` | Dữ liệu mở rộng chuẩn `CoreBaseEntity` (mặc định `{}`) |
 | `created_at` / `updated_at` | `timestamptz` | Audit timestamp |
 | `is_deleted` | `boolean` | Cờ xóa mềm (kế thừa từ `CoreSoftDeletableEntity`) |
 
@@ -72,6 +73,7 @@ loans_finance (Hợp đồng vay)
 | `total_paid` | `numeric(15,2)` | Tổng tiền thanh toán kỳ |
 | `payment_ref` | `varchar(100)` | Mã giao dịch / UNC ngân hàng |
 | `notes` | `text` | Ghi chú thanh toán |
+| `extra_data` | `jsonb` | Dữ liệu mở rộng chuẩn `CoreBaseEntity` (mặc định `{}`) |
 
 ---
 

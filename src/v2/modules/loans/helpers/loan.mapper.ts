@@ -20,6 +20,7 @@ export class LoanMapper {
       paymentRef: entity.paymentRef || null,
       notes: entity.notes || null,
       createdBy: entity.createdBy || null,
+      extraData: entity.extraData ?? {},
       createdAt: entity.createdAt,
     };
   }
@@ -49,6 +50,7 @@ export class LoanMapper {
       status: entity.status,
       notes: entity.notes || null,
       createdBy: entity.createdBy || null,
+      extraData: entity.extraData ?? {},
       createdAt: entity.createdAt,
       updatedAt: entity.updatedAt,
       payments: entity.payments

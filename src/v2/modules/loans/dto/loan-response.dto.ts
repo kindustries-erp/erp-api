@@ -15,6 +15,7 @@ export class LoanPaymentResponseDto {
   paymentRef: string | null;
   notes: string | null;
   createdBy: string | null;
+  extraData?: Record<string, unknown>;
   createdAt: Date;
 }
 
@@ -36,6 +37,7 @@ export class LoanResponseDto {
   status: LoanStatus;
   notes: string | null;
   createdBy: string | null;
+  extraData?: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
   schedule?: LoanSchedulePeriod[];
