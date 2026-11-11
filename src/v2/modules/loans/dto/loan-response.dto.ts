@@ -51,6 +51,16 @@ export class LoanListResponseDto {
   pageSize: number;
 }
 
+export class CashflowLoanBreakdownDto {
+  loanId: string;
+  loanName: string;
+  dueDate: string;
+  principalDue: number;
+  interestDue: number;
+  totalPayment: number;
+  endingBalance: number;
+}
+
 export class MonthlyCashflowProjectionDto {
   month: string; // YYYY-MM
   principalDue: number;
@@ -58,6 +68,7 @@ export class MonthlyCashflowProjectionDto {
   totalPaymentDue: number;
   cumulativeRemainingPrincipal: number;
   activeLoanCount: number;
+  breakdown?: CashflowLoanBreakdownDto[];
 }
 
 export class CashflowProjectionResponseDto {

@@ -22,7 +22,7 @@ Module `loans` (nằm tại `src/v2/modules/loans/` và kế thừa engine từ 
   - Sử dụng TypeORM `QueryRunner` với Pessimistic Write Lock (`setLock('pessimistic_write')`) để đảm bảo không bị race condition khi cập nhật `total_paid_principal`, `total_paid_interest` và `remaining_principal`.
   - Tự động chuyển trạng thái khoản vay sang `COMPLETED` khi dư nợ gốc về 0.
 - **Dự Báo Dòng Tiền Tương Lai Hợp Nhất (Consolidated Cashflow Projection)**:
-  - Endpoint `/api/v2/loans/cashflow-projection` tổng hợp lịch trả nợ tương lai của tất cả hợp đồng `ACTIVE`, nhóm theo từng tháng để lập kế hoạch dòng tiền cho ban giám đốc.
+  - Endpoint `/api/v2/loans/cashflow-projection` tổng hợp lịch trả nợ tương lai của tất cả hợp đồng `ACTIVE`, nhóm theo từng tháng để lập kế hoạch dòng tiền cho ban giám đốc, kèm mảng `breakdown?: CashflowLoanBreakdownDto[]` chi tiết từng khoản vay cấu thành theo tháng.
 
 ---
 

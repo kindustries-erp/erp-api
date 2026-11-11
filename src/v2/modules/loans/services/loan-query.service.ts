@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { LoanEntity } from '../entities';
 import {
+  CashflowLoanBreakdownDto,
   CashflowProjectionResponseDto,
   LoanListResponseDto,
   LoanResponseDto,
@@ -84,6 +85,7 @@ export class LoanQueryService {
         totalDue: number;
         endingBalances: Map<string, number>;
         activeLoanIds: Set<string>;
+        breakdown: CashflowLoanBreakdownDto[];
       }
     >();
 
@@ -107,6 +109,7 @@ export class LoanQueryService {
             totalDue: 0,
             endingBalances: new Map<string, number>(),
             activeLoanIds: new Set<string>(),
+            breakdown: [],
           };
           monthMap.set(month, entry);
         }
@@ -115,6 +118,15 @@ export class LoanQueryService {
         entry.totalDue += p.totalPaymentDue;
         entry.endingBalances.set(loan.id, p.endingBalance);
         entry.activeLoanIds.add(loan.id);
+        entry.breakdown.push({
+          loanId: loan.id,
+          loanName: loan.title || loan.loanCode,
+          dueDate: p.dueDate,
+          principalDue: Math.round(p.principalDue),
+          interestDue: Math.round(p.interestDue),
+          totalPayment: Math.round(p.totalPaymentDue),
+          endingBalance: Math.round(p.endingBalance),
+        });
       }
     }
 
@@ -140,6 +152,7 @@ export class LoanQueryService {
         totalPaymentDue: Math.round(data.totalDue),
         cumulativeRemainingPrincipal: Math.round(cumBal),
         activeLoanCount: data.activeLoanIds.size,
+        breakdown: data.breakdown,
       });
     }
 

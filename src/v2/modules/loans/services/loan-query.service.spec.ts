@@ -64,9 +64,11 @@ describe('LoanQueryService', () => {
     expect(res.schedule?.length).toBe(12);
   });
 
-  it('should aggregate cashflow projection for active loans', async () => {
+  it('should aggregate cashflow projection with constituent loan breakdown', async () => {
     const mockLoan = {
       id: 'l1',
+      loanCode: 'LN-001',
+      title: 'Vay dự án A',
       principalAmount: '24000000',
       annualInterestRate: '12',
       tenorMonths: 2,
@@ -81,5 +83,11 @@ describe('LoanQueryService', () => {
     const res = await service.getCashflowProjection();
     expect(res.monthlyProjections.length).toBe(2);
     expect(res.totalPrincipalDue).toBe(24000000);
+    expect(res.monthlyProjections[0].breakdown).toHaveLength(1);
+    expect(res.monthlyProjections[0].breakdown?.[0]).toMatchObject({
+      loanId: 'l1',
+      loanName: 'Vay dự án A',
+      principalDue: 12000000,
+    });
   });
 });

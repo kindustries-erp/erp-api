@@ -148,4 +148,38 @@ describe('LoanCommandService', () => {
     expect(results[0].title).toBe('Loan 1');
     expect(results[1].title).toBe('Loan 2');
   });
+
+  it('should mark loan as COMPLETED when remaining principal reaches 0', async () => {
+    const mockLoan = {
+      id: 'l2',
+      principalAmount: '100000000',
+      totalPaidPrincipal: '90000000',
+      totalPaidInterest: '5000000',
+      remainingPrincipal: '10000000',
+      annualInterestRate: '12',
+      tenorMonths: 10,
+      amortizationMethod: AmortizationMethod.EQUAL_PRINCIPAL,
+      startDate: '2026-01-01',
+      firstPaymentDate: '2026-02-01',
+      status: LoanStatus.ACTIVE,
+    };
+
+    queryRunner.manager.findOne.mockResolvedValue(mockLoan);
+
+    const res = await service.recordPayment(
+      'l2',
+      {
+        periodNumber: 10,
+        paymentDate: '2026-11-01',
+        principalPaid: 10000000,
+        interestPaid: 100000,
+        paymentRef: 'TX-FINAL',
+      },
+      'user-1',
+    );
+
+    expect(res.totalPaidPrincipal).toBe(100000000);
+    expect(res.remainingPrincipal).toBe(0);
+    expect(res.status).toBe(LoanStatus.COMPLETED);
+  });
 });
