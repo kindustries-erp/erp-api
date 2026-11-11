@@ -56,6 +56,19 @@ export class GarageProcurementOrdersService {
     return this.findOne(saved.id);
   }
 
+  /** Nhân bản đơn đã từ chối/hủy thành nháp mới (giữ chi nhánh). */
+  async clone(
+    id: string,
+    actorId: string,
+  ): Promise<GarageProcurementOrderResponseDto> {
+    const saved = await this.command.cloneDraft(
+      id,
+      { id: actorId, roles: await this.roles(actorId) },
+      ['branchId', 'branchName'],
+    );
+    return this.findOne(saved.id);
+  }
+
   async list(
     dto: ListProcurementOrdersDto,
   ): Promise<GarageProcurementOrderListResponseDto> {

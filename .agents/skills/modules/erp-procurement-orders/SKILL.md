@@ -22,8 +22,8 @@ CHECK: `line_type IN ('GOODS','SERVICE')`; `source_type IN ('DIRECT','REQUEST')`
 
 ## 2. Vòng đời
 
-- `status`: DRAFT, PENDING_APPROVAL, APPROVED, ISSUED, CLOSED, CANCELLED.
-- submit (DRAFT→PENDING, cần NCC và đơn giá mọi dòng), approve (PENDING→APPROVED, chốt `approved_total`), reject (PENDING→DRAFT, lý do bắt buộc), recall, issue (APPROVED→ISSUED), cancel (APPROVED/ISSUED→CANCELLED, chỉ khi chưa có giao nhận hay nghiệm thu nào; lý do bắt buộc), close (ISSUED→CLOSED, lý do bắt buộc).
+- `status`: DRAFT, PENDING_APPROVAL, APPROVED, REJECTED, ISSUED, CLOSED, CANCELLED.
+- submit (DRAFT→PENDING, cần NCC và đơn giá mọi dòng), approve (PENDING→APPROVED, chốt `approved_total`), reject (PENDING→REJECTED, lý do bắt buộc), recall, issue (APPROVED→ISSUED), cancel (APPROVED/ISSUED→CANCELLED, chỉ khi chưa có giao nhận hay nghiệm thu nào; lý do bắt buộc), close (ISSUED→CLOSED, lý do bắt buộc).
 - Sửa dòng chỉ khi DRAFT.
 - `fulfillment_status` (NONE/PARTIAL/FULL) suy ra từ dòng. FULL thì tự CLOSED.
 
@@ -83,3 +83,12 @@ Không có `po-draft` (PO đọc phần còn lại từ PR qua `/procurement-req
 - **Ghi**: tạo mặc định `{}`. Sửa header merge cấp 1 (`null` xóa key). Dòng chứng từ ghi theo payload, không merge.
 - **Giới hạn**: 16 KB, sâu 5 cấp, key ≤ 64 ký tự, cấm `__proto__`/`constructor`/`prototype` (400 qua `RejectUnsafeExtraDataPipe` và service).
 - **Response**: luôn có `extraData` (object).
+
+## 9. Cập nhật 2026-11-11: từ chối → REJECTED và nhân bản
+
+- Từ chối (`reject`) chuyển `PENDING_APPROVAL → REJECTED` (trước đây về DRAFT). REJECTED là trạng thái khóa: không có action nào chuyển đi từ REJECTED. Chỉ xem chi tiết, lịch sử duyệt và nhân bản.
+- Nhân bản: `POST /:id/clone` (quyền CREATE) tạo nháp mới từ phiếu REJECTED hoặc CANCELLED. Copy đầu đề và dòng, không copy trạng thái duyệt hay lý do. Gán `cloned_from_id` trỏ về phiếu gốc (cột mới, nullable, migration `20261111100000-add-cloned-from-to-procurement`, không backfill). Phiếu ở trạng thái khác → 409 `ConflictException`. Không tồn tại → 404.
+- Lõi `cloneDraft` nằm ở `abstract-*-command.service.ts` và dùng chung cho ERP và Garage. Garage giữ `branchId`/`branchName` khi nhân bản.
+- PO: reject cũng trả số lượng đã giữ về PR nguồn (như cancel). Trước đó reject không trả, đã sửa trong lõi PO. Nhân bản PO giữ `requestId`/`requestLineId` để `createDraft` giữ lại số lượng PR.
+- PR nhân bản không copy `orderingStatus` (luôn `NONE`).
+- Spec: `abstract-*-clone.spec.ts` (quy tắc clone, 409/404, REJECTED là trạng thái cuối, PO reject trả số lượng PR).

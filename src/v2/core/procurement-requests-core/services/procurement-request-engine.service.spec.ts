@@ -28,14 +28,14 @@ describe('procurement-request engine', () => {
       ).toBe('APPROVED');
     });
 
-    it('từ chối và thu hồi đều đưa về DRAFT', () => {
+    it('từ chối chuyển sang REJECTED (trạng thái cuối), thu hồi về DRAFT', () => {
       expect(
         resolveTransition(
           PURCHASE_REQUEST_TRANSITIONS,
           'PENDING_APPROVAL',
           'reject',
         ),
-      ).toBe('DRAFT');
+      ).toBe('REJECTED');
       expect(
         resolveTransition(
           PURCHASE_REQUEST_TRANSITIONS,

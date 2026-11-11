@@ -128,7 +128,7 @@ describe('AbstractPurchaseRequestCommandService.transition', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('từ chối bắt buộc lý do và đưa về DRAFT', async () => {
+  it('từ chối bắt buộc lý do và chuyển sang REJECTED', async () => {
     const header = makeHeader({ status: 'PENDING_APPROVAL' });
     const svc = new TestCommand(
       fakeDataSource(fakeManager(header).manager),
@@ -144,7 +144,7 @@ describe('AbstractPurchaseRequestCommandService.transition', () => {
       { id: 'boss', roles: ['MGR'] },
       'thiếu báo giá',
     );
-    expect(out.status).toBe('DRAFT');
+    expect(out.status).toBe('REJECTED');
     expect(out.rejectReason).toBe('thiếu báo giá');
   });
 

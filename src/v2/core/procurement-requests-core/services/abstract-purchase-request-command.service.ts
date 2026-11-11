@@ -1,4 +1,8 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { nextDocumentNo } from '../../../../common/numbering/document-numbering';
 import {
   DataSource,
@@ -42,7 +46,15 @@ import {
   mergeExtraData,
 } from '../../base-core/helpers/extra-data.util';
 
+/** Trạng thái được phép nhân bản: đã từ chối hoặc đã hủy. */
+const CLONABLE_REQUEST_STATUSES: readonly PurchaseRequestStatus[] = [
+  'REJECTED',
+  'CANCELLED',
+];
+
 export interface DraftHeaderInput {
+  /** Phiếu gốc khi nhân bản (null/undefined khi tạo mới). */
+  clonedFromId?: string | null;
   requestDate: string;
   neededDate?: string | null;
   title?: string | null;
@@ -167,6 +179,61 @@ export abstract class AbstractPurchaseRequestCommandService<
       });
       return header;
     });
+  }
+
+  /**
+   * Nhân bản đề nghị ĐÃ TỪ CHỐI hoặc ĐÃ HỦY thành nháp mới: số phiếu mới, người tạo là
+   * người nhân bản, copy đầu đề và dòng hàng. Không copy duyệt/từ chối/hủy/đặt hàng.
+   * `copyHeaderFields` là các trường riêng của họ con cần giữ (ví dụ chi nhánh).
+   */
+  async cloneDraft(
+    sourceId: string,
+    actor: RequestActor,
+    copyHeaderFields: readonly string[] = [],
+  ): Promise<H> {
+    const source = (await this.dataSource.manager.findOne(this.headerEntity, {
+      where: { id: sourceId } as unknown as FindOptionsWhere<H>,
+    })) as H | null;
+    if (!source) throw new NotFoundException('Không tìm thấy đề nghị');
+    if (
+      !CLONABLE_REQUEST_STATUSES.includes(
+        source.status as PurchaseRequestStatus,
+      )
+    ) {
+      throw new ConflictException(
+        'Chỉ nhân bản đề nghị đã từ chối hoặc đã hủy',
+      );
+    }
+    const sourceLines = (await this.dataSource.manager.find(this.lineEntity, {
+      where: {
+        [this.lineForeignKey]: sourceId,
+      } as unknown as FindOptionsWhere<L>,
+      order: { lineNo: 'ASC' } as never,
+    })) as unknown as BasePurchaseRequestLineEntity[];
+
+    const header: DraftHeaderInput & Record<string, unknown> = {
+      requestDate: new Date().toISOString().slice(0, 10),
+      neededDate: source.neededDate,
+      title: source.title,
+      requesterEmployeeId: source.requesterEmployeeId,
+      remarks: source.remarks,
+      extraData: {},
+      clonedFromId: sourceId,
+    };
+    for (const field of copyHeaderFields) {
+      header[field] = (source as unknown as Record<string, unknown>)[field];
+    }
+    const lines = sourceLines.map((l) => ({
+      lineType: l.lineType,
+      qtyRequested: Number(l.qtyRequested),
+      estUnitPrice: l.estUnitPrice === null ? null : Number(l.estUnitPrice),
+      itemId: l.itemId,
+      itemCode: l.itemCode,
+      itemName: l.itemName,
+      description: l.description,
+      notes: l.notes,
+    }));
+    return this.createDraft(actor, header, lines);
   }
 
   /** Tạo đề nghị ở trạng thái DRAFT, đánh số trong cùng transaction. */

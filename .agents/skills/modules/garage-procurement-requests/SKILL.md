@@ -18,7 +18,7 @@ Module `src/v2/modules/procurement-requests-garage`. Dùng chung lõi `src/v2/co
 
 ## 2. Vòng đời và duyệt
 
-Giống hệt họ thường: `DRAFT → PENDING_APPROVAL → APPROVED → CLOSED / CANCELLED`, `ordering_status` suy ra từ dòng, sửa dòng chỉ ở DRAFT.
+Giống hệt họ thường: `DRAFT → PENDING_APPROVAL → APPROVED → CLOSED / CANCELLED`, cộng `REJECTED` (từ chối, xem mục 9), `ordering_status` suy ra từ dòng, sửa dòng chỉ ở DRAFT.
 
 - `approve` cần `APPROVE`, `reject` cần `REJECT`, chặn tự duyệt, lý do bắt buộc khi reject/cancel/close.
 - Nhật ký `erp_approval_events` với `doc_type = GARAGE_PROCUREMENT_REQUEST`.
@@ -78,7 +78,7 @@ Quyền resource: `garage_procurement_requests`. Seed từ `garage_purchase_orde
 ## 11. Khóa duyệt và chọn người duyệt (2026-11-06)
 
 - Khóa bật/tắt nằm ở BE, không có UI: bảng `erp_approval_settings`, `doc_type = GARAGE_PROCUREMENT_REQUEST`, mặc định **bật**. Đọc: `GET /api/v2/approval-config/garage-procurement-requests/setting` (đăng nhập là đọc được). Đổi: `PATCH` cùng path (quyền `admin_users:update`).
-- Khóa **bật**: `POST /:id/submit` nhận body `{ approverId }` (bắt buộc). Người duyệt phải ACTIVE, có `APPROVE` và `REJECT` trên `garage_procurement_requests`, khác người gửi. Lưu `approver_id` (cột mới trên `proc_requests_garage`). Chỉ đúng người đó approve/reject được, người khác nhận 403. Recall/reject về DRAFT xóa `approver_id`.
+- Khóa **bật**: `POST /:id/submit` nhận body `{ approverId }` (bắt buộc). Người duyệt phải ACTIVE, có `APPROVE` và `REJECT` trên `garage_procurement_requests`, khác người gửi. Lưu `approver_id` (cột mới trên `proc_requests_garage`). Chỉ đúng người đó approve/reject được, người khác nhận 403. Recall về DRAFT xóa `approver_id`. Reject chuyển REJECTED (xem mục 9).
 - Khóa **tắt**: submit tự duyệt trong cùng transaction, ghi event `AUTO_APPROVED`, không cần người duyệt.
 - Danh sách người duyệt: `GET /api/v2/approval-config/garage-procurement-requests/approvers` (loại người đang gọi).
 - Logic dùng chung ở `src/v2/core/approval-core` (`approval-gate.helper.ts`, `approval-settings.service.ts`, `approver-directory.service.ts`); module chỉ khai báo `docType` và resource.
@@ -112,3 +112,12 @@ Quyền resource: `garage_procurement_requests`. Seed từ `garage_purchase_orde
 - **Không có restore**: chưa có endpoint khôi phục phiếu đã xóa mềm.
 
 - **Đã xử lý trước đó (409)**: `approval.engine` `resolveTransition` trả `ConflictException` với body `{ code: 'INVALID_STATUS_TRANSITION', message, action, currentStatus }`. Web dùng `code` và `currentStatus` để hiện modal "đã xử lý" thay vì toast chung. Message giữ nguyên để tương thích ngược.
+
+## 9. Cập nhật 2026-11-11: từ chối → REJECTED và nhân bản
+
+- Từ chối (`reject`) chuyển `PENDING_APPROVAL → REJECTED` (trước đây về DRAFT). REJECTED là trạng thái khóa: không có action nào chuyển đi từ REJECTED. Chỉ xem chi tiết, lịch sử duyệt và nhân bản.
+- Nhân bản: `POST /:id/clone` (quyền CREATE) tạo nháp mới từ phiếu REJECTED hoặc CANCELLED. Copy đầu đề và dòng, không copy trạng thái duyệt hay lý do. Gán `cloned_from_id` trỏ về phiếu gốc (cột mới, nullable, migration `20261111100000-add-cloned-from-to-procurement`, không backfill). Phiếu ở trạng thái khác → 409 `ConflictException`. Không tồn tại → 404.
+- Lõi `cloneDraft` nằm ở `abstract-*-command.service.ts` và dùng chung cho ERP và Garage. Garage giữ `branchId`/`branchName` khi nhân bản.
+- PO: reject cũng trả số lượng đã giữ về PR nguồn (như cancel). Trước đó reject không trả, đã sửa trong lõi PO. Nhân bản PO giữ `requestId`/`requestLineId` để `createDraft` giữ lại số lượng PR.
+- PR nhân bản không copy `orderingStatus` (luôn `NONE`).
+- Spec: `abstract-*-clone.spec.ts` (quy tắc clone, 409/404, REJECTED là trạng thái cuối, PO reject trả số lượng PR).

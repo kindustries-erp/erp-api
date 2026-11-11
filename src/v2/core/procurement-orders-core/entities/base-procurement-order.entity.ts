@@ -95,6 +95,10 @@ export abstract class BaseProcurementOrderEntity extends BaseApprovalFields {
   @Column({ type: 'text', name: 'close_reason', nullable: true })
   closeReason: string | null;
 
+  /** Chứng từ gốc khi đơn này được nhân bản từ đơn đã từ chối/hủy. */
+  @Column({ type: 'uuid', name: 'cloned_from_id', nullable: true })
+  clonedFromId: string | null;
+
   @Column({ type: 'text', name: 'remarks', nullable: true })
   remarks: string | null;
 }
