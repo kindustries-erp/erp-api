@@ -81,6 +81,25 @@ export class GarageGoodsReceiptsCoreService {
     };
   }
 
+  /** Tạo phiếu và ghi sổ nhập kho trong một bước (một transaction). */
+  async createAndPost(dto: CreateGarageGoodsReceiptDto) {
+    const saved = await this.command.saveAndPost(null, dto);
+    return {
+      message: 'Nhập kho thành công',
+      data: await this.toResponse(saved),
+    };
+  }
+
+  /** Cập nhật phiếu nháp và ghi sổ nhập kho trong một bước. */
+  async updateAndPost(id: string, dto: UpdateGarageGoodsReceiptDto) {
+    await this.requireById(id);
+    const saved = await this.command.saveAndPost(id, dto);
+    return {
+      message: 'Nhập kho thành công',
+      data: await this.toResponse(saved),
+    };
+  }
+
   async post(id: string) {
     const entity = await this.requireById(id);
     const saved = await this.command.post(entity);
@@ -113,10 +132,16 @@ export class GarageGoodsReceiptsCoreService {
     const orders = await this.query.findOrderSummaries([
       entity.garageProcurementOrderId ?? '',
     ]);
-    return toGarageGoodsReceiptResponse(
+    const response = toGarageGoodsReceiptResponse(
       entity,
       orders.get(entity.garageProcurementOrderId ?? ''),
     );
+    if (entity.status === 'POSTED') {
+      const reason = await this.query.findReverseBlockedReason(entity);
+      response.reversible = reason === null;
+      response.reverseBlockedReason = reason ?? undefined;
+    }
+    return response;
   }
 
   private async requireById(id: string): Promise<GarageGoodsReceipt> {

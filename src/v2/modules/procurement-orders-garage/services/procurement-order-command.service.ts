@@ -18,6 +18,8 @@ export class GarageProcurementOrderCommandService extends AbstractProcurementOrd
   protected readonly lineForeignKey = 'orderId' as const;
   protected readonly docType = 'GARAGE_PROCUREMENT_ORDER';
   protected readonly numberPrefix = 'GDMH';
+  /** Garage: NCC có thể gõ tự do (không bắt buộc danh mục) khi gửi duyệt. */
+  protected readonly requireSupplierId = false;
 
   constructor(
     dataSource: DataSource,

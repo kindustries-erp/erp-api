@@ -164,3 +164,10 @@ Module `garage-goods-receipts` (`src/v2/modules/goods-receipts-garage/`) sử d�
 - Response thêm `garageProcurementOrderNo` và `orderTotalAmount` (join một truy vấn cho cả trang: `GarageGoodsReceiptQueryService.findOrderSummaries`).
 - Danh sách lọc được theo `garageProcurementOrderId` (`column_filters`), dùng cho lịch sử nhập kho của đơn.
 - Phiếu cũ không có đơn vẫn đọc/sửa được như trước.
+
+## 13. Cập nhật 2026-11-12: nhập kho một bước và hoàn nhập có kiểm tra
+
+- Endpoint mới: `POST /api/v1/garage-goods-receipts/save-and-post` (tạo rồi ghi sổ) và `PATCH /api/v1/garage-goods-receipts/:id/save-and-post` (sửa nháp rồi ghi sổ). Điều phối qua `GarageProcurementFlowService.saveAndPost`, một transaction.
+- `GarageGoodsReceiptCommandService.create/update` nhận `outerManager?` (qua `runInOptionalTransaction`).
+- Response phiếu POSTED có thêm `reversible` và `reverseBlockedReason`. Hoàn nhập bị chặn (409) khi hàng đã xuất/điều chỉnh sau phiếu.
+- Endpoint cũ `POST /:id/post`, `POST /:id/cancel` giữ nguyên.

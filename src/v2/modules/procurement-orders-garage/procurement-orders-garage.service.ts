@@ -14,9 +14,11 @@ import { resolveApprovalEmails } from '@/v2/core/approval-core/helpers/approval-
 import { ProcurementOrderAction } from '@/v2/core/procurement-orders-core/contracts/procurement-orders.contract';
 import {
   AcceptServicesDto,
+  CreateAndConfirmProcurementOrderDto,
   CreateProcurementOrderDto,
   ListProcurementOrdersDto,
   ReplaceOrderLinesDto,
+  UpdateAndConfirmProcurementOrderDto,
   UpdateProcurementOrderHeaderDto,
 } from './dto/procurement-order.dto';
 import { GarageProcurementOrderResponseDto } from './dto/garage-procurement-order-response.dto';
@@ -24,6 +26,7 @@ import { GarageProcurementOrderListResponseDto } from './dto/garage-procurement-
 import { toPaginatedResult } from '@/common/utils/paginated-result';
 import { toGarageProcurementOrderResponse } from './helpers/garage-procurement-order.mapper';
 import { GarageProcurementOrderCommandService } from './services/procurement-order-command.service';
+import { GarageProcurementOrderFlowService } from './services/garage-procurement-order-flow.service';
 import { GarageProcurementOrderFulfilmentService } from './services/procurement-order-fulfilment.service';
 import { GarageProcurementOrderQueryService } from './services/procurement-order-query.service';
 
@@ -38,6 +41,7 @@ export class GarageProcurementOrdersService {
     private readonly actors: ApprovalActorService,
     private readonly dataSource: DataSource,
     private readonly approvers: ApproverDirectoryService,
+    private readonly flow: GarageProcurementOrderFlowService,
   ) {}
 
   async create(
@@ -188,6 +192,69 @@ export class GarageProcurementOrdersService {
       approverId ?? null,
     );
     return this.findOne(id);
+  }
+
+  /** Tạo đơn rồi gửi duyệt/ghi nhận trong một bước (một transaction qua orchestrator). */
+  createAndConfirm(
+    dto: CreateAndConfirmProcurementOrderDto,
+    actorId: string,
+  ): Promise<GarageProcurementOrderResponseDto> {
+    const { lines, approverId, ...header } = dto;
+    return this.saveAndConfirm(null, header, lines, approverId, actorId);
+  }
+
+  /** Cập nhật đơn nháp rồi gửi duyệt/ghi nhận trong một bước. */
+  updateAndConfirm(
+    id: string,
+    dto: UpdateAndConfirmProcurementOrderDto,
+    actorId: string,
+  ): Promise<GarageProcurementOrderResponseDto> {
+    const { lines, approverId, ...header } = dto;
+    return this.saveAndConfirm(id, header, lines, approverId, actorId);
+  }
+
+  private async saveAndConfirm(
+    id: string | null,
+    header:
+      | Omit<CreateProcurementOrderDto, 'lines'>
+      | UpdateProcurementOrderHeaderDto,
+    lines: CreateProcurementOrderDto['lines'],
+    approverId: string | undefined,
+    actorId: string,
+  ): Promise<GarageProcurementOrderResponseDto> {
+    if (approverId) {
+      await this.approvers.assertEligible(
+        ErpResource.GARAGE_PROCUREMENT_ORDERS,
+        approverId,
+        actorId,
+      );
+    }
+    await this.assertBranchMatchesRequest(id, header);
+    const saved = await this.flow.saveAndSubmit(
+      id,
+      { header, lines },
+      { id: actorId, roles: await this.roles(actorId) },
+      approverId ?? null,
+    );
+    return this.findOne(saved.id);
+  }
+
+  /** Đơn gắn đề nghị phải cùng chi nhánh với đề nghị (kiểm trước khi mở transaction). */
+  private async assertBranchMatchesRequest(
+    id: string | null,
+    header: { requestId?: string; branchId?: string | null },
+  ): Promise<void> {
+    if (!id) {
+      if (header.requestId) {
+        await this.assertRequestSameBranch(header.requestId, header.branchId);
+      }
+      return;
+    }
+    if (header.branchId === undefined) return;
+    const { header: current } = await this.query.findOne(id);
+    if (current.requestId) {
+      await this.assertRequestSameBranch(current.requestId, header.branchId);
+    }
   }
 
   async acceptServices(

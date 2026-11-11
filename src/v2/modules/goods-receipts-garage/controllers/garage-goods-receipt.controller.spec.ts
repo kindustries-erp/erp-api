@@ -15,6 +15,8 @@ describe('GarageGoodsReceiptController', () => {
     findOne: jest.Mock;
     create: jest.Mock;
     update: jest.Mock;
+    createAndPost: jest.Mock;
+    updateAndPost: jest.Mock;
     post: jest.Mock;
     cancel: jest.Mock;
     remove: jest.Mock;
@@ -30,6 +32,8 @@ describe('GarageGoodsReceiptController', () => {
       findOne: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      createAndPost: jest.fn(),
+      updateAndPost: jest.fn(),
       post: jest.fn(),
       cancel: jest.fn(),
       remove: jest.fn(),
@@ -116,5 +120,24 @@ describe('GarageGoodsReceiptController', () => {
         );
       }
     });
+  });
+
+  it('save-and-post: tạo cần CREATE và UPDATE, sửa cần UPDATE, ủy quyền cho facade', async () => {
+    const dto = {} as CreateGarageGoodsReceiptDto;
+    await controller.createAndPost(dto);
+    await controller.updateAndPost('id-1', dto);
+    expect(service.createAndPost).toHaveBeenCalledWith(dto);
+    expect(service.updateAndPost).toHaveBeenCalledWith('id-1', dto);
+
+    const perms = (fn: object) =>
+      (reflector.get(RBAC_PERMISSIONS_KEY, fn as never) ?? []).map(
+        (p: { action: ErpAction }) => p.action,
+      );
+    expect(perms(GarageGoodsReceiptController.prototype.createAndPost)).toEqual(
+      [ErpAction.CREATE, ErpAction.UPDATE],
+    );
+    expect(perms(GarageGoodsReceiptController.prototype.updateAndPost)).toEqual(
+      [ErpAction.UPDATE],
+    );
   });
 });

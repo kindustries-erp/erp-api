@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { GarageProcurementOrder } from '@/v2/modules/procurement-orders-garage/entities/procurement-order.entity';
+import { findReverseBlockedReason } from '@/v2/modules/procurement-flow-garage/helpers/garage-receipt-flow.helper';
 import { GarageGoodsReceipt } from '../entities/garage-goods-receipt.entity';
 import { QueryGarageGoodsReceiptDto } from '../dto/query-garage-goods-receipt.dto';
 import { applyMultiKeywordMultiFieldFilter } from '@/common/utils/query-builder.util';
@@ -177,6 +178,18 @@ export class GarageGoodsReceiptQueryService {
       column,
     );
     return findTableColumnOptions(qb, def, search, page, pageSize);
+  }
+
+  /** Lý do không hoàn nhập được phiếu đã ghi sổ; null khi hàng chưa dùng hoặc phiếu chưa POSTED. */
+  async findReverseBlockedReason(
+    entity: GarageGoodsReceipt,
+  ): Promise<string | null> {
+    if (entity.status !== 'POSTED') return null;
+    return findReverseBlockedReason(
+      this.repo.manager,
+      entity,
+      entity.lines ?? [],
+    );
   }
 
   findById(id: string): Promise<GarageGoodsReceipt | null> {

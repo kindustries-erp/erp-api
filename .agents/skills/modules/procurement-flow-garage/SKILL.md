@@ -19,3 +19,9 @@ description: Orchestrator chuỗi mua garage (PR → PO → nhận hàng GR → 
 - Engine chặn tồn âm và `qty <= 0`.
 - Thanh toán/hóa đơn sẽ là orchestration riêng sau này (chưa làm).
 - Thêm bước mới: thêm cổng ở lõi + adapter ở module, không gọi chéo service trong facade.
+
+## 4. Cập nhật 2026-11-12: lưu-và-nhập-kho và hoàn nhập có kiểm tra
+
+- `GarageProcurementFlowService.saveAndPost(save)`: lưu phiếu rồi ghi sổ trong MỘT transaction. Thân ghi sổ tách thành `postReceiptIn(manager, emit, id)` để dùng chung cho post riêng và save-and-post.
+- `cancelReceipt` gọi `assertGoodsUnused` trước khi đảo: nếu sổ `garage_stock_transactions` có ISSUE/ADJUSTMENT cùng mã hàng và chi nhánh sau thời điểm ghi sổ phiếu thì trả 409 "Hàng đã xuất/điều chỉnh sau khi nhập kho, không thể hoàn nhập".
+- Helper: `findReverseBlockedReason` (trả lý do hoặc null) và `assertGoodsUnused` trong `helpers/garage-receipt-flow.helper.ts`.

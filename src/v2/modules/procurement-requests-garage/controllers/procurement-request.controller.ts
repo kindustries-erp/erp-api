@@ -25,9 +25,11 @@ import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
 import { SubmitApprovalDto } from '@/v2/core/approval-core/dto/approval-action.dto';
 
 import {
+  CreateAndSubmitProcurementRequestDto,
   CreateProcurementRequestDto,
   ListProcurementRequestsDto,
   ReplaceRequestLinesDto,
+  UpdateAndSubmitProcurementRequestDto,
   UpdateProcurementRequestHeaderDto,
   ReasonBodyDto,
 } from '../dto/procurement-request.dto';
@@ -180,6 +182,43 @@ export class GarageProcurementRequestController {
   @Delete(':id/permanent')
   hardDelete(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.hardDelete(id);
+  }
+
+  @RequirePermissions(
+    {
+      resource: ErpResource.GARAGE_PROCUREMENT_REQUESTS,
+      action: ErpAction.CREATE,
+    },
+    {
+      resource: ErpResource.GARAGE_PROCUREMENT_REQUESTS,
+      action: ErpAction.UPDATE,
+    },
+  )
+  @ApiOperation({
+    summary: 'Tạo đề nghị và gửi duyệt trong một bước (một transaction)',
+  })
+  @Post('save-and-submit')
+  createAndSubmit(
+    @Body() dto: CreateAndSubmitProcurementRequestDto,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.service.createAndSubmit(dto, req.user?.sub ?? '');
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_PROCUREMENT_REQUESTS,
+    action: ErpAction.UPDATE,
+  })
+  @ApiOperation({
+    summary: 'Cập nhật đề nghị nháp và gửi duyệt trong một bước',
+  })
+  @Patch(':id/save-and-submit')
+  updateAndSubmit(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateAndSubmitProcurementRequestDto,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.service.updateAndSubmit(id, dto, req.user?.sub ?? '');
   }
 
   @RequirePermissions({

@@ -50,6 +50,8 @@ function setup(
     receipt?: GarageGoodsReceipt;
     order?: GarageProcurementOrder | null;
     lines?: GarageGoodsReceiptLine[];
+    /** Số giao dịch xuất/điều chỉnh sau phiếu trong sổ (0 = hàng chưa dùng). */
+    usedAfter?: number;
   } = {},
 ) {
   const receipt = opts.receipt ?? makeReceipt();
@@ -60,6 +62,15 @@ function setup(
     ),
     find: jest.fn().mockResolvedValue(opts.lines ?? makeLines()),
     save: jest.fn(async (_t: unknown, v: unknown) => v),
+    getRepository: jest.fn(() => {
+      const qb: Record<string, jest.Mock> = {};
+      for (const m of ['select', 'where', 'andWhere']) {
+        qb[m] = jest.fn(() => qb);
+      }
+      qb.getRawOne = jest.fn().mockResolvedValue({ at: new Date() });
+      qb.getCount = jest.fn().mockResolvedValue(opts.usedAfter ?? 0);
+      return { createQueryBuilder: jest.fn(() => qb) };
+    }),
   };
   const dataSource = {
     transaction: (cb: (m: unknown) => Promise<unknown>) => cb(manager),
@@ -197,5 +208,36 @@ describe('GarageProcurementFlowService.cancelReceipt', () => {
     expect(out.status).toBe('CANCELLED');
     expect(fulfilment.revertGoodsReceipt).not.toHaveBeenCalled();
     expect(stock.reverse).not.toHaveBeenCalled();
+  });
+
+  it('hàng đã xuất/điều chỉnh sau phiếu: 409, không đảo sổ, không hoàn đơn mua', async () => {
+    const { svc, fulfilment, stock } = setup({
+      receipt: makeReceipt({ status: 'POSTED' }),
+      usedAfter: 1,
+    });
+    await expect(svc.cancelReceipt('r1')).rejects.toThrow(
+      'Hàng đã xuất/điều chỉnh sau khi nhập kho, không thể hoàn nhập',
+    );
+    expect(stock.reverse).not.toHaveBeenCalled();
+    expect(fulfilment.revertGoodsReceipt).not.toHaveBeenCalled();
+  });
+});
+
+describe('GarageProcurementFlowService.saveAndPost', () => {
+  it('lưu rồi ghi sổ trong một transaction, trả phiếu POSTED', async () => {
+    const { svc, stock } = setup();
+    const save = jest.fn().mockResolvedValue({ id: 'r1' });
+    const out = await svc.saveAndPost(save);
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(stock.post).toHaveBeenCalled();
+    expect(out.status).toBe('POSTED');
+  });
+
+  it('ghi sổ lỗi thì lỗi nổi lên (transaction rollback phiếu vừa lưu)', async () => {
+    const { svc, stock } = setup();
+    stock.post.mockRejectedValueOnce(new Error('lệch tồn'));
+    await expect(
+      svc.saveAndPost(() => Promise.resolve({ id: 'r1' })),
+    ).rejects.toThrow('lệch tồn');
   });
 });

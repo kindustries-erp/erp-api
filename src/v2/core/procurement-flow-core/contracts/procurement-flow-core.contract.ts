@@ -83,3 +83,23 @@ export const PROCUREMENT_FLOW_EVENTS = {
   receiptPosted: 'GOODS_RECEIPT_POSTED',
   receiptCancelled: 'GOODS_RECEIPT_CANCELLED',
 } as const;
+
+/**
+ * Cổng "lưu rồi hành động" của orchestrator: `save` tạo hoặc cập nhật chứng từ, `act` chạy hành động
+ * (gửi duyệt, ghi nhận, ghi sổ). Cả hai nhận cùng `manager` nên nằm trong một transaction:
+ * lỗi ở `act` thì `save` cũng rollback, không để lại chứng từ nháp mồ côi.
+ */
+export interface SaveAndActPort<TInput, TDoc> {
+  /** `id` null = tạo mới; có id = cập nhật chứng từ nháp. Trả về id chứng từ đã lưu. */
+  save(
+    manager: EntityManager,
+    id: string | null,
+    input: TInput,
+  ): Promise<{ id: string }>;
+  /** Hành động sau khi lưu. Gom sự kiện qua `emit`, lõi phát sau commit. */
+  act(
+    manager: EntityManager,
+    emit: (event: ProcurementFlowEvent) => void,
+    id: string,
+  ): Promise<TDoc>;
+}

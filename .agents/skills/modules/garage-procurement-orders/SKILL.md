@@ -125,3 +125,10 @@ Quyền resource: `garage_procurement_orders`. Seed từ `garage_purchase_orders
 
 - Thu hồi (`recall`) chỉ người tạo (`created_by`), áp ở lõi `procurement-orders-core`; người duyệt hoặc người khác nhận 403 "Chỉ người tạo mới được thu hồi". Web ẩn nút qua `applyApprovalGate`.
 - Nhận hàng (GR post/cancel) đi qua orchestrator `procurement-flow-garage` (xem skill của module đó): tăng/hoàn `qty_fulfilled` và ghi sổ `garage_stock_*` cùng transaction. Người tạo PO nhận thông báo sau commit (đích `PROCUREMENT_ORDER_GARAGE`, web chưa có deep link).
+
+## 13. Cập nhật 2026-11-12: tạo/cập nhật và ghi nhận một bước (save-and-confirm)
+
+- Endpoint mới: `POST /api/v2/procurement-orders-garage/save-and-confirm` (tạo) và `PATCH /api/v2/procurement-orders-garage/:id/save-and-confirm` (sửa nháp, kèm dòng). Body là DTO tạo/sửa + `approverId?`.
+- Điều phối qua `GarageProcurementOrderFlowService.saveAndSubmit`: lưu rồi submit trong MỘT transaction. Lỗi submit (vd. thiếu NCC) rollback cả đơn nháp, nên PR nguồn không bị giữ số lượng bởi đơn mồ côi (đây là gốc của lỗi 409 "vượt phần còn lại").
+- Khóa duyệt PO tắt: submit ghi nhận luôn (APPROVED). Bật: cần `approverId`.
+- Endpoint cũ (`POST /`, `PATCH /:id`, `POST /:id/submit`) giữ nguyên.

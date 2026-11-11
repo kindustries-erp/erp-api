@@ -125,3 +125,11 @@ Quyền resource: `garage_procurement_requests`. Seed từ `garage_purchase_orde
 ## Cập nhật 2026-11-11: thu hồi
 
 - Thu hồi (`recall`) chỉ người tạo (lõi `procurement-requests-core`); người duyệt/người khác nhận 403. Áp dụng cho cả họ thường (`erp-procurement-requests`, `erp-procurement-orders`).
+
+## 13. Cập nhật 2026-11-12: lưu và gửi duyệt một bước (save-and-submit)
+
+- Endpoint mới: `POST /api/v2/procurement-requests-garage/save-and-submit` (tạo) và `PATCH /api/v2/procurement-requests-garage/:id/save-and-submit` (sửa nháp, kèm dòng). Body là DTO tạo/sửa + `approverId?` (bắt buộc khi khóa duyệt bật).
+- Điều phối qua `GarageProcurementRequestFlowService.saveAndSubmit` (lõi `AbstractTransactionalFlow`): lưu rồi gửi duyệt trong MỘT transaction, lỗi gửi duyệt rollback cả phần lưu, không để lại nháp mồ côi. Thông báo gửi sau commit.
+- Quyền: tạo cần CREATE + UPDATE; sửa cần UPDATE (AND semantics).
+- Command lõi nhận `manager?` tùy chọn (không truyền thì giữ hành vi cũ).
+- Endpoint cũ `POST /` và `POST /:id/submit` giữ nguyên.

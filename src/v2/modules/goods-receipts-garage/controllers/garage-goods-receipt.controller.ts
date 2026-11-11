@@ -107,6 +107,37 @@ export class GarageGoodsReceiptController {
     return this.service.update(id, dto);
   }
 
+  @RequirePermissions(
+    {
+      resource: ErpResource.GARAGE_GOODS_RECEIPTS,
+      action: ErpAction.CREATE,
+    },
+    {
+      resource: ErpResource.GARAGE_GOODS_RECEIPTS,
+      action: ErpAction.UPDATE,
+    },
+  )
+  @ApiOperation({
+    summary: 'Tạo phiếu và nhập kho trong một bước (một transaction)',
+  })
+  @Post('save-and-post')
+  createAndPost(@Body() dto: CreateGarageGoodsReceiptDto) {
+    return this.service.createAndPost(dto);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_GOODS_RECEIPTS,
+    action: ErpAction.UPDATE,
+  })
+  @ApiOperation({ summary: 'Cập nhật phiếu nháp và nhập kho trong một bước' })
+  @Patch(':id/save-and-post')
+  updateAndPost(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateGarageGoodsReceiptDto,
+  ) {
+    return this.service.updateAndPost(id, dto);
+  }
+
   @RequirePermissions({
     resource: ErpResource.GARAGE_GOODS_RECEIPTS,
     action: ErpAction.UPDATE,

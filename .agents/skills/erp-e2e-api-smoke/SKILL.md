@@ -10,7 +10,7 @@ description: Quy trình E2E/smoke cho erp-api. Gồm jest e2e (`*.e2e-spec.ts`, 
 | Loại | Lệnh | Yêu cầu |
 |---|---|---|
 | Jest e2e (`test/*.e2e-spec.ts`, cấu hình `test/jest-e2e.json`) | `bun run test:e2e` | Boot app qua Nest testing module, cần DB test |
-| Smoke trên API đang chạy (`test/smoke/*.smoke.mjs`) | `bun run test:smoke:clone`, `bun run test:smoke:procurement` | API đang chạy ở `E2E_API_URL`, DB đúng, tài khoản test |
+| Smoke trên API đang chạy (`test/smoke/*.smoke.mjs`) | `bun run test:smoke:clone`, `bun run test:smoke:procurement`, `bun run test:smoke:save-and-act` (orchestration save-and-submit/confirm/post, rollback, hoàn nhập) | API đang chạy ở `E2E_API_URL`, DB đúng, tài khoản test |
 
 Unit test (`bunx jest --forceExit`, hoặc scope hẹp `bunx jest --forceExit procurement`) vẫn là lớp kiểm tra chính trước commit.
 

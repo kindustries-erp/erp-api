@@ -17,6 +17,7 @@ import { GarageProcurementOrderController } from './controllers/procurement-orde
 import { GarageProcurementOrdersService } from './procurement-orders-garage.service';
 import { GarageProcurementOrderCommandService } from './services/procurement-order-command.service';
 import { GarageProcurementOrderFulfilmentService } from './services/procurement-order-fulfilment.service';
+import { GarageProcurementOrderFlowService } from './services/garage-procurement-order-flow.service';
 import { GarageProcurementOrderQueryService } from './services/procurement-order-query.service';
 import {
   GARAGE_PROCUREMENT_REQUEST_LINK,
@@ -60,6 +61,7 @@ const GarageProcurementOrderApprovalConfigController =
       useExisting: GarageProcurementRequestLinkAdapter,
     },
     GarageProcurementOrderCommandService,
+    GarageProcurementOrderFlowService,
     GarageProcurementOrderFulfilmentService,
     GarageProcurementOrderQueryService,
     GarageProcurementOrdersService,

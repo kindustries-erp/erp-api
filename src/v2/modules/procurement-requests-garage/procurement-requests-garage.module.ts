@@ -15,6 +15,7 @@ import { GarageProcurementRequestLine } from './entities/procurement-request-lin
 import { GarageProcurementRequestController } from './controllers/procurement-request.controller';
 import { GarageProcurementRequestsService } from './procurement-requests-garage.service';
 import { GarageProcurementRequestCommandService } from './services/procurement-request-command.service';
+import { GarageProcurementRequestFlowService } from './services/garage-procurement-request-flow.service';
 import { GarageProcurementRequestQueryService } from './services/procurement-request-query.service';
 import { GarageProcurementRequestOrderingService } from './services/garage-procurement-request-ordering.service';
 import { ProcurementRequestNotifierService } from './services/procurement-request-notifier.service';
@@ -51,6 +52,7 @@ const GarageProcurementRequestApprovalConfigController =
     ApprovalSettingsService,
     ApproverDirectoryService,
     GarageProcurementRequestCommandService,
+    GarageProcurementRequestFlowService,
     GarageProcurementRequestQueryService,
     GarageProcurementRequestsService,
     GarageProcurementRequestOrderingService,

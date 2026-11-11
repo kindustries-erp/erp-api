@@ -18,7 +18,11 @@ describe('GarageGoodsReceiptCommandService', () => {
     delete: jest.Mock;
     find: jest.Mock;
   };
-  let flow: { postReceipt: jest.Mock; cancelReceipt: jest.Mock };
+  let flow: {
+    postReceipt: jest.Mock;
+    cancelReceipt: jest.Mock;
+    saveAndPost: jest.Mock;
+  };
   let dataSource: { transaction: jest.Mock };
   let voucherEngine: BaseVoucherEngineService;
   let service: GarageGoodsReceiptCommandService;
@@ -38,6 +42,12 @@ describe('GarageGoodsReceiptCommandService', () => {
       find: jest.fn().mockResolvedValue([]),
     };
     flow = {
+      saveAndPost: jest.fn(
+        async (save: (m: unknown) => Promise<{ id: string }>) => {
+          const saved = await save({ tx: true });
+          return { id: saved.id, status: 'POSTED' };
+        },
+      ),
       postReceipt: jest.fn(async (id: string) => ({ id, status: 'POSTED' })),
       cancelReceipt: jest.fn(async (id: string) => ({
         id,
@@ -275,6 +285,29 @@ describe('GarageGoodsReceiptCommandService', () => {
           supplierName: 'NCC theo đơn',
           totalAmount: '200',
         }),
+      );
+    });
+  });
+
+  describe('saveAndPost', () => {
+    it('id null: tạo phiếu bằng manager của orchestrator rồi ghi sổ', async () => {
+      const createSpy = jest
+        .spyOn(service, 'create')
+        .mockResolvedValue({ id: 'new-1' } as GarageGoodsReceipt);
+      const out = await service.saveAndPost(null, { lines: [] } as never);
+      expect(createSpy).toHaveBeenCalledWith({ lines: [] }, { tx: true });
+      expect(out).toMatchObject({ id: 'new-1', status: 'POSTED' });
+    });
+
+    it('có id: sửa phiếu nháp cùng manager rồi ghi sổ', async () => {
+      const updateSpy = jest
+        .spyOn(service, 'update')
+        .mockResolvedValue({ id: 'r9' } as GarageGoodsReceipt);
+      await service.saveAndPost('r9', { remarks: 'x' } as never);
+      expect(updateSpy).toHaveBeenCalledWith(
+        { id: 'r9' },
+        { remarks: 'x' },
+        { tx: true },
       );
     });
   });

@@ -91,6 +91,14 @@ export class CreateProcurementOrderDto {
   lines: GarageProcurementOrderLineDto[];
 }
 
+/** Tạo đơn mua rồi gửi duyệt/ghi nhận trong một bước. `approverId` bắt buộc khi khóa duyệt bật. */
+export class CreateAndConfirmProcurementOrderDto extends CreateProcurementOrderDto {
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  approverId?: string;
+}
+
 export class ReplaceOrderLinesDto {
   @ApiProperty({ type: [GarageProcurementOrderLineDto] })
   @IsArray()
@@ -173,6 +181,21 @@ export class UpdateProcurementOrderHeaderDto {
   /** Merge cấp 1 với dữ liệu hiện có; giá trị null xóa key. */
   @ExtraDataField()
   extraData?: Record<string, unknown>;
+}
+
+/** Cập nhật đơn nháp (đầu đơn + dòng) rồi gửi duyệt/ghi nhận trong một bước. */
+export class UpdateAndConfirmProcurementOrderDto extends UpdateProcurementOrderHeaderDto {
+  @ApiProperty({ type: [GarageProcurementOrderLineDto] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => GarageProcurementOrderLineDto)
+  lines: GarageProcurementOrderLineDto[];
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  approverId?: string;
 }
 
 export class ListProcurementOrdersDto extends TableQueryDto {

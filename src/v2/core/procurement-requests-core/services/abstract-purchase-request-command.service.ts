@@ -11,6 +11,7 @@ import {
   EntityTarget,
   FindOptionsWhere,
 } from 'typeorm';
+import { runInOptionalTransaction } from '../../base-core/helpers/run-in-optional-transaction.util';
 import { ApprovalEventService } from '../../approval-core/approval-event.service';
 import {
   assertCanDecide,
@@ -121,71 +122,80 @@ export abstract class AbstractPurchaseRequestCommandService<
     actor: RequestActor,
     reason?: string,
     approverId?: string | null,
+    outerManager?: EntityManager,
   ): Promise<H> {
-    return this.dataSource.transaction(async (manager) => {
-      const header = await this.lockHeader(manager, id);
-      const from = header.status as PurchaseRequestStatus;
-      const mode = await loadApprovalMode(manager, this.docType);
+    return runInOptionalTransaction(
+      this.dataSource,
+      outerManager,
+      async (manager) => {
+        const header = await this.lockHeader(manager, id);
+        const from = header.status as PurchaseRequestStatus;
+        const mode = await loadApprovalMode(manager, this.docType);
 
-      if (
-        action === 'submit' &&
-        header.createdBy &&
-        header.createdBy !== actor.id
-      ) {
-        throw new ForbiddenException('Chỉ người tạo mới được gửi duyệt');
-      }
-      if (
-        action === 'recall' &&
-        header.createdBy &&
-        header.createdBy !== actor.id
-      ) {
-        throw new ForbiddenException('Chỉ người tạo mới được thu hồi');
-      }
-      if (PURCHASE_REQUEST_ACTIONS_REQUIRING_APPROVER.includes(action)) {
-        assertNotSelfApproval(actor.id, header.createdBy);
-        assertCanDecide(header.approverId, actor.id);
-      }
-      const cleanReason = PURCHASE_REQUEST_ACTIONS_REQUIRING_REASON.includes(
-        action,
-      )
-        ? requireReason(reason)
-        : null;
-      if (action === 'cancel') {
-        assertCanCancel(await this.loadLineQty(manager, id));
-      }
-
-      const to = resolveTransition(PURCHASE_REQUEST_TRANSITIONS, from, action);
-      const decision =
-        action === 'submit'
-          ? resolveSubmitDecision(mode, actor.id, approverId)
-          : null;
-
-      this.applyFields(header, action, actor.id, cleanReason);
-      if (decision) {
-        header.approverId = decision.approverId;
-        if (decision.autoApprove) {
-          this.applyFields(header, 'approve', actor.id, null);
+        if (
+          action === 'submit' &&
+          header.createdBy &&
+          header.createdBy !== actor.id
+        ) {
+          throw new ForbiddenException('Chỉ người tạo mới được gửi duyệt');
         }
-      }
-      if (action === 'recall' || action === 'reject') {
-        header.approverId = null;
-      }
-      const finalTo = decision?.autoApprove ? 'APPROVED' : to;
-      header.status = finalTo;
-      await manager.save(this.headerEntity, header);
+        if (
+          action === 'recall' &&
+          header.createdBy &&
+          header.createdBy !== actor.id
+        ) {
+          throw new ForbiddenException('Chỉ người tạo mới được thu hồi');
+        }
+        if (PURCHASE_REQUEST_ACTIONS_REQUIRING_APPROVER.includes(action)) {
+          assertNotSelfApproval(actor.id, header.createdBy);
+          assertCanDecide(header.approverId, actor.id);
+        }
+        const cleanReason = PURCHASE_REQUEST_ACTIONS_REQUIRING_REASON.includes(
+          action,
+        )
+          ? requireReason(reason)
+          : null;
+        if (action === 'cancel') {
+          assertCanCancel(await this.loadLineQty(manager, id));
+        }
 
-      await this.events.record(manager, {
-        docType: this.docType,
-        docId: id,
-        action: decision?.autoApprove ? 'AUTO_APPROVED' : action,
-        fromStatus: from,
-        toStatus: finalTo,
-        actorId: actor.id,
-        actorRoles: actor.roles,
-        comment: cleanReason,
-      });
-      return header;
-    });
+        const to = resolveTransition(
+          PURCHASE_REQUEST_TRANSITIONS,
+          from,
+          action,
+        );
+        const decision =
+          action === 'submit'
+            ? resolveSubmitDecision(mode, actor.id, approverId)
+            : null;
+
+        this.applyFields(header, action, actor.id, cleanReason);
+        if (decision) {
+          header.approverId = decision.approverId;
+          if (decision.autoApprove) {
+            this.applyFields(header, 'approve', actor.id, null);
+          }
+        }
+        if (action === 'recall' || action === 'reject') {
+          header.approverId = null;
+        }
+        const finalTo = decision?.autoApprove ? 'APPROVED' : to;
+        header.status = finalTo;
+        await manager.save(this.headerEntity, header);
+
+        await this.events.record(manager, {
+          docType: this.docType,
+          docId: id,
+          action: decision?.autoApprove ? 'AUTO_APPROVED' : action,
+          fromStatus: from,
+          toStatus: finalTo,
+          actorId: actor.id,
+          actorRoles: actor.roles,
+          comment: cleanReason,
+        });
+        return header;
+      },
+    );
   }
 
   /**
@@ -248,71 +258,89 @@ export abstract class AbstractPurchaseRequestCommandService<
     actor: RequestActor,
     input: DraftHeaderInput,
     lines: Array<DraftLineInput & DraftLineFields>,
+    outerManager?: EntityManager,
   ): Promise<H> {
     assertValidDraftLines(lines);
     if (input.extraData !== undefined) assertValidExtraData(input.extraData);
-    return this.dataSource.transaction(async (manager) => {
-      const requestNo = await nextDocumentNo(
-        manager,
-        this.headerEntity,
-        'requestNo' as keyof H & string,
-        this.numberPrefix,
-        input.requestDate,
-      );
-      const header = manager.create(this.headerEntity, {
-        ...input,
-        requestNo,
-        status: 'DRAFT',
-        orderingStatus: 'NONE',
-        estimatedTotal: String(estimatedTotalOf(lines)),
-        createdBy: actor.id,
-        isDeleted: false,
-        extraData: input.extraData ?? {},
-      } as DeepPartial<H>);
-      const saved = await manager.save(this.headerEntity, header);
-      await this.writeLines(manager, saved.id, lines);
-      return saved;
-    });
+    return runInOptionalTransaction(
+      this.dataSource,
+      outerManager,
+      async (manager) => {
+        const requestNo = await nextDocumentNo(
+          manager,
+          this.headerEntity,
+          'requestNo' as keyof H & string,
+          this.numberPrefix,
+          input.requestDate,
+        );
+        const header = manager.create(this.headerEntity, {
+          ...input,
+          requestNo,
+          status: 'DRAFT',
+          orderingStatus: 'NONE',
+          estimatedTotal: String(estimatedTotalOf(lines)),
+          createdBy: actor.id,
+          isDeleted: false,
+          extraData: input.extraData ?? {},
+        } as DeepPartial<H>);
+        const saved = await manager.save(this.headerEntity, header);
+        await this.writeLines(manager, saved.id, lines);
+        return saved;
+      },
+    );
   }
 
   /**
    * Sửa đầu đề khi còn DRAFT. Chỉ các trường được truyền (khác undefined) mới được ghi.
    * Chi nhánh không nằm trong patch vì PO đã liên kết có thể đang dùng chi nhánh cũ.
    */
-  async updateHeader(id: string, patch: DraftHeaderPatch): Promise<H> {
+  async updateHeader(
+    id: string,
+    patch: DraftHeaderPatch,
+    outerManager?: EntityManager,
+  ): Promise<H> {
     const { extraData, ...fields } = patch;
     if (extraData !== undefined) assertValidExtraData(extraData);
-    return this.dataSource.transaction(async (manager) => {
-      const header = await this.lockHeader(manager, id);
-      assertLinesEditable(header.status as PurchaseRequestStatus);
-      const changes = Object.fromEntries(
-        Object.entries(fields).filter(([, value]) => value !== undefined),
-      );
-      Object.assign(header, changes);
-      if (extraData !== undefined) {
-        header.extraData = mergeExtraData(header.extraData, extraData);
-      }
-      return manager.save(this.headerEntity, header);
-    });
+    return runInOptionalTransaction(
+      this.dataSource,
+      outerManager,
+      async (manager) => {
+        const header = await this.lockHeader(manager, id);
+        assertLinesEditable(header.status as PurchaseRequestStatus);
+        const changes = Object.fromEntries(
+          Object.entries(fields).filter(([, value]) => value !== undefined),
+        );
+        Object.assign(header, changes);
+        if (extraData !== undefined) {
+          header.extraData = mergeExtraData(header.extraData, extraData);
+        }
+        return manager.save(this.headerEntity, header);
+      },
+    );
   }
 
   /** Thay toàn bộ dòng khi còn DRAFT. */
   async replaceDraftLines(
     id: string,
     lines: Array<DraftLineInput & DraftLineFields>,
+    outerManager?: EntityManager,
   ): Promise<H> {
     assertValidDraftLines(lines);
-    return this.dataSource.transaction(async (manager) => {
-      const header = await this.lockHeader(manager, id);
-      assertLinesEditable(header.status as PurchaseRequestStatus);
-      await manager.delete(this.lineEntity, {
-        [this.lineForeignKey]: id,
-      } as never);
-      await this.writeLines(manager, id, lines);
-      header.estimatedTotal = String(estimatedTotalOf(lines));
-      await manager.save(this.headerEntity, header);
-      return header;
-    });
+    return runInOptionalTransaction(
+      this.dataSource,
+      outerManager,
+      async (manager) => {
+        const header = await this.lockHeader(manager, id);
+        assertLinesEditable(header.status as PurchaseRequestStatus);
+        await manager.delete(this.lineEntity, {
+          [this.lineForeignKey]: id,
+        } as never);
+        await this.writeLines(manager, id, lines);
+        header.estimatedTotal = String(estimatedTotalOf(lines));
+        await manager.save(this.headerEntity, header);
+        return header;
+      },
+    );
   }
 
   /**

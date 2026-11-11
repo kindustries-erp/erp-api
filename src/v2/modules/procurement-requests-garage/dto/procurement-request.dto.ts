@@ -157,3 +157,26 @@ export class UpdateProcurementRequestHeaderDto {
   @ExtraDataField()
   extraData?: Record<string, unknown>;
 }
+
+/** Tạo đề nghị rồi gửi duyệt trong một bước. `approverId` bắt buộc khi khóa duyệt bật. */
+export class CreateAndSubmitProcurementRequestDto extends CreateProcurementRequestDto {
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  approverId?: string;
+}
+
+/** Cập nhật đề nghị nháp (đầu đề + dòng) rồi gửi duyệt trong một bước. */
+export class UpdateAndSubmitProcurementRequestDto extends UpdateProcurementRequestHeaderDto {
+  @ApiProperty({ type: [GarageProcurementRequestLineDto] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => GarageProcurementRequestLineDto)
+  lines: GarageProcurementRequestLineDto[];
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  approverId?: string;
+}
