@@ -40,5 +40,6 @@ export enum ErpResource {
   GARAGE_STOCK_RECEIPTS = 'garage_stock_receipts', // api-v2-module:inventory-movements-garage-receipts:rbac-resource
   GARAGE_STOCK_ISSUES = 'garage_stock_issues', // api-v2-module:inventory-movements-garage-issues:rbac-resource
   GARAGE_STOCK_ADJUSTMENTS = 'garage_stock_adjustments', // api-v2-module:inventory-movements-garage-adjustments:rbac-resource
+  LOANS = 'loans', // api-v2-module:loans:rbac-resource
   // plop:api-v2-resources
 }

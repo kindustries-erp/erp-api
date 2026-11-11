@@ -1,0 +1,122 @@
+---
+name: loans
+description: Module tri thức Quản lý Khoản Vay & Dự báo Dòng Tiền Tương Lai (Loans & Cashflow Simulator V2) trong erp-api (v2/core/loans-core và v2/modules/loans). Chứa toàn bộ database schema, entities, TypeORM migration, pure math engine, DTOs, API endpoints (public & RBAC), và quy trình ghi nhận trả nợ an toàn bằng Pessimistic Lock transaction.
+---
+
+# 📦 Module Tri Thức: Quản Lý Khoản Vay & Dòng Tiền (`loans`) - Backend (`erp-api`)
+
+## 1. Tổng quan Nghiệp vụ
+
+Module `loans` (nằm tại `src/v2/modules/loans/` và kế thừa engine từ `src/v2/core/loans-core/`) cung cấp giải pháp quản trị nợ vay ngân hàng, tính toán lãi suất, lịch khấu hao dòng tiền và dự báo áp lực thanh toán tương lai cho toàn doanh nghiệp.
+
+### 1.1. Các tính năng cốt lõi:
+- **Chế độ Kép (Dual Mode)**:
+  - **Public Calculator (`/api/v2/public/loans/simulate`)**: Cho phép khách vãng lai hoặc nhân viên tính toán nhanh lịch trả nợ tức thì, không cần đăng nhập.
+  - **Authenticated RBAC (`/api/v2/loans`)**: Quản lý lưu trữ hợp đồng vay, lịch sử thanh toán và dự báo dòng tiền doanh nghiệp với quyền kiểm soát `loans:read`, `loans:create`, `loans:update`, `loans:delete`.
+- **4 Phương thức Trả Nợ Chuẩn Ngân Hàng**:
+  - `AMORTIZED` (Niên kim cố định / gốc + lãi đều): Dùng công thức tài chính quốc tế $A = P \times \frac{r(1+r)^n}{(1+r)^n - 1}$.
+  - `EQUAL_PRINCIPAL` (Dư nợ giảm dần / gốc đều): Gốc cố định $P/n$, lãi giảm dần theo dư nợ thực tế.
+  - `BULLET` (Cuối kỳ): Hàng kỳ chỉ trả lãi, toàn bộ nợ gốc thanh toán tại kỳ cuối.
+  - `FLAT` (Lãi phẳng): Lãi tính cố định theo dư nợ gốc ban đầu.
+- **Ghi Nhận Thanh Toán An Toàn (ACID Transaction)**:
+  - Sử dụng TypeORM `QueryRunner` với Pessimistic Write Lock (`setLock('pessimistic_write')`) để đảm bảo không bị race condition khi cập nhật `total_paid_principal`, `total_paid_interest` và `remaining_principal`.
+  - Tự động chuyển trạng thái khoản vay sang `COMPLETED` khi dư nợ gốc về 0.
+- **Dự Báo Dòng Tiền Tương Lai Hợp Nhất (Consolidated Cashflow Projection)**:
+  - Endpoint `/api/v2/loans/cashflow-projection` tổng hợp lịch trả nợ tương lai của tất cả hợp đồng `ACTIVE`, nhóm theo từng tháng để lập kế hoạch dòng tiền cho ban giám đốc.
+
+---
+
+## 2. Database Schema & Quan hệ Dữ liệu
+
+### 2.1. Sơ đồ Quan hệ Bảng (Data Relations)
+
+```text
+loans_finance (Hợp đồng vay)
+  ├── 1:N ── loan_payments_finance (Lịch sử thanh toán từng kỳ)
+  └── N:1 ── erp_business_partners (Đối tác / Ngân hàng liên kết - Optional)
+```
+
+### 2.2. Chi tiết Bảng `loans_finance`
+
+| Cột | Kiểu | Mô tả |
+| :--- | :--- | :--- |
+| `id` | `uuid` | Khóa chính (kế thừa từ `CoreSoftDeletableEntity`) |
+| `loan_code` | `varchar(64)` | Mã hợp đồng vay (Unique, Index) |
+| `title` | `varchar(255)` | Tên gói vay / Mục đích vay |
+| `lender_name` | `varchar(255)` | Tên ngân hàng / Đơn vị cho vay |
+| `partner_id` | `uuid` | Khóa ngoại trỏ sang `erp_business_partners` (nullable) |
+| `principal_amount` | `numeric(15,2)` | Số tiền vay ban đầu |
+| `annual_interest_rate` | `numeric(6,3)` | Lãi suất theo năm (%) |
+| `tenor_months` | `int` | Thời hạn vay (tháng) |
+| `amortization_method` | `varchar(32)` | `AMORTIZED`, `EQUAL_PRINCIPAL`, `BULLET`, `FLAT` |
+| `start_date` | `date` | Ngày bắt đầu tính lãi |
+| `first_payment_date` | `date` | Ngày thanh toán kỳ đầu tiên |
+| `total_paid_principal` | `numeric(15,2)` | Tổng tiền gốc đã trả |
+| `total_paid_interest` | `numeric(15,2)` | Tổng tiền lãi đã trả |
+| `remaining_principal` | `numeric(15,2)` | Dư nợ gốc còn lại |
+| `status` | `varchar(32)` | `DRAFT`, `ACTIVE`, `COMPLETED`, `OVERDUE` |
+| `notes` | `text` | Ghi chú hợp đồng |
+| `created_at` / `updated_at` | `timestamptz` | Audit timestamp |
+| `is_deleted` | `boolean` | Cờ xóa mềm (kế thừa từ `CoreSoftDeletableEntity`) |
+
+### 2.3. Chi tiết Bảng `loan_payments_finance`
+
+| Cột | Kiểu | Mô tả |
+| :--- | :--- | :--- |
+| `id` | `uuid` | Khóa chính |
+| `loan_id` | `uuid` | Khóa ngoại trỏ sang `loans_finance` (Cascade delete on soft) |
+| `period_number` | `int` | Kỳ thanh toán (1..N) |
+| `payment_date` | `date` | Ngày thực hiện thanh toán |
+| `principal_paid` | `numeric(15,2)` | Tiền gốc thanh toán |
+| `interest_paid` | `numeric(15,2)` | Tiền lãi thanh toán |
+| `total_paid` | `numeric(15,2)` | Tổng tiền thanh toán kỳ |
+| `payment_ref` | `varchar(100)` | Mã giao dịch / UNC ngân hàng |
+| `notes` | `text` | Ghi chú thanh toán |
+
+---
+
+## 3. Kiến Trúc V2 Module (`erp-api`)
+
+Tuân thủ 100% quy chuẩn `/api-structure`:
+- **`src/v2/core/loans-core/`**:
+  - `engines/loan-amortization.engine.ts`: Pure TypeScript class không phụ thuộc TypeORM hay NestJS context. 100% co-located unit test.
+  - `entities/base-loan.entity.ts`: Kế thừa `CoreSoftDeletableEntity`.
+  - `enums/loan-amortization.enum.ts`: `AmortizationMethod`, `LoanStatus`.
+  - `interfaces/loan-contract.interface.ts`: Contract type.
+- **`src/v2/modules/loans/`**:
+  - `loans.service.ts`: Facade mỏng điều phối, Clean DI constructor.
+  - `services/loan-query.service.ts`: Xử lý phân trang, tìm kiếm, lấy chi tiết kèm tính toán schedule và dự báo dòng tiền hợp nhất.
+  - `services/loan-command.service.ts`: Xử lý tạo, cập nhật, xóa mềm và ghi nhận thanh toán với `QueryRunner` transaction.
+  - `helpers/loan.mapper.ts`: Mapper chuyển đổi giữa Entity sang Response DTO (Zero Entity Leaking).
+  - `controllers/loans-public.controller.ts`: Endpoint công khai tính toán nhanh.
+  - `controllers/loans.controller.ts`: Controller có RBAC guard.
+
+---
+
+## 4. API Endpoints
+
+| Method | Endpoint | Auth | Quyền (RBAC) | Mô tả |
+| :--- | :--- | :--- | :--- | :--- |
+| `POST` | `/api/v2/public/loans/simulate` | No | None | Tính toán nhanh lịch khấu hao và KPIs |
+| `GET` | `/api/v2/loans` | Yes | `loans:read` | Danh sách khoản vay (phân trang, search, status) |
+| `GET` | `/api/v2/loans/cashflow-projection` | Yes | `loans:read` | Dự báo dòng tiền nợ vay hợp nhất theo tháng |
+| `GET` | `/api/v2/loans/:id` | Yes | `loans:read` | Chi tiết hợp đồng vay kèm schedule & payments |
+| `POST` | `/api/v2/loans` | Yes | `loans:create` | Tạo mới hợp đồng vay |
+| `PUT` | `/api/v2/loans/:id` | Yes | `loans:update` | Cập nhật hợp đồng vay |
+| `DELETE` | `/api/v2/loans/:id` | Yes | `loans:delete` | Xóa mềm hợp đồng vay |
+| `POST` | `/api/v2/loans/:id/payments` | Yes | `loans:update` | Ghi nhận thanh toán trả nợ theo kỳ |
+
+---
+
+## 5. Quy Trình Kiểm Thử
+
+```bash
+# Typecheck
+cd erp/erp-api && bunx tsc --noEmit
+
+# Chạy trọn bộ unit test Jest cho loans
+cd erp/erp-api && bunx jest src/v2/core/loans-core src/v2/modules/loans --forceExit
+
+# Quét kiểm tra Clean DI và LoC (< 300 dòng Controller, < 500 dòng Service)
+bun .agents/skills/erp-api-structure/scripts/scan-oversized-files.ts --path=src/v2/modules/loans --strict
+```

@@ -1,0 +1,151 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { DataSource } from 'typeorm';
+import { NotFoundException } from '@nestjs/common';
+import { LoanCommandService } from './loan-command.service';
+import { LoanEntity } from '../entities';
+import { AmortizationMethod, LoanStatus } from '@/v2/core/loans-core';
+
+describe('LoanCommandService', () => {
+  let service: LoanCommandService;
+  let dataSource: any;
+  let repo: any;
+  let queryRunner: any;
+
+  beforeEach(async () => {
+    repo = {
+      create: jest.fn((dto) => ({ id: 'new-id', ...dto })),
+      save: jest.fn((entity) => Promise.resolve({ id: 'saved-id', ...entity })),
+      findOne: jest.fn(),
+    };
+
+    queryRunner = {
+      connect: jest.fn(),
+      startTransaction: jest.fn(),
+      commitTransaction: jest.fn(),
+      rollbackTransaction: jest.fn(),
+      release: jest.fn(),
+      manager: {
+        findOne: jest.fn(),
+        create: jest.fn((entity, dto) => ({ id: 'pay-id', ...dto })),
+        save: jest.fn((entity) => Promise.resolve(entity)),
+      },
+    };
+
+    dataSource = {
+      getRepository: jest.fn().mockReturnValue(repo),
+      createQueryRunner: jest.fn().mockReturnValue(queryRunner),
+      transaction: jest.fn(async (cb) => cb({ getRepository: () => repo })),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        LoanCommandService,
+        {
+          provide: DataSource,
+          useValue: dataSource,
+        },
+      ],
+    }).compile();
+
+    service = module.get<LoanCommandService>(LoanCommandService);
+  });
+
+  it('should create a new loan and initialize remaining principal', async () => {
+    const dto = {
+      title: 'Company Loan',
+      lenderName: 'Vietcombank',
+      principalAmount: 500000000,
+      annualInterestRate: 9.5,
+      tenorMonths: 36,
+      amortizationMethod: AmortizationMethod.AMORTIZED,
+      startDate: '2026-01-01',
+    };
+
+    const res = await service.create(dto, 'user-1');
+    expect(res.title).toBe('Company Loan');
+    expect(repo.save).toHaveBeenCalled();
+  });
+
+  it('should update loan fields', async () => {
+    repo.findOne.mockResolvedValue({
+      id: 'l1',
+      title: 'Old Title',
+      isDeleted: false,
+      principalAmount: '100',
+      annualInterestRate: '10',
+      tenorMonths: 12,
+      amortizationMethod: AmortizationMethod.AMORTIZED,
+      startDate: '2026-01-01',
+      firstPaymentDate: '2026-02-01',
+    });
+
+    const res = await service.update('l1', { title: 'New Title' });
+    expect(res.title).toBe('New Title');
+  });
+
+  it('should record payment with transaction lock and reduce remaining principal', async () => {
+    const mockLoan = {
+      id: 'l1',
+      principalAmount: '100000000',
+      totalPaidPrincipal: '0',
+      totalPaidInterest: '0',
+      remainingPrincipal: '100000000',
+      annualInterestRate: '12',
+      tenorMonths: 10,
+      amortizationMethod: AmortizationMethod.EQUAL_PRINCIPAL,
+      startDate: '2026-01-01',
+      firstPaymentDate: '2026-02-01',
+      status: LoanStatus.ACTIVE,
+    };
+
+    queryRunner.manager.findOne.mockResolvedValue(mockLoan);
+
+    const res = await service.recordPayment(
+      'l1',
+      {
+        periodNumber: 1,
+        paymentDate: '2026-02-01',
+        principalPaid: 10000000,
+        interestPaid: 1000000,
+        paymentRef: 'TX12345',
+      },
+      'user-1',
+    );
+
+    expect(queryRunner.connect).toHaveBeenCalled();
+    expect(queryRunner.startTransaction).toHaveBeenCalled();
+    expect(queryRunner.commitTransaction).toHaveBeenCalled();
+    expect(queryRunner.release).toHaveBeenCalled();
+    expect(res.totalPaidPrincipal).toBe(10000000);
+    expect(res.remainingPrincipal).toBe(90000000);
+  });
+
+  it('should create multiple loans in a transaction via createBatch', async () => {
+    const dtos = [
+      {
+        title: 'Loan 1',
+        lenderName: 'VCB',
+        principalAmount: 100000000,
+        annualInterestRate: 10,
+        tenorMonths: 12,
+        amortizationMethod: AmortizationMethod.AMORTIZED,
+        startDate: '2026-01-01',
+      },
+      {
+        title: 'Loan 2',
+        lenderName: 'TCB',
+        principalAmount: 200000000,
+        annualInterestRate: 9,
+        tenorMonths: 24,
+        amortizationMethod: AmortizationMethod.EQUAL_PRINCIPAL,
+        startDate: '2026-02-01',
+      },
+    ];
+
+    const results = await service.createBatch(dtos, 'user-1');
+    expect(dataSource.transaction).toHaveBeenCalled();
+    expect(results).toHaveLength(2);
+    expect(results[0].title).toBe('Loan 1');
+    expect(results[1].title).toBe('Loan 2');
+  });
+});
