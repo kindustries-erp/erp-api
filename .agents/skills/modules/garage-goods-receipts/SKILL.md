@@ -156,3 +156,11 @@ Module `garage-goods-receipts` (`src/v2/modules/goods-receipts-garage/`) sử d�
 - Không tạo `garage_stock_receipts`: phiếu GR là chứng từ nhập duy nhất.
 - Đã gỡ `GarageInventoryBalanceService` và cơ chế kẹp tồn về 0 khi hủy. Engine chặn tồn âm; dòng có `qty_received <= 0` giờ làm post lỗi (trước đây cộng 0).
 - Thứ tự khóa: phiếu GR → PO → dòng PO → dòng sổ tồn.
+
+## 12. Cập nhật 2026-11-11: phiếu nhập bắt buộc gắn đơn mua
+
+- `CreateGarageGoodsReceiptDto.garageProcurementOrderId` **bắt buộc** (`@IsUUID`). Update không đổi được đơn (400 "Không đổi được đơn mua của phiếu nhập"); phiếu cũ chưa có đơn được gắn đơn lần đầu.
+- Create/update nạp đơn (`helpers/garage-receipt-order.helper.ts`): đơn phải tồn tại, chưa xóa, `ISSUED`, chưa `FULL`. **NCC và chi nhánh ghi đè theo đơn** (bỏ giá trị client); **tổng tiền = tổng dòng nhận** do server tính (bỏ `totalAmount` client).
+- Response thêm `garageProcurementOrderNo` và `orderTotalAmount` (join một truy vấn cho cả trang: `GarageGoodsReceiptQueryService.findOrderSummaries`).
+- Danh sách lọc được theo `garageProcurementOrderId` (`column_filters`), dùng cho lịch sử nhập kho của đơn.
+- Phiếu cũ không có đơn vẫn đọc/sửa được như trước.

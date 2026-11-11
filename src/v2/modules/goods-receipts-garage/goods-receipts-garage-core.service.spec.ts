@@ -18,6 +18,7 @@ describe('GarageGoodsReceiptsCoreService', () => {
   let query: {
     findAll: jest.Mock;
     findById: jest.Mock;
+    findOrderSummaries: jest.Mock;
     findColumnOptions: jest.Mock;
   };
   let command: { create: jest.Mock; update: jest.Mock; softDelete: jest.Mock };
@@ -27,6 +28,7 @@ describe('GarageGoodsReceiptsCoreService', () => {
     query = {
       findAll: jest.fn(),
       findById: jest.fn(),
+      findOrderSummaries: jest.fn().mockResolvedValue(new Map()),
       findColumnOptions: jest.fn(),
     };
     command = { create: jest.fn(), update: jest.fn(), softDelete: jest.fn() };
@@ -119,5 +121,22 @@ describe('GarageGoodsReceiptsCoreService', () => {
     expect(command.softDelete).toHaveBeenCalledWith(row);
     expect(result.data.id).toBe('id-1');
     expect(result.data).not.toHaveProperty('isDeleted');
+  });
+
+  it('findOne trả kèm số đơn và tổng tiền đơn mua nguồn', async () => {
+    query.findById.mockResolvedValue({
+      ...row,
+      garageProcurementOrderId: 'po-1',
+    } as GarageGoodsReceipt);
+    query.findOrderSummaries.mockResolvedValue(
+      new Map([['po-1', { orderNo: 'GDMH-1', totalAmount: 500 }]]),
+    );
+
+    const result = await service.findOne('id-1');
+
+    expect(result.data).toMatchObject({
+      garageProcurementOrderNo: 'GDMH-1',
+      orderTotalAmount: 500,
+    });
   });
 });

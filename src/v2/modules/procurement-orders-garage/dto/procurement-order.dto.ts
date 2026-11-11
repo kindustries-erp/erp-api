@@ -75,6 +75,11 @@ export class CreateProcurementOrderDto {
   supplierName?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() requestId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() remarks?: string;
+  @ApiPropertyOptional({ description: 'Số hóa đơn của NCC' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  supplierInvoiceNo?: string;
   @ExtraDataField()
   extraData?: Record<string, unknown>;
 

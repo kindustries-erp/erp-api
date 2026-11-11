@@ -16,6 +16,12 @@ export class GarageGoodsReceiptResponseDto extends BaseGoodsReceiptResponseDto {
   @ApiPropertyOptional()
   garageProcurementOrderId?: string;
 
+  @ApiPropertyOptional({ description: 'Số đơn mua nguồn' })
+  garageProcurementOrderNo?: string;
+
+  @ApiPropertyOptional({ description: 'Tổng tiền của đơn mua nguồn' })
+  orderTotalAmount?: number;
+
   @ApiPropertyOptional({ type: [GarageGoodsReceiptLineResponseDto] })
   declare lines?: GarageGoodsReceiptLineResponseDto[];
 }

@@ -138,3 +138,22 @@ describe('GarageProcurementOrdersService - chi nhánh trống', () => {
     expect(command.updateHeader).not.toHaveBeenCalled();
   });
 });
+
+describe('GarageProcurementOrdersService.create - số hóa đơn NCC', () => {
+  it('chuyển supplierInvoiceNo vào đầu đơn khi tạo', async () => {
+    const { svc, command } = makeService('b1');
+    await svc.create(
+      {
+        orderDate: '2026-11-05',
+        supplierInvoiceNo: 'HD-0001',
+        lines: [],
+      } as never,
+      'u1',
+    );
+    expect(command.createDraft).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ supplierInvoiceNo: 'HD-0001' }),
+      [],
+    );
+  });
+});

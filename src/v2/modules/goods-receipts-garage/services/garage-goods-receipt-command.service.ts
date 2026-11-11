@@ -7,6 +7,12 @@ import { CreateGarageGoodsReceiptDto } from '../dto/create-garage-goods-receipt.
 import { UpdateGarageGoodsReceiptDto } from '../dto/update-garage-goods-receipt.dto';
 import { toGarageGoodsReceiptEntityFields } from '../helpers/garage-goods-receipt.mapper';
 import {
+  assertOrderUnchanged,
+  loadOrderForNewReceipt,
+  receiptFieldsFromOrder,
+  stripOrderOwnedFields,
+} from '../helpers/garage-receipt-order.helper';
+import {
   assertValidExtraData,
   mergeExtraData,
 } from '@/v2/core/base-core/helpers/extra-data.util';
@@ -42,9 +48,22 @@ export class GarageGoodsReceiptCommandService {
         dto.receiptNo?.trim() ||
         (await this.generateDailyReceiptNo(dto.receiptDate));
 
-      const { lines = [], ...headerDto } = dto;
+      const { lines = [], ...rawHeader } = dto;
+      // Phiếu gắn đơn mua: NCC, chi nhánh lấy từ đơn, tổng tiền tính từ dòng (không tin client)
+      const order = rawHeader.garageProcurementOrderId
+        ? await loadOrderForNewReceipt(
+            manager,
+            rawHeader.garageProcurementOrderId,
+          )
+        : null;
+      const headerDto = order
+        ? {
+            ...stripOrderOwnedFields(rawHeader),
+            ...receiptFieldsFromOrder(order),
+          }
+        : rawHeader;
       const entityFields = toGarageGoodsReceiptEntityFields({
-        ...headerDto,
+        ...(headerDto as typeof rawHeader),
         receiptNo,
         status: headerDto.status || 'DRAFT',
         paymentStatus: headerDto.paymentStatus || 'UNPAID',
@@ -75,7 +94,9 @@ export class GarageGoodsReceiptCommandService {
 
       const calculatedTotal = this.voucherEngine.sumLineAmounts(lineEntities);
 
-      if (dto.totalAmount !== undefined && dto.totalAmount !== null) {
+      if (order) {
+        entityFields.totalAmount = String(calculatedTotal);
+      } else if (dto.totalAmount !== undefined && dto.totalAmount !== null) {
         entityFields.totalAmount = String(dto.totalAmount);
       } else if (lineEntities.length > 0) {
         entityFields.totalAmount = String(calculatedTotal);
@@ -114,7 +135,32 @@ export class GarageGoodsReceiptCommandService {
       const receiptRepo = manager.getRepository(GarageGoodsReceipt);
       const lineRepo = manager.getRepository(GarageGoodsReceiptLine);
 
-      const { lines, extraData, ...headerDto } = dto;
+      const { lines, extraData, ...rawHeader } = dto;
+      assertOrderUnchanged(
+        receipt.garageProcurementOrderId,
+        rawHeader.garageProcurementOrderId,
+      );
+      // Phiếu đã có đơn: NCC, chi nhánh, tổng tiền do đơn/dòng quyết định, bỏ giá trị client
+      let headerDto = receipt.garageProcurementOrderId
+        ? stripOrderOwnedFields(rawHeader)
+        : rawHeader;
+      // Phiếu cũ chưa có đơn được gắn đơn lần đầu: áp NCC, chi nhánh từ đơn
+      if (
+        !receipt.garageProcurementOrderId &&
+        rawHeader.garageProcurementOrderId
+      ) {
+        const order = await loadOrderForNewReceipt(
+          manager,
+          rawHeader.garageProcurementOrderId,
+        );
+        headerDto = {
+          ...stripOrderOwnedFields(rawHeader),
+          ...receiptFieldsFromOrder(order),
+        } as typeof rawHeader;
+      }
+      const hasOrder = Boolean(
+        receipt.garageProcurementOrderId || rawHeader.garageProcurementOrderId,
+      );
       const entityFields = toGarageGoodsReceiptEntityFields(headerDto);
       Object.assign(receipt, entityFields);
       if (extraData !== undefined) {
@@ -149,7 +195,7 @@ export class GarageGoodsReceiptCommandService {
           lineEntities.push(await lineRepo.save(line));
         }
 
-        if (dto.totalAmount === undefined) {
+        if (hasOrder || dto.totalAmount === undefined) {
           receipt.totalAmount = String(
             this.voucherEngine.sumLineAmounts(lineEntities),
           );

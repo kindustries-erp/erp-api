@@ -17,8 +17,16 @@ export class GarageGoodsReceiptsCoreService {
 
   async findAll(dto: QueryGarageGoodsReceiptDto) {
     const page = await this.query.findAll(dto);
+    const orders = await this.query.findOrderSummaries(
+      page.items.map((item) => item.garageProcurementOrderId ?? ''),
+    );
     return {
-      items: page.items.map((item) => toGarageGoodsReceiptResponse(item)),
+      items: page.items.map((item) =>
+        toGarageGoodsReceiptResponse(
+          item,
+          orders.get(item.garageProcurementOrderId ?? ''),
+        ),
+      ),
       total: page.total,
       page: page.page,
       pageSize: page.pageSize,
@@ -52,7 +60,7 @@ export class GarageGoodsReceiptsCoreService {
     const entity = await this.requireById(id);
     return {
       message: 'Lấy thông tin thành công',
-      data: toGarageGoodsReceiptResponse(entity),
+      data: await this.toResponse(entity),
     };
   }
 
@@ -60,7 +68,7 @@ export class GarageGoodsReceiptsCoreService {
     const entity = await this.command.create(dto);
     return {
       message: 'Tạo thành công',
-      data: toGarageGoodsReceiptResponse(entity),
+      data: await this.toResponse(entity),
     };
   }
 
@@ -69,7 +77,7 @@ export class GarageGoodsReceiptsCoreService {
     const saved = await this.command.update(entity, dto);
     return {
       message: 'Cập nhật thành công',
-      data: toGarageGoodsReceiptResponse(saved),
+      data: await this.toResponse(saved),
     };
   }
 
@@ -78,7 +86,7 @@ export class GarageGoodsReceiptsCoreService {
     const saved = await this.command.post(entity);
     return {
       message: 'Ghi sổ nhập kho thành công',
-      data: toGarageGoodsReceiptResponse(saved),
+      data: await this.toResponse(saved),
     };
   }
 
@@ -87,7 +95,7 @@ export class GarageGoodsReceiptsCoreService {
     const saved = await this.command.cancel(entity);
     return {
       message: 'Hủy phiếu nhập kho thành công',
-      data: toGarageGoodsReceiptResponse(saved),
+      data: await this.toResponse(saved),
     };
   }
 
@@ -96,8 +104,19 @@ export class GarageGoodsReceiptsCoreService {
     const saved = await this.command.softDelete(entity);
     return {
       message: 'Xóa thành công',
-      data: toGarageGoodsReceiptResponse(saved),
+      data: await this.toResponse(saved),
     };
+  }
+
+  /** Response của một phiếu kèm số đơn và tổng tiền đơn mua nguồn. */
+  private async toResponse(entity: GarageGoodsReceipt) {
+    const orders = await this.query.findOrderSummaries([
+      entity.garageProcurementOrderId ?? '',
+    ]);
+    return toGarageGoodsReceiptResponse(
+      entity,
+      orders.get(entity.garageProcurementOrderId ?? ''),
+    );
   }
 
   private async requireById(id: string): Promise<GarageGoodsReceipt> {

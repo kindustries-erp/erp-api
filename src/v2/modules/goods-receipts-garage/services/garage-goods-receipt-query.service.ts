@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
+import { GarageProcurementOrder } from '@/v2/modules/procurement-orders-garage/entities/procurement-order.entity';
 import { GarageGoodsReceipt } from '../entities/garage-goods-receipt.entity';
 import { QueryGarageGoodsReceiptDto } from '../dto/query-garage-goods-receipt.dto';
 import { applyMultiKeywordMultiFieldFilter } from '@/common/utils/query-builder.util';
@@ -39,6 +40,15 @@ const TABLE_COLUMNS: TableColumnMap = {
   paymentStatus: { sql: 'e.paymentStatus', type: 'status' },
   payment_status: { sql: 'e.paymentStatus', type: 'status' },
   remarks: { sql: 'e.remarks', type: 'text' },
+  // Lọc phiếu theo đơn mua nguồn (lịch sử nhập kho của đơn); ép TEXT để so khớp và kiểm tra trống an toàn với uuid
+  garageProcurementOrderId: {
+    sql: 'CAST(e.garageProcurementOrderId AS TEXT)',
+    type: 'status',
+  },
+  garage_procurement_order_id: {
+    sql: 'CAST(e.garageProcurementOrderId AS TEXT)',
+    type: 'status',
+  },
 };
 
 /** Cột số được cộng vào `summaries` (tổng toàn bộ dòng khớp bộ lọc). */
@@ -53,6 +63,12 @@ const SEARCH_COLUMNS: string[] = [
   'e.branchName',
   'e.remarks',
 ];
+
+/** Thông tin đơn mua hiển thị cùng phiếu nhập (số đơn, tổng tiền đơn). */
+export interface GarageReceiptOrderSummary {
+  orderNo: string;
+  totalAmount: number;
+}
 
 export interface GarageGoodsReceiptPageResult {
   items: GarageGoodsReceipt[];
@@ -69,6 +85,28 @@ export class GarageGoodsReceiptQueryService {
     @InjectRepository(GarageGoodsReceipt)
     private readonly repo: Repository<GarageGoodsReceipt>,
   ) {}
+
+  /** Số đơn và tổng tiền của các đơn mua được phiếu nhập tham chiếu (một truy vấn cho cả trang). */
+  async findOrderSummaries(
+    orderIds: string[],
+  ): Promise<Map<string, GarageReceiptOrderSummary>> {
+    const ids = [...new Set(orderIds.filter(Boolean))];
+    const result = new Map<string, GarageReceiptOrderSummary>();
+    if (ids.length === 0) return result;
+    const orders = await this.repo.manager
+      .getRepository(GarageProcurementOrder)
+      .find({
+        where: { id: In(ids) },
+        select: { id: true, orderNo: true, totalAmount: true },
+      });
+    for (const o of orders) {
+      result.set(o.id, {
+        orderNo: o.orderNo,
+        totalAmount: Number(o.totalAmount || 0),
+      });
+    }
+    return result;
+  }
 
   async findAll(
     query: QueryGarageGoodsReceiptDto,
