@@ -95,3 +95,7 @@ PO không import module này. Cổng `RequestLinkPort` do `ProcurementRequestLin
 - PO: reject cũng trả số lượng đã giữ về PR nguồn (như cancel). Trước đó reject không trả, đã sửa trong lõi PO. Nhân bản PO giữ `requestId`/`requestLineId` để `createDraft` giữ lại số lượng PR.
 - PR nhân bản không copy `orderingStatus` (luôn `NONE`).
 - Spec: `abstract-*-clone.spec.ts` (quy tắc clone, 409/404, REJECTED là trạng thái cuối, PO reject trả số lượng PR).
+
+## Cập nhật 2026-11-11: thu hồi
+
+- `recall` chỉ người tạo (`created_by`) được thực hiện; người khác nhận 403 "Chỉ người tạo mới được thu hồi".

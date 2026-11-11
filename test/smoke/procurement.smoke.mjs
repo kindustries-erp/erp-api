@@ -29,7 +29,8 @@ async function login(email) {
 }
 
 async function call(session, method, path, body, expect) {
-  const r = await fetch(`${V2}${path}`, {
+  const url = path.startsWith('/api/') ? `${BASE}${path}` : `${V2}${path}`;
+  const r = await fetch(url, {
     method,
     headers: {
       Authorization: `Bearer ${session.token}`,
@@ -119,8 +120,44 @@ await call(tao, 'POST', '/procurement-orders-garage', {
 await call(tao, 'POST', `/procurement-orders-garage/${poId}/submit`, {}, [400]);
 await call(tao, 'PATCH', `/procurement-orders-garage/${poId}`, { supplierId: '02c760ca-2a7c-454b-9c52-28712653062b' }, [200]);
 await call(tao, 'POST', `/procurement-orders-garage/${poId}/submit`, {}, [200, 201]);
-await call(duyet, 'POST', `/procurement-orders-garage/${poId}/approve`, {}, [200, 201]);
+// Khóa duyệt tắt: submit đã sang APPROVED nên approve trả 409.
+await call(duyet, 'POST', `/procurement-orders-garage/${poId}/approve`, {}, [200, 201, 409]);
 await call(duyet, 'POST', `/procurement-orders-garage/${poId}/issue`, {}, [200, 201]);
+// 7b. Nhận hàng garage (PO đang ISSUED): GR gắn PO → post → cancel (orchestrator procurement-flow-garage).
+// Kiểm sổ tồn garage_stock_* thực tế bằng SQL ở bước riêng (script không đọc DB).
+const poIssued = (await call(tao, 'GET', `/procurement-orders-garage/${poId}`, undefined, [200])).data;
+const poLinesNow = poIssued?.lines ?? [];
+const grRes = await call(tao, 'POST', '/api/v1/garage-goods-receipts', {
+  receiptDate: today,
+  supplierId: poIssued?.supplierId,
+  supplierName: poIssued?.supplierName ?? 'Smoke NCC',
+  branchId: poIssued?.branchId ?? undefined,
+  garageProcurementOrderId: poId,
+  status: 'DRAFT',
+  lines: poLinesNow.map((l) => ({
+    itemCode: `SMOKE-${String(l.itemName).replace(/\s+/g, '-').toUpperCase()}`,
+    itemName: l.itemName,
+    unit: 'Cái',
+    qtyReceived: Number(l.qtyOrdered),
+    unitCost: Number(l.unitPrice ?? 0),
+    procurementOrderLineId: l.id,
+  })),
+}, [201]);
+// API v1 bọc phản hồi trong { message, data }
+const unwrap = (res) => res.data?.data ?? res.data;
+const grId = unwrap(grRes)?.id;
+console.log('GR created:', unwrap(grRes)?.receiptNo, unwrap(grRes)?.status);
+const grPost = await call(tao, 'POST', `/api/v1/garage-goods-receipts/${grId}/post`, {}, [200, 201]);
+console.log('GR after post:', unwrap(grPost)?.status);
+const poAfterPost = (await call(tao, 'GET', `/procurement-orders-garage/${poId}`, undefined, [200])).data;
+console.log('PO fulfillment after post:', poAfterPost?.fulfillmentStatus);
+await call(tao, 'POST', `/api/v1/garage-goods-receipts/${grId}/post`, {}, [400]);
+const grCancel = await call(tao, 'POST', `/api/v1/garage-goods-receipts/${grId}/cancel`, {}, [200, 201]);
+console.log('GR after cancel:', unwrap(grCancel)?.status);
+const poAfterCancel = (await call(tao, 'GET', `/procurement-orders-garage/${poId}`, undefined, [200])).data;
+console.log('PO fulfillment after cancel:', poAfterCancel?.fulfillmentStatus);
+console.log('GR_ID', grId, 'PO_ID', poId);
+
 // close cần lý do
 await call(duyet, 'POST', `/procurement-orders-garage/${poId}/close`, {}, [400]);
 await call(duyet, 'POST', `/procurement-orders-garage/${poId}/close`, { reason: 'Smoke close' }, [200, 201]);
@@ -141,8 +178,8 @@ const pr2 = (await call(tao, 'GET', `/procurement-requests-garage/${pr2Id}`, und
 console.log('PR2 after reject:', pr2?.status);
 // Sau từ chối PR đang ở DRAFT (không còn trạng thái REJECTED): không duyệt được khi chưa gửi lại
 await call(duyet, 'POST', `/procurement-requests-garage/${pr2Id}/approve`, {}, [409]);
-// Gửi lại từ DRAFT → PENDING_APPROVAL (ghi nhận hành vi thực tế)
-await call(tao, 'POST', `/procurement-requests-garage/${pr2Id}/submit`, { approverId: duyet.user.id }, [200, 201]);
+// REJECTED là trạng thái cuối: gửi lại bị chặn (409)
+await call(tao, 'POST', `/procurement-requests-garage/${pr2Id}/submit`, { approverId: duyet.user.id }, [409]);
 
 // 9. PR nháp: sửa được; PR đang chờ duyệt / đã duyệt: không sửa
 await call(tao, 'PATCH', `/procurement-requests-garage/${pr2Id}`, { title: 'x' }, [409]);

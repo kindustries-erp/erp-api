@@ -158,3 +158,36 @@ describe('AbstractProcurementOrderCommandService — từ chối đơn có PR ng
     ]);
   });
 });
+
+describe('AbstractProcurementOrderCommandService — thu hồi', () => {
+  it('chỉ người tạo được thu hồi: người duyệt và người khác bị chặn', async () => {
+    for (const actorId of ['approver', 'other-user']) {
+      const header = sourceHeader({
+        status: 'PENDING_APPROVAL',
+        approverId: 'approver',
+      });
+      const { svc } = setup(header, [sourceLine()]);
+
+      await expect(
+        svc.transition('src', 'recall', { id: actorId, roles: [] }),
+      ).rejects.toThrow('Chỉ người tạo mới được thu hồi');
+      expect(header.status).toBe('PENDING_APPROVAL');
+    }
+  });
+
+  it('người tạo thu hồi đơn chờ duyệt về nháp và xóa người duyệt', async () => {
+    const header = sourceHeader({
+      status: 'PENDING_APPROVAL',
+      approverId: 'approver',
+    });
+    const { svc } = setup(header, [sourceLine()]);
+
+    const out = await svc.transition('src', 'recall', {
+      id: 'creator',
+      roles: [],
+    });
+
+    expect(out.status).toBe('DRAFT');
+    expect(out.approverId).toBeNull();
+  });
+});

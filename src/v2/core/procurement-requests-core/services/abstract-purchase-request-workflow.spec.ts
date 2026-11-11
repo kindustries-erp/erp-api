@@ -117,6 +117,40 @@ describe('AbstractPurchaseRequestCommandService.transition', () => {
     ).rejects.toThrow('Chỉ người tạo mới được gửi duyệt');
   });
 
+  it('chỉ người tạo được thu hồi: người duyệt và người khác bị chặn', async () => {
+    for (const actorId of ['approver', 'other-user']) {
+      const header = makeHeader({
+        status: 'PENDING_APPROVAL',
+        approverId: 'approver',
+      });
+      const { manager } = fakeManager(header);
+      const svc = new TestCommand(fakeDataSource(manager), events);
+
+      await expect(
+        svc.transition('h1', 'recall', { id: actorId, roles: ['MGR'] }),
+      ).rejects.toThrow('Chỉ người tạo mới được thu hồi');
+      expect(header.status).toBe('PENDING_APPROVAL');
+      expect(manager.save).not.toHaveBeenCalled();
+    }
+  });
+
+  it('người tạo thu hồi phiếu chờ duyệt về nháp và xóa người duyệt', async () => {
+    const header = makeHeader({
+      status: 'PENDING_APPROVAL',
+      approverId: 'approver',
+    });
+    const { manager } = fakeManager(header);
+    const svc = new TestCommand(fakeDataSource(manager), events);
+
+    const out = await svc.transition('h1', 'recall', {
+      id: 'creator',
+      roles: ['STAFF'],
+    });
+
+    expect(out.status).toBe('DRAFT');
+    expect(out.approverId).toBeNull();
+  });
+
   it('chặn người tạo tự duyệt', async () => {
     const header = makeHeader({ status: 'PENDING_APPROVAL' });
     const svc = new TestCommand(

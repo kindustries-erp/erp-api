@@ -134,6 +134,13 @@ export abstract class AbstractPurchaseRequestCommandService<
       ) {
         throw new ForbiddenException('Chỉ người tạo mới được gửi duyệt');
       }
+      if (
+        action === 'recall' &&
+        header.createdBy &&
+        header.createdBy !== actor.id
+      ) {
+        throw new ForbiddenException('Chỉ người tạo mới được thu hồi');
+      }
       if (PURCHASE_REQUEST_ACTIONS_REQUIRING_APPROVER.includes(action)) {
         assertNotSelfApproval(actor.id, header.createdBy);
         assertCanDecide(header.approverId, actor.id);

@@ -7,7 +7,7 @@ import {
   voucherWiringPlan,
 } from './plop-helpers/apiVoucherData.mjs';
 import { enumEntryExists, insertAtMarker } from './plop-helpers/apiV2Wiring.mjs';
-import { API_CORE_STYLES, buildApiCoreData } from './plop-helpers/apiCoreData.mjs';
+import { API_CORE_STYLES, ORCHESTRATOR_STYLE, buildApiCoreData } from './plop-helpers/apiCoreData.mjs';
 import { coreFileMap } from './plop-helpers/apiCoreFiles.mjs';
 import { manifestJson } from './plop-helpers/apiCoreManifest.mjs';
 import {
@@ -45,7 +45,8 @@ export default function (plop) {
 
   // 0. GENERATOR: Lõi họ V2 (src/v2/core/<họ>) kèm core.manifest.json
   plop.setGenerator('api-core', {
-    description: 'Tạo khung lõi họ V2 (src/v2/core/<họ>) kèm core.manifest.json, style engine | abstract-services',
+    description:
+      'Tạo khung lõi họ V2 (src/v2/core/<họ>) kèm core.manifest.json, style engine | abstract-services | orchestrator (điều phối nhiều module, không entity)',
     prompts: [
       {
         type: 'input',
@@ -56,7 +57,7 @@ export default function (plop) {
       {
         type: 'input',
         name: 'entityInput',
-        message: 'Entity gốc (PascalCase, vd: CustomerClaim):',
+        message: 'Entity gốc (PascalCase, vd: CustomerClaim; với orchestrator là tên luồng, vd: ProcurementFlow):',
         validate: (value) => (/^[A-Za-z][A-Za-z0-9]*$/.test(value) ? true : 'Dùng PascalCase, vd: CustomerClaim'),
       },
       {
@@ -91,8 +92,11 @@ export default function (plop) {
       {
         type: 'list',
         name: 'coreInput',
-        message: 'Chọn họ lõi có sẵn (src/v2/core/<họ>):',
-        choices: () => listCoreFamilies(plop.getDestBasePath()),
+        message: 'Chọn họ lõi có sẵn (src/v2/core/<họ>; không gồm lõi orchestrator vì không có entity):',
+        choices: () => {
+          const base = plop.getDestBasePath();
+          return listCoreFamilies(base).filter((family) => readCoreManifest(base, family).style !== ORCHESTRATOR_STYLE);
+        },
       },
       {
         type: 'input',

@@ -1,4 +1,8 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   DataSource,
   DeepPartial,
@@ -124,6 +128,13 @@ export abstract class AbstractProcurementOrderCommandService<
       const lines = await this.loadLines(manager, id);
       const mode = await loadApprovalMode(manager, this.docType);
 
+      if (
+        action === 'recall' &&
+        header.createdBy &&
+        header.createdBy !== actor.id
+      ) {
+        throw new ForbiddenException('Chỉ người tạo mới được thu hồi');
+      }
       if (PROCUREMENT_ORDER_ACTIONS_REQUIRING_APPROVER.includes(action)) {
         assertNotSelfApproval(actor.id, header.createdBy);
         assertCanDecide(header.approverId, actor.id);

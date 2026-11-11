@@ -38,3 +38,5 @@ Ví dụ: `E2E_PASSWORD='...' bun run test:smoke:clone`.
 - Đặt vào `test/smoke/<ten>.smoke.mjs`, đọc cấu hình từ biến môi trường như hai script có sẵn.
 - Thêm script `test:smoke:<key>` vào `package.json`.
 - Kỳ vọng phải khớp quy tắc nghiệp vụ hiện tại. Ví dụ: PO garage duyệt tắt thì `submit` đi thẳng sang APPROVED; PO submit cần `supplierId` (UUID); PATCH phiếu không phải DRAFT trả 409; từ chối chuyển REJECTED, không về DRAFT.
+
+- Bước nhận hàng GR (mục 7b của `procurement.smoke.mjs`): route GR là v1 (`/api/v1/garage-goods-receipts`, phản hồi bọc `{ message, data }`), GR phải cùng NCC và chi nhánh với PO, PO phải ISSUED. Sổ tồn kiểm bằng SQL trên `garage_stock_transactions` (document_type `GOODS_RECEIPT_GARAGE`: dòng `RECEIPT` khi post, `RECEIPT_CANCEL` khi cancel) và `garage_stock_balances`; smoke là HTTP nên không đọc DB.

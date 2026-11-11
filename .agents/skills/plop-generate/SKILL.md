@@ -19,6 +19,7 @@ Sinh `src/v2/core/<họ>/`: contracts, Base entity (abstract, không `@Entity`),
 
 **Prompts (tương tác):** `familyInput` (kebab-case, ví dụ `customer-claims`), `entityInput` (PascalCase), `styleInput`:
 - `engine`: `Base<Họ>EngineService` (abstract, không `@Injectable`), dùng cho lõi kiểu voucher (ví dụ `goods-receipts`, `invoices`).
+- `orchestrator`: lõi điều phối nhiều module (không entity/controller): contract các cổng (port), `Abstract<Họ>FlowService` với `runInTransaction` (sự kiện phát sau commit), spec và barrel. Module con kế thừa, nối cổng vào service cụ thể. Ví dụ: `procurement-flow-core`.
 - `abstract-services`: khung workflow cho chứng từ có trạng thái: contract (`<E>Action`, bảng `<E>_TRANSITIONS` rỗng), entity có `status`/`createdBy`, và `Abstract<E>CommandService` với `transition()`, `createDraft()` cùng hook `// CUSTOM`. Lớp abstract không được đăng ký làm provider ở lõi.
 
 - Từ chối nếu `src/v2/core/<họ>` đã tồn tại.

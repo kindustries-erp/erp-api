@@ -13,9 +13,9 @@ Các nghiệp vụ trọng tâm:
 - **Lập phiếu nhập kho Garage**: Nhập thông tin nhà cung cấp, ngày nhập kho, chi nhánh tiếp nhận, ghi chú và danh sách phụ tùng chi tiết (Mã SKU, tên phụ tùng, đơn vị tính, số lượng, đơn giá, thành tiền).
 - **Trạng thái phiếu**:
   - `DRAFT`: Phiếu nháp, có thể chỉnh sửa chi tiết phụ tùng hoặc xóa phiếu.
-  - `POSTED`: Đã ghi sổ nhập kho. Tự động cộng dồn số lượng phụ tùng vào số dư tồn kho Garage (`inventory_balances_garage`). Không thể chỉnh sửa trực tiếp.
-  - `CANCELLED`: Hủy phiếu nhập kho đã ghi sổ. Tự động trừ hoàn trả số lượng đã tăng trong số dư tồn kho Garage.
-- **Quản lý Tồn kho Garage (`inventory_balances_garage`)**: Theo dõi số lượng tồn kho phụ tùng (`item_code`) theo từng chi nhánh (`branch_id`).
+  - `POSTED`: Đã ghi sổ nhập kho. Ghi sổ tồn garage `garage_stock_*` qua orchestrator `procurement-flow-garage` (chứng từ `GOODS_RECEIPT_GARAGE`). Không thể chỉnh sửa trực tiếp.
+  - `CANCELLED`: Hủy phiếu nhập kho đã ghi sổ. Đảo bút toán trong sổ tồn garage (`_CANCEL`).
+- **Tồn kho Garage**: nguồn đúng là sổ `garage_stock_balances/transactions/cost_layers` (xem skill `inventory-movements-core`). Bảng cũ `inventory_balances_garage` không còn được ghi (chỉ còn entity đăng ký, dữ liệu cũ giữ nguyên).
 
 ---
 
@@ -58,7 +58,7 @@ Các nghiệp vụ trọng tâm:
 | `created_at` | `timestamptz` | NO | `now()` | Thời điểm tạo |
 | `updated_at` | `timestamptz` | NO | `now()` | Thời điểm cập nhật |
 
-### Bảng `inventory_balances_garage` (Số Dư Kho Garage)
+### Bảng `inventory_balances_garage` (cũ, không còn được ghi; cột thực tế là `qty_on_hand`, không phải `quantity`)
 | Cột | Kiểu dữ liệu | Nullable | Default | Mô tả |
 | :--- | :--- | :--- | :--- | :--- |
 | `id` | `uuid` | NO | `gen_random_uuid()` | Khóa chính (PK) |
@@ -106,12 +106,12 @@ Các nghiệp vụ trọng tâm:
 
 ### Kế thừa V2 Core Base Voucher Engine
 Module `garage-goods-receipts` (`src/v2/modules/goods-receipts-garage/`) sử dụng cơ chế **Mô hình 2 (Bảng DB riêng biệt, Kế thừa Engine ở Tầng Code)**:
-- **DB riêng biệt**: Dùng các bảng `goods_receipts_garage`, `goods_receipt_lines_garage` và `inventory_balances_garage`.
+- **DB riêng biệt**: Dùng các bảng `goods_receipts_garage`, `goods_receipt_lines_garage`; tồn nằm ở sổ `garage_stock_*`.
 - **Tái sử dụng Engine từ V2 Core**: Inject `BaseVoucherEngineService` từ `src/v2/core/goods-receipts-core/`:
   - `generateDailyReceiptNo`: Tự động sinh mã `GGR-YYYYMMDD-XXX`.
   - `sumLineAmounts`: Tính tổng tiền chi tiết từ các dòng hàng.
   - `validateVoucherTransition`: Xác thực chuyển trạng thái DRAFT -> POSTED -> CANCELLED và chặn sửa/xóa khi không hợp lệ.
-  - Chiến lược cập nhật kho chuyên biệt: Tự động cập nhật số dư tồn kho phụ tùng xưởng vào `inventory_balances_garage`.
+  - Ghi tồn: `post`/`cancel` giao cho `GarageProcurementFlowService` (module `procurement-flow-garage`), không tự ghi tồn.
 
 ### Phân quyền RBAC
 - **Migration**: `SeedGarageGoodsReceiptsPermissions20261103085000` tự động sao chép các quyền READ, CREATE, UPDATE, DELETE từ resource `garage` sang `garage_goods_receipts`.
@@ -149,3 +149,10 @@ Module `garage-goods-receipts` (`src/v2/modules/goods-receipts-garage/`) sử d�
 - **Ghi**: tạo mặc định `{}`. Sửa header merge cấp 1 (`null` xóa key). Dòng chứng từ ghi theo payload, không merge.
 - **Giới hạn**: 16 KB, sâu 5 cấp, key ≤ 64 ký tự, cấm `__proto__`/`constructor`/`prototype` (400 qua `RejectUnsafeExtraDataPipe` và service).
 - **Response**: luôn có `extraData` (object).
+
+## 11. Cập nhật 2026-11-11: hợp nhất tồn vào sổ garage_stock
+
+- `post`/`cancel` chỉ còn `GarageProcurementFlowService.postReceipt/cancelReceipt(id)`: khóa phiếu `pessimistic_write` → kiểm trạng thái → (có PO) kiểm khớp chi nhánh/NCC/dòng → nhận hàng vào PO → `StockMovementEngineService.post` (IN/RECEIPT, `WEIGHTED_AVG`, `documentType GOODS_RECEIPT_GARAGE`, `documentId` = id phiếu) → POSTED. Cancel: hoàn PO + `reverse` → CANCELLED. Cùng một transaction; thông báo gửi sau commit.
+- Không tạo `garage_stock_receipts`: phiếu GR là chứng từ nhập duy nhất.
+- Đã gỡ `GarageInventoryBalanceService` và cơ chế kẹp tồn về 0 khi hủy. Engine chặn tồn âm; dòng có `qty_received <= 0` giờ làm post lỗi (trước đây cộng 0).
+- Thứ tự khóa: phiếu GR → PO → dòng PO → dòng sổ tồn.

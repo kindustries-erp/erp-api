@@ -121,3 +121,7 @@ Quyền resource: `garage_procurement_requests`. Seed từ `garage_purchase_orde
 - PO: reject cũng trả số lượng đã giữ về PR nguồn (như cancel). Trước đó reject không trả, đã sửa trong lõi PO. Nhân bản PO giữ `requestId`/`requestLineId` để `createDraft` giữ lại số lượng PR.
 - PR nhân bản không copy `orderingStatus` (luôn `NONE`).
 - Spec: `abstract-*-clone.spec.ts` (quy tắc clone, 409/404, REJECTED là trạng thái cuối, PO reject trả số lượng PR).
+
+## Cập nhật 2026-11-11: thu hồi
+
+- Thu hồi (`recall`) chỉ người tạo (lõi `procurement-requests-core`); người duyệt/người khác nhận 403. Áp dụng cho cả họ thường (`erp-procurement-requests`, `erp-procurement-orders`).

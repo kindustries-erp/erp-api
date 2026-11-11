@@ -13,15 +13,20 @@ export function buildCoreManifest(data) {
     barrel: `${data.coreDir}/index.ts`,
     module: data.moduleClass ?? null,
     moduleFile: data.moduleFile ? `${data.moduleFile}.ts` : null,
-    baseClasses: {
-      entity: data.baseEntity,
-      createDto: data.baseCreateDto,
-      contract: data.baseContract,
-      service: data.serviceClass,
-    },
+    // Orchestrator không có entity và DTO: chỉ khai báo cổng (contract) và service nền
+    baseClasses: data.orchestrator
+      ? { contract: data.baseContract, service: data.serviceClass }
+      : {
+          entity: data.baseEntity,
+          createDto: data.baseCreateDto,
+          contract: data.baseContract,
+          service: data.serviceClass,
+        },
     serviceFile: `${data.serviceFile}.ts`,
     permissionPattern: data.family,
-    requiredModuleFiles: ['contracts', 'controllers', 'dto', 'entities', 'services'],
+    requiredModuleFiles: data.orchestrator
+      ? ['services']
+      : ['contracts', 'controllers', 'dto', 'entities', 'services'],
   };
 }
 

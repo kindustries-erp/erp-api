@@ -7,8 +7,8 @@ import { GarageGoodsReceiptController } from './controllers/garage-goods-receipt
 import { GarageGoodsReceiptsCoreService } from './goods-receipts-garage-core.service';
 import { GarageGoodsReceiptCommandService } from './services/garage-goods-receipt-command.service';
 import { GarageGoodsReceiptQueryService } from './services/garage-goods-receipt-query.service';
-import { GarageInventoryBalanceService } from './services/garage-inventory-balance.service';
 import { GoodsReceiptsCoreModule } from '@/v2/core/goods-receipts-core/goods-receipts-core.module';
+import { GarageProcurementFlowModule } from '@/v2/modules/procurement-flow-garage/procurement-flow-garage.module';
 import { GarageProcurementOrdersModule } from '@/v2/modules/procurement-orders-garage/procurement-orders-garage.module';
 
 @Module({
@@ -20,13 +20,13 @@ import { GarageProcurementOrdersModule } from '@/v2/modules/procurement-orders-g
     ]),
     GoodsReceiptsCoreModule,
     GarageProcurementOrdersModule,
+    GarageProcurementFlowModule,
   ],
   controllers: [GarageGoodsReceiptController],
   providers: [
     GarageGoodsReceiptsCoreService,
     GarageGoodsReceiptQueryService,
     GarageGoodsReceiptCommandService,
-    GarageInventoryBalanceService,
   ],
   exports: [GarageGoodsReceiptsCoreService],
 })
