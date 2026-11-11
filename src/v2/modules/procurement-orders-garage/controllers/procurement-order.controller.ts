@@ -55,6 +55,16 @@ export class GarageProcurementOrderController {
 
   @RequirePermissions({
     resource: ErpResource.GARAGE_PROCUREMENT_ORDERS,
+    action: ErpAction.CREATE,
+  })
+  @ApiOperation({ summary: 'Nhân bản đơn đã từ chối/hủy thành nháp mới' })
+  @Post(':id/clone')
+  clone(@Param('id', ParseUUIDPipe) id: string, @Req() req: RequestWithUser) {
+    return this.service.clone(id, req.user?.sub ?? '');
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_PROCUREMENT_ORDERS,
     action: ErpAction.READ,
   })
   @ApiOkResponse({ type: GarageProcurementOrderListResponseDto })

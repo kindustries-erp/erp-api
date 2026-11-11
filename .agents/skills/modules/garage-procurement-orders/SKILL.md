@@ -16,7 +16,7 @@ Module `src/v2/modules/procurement-orders-garage`. Dùng chung lõi `src/v2/core
 
 ## 2. Vòng đời
 
-Giống họ thường: DRAFT, PENDING_APPROVAL, APPROVED, ISSUED, CLOSED, CANCELLED. Các quy tắc submit, approve (chốt `approved_total`), reject, recall, issue, cancel, close giữ nguyên. `fulfillment_status` suy ra từ dòng.
+Giống họ thường: DRAFT, PENDING_APPROVAL, APPROVED, ISSUED, CLOSED, CANCELLED, cộng REJECTED (xem mục 9). Các quy tắc submit, approve (chốt `approved_total`), reject, recall, issue, cancel, close giữ nguyên. `fulfillment_status` suy ra từ dòng.
 
 - `approve`/`reject` cần `APPROVE`/`REJECT`, chặn tự duyệt.
 - Nhật ký `erp_approval_events` với `doc_type = GARAGE_PROCUREMENT_ORDER`.
@@ -113,3 +113,15 @@ Quyền resource: `garage_procurement_orders`. Seed từ `garage_purchase_orders
 
 - **Query**: `GET /api/v2/procurement-orders-garage?deleted=only` chỉ trả đơn `isDeleted = true`; thiếu tham số thì giữ `isDeleted = false`. Gợi ý cột (`column-options`) nhận cùng tham số.
 - **Xóa cứng**: `hardDeleteDraft` dùng `lockHeader(..., includeDeleted=true)` và chỉ trả số lượng giữ khi đơn chưa xóa mềm, tránh trả trùng với `softDeleteDraft`.
+
+## 9. Cập nhật 2026-11-11: từ chối → REJECTED và nhân bản
+
+- Từ chối PO chuyển `PENDING_APPROVAL → REJECTED` (trước đây về DRAFT). REJECTED khóa mọi thao tác, chỉ còn xem, lịch sử và nhân bản.
+- Nhân bản: `POST /api/v2/procurement-orders-garage/:id/clone` (quyền CREATE) từ phiếu REJECTED hoặc CANCELLED. Tạo nháp mới, giữ `requestId`/`requestLineId` của PR nguồn (`createDraft` giữ lại số lượng PR), gán `cloned_from_id`. Không copy trạng thái duyệt hay lý do. Trạng thái khác → 409. Không tồn tại → 404.
+- Reject PO trả số lượng đã giữ về PR nguồn (như cancel).
+- Duyệt PO garage đang tắt (`GARAGE_PROCUREMENT_ORDER`): `submit` đi thẳng sang APPROVED. Web dùng nút "Tạo mới"/"Cập nhật" để lưu và gửi trong một bước (xem skill web `garage-procurement-requests`).
+
+## Cập nhật 2026-11-11: thu hồi và nhận hàng
+
+- Thu hồi (`recall`) chỉ người tạo (`created_by`), áp ở lõi `procurement-orders-core`; người duyệt hoặc người khác nhận 403 "Chỉ người tạo mới được thu hồi". Web ẩn nút qua `applyApprovalGate`.
+- Nhận hàng (GR post/cancel) đi qua orchestrator `procurement-flow-garage` (xem skill của module đó): tăng/hoàn `qty_fulfilled` và ghi sổ `garage_stock_*` cùng transaction. Người tạo PO nhận thông báo sau commit (đích `PROCUREMENT_ORDER_GARAGE`, web chưa có deep link).

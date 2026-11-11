@@ -3,8 +3,6 @@ import { DataSource, Repository } from 'typeorm';
 import { GarageGoodsReceipt } from '../entities/garage-goods-receipt.entity';
 import { CreateGarageGoodsReceiptDto } from '../dto/create-garage-goods-receipt.dto';
 import { GarageGoodsReceiptCommandService } from './garage-goods-receipt-command.service';
-import { GarageInventoryBalanceService } from './garage-inventory-balance.service';
-import { GarageInventoryBalance } from '../entities/garage-inventory-balance.entity';
 import { BaseVoucherEngineService } from '@/v2/core/goods-receipts-core/services/base-voucher-engine.service';
 
 describe('GarageGoodsReceiptCommandService', () => {
@@ -19,7 +17,7 @@ describe('GarageGoodsReceiptCommandService', () => {
     delete: jest.Mock;
     find: jest.Mock;
   };
-  let balanceRepo: { create: jest.Mock; save: jest.Mock; findOne: jest.Mock };
+  let flow: { postReceipt: jest.Mock; cancelReceipt: jest.Mock };
   let dataSource: { transaction: jest.Mock };
   let voucherEngine: BaseVoucherEngineService;
   let service: GarageGoodsReceiptCommandService;
@@ -37,10 +35,12 @@ describe('GarageGoodsReceiptCommandService', () => {
       delete: jest.fn().mockResolvedValue({}),
       find: jest.fn().mockResolvedValue([]),
     };
-    balanceRepo = {
-      create: jest.fn((value: object) => value),
-      save: jest.fn((value: object) => Promise.resolve(value)),
-      findOne: jest.fn().mockResolvedValue(null),
+    flow = {
+      postReceipt: jest.fn(async (id: string) => ({ id, status: 'POSTED' })),
+      cancelReceipt: jest.fn(async (id: string) => ({
+        id,
+        status: 'CANCELLED',
+      })),
     };
 
     lockedReceipt = null;
@@ -48,17 +48,12 @@ describe('GarageGoodsReceiptCommandService', () => {
       getRepository: jest.fn((entityClass) => {
         if (entityClass === GarageGoodsReceipt) return repo;
         if (entityClass.name === 'GarageGoodsReceiptLine') return lineRepo;
-        return balanceRepo;
+        return undefined;
       }),
-      findOne: jest.fn((entityClass, options) => {
-        if (entityClass === GarageGoodsReceipt) return lockedReceipt;
-        return balanceRepo.findOne(options);
-      }),
-      save: jest.fn((entityClass, value) =>
-        entityClass === GarageInventoryBalance
-          ? balanceRepo.save(value)
-          : Promise.resolve(value),
+      findOne: jest.fn((entityClass) =>
+        entityClass === GarageGoodsReceipt ? lockedReceipt : null,
       ),
+      save: jest.fn((_entityClass, value) => Promise.resolve(value)),
       query: jest.fn().mockResolvedValue(undefined),
     };
 
@@ -72,8 +67,7 @@ describe('GarageGoodsReceiptCommandService', () => {
       dataSource as unknown as DataSource,
       repo as unknown as Repository<GarageGoodsReceipt>,
       voucherEngine,
-      { applyGoodsReceipt: jest.fn(), revertGoodsReceipt: jest.fn() } as never,
-      new GarageInventoryBalanceService(),
+      flow as never,
     );
   });
 
@@ -166,40 +160,17 @@ describe('GarageGoodsReceiptCommandService', () => {
     expect(repo.save).not.toHaveBeenCalled();
   });
 
-  it('posts goods receipt and updates stock balance', async () => {
-    const line = {
-      id: 'l-1',
-      itemCode: 'LOC-GIO',
-      itemName: 'Lọc gió',
-      unit: 'Cái',
-      qtyReceived: '5',
-      unitCost: '50000',
-    };
-    const entity = {
-      id: 'id-1',
-      status: 'DRAFT',
-      branchId: 'br-1',
-      lines: [line],
-    } as unknown as GarageGoodsReceipt;
-    lockedReceipt = entity;
-    lineRepo.find.mockResolvedValueOnce([line]);
-    balanceRepo.findOne.mockResolvedValueOnce({
-      itemCode: 'LOC-GIO',
-      qtyOnHand: '0',
-      avgCost: '0',
+  it('post và cancel giao cho orchestrator luồng mua garage', async () => {
+    const entity = { id: 'id-1', status: 'DRAFT' } as GarageGoodsReceipt;
+
+    await expect(service.post(entity)).resolves.toMatchObject({
+      status: 'POSTED',
     });
-
-    await service.post(entity);
-
-    expect(entity.status).toBe('POSTED');
-    expect(balanceRepo.save).toHaveBeenCalledWith(
-      expect.objectContaining({
-        itemCode: 'LOC-GIO',
-        qtyOnHand: '5',
-        avgCost: '50000',
-      }),
-    );
-    expect(repo.save).toHaveBeenCalledWith(entity);
+    await expect(service.cancel(entity)).resolves.toMatchObject({
+      status: 'CANCELLED',
+    });
+    expect(flow.postReceipt).toHaveBeenCalledWith('id-1');
+    expect(flow.cancelReceipt).toHaveBeenCalledWith('id-1');
   });
 
   it('soft-deletes by flagging isDeleted when status is DRAFT', async () => {

@@ -266,6 +266,12 @@ Source of truth for this repo (`./erp-api`).
 - When pushing code and encountering a conflict, your **first priority** is to use `git pull --rebase github-industries erp-master`.
 - Only if the rebase presents overly complex conflicts, you may `git rebase --abort` and resolve using a standard merge (`git pull origin erp-master`).
 
+### 5. E2E/Smoke Mandate
+
+- Luồng nghiệp vụ nhiều bước (PR/PO, nhân bản, duyệt, tồn kho) phải có unit/integration spec, và smoke trên API đang chạy trong `test/smoke/` khi thay đổi hành vi nghiệp vụ. Ghi vào skill `erp-e2e-api-smoke`.
+- Smoke không hardcode mật khẩu hay URL; đọc qua biến môi trường (`E2E_PASSWORD` bắt buộc).
+- Trước khi ghi DB, xác nhận `SELECT current_database();`. Không chạy smoke trên DB production.
+
 ---
 
 ## Current Truth

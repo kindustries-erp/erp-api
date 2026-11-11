@@ -1,4 +1,8 @@
-import { NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   DataSource,
   DeepPartial,
@@ -43,7 +47,12 @@ import {
 } from './procurement-order-engine.service';
 import { RequestLinkPort } from './request-link.port';
 
+/** Trạng thái được phép nhân bản: đã từ chối hoặc đã hủy. */
+const CLONABLE_ORDER_STATUSES: readonly string[] = ['REJECTED', 'CANCELLED'];
+
 export interface OrderDraftHeaderInput {
+  /** Đơn gốc khi nhân bản (null/undefined khi tạo mới). */
+  clonedFromId?: string | null;
   orderDate: string;
   expectedDate?: string | null;
   supplierId?: string | null;
@@ -119,6 +128,13 @@ export abstract class AbstractProcurementOrderCommandService<
       const lines = await this.loadLines(manager, id);
       const mode = await loadApprovalMode(manager, this.docType);
 
+      if (
+        action === 'recall' &&
+        header.createdBy &&
+        header.createdBy !== actor.id
+      ) {
+        throw new ForbiddenException('Chỉ người tạo mới được thu hồi');
+      }
       if (PROCUREMENT_ORDER_ACTIONS_REQUIRING_APPROVER.includes(action)) {
         assertNotSelfApproval(actor.id, header.createdBy);
         assertCanDecide(header.approverId, actor.id);
@@ -159,7 +175,8 @@ export abstract class AbstractProcurementOrderCommandService<
       header.status = finalTo;
       await manager.save(this.headerEntity, header);
 
-      if (action === 'cancel' && header.requestId) {
+      // Từ chối là trạng thái cuối: phải trả số đã giữ trên PR như khi hủy
+      if ((action === 'cancel' || action === 'reject') && header.requestId) {
         await this.requestLink.release(
           manager,
           header.requestId,
@@ -184,6 +201,59 @@ export abstract class AbstractProcurementOrderCommandService<
       });
       return header;
     });
+  }
+
+  /**
+   * Nhân bản đơn ĐÃ TỪ CHỐI hoặc ĐÃ HỦY thành nháp mới: số đơn mới, người tạo là người
+   * nhân bản, copy đầu đơn và dòng. Giữ liên kết PR nguồn (nếu có) và giữ lại số lượng
+   * qua createDraft, nên vẫn bị chặn nếu PR đã hết phần còn lại.
+   * `copyHeaderFields` là các trường riêng của họ con cần giữ (ví dụ chi nhánh).
+   */
+  async cloneDraft(
+    sourceId: string,
+    actor: OrderActor,
+    copyHeaderFields: readonly string[] = [],
+  ): Promise<H> {
+    const source = (await this.dataSource.manager.findOne(this.headerEntity, {
+      where: { id: sourceId } as unknown as FindOptionsWhere<H>,
+    })) as H | null;
+    if (!source) throw new NotFoundException('Không tìm thấy đơn mua');
+    if (!CLONABLE_ORDER_STATUSES.includes(source.status)) {
+      throw new ConflictException(
+        'Chỉ nhân bản đơn mua đã từ chối hoặc đã hủy',
+      );
+    }
+    const sourceLines = (await this.dataSource.manager.find(this.lineEntity, {
+      where: {
+        [this.lineForeignKey]: sourceId,
+      } as unknown as FindOptionsWhere<L>,
+      order: { lineNo: 'ASC' } as never,
+    })) as unknown as BaseProcurementOrderLineEntity[];
+
+    const header: OrderDraftHeaderInput & Record<string, unknown> = {
+      orderDate: new Date().toISOString().slice(0, 10),
+      expectedDate: source.expectedDate,
+      supplierId: source.supplierId,
+      supplierName: source.supplierName,
+      remarks: source.remarks,
+      requestId: source.requestId,
+      extraData: {},
+      clonedFromId: sourceId,
+    };
+    for (const field of copyHeaderFields) {
+      header[field] = (source as unknown as Record<string, unknown>)[field];
+    }
+    const lines = sourceLines.map((l) => ({
+      lineType: l.lineType,
+      qtyOrdered: Number(l.qtyOrdered),
+      unitPrice: l.unitPrice === null ? null : Number(l.unitPrice),
+      requestLineId: l.requestLineId,
+      itemId: l.itemId,
+      itemCode: l.itemCode,
+      itemName: l.itemName,
+      description: l.description,
+    }));
+    return this.createDraft(actor, header, lines);
   }
 
   /**

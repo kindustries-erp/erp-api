@@ -19,8 +19,8 @@ Ràng buộc CHECK: `line_type IN ('GOODS','SERVICE')`; `0 <= qty_ordered <= qty
 
 ## 2. Vòng đời
 
-- `status`: `DRAFT`, `PENDING_APPROVAL`, `APPROVED`, `CLOSED`, `CANCELLED`.
-- Chuyển trạng thái (`PURCHASE_REQUEST_TRANSITIONS`): submit (DRAFT→PENDING), recall (PENDING→DRAFT), approve (PENDING→APPROVED), reject (PENDING→DRAFT, bắt buộc lý do), cancel (PENDING/APPROVED→CANCELLED, bắt buộc lý do, chỉ khi chưa có PO giữ số lượng), close (APPROVED→CLOSED, bắt buộc lý do).
+- `status`: `DRAFT`, `PENDING_APPROVAL`, `APPROVED`, `REJECTED`, `CLOSED`, `CANCELLED`.
+- Chuyển trạng thái (`PURCHASE_REQUEST_TRANSITIONS`): submit (DRAFT→PENDING), recall (PENDING→DRAFT), approve (PENDING→APPROVED), reject (PENDING→REJECTED, bắt buộc lý do), cancel (PENDING/APPROVED→CANCELLED, bắt buộc lý do, chỉ khi chưa có PO giữ số lượng), close (APPROVED→CLOSED, bắt buộc lý do).
 - Sửa dòng chỉ khi `DRAFT`.
 - `ordering_status` (`NONE`/`PARTIAL`/`FULL`) suy ra từ các dòng bằng `orderingStatusOf`, không sửa tay. Khi `FULL` thì tự chuyển `CLOSED` (không ghi lý do).
 - Tổng `estimated_total` = Σ `qty_requested × est_unit_price`, làm tròn 2 số.
@@ -86,3 +86,16 @@ PO không import module này. Cổng `RequestLinkPort` do `ProcurementRequestLin
 - **Ghi**: tạo mặc định `{}`. Sửa header merge cấp 1 (`null` xóa key). Dòng chứng từ ghi theo payload, không merge.
 - **Giới hạn**: 16 KB, sâu 5 cấp, key ≤ 64 ký tự, cấm `__proto__`/`constructor`/`prototype` (400 qua `RejectUnsafeExtraDataPipe` và service).
 - **Response**: luôn có `extraData` (object).
+
+## 9. Cập nhật 2026-11-11: từ chối → REJECTED và nhân bản
+
+- Từ chối (`reject`) chuyển `PENDING_APPROVAL → REJECTED` (trước đây về DRAFT). REJECTED là trạng thái khóa: không có action nào chuyển đi từ REJECTED. Chỉ xem chi tiết, lịch sử duyệt và nhân bản.
+- Nhân bản: `POST /:id/clone` (quyền CREATE) tạo nháp mới từ phiếu REJECTED hoặc CANCELLED. Copy đầu đề và dòng, không copy trạng thái duyệt hay lý do. Gán `cloned_from_id` trỏ về phiếu gốc (cột mới, nullable, migration `20261111100000-add-cloned-from-to-procurement`, không backfill). Phiếu ở trạng thái khác → 409 `ConflictException`. Không tồn tại → 404.
+- Lõi `cloneDraft` nằm ở `abstract-*-command.service.ts` và dùng chung cho ERP và Garage. Garage giữ `branchId`/`branchName` khi nhân bản.
+- PO: reject cũng trả số lượng đã giữ về PR nguồn (như cancel). Trước đó reject không trả, đã sửa trong lõi PO. Nhân bản PO giữ `requestId`/`requestLineId` để `createDraft` giữ lại số lượng PR.
+- PR nhân bản không copy `orderingStatus` (luôn `NONE`).
+- Spec: `abstract-*-clone.spec.ts` (quy tắc clone, 409/404, REJECTED là trạng thái cuối, PO reject trả số lượng PR).
+
+## Cập nhật 2026-11-11: thu hồi
+
+- `recall` chỉ người tạo (`created_by`) được thực hiện; người khác nhận 403 "Chỉ người tạo mới được thu hồi".
