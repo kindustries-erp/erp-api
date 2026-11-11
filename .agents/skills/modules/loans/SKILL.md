@@ -88,7 +88,7 @@ Tuân thủ 100% quy chuẩn `/api-structure`:
 - **`src/v2/modules/loans/`**:
   - `loans.service.ts`: Facade mỏng điều phối, Clean DI constructor.
   - `services/loan-query.service.ts`: Xử lý phân trang, tìm kiếm, lấy chi tiết kèm tính toán schedule và dự báo dòng tiền hợp nhất.
-  - `services/loan-command.service.ts`: Xử lý tạo, cập nhật, xóa mềm và ghi nhận thanh toán với `QueryRunner` transaction.
+  - `services/loan-command.service.ts`: Xử lý tạo, cập nhật (đồng bộ tất cả thông số khoản vay và tự động tính lại `remaining_principal`), xóa mềm và ghi nhận thanh toán với `QueryRunner` transaction.
   - `helpers/loan.mapper.ts`: Mapper chuyển đổi giữa Entity sang Response DTO (Zero Entity Leaking).
   - `controllers/loans-public.controller.ts`: Endpoint công khai tính toán nhanh.
   - `controllers/loans.controller.ts`: Controller có RBAC guard.
@@ -104,7 +104,7 @@ Tuân thủ 100% quy chuẩn `/api-structure`:
 | `GET` | `/api/v2/loans/cashflow-projection` | Yes | `loans:read` | Dự báo dòng tiền nợ vay hợp nhất theo tháng |
 | `GET` | `/api/v2/loans/:id` | Yes | `loans:read` | Chi tiết hợp đồng vay kèm schedule & payments |
 | `POST` | `/api/v2/loans` | Yes | `loans:create` | Tạo mới hợp đồng vay |
-| `PUT` | `/api/v2/loans/:id` | Yes | `loans:update` | Cập nhật hợp đồng vay |
+| `PATCH` | `/api/v2/loans/:id` | Yes | `loans:update` | Cập nhật hợp đồng vay |
 | `DELETE` | `/api/v2/loans/:id` | Yes | `loans:delete` | Xóa mềm hợp đồng vay |
 | `POST` | `/api/v2/loans/:id/payments` | Yes | `loans:update` | Ghi nhận thanh toán trả nợ theo kỳ |
 

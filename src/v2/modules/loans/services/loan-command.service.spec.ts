@@ -66,21 +66,40 @@ describe('LoanCommandService', () => {
     expect(repo.save).toHaveBeenCalled();
   });
 
-  it('should update loan fields', async () => {
+  it('should update loan fields including terms and recalculate remainingPrincipal', async () => {
     repo.findOne.mockResolvedValue({
       id: 'l1',
       title: 'Old Title',
+      lenderName: 'Old Bank',
       isDeleted: false,
-      principalAmount: '100',
+      principalAmount: '100000000',
+      totalPaidPrincipal: '20000000',
+      remainingPrincipal: '80000000',
       annualInterestRate: '10',
       tenorMonths: 12,
       amortizationMethod: AmortizationMethod.AMORTIZED,
       startDate: '2026-01-01',
-      firstPaymentDate: '2026-02-01',
+      firstPaymentDate: '2026-01-01',
     });
 
-    const res = await service.update('l1', { title: 'New Title' });
+    const res = await service.update('l1', {
+      title: 'New Title',
+      lenderName: 'VCB',
+      principalAmount: 200000000,
+      annualInterestRate: 8.5,
+      tenorMonths: 24,
+      amortizationMethod: AmortizationMethod.EQUAL_PRINCIPAL,
+      startDate: '2026-03-01',
+    });
     expect(res.title).toBe('New Title');
+    expect(res.lenderName).toBe('VCB');
+    expect(res.principalAmount).toBe(200000000);
+    expect(res.remainingPrincipal).toBe(180000000);
+    expect(res.annualInterestRate).toBe(8.5);
+    expect(res.tenorMonths).toBe(24);
+    expect(res.amortizationMethod).toBe(AmortizationMethod.EQUAL_PRINCIPAL);
+    expect(res.startDate).toBe('2026-03-01');
+    expect(res.firstPaymentDate).toBe('2026-03-01');
   });
 
   it('should record payment with transaction lock and reduce remaining principal', async () => {

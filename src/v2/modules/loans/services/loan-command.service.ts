@@ -90,10 +90,41 @@ export class LoanCommandService {
       throw new NotFoundException(`Loan with ID "${id}" not found`);
     }
 
-    if (dto.title) loan.title = dto.title;
-    if (dto.lenderName) loan.lenderName = dto.lenderName;
+    if (dto.loanCode !== undefined && dto.loanCode.trim()) {
+      loan.loanCode = dto.loanCode.trim();
+    }
+    if (dto.title !== undefined) loan.title = dto.title;
+    if (dto.lenderName !== undefined) loan.lenderName = dto.lenderName;
+    if (dto.partnerId !== undefined) loan.partnerId = dto.partnerId || null;
+    if (dto.principalAmount !== undefined) {
+      loan.principalAmount = String(dto.principalAmount);
+      const paidPrincipal = Number(loan.totalPaidPrincipal || 0);
+      loan.remainingPrincipal = String(
+        Math.max(0, dto.principalAmount - paidPrincipal),
+      );
+    }
+    if (dto.annualInterestRate !== undefined) {
+      loan.annualInterestRate = String(dto.annualInterestRate);
+    }
+    if (dto.tenorMonths !== undefined) loan.tenorMonths = dto.tenorMonths;
+    if (dto.amortizationMethod !== undefined) {
+      loan.amortizationMethod = dto.amortizationMethod;
+    }
+    if (dto.startDate !== undefined) {
+      const prevStart = loan.startDate;
+      loan.startDate = dto.startDate;
+      if (
+        dto.firstPaymentDate === undefined &&
+        (!loan.firstPaymentDate || loan.firstPaymentDate === prevStart)
+      ) {
+        loan.firstPaymentDate = dto.startDate;
+      }
+    }
+    if (dto.firstPaymentDate !== undefined) {
+      loan.firstPaymentDate = dto.firstPaymentDate || loan.startDate;
+    }
     if (dto.notes !== undefined) loan.notes = dto.notes || null;
-    if (dto.status) loan.status = dto.status;
+    if (dto.status !== undefined) loan.status = dto.status;
 
     const saved = await repo.save(loan);
     return LoanMapper.toDto(saved, true);
