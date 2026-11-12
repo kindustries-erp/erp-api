@@ -116,7 +116,7 @@ Module `garage-goods-receipts` (`src/v2/modules/goods-receipts-garage/`) sử d�
 ### Phân quyền RBAC
 - **Migration**: `SeedGarageGoodsReceiptsPermissions20261103085000` tự động sao chép các quyền READ, CREATE, UPDATE, DELETE từ resource `garage` sang `garage_goods_receipts`.
 - **Backend Guard**: Controller được bảo vệ bởi `@UseGuards(JwtAuthGuard, CoreRbacGuard)` và `@RequirePermissions({ resource: ErpResource.GARAGE_GOODS_RECEIPTS, action: ... })`.
-- **Rbac Core Collections API**: Đã khai báo `{ resource: ErpResource.GARAGE_GOODS_RECEIPTS, label: 'Nhập kho Garage (Garage Goods Receipts)' }` trong `rbacCoreService.getAvailableResources()` (`GET /api/v2/rbac-core/collections`) để hiển thị trực tiếp trên ma trận phân quyền `ErpPermissionsCorePage`.
+- **Rbac Core Collections API**: Đã khai báo `{ resource: ErpResource.GARAGE_GOODS_RECEIPTS, label: 'Nhập kho Garage (Garage Goods Receipts)' }` trong `rbacCoreService.getAvailableResources()` (`GET /api/v2/rbac-roles/collections`) để hiển thị trực tiếp trên ma trận phân quyền `ErpPermissionsCorePage`.
 - **Frontend RBAC**: Khai báo `garage_goods_receipts` trong `RBAC_COLLECTIONS` và `PERMISSION_RESOURCE_GROUPS` (nhóm "Garage & Xưởng dịch vụ") trên Web giúp quản trị viên phân quyền linh hoạt qua Role Drawer và Permission Matrix.
 
 ## 8. Cập nhật 2026-11-05: nối đơn mua Garage

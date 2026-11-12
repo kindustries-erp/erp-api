@@ -358,7 +358,7 @@ find src -name '*.controller.ts' ! -name '*.spec.ts' -exec wc -l {} + | awk '$1>
 
 ## 🅱️ Phần B: Module v2 (Facade + sub-services)
 
-Workflow này định nghĩa **API v2** trong `erp-api`: không đổi route, không đổi DB có sẵn. Một module v2 là module được sinh đúng cấu trúc đích ngay từ đầu, và các module cũ chỉ chuyển sang v2 khi người dùng ra lệnh (rolling migration).
+Workflow này định nghĩa **API v2** trong `erp-api`: route chuẩn là `api/v2/<tên thư mục module>` (một chuỗi, không alias v1), response list là `{ items, pagination, summaries?, extraData? }` (`extraData` chỉ khi list có dữ liệu phụ chung, ví dụ `unreadCount`), không đổi DB có sẵn. Chi tiết: skill `erp-api-structure`, `references/v2-module.md` mục 0a và mục Hợp đồng response. Một module v2 là module được sinh đúng cấu trúc đích ngay từ đầu, và các module cũ chỉ chuyển sang v2 khi người dùng ra lệnh (rolling migration).
 
 Skill đi kèm (quy ước, bẫy, checklist): [`./../skills/erp-api-structure/references/v2-module.md`](../skills/erp-api-structure/references/v2-module.md)
 Generator: `api-module-v2` (xem [`plop-generate`](../skills/plop-generate/SKILL.md), mục Generator 3)

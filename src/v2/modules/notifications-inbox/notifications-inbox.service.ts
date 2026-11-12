@@ -7,10 +7,8 @@ import {
   NotificationAffectedDto,
   NotificationListResponseDto,
 } from './dto/notification-response.dto';
-import {
-  toNotificationResponse,
-  toPaginationMeta,
-} from './helpers/notification.mapper';
+import { toNotificationResponse } from './helpers/notification.mapper';
+import { toPagedList } from '@/common/utils/paginated-result';
 
 /** Facade HTTP: gọi lõi, map sang response DTO. Mọi thao tác đều nhận userId từ token. */
 @Injectable()
@@ -35,11 +33,13 @@ export class NotificationsInboxService {
       }),
       this.query.countUnread(userId),
     ]);
-    return {
-      items: items.map(toNotificationResponse),
-      pagination: toPaginationMeta(page, pageSize, total),
-      unreadCount,
-    };
+    return toPagedList(
+      items.map(toNotificationResponse),
+      page,
+      pageSize,
+      total,
+      { unreadCount },
+    );
   }
 
   async unreadCount(userId: string): Promise<{ unreadCount: number }> {

@@ -1,5 +1,5 @@
 ---
-name: loans
+name: loans-tool
 description: Module tri thức Quản lý Khoản Vay & Dự báo Dòng Tiền Tương Lai (Loans & Cashflow Simulator V2) trong erp-api (v2/core/loans-core và v2/modules/loans). Chứa toàn bộ database schema, entities, TypeORM migration, pure math engine, DTOs, API endpoints (public & RBAC), và quy trình ghi nhận trả nợ an toàn bằng Pessimistic Lock transaction.
 ---
 
@@ -7,12 +7,12 @@ description: Module tri thức Quản lý Khoản Vay & Dự báo Dòng Tiền T
 
 ## 1. Tổng quan Nghiệp vụ
 
-Module `loans` (nằm tại `src/v2/modules/loans/` và kế thừa engine từ `src/v2/core/loans-core/`) cung cấp giải pháp quản trị nợ vay ngân hàng, tính toán lãi suất, lịch khấu hao dòng tiền và dự báo áp lực thanh toán tương lai cho toàn doanh nghiệp.
+Module `loans-tool` (nằm tại `src/v2/modules/loans-tool/` và kế thừa engine từ `src/v2/core/loans-core/`) cung cấp giải pháp quản trị nợ vay ngân hàng, tính toán lãi suất, lịch khấu hao dòng tiền và dự báo áp lực thanh toán tương lai cho toàn doanh nghiệp.
 
 ### 1.1. Các tính năng cốt lõi:
 - **Chế độ Kép (Dual Mode)**:
-  - **Public Calculator (`/api/v2/public/loans/simulate`)**: Cho phép khách vãng lai hoặc nhân viên tính toán nhanh lịch trả nợ tức thì, không cần đăng nhập.
-  - **Authenticated RBAC (`/api/v2/loans`)**: Quản lý lưu trữ hợp đồng vay, lịch sử thanh toán và dự báo dòng tiền doanh nghiệp với quyền kiểm soát `loans:read`, `loans:create`, `loans:update`, `loans:delete`.
+  - **Public Calculator (`/api/v2/public/loans-tool/simulate`)**: Cho phép khách vãng lai hoặc nhân viên tính toán nhanh lịch trả nợ tức thì, không cần đăng nhập.
+  - **Authenticated RBAC (`/api/v2/loans-tool`)**: Quản lý lưu trữ hợp đồng vay, lịch sử thanh toán và dự báo dòng tiền doanh nghiệp với quyền kiểm soát `loans:read`, `loans:create`, `loans:update`, `loans:delete`.
 - **4 Phương thức Trả Nợ Chuẩn Ngân Hàng**:
   - `AMORTIZED` (Niên kim cố định / gốc + lãi đều): Dùng công thức tài chính quốc tế $A = P \times \frac{r(1+r)^n}{(1+r)^n - 1}$.
   - `EQUAL_PRINCIPAL` (Dư nợ giảm dần / gốc đều): Gốc cố định $P/n$, lãi giảm dần theo dư nợ thực tế.
@@ -22,7 +22,7 @@ Module `loans` (nằm tại `src/v2/modules/loans/` và kế thừa engine từ 
   - Sử dụng TypeORM `QueryRunner` với Pessimistic Write Lock (`setLock('pessimistic_write')`) để đảm bảo không bị race condition khi cập nhật `total_paid_principal`, `total_paid_interest` và `remaining_principal`.
   - Tự động chuyển trạng thái khoản vay sang `COMPLETED` khi dư nợ gốc về 0.
 - **Dự Báo Dòng Tiền Tương Lai Hợp Nhất (Consolidated Cashflow Projection)**:
-  - Endpoint `/api/v2/loans/cashflow-projection` tổng hợp lịch trả nợ tương lai của tất cả hợp đồng `ACTIVE`, nhóm theo từng tháng để lập kế hoạch dòng tiền cho ban giám đốc, kèm mảng `breakdown?: CashflowLoanBreakdownDto[]` chi tiết từng khoản vay cấu thành theo tháng.
+  - Endpoint `/api/v2/loans-tool/cashflow-projection` tổng hợp lịch trả nợ tương lai của tất cả hợp đồng `ACTIVE`, nhóm theo từng tháng để lập kế hoạch dòng tiền cho ban giám đốc, kèm mảng `breakdown?: CashflowLoanBreakdownDto[]` chi tiết từng khoản vay cấu thành theo tháng.
 
 ---
 
@@ -85,7 +85,7 @@ Tuân thủ 100% quy chuẩn `/api-structure`:
   - `entities/base-loan.entity.ts`: Kế thừa `CoreSoftDeletableEntity`.
   - `enums/loan-amortization.enum.ts`: `AmortizationMethod`, `LoanStatus`.
   - `interfaces/loan-contract.interface.ts`: Contract type.
-- **`src/v2/modules/loans/`**:
+- **`src/v2/modules/loans-tool/`**:
   - `loans.service.ts`: Facade mỏng điều phối, Clean DI constructor.
   - `services/loan-query.service.ts`: Xử lý phân trang, tìm kiếm, lấy chi tiết kèm tính toán schedule và dự báo dòng tiền hợp nhất.
   - `services/loan-command.service.ts`: Xử lý tạo, cập nhật (đồng bộ tất cả thông số khoản vay và tự động tính lại `remaining_principal`), xóa mềm và ghi nhận thanh toán với `QueryRunner` transaction.
@@ -99,14 +99,14 @@ Tuân thủ 100% quy chuẩn `/api-structure`:
 
 | Method | Endpoint | Auth | Quyền (RBAC) | Mô tả |
 | :--- | :--- | :--- | :--- | :--- |
-| `POST` | `/api/v2/public/loans/simulate` | No | None | Tính toán nhanh lịch khấu hao và KPIs |
-| `GET` | `/api/v2/loans` | Yes | `loans:read` | Danh sách khoản vay (phân trang, search, status) |
-| `GET` | `/api/v2/loans/cashflow-projection` | Yes | `loans:read` | Dự báo dòng tiền nợ vay hợp nhất theo tháng |
-| `GET` | `/api/v2/loans/:id` | Yes | `loans:read` | Chi tiết hợp đồng vay kèm schedule & payments |
-| `POST` | `/api/v2/loans` | Yes | `loans:create` | Tạo mới hợp đồng vay |
-| `PATCH` | `/api/v2/loans/:id` | Yes | `loans:update` | Cập nhật hợp đồng vay |
-| `DELETE` | `/api/v2/loans/:id` | Yes | `loans:delete` | Xóa mềm hợp đồng vay |
-| `POST` | `/api/v2/loans/:id/payments` | Yes | `loans:update` | Ghi nhận thanh toán trả nợ theo kỳ |
+| `POST` | `/api/v2/public/loans-tool/simulate` | No | None | Tính toán nhanh lịch khấu hao và KPIs |
+| `GET` | `/api/v2/loans-tool` | Yes | `loans:read` | Danh sách khoản vay (phân trang, search, status) |
+| `GET` | `/api/v2/loans-tool/cashflow-projection` | Yes | `loans:read` | Dự báo dòng tiền nợ vay hợp nhất theo tháng |
+| `GET` | `/api/v2/loans-tool/:id` | Yes | `loans:read` | Chi tiết hợp đồng vay kèm schedule & payments |
+| `POST` | `/api/v2/loans-tool` | Yes | `loans:create` | Tạo mới hợp đồng vay |
+| `PATCH` | `/api/v2/loans-tool/:id` | Yes | `loans:update` | Cập nhật hợp đồng vay |
+| `DELETE` | `/api/v2/loans-tool/:id` | Yes | `loans:delete` | Xóa mềm hợp đồng vay |
+| `POST` | `/api/v2/loans-tool/:id/payments` | Yes | `loans:update` | Ghi nhận thanh toán trả nợ theo kỳ |
 
 ---
 
@@ -117,10 +117,10 @@ Tuân thủ 100% quy chuẩn `/api-structure`:
 cd erp/erp-api && bunx tsc --noEmit
 
 # Chạy trọn bộ unit test Jest cho loans
-cd erp/erp-api && bunx jest src/v2/core/loans-core src/v2/modules/loans --forceExit
+cd erp/erp-api && bunx jest src/v2/core/loans-core src/v2/modules/loans-tool --forceExit
 
 # Quét kiểm tra Clean DI và LoC (< 300 dòng Controller, < 500 dòng Service)
-bun .agents/skills/erp-api-structure/scripts/scan-oversized-files.ts --path=src/v2/modules/loans --strict
+bun .agents/skills/erp-api-structure/scripts/scan-oversized-files.ts --path=src/v2/modules/loans-tool --strict
 ```
 
 ## Hợp đồng phân trang chuẩn v2 (pagination)

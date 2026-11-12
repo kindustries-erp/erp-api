@@ -124,7 +124,7 @@ Quyền resource: `garage_procurement_requests`. Seed từ `garage_purchase_orde
 
 ## Cập nhật 2026-11-11: thu hồi
 
-- Thu hồi (`recall`) chỉ người tạo (lõi `procurement-requests-core`); người duyệt/người khác nhận 403. Áp dụng cho cả họ thường (`erp-procurement-requests`, `erp-procurement-orders`).
+- Thu hồi (`recall`) chỉ người tạo (lõi `procurement-requests-core`); người duyệt/người khác nhận 403. Áp dụng cho cả họ thường (`/api/v2/procurement-requests-erp`, `/api/v2/procurement-orders-erp`).
 
 ## 13. Cập nhật 2026-11-12: lưu và gửi duyệt một bước (save-and-submit)
 

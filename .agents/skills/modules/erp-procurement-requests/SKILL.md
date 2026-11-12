@@ -34,7 +34,7 @@ Ràng buộc CHECK: `line_type IN ('GOODS','SERVICE')`; `0 <= qty_ordered <= qty
 - Khóa: `pessimistic_write` trên header trước khi kiểm tra trạng thái.
 - Lõi dùng chung `approval-core` (2026-11-06): không có dòng trong `erp_approval_settings` thì giữ hành vi cũ (LEGACY, `approverId` tùy chọn). Module họ thường không seed khóa.
 
-## 4. Endpoint (`/api/v2/erp-procurement-requests`)
+## 4. Endpoint (`/api/v2/procurement-requests-erp`)
 
 | Method | Path | Quyền |
 | :--- | :--- | :--- |
@@ -52,7 +52,7 @@ Quyền resource: `procurement_requests`. Seed từ `purchase_requests` (read/cr
 
 ## 5. Liên kết với PO
 
-PO không import module này. Cổng `RequestLinkPort` do `ProcurementRequestLinkAdapter` (module `erp-procurement-orders`) cài đặt bằng `ProcurementRequestOrderingService`, export từ module này. Đặt hàng giữ số lượng bằng `reserve`/`release` trong cùng transaction với PO.
+PO không import module này. Cổng `RequestLinkPort` do `ProcurementRequestLinkAdapter` (module `/api/v2/procurement-orders-erp`) cài đặt bằng `ProcurementRequestOrderingService`, export từ module này. Đặt hàng giữ số lượng bằng `reserve`/`release` trong cùng transaction với PO.
 
 ## 6. Tests
 

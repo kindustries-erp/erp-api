@@ -24,6 +24,9 @@ const VALID_UUID = '11111111-2222-4333-8444-555555555555';
 describe('RbacRolesController HTTP (UUID params)', () => {
   let app: INestApplication;
   const facade = {
+    getAvailableResources: jest.fn<(...args: any[]) => Promise<any>>(
+      async () => [],
+    ),
     getRolePermissions: jest.fn<(...args: any[]) => Promise<any>>(
       async () => [],
     ),
@@ -68,12 +71,12 @@ describe('RbacRolesController HTTP (UUID params)', () => {
   const invalidId = 'not-a-uuid';
 
   it.each([
-    ['GET', `/api/v2/rbac-core/roles/${invalidId}/permissions`],
-    ['PATCH', `/api/v2/rbac-core/roles/${invalidId}/permissions`],
-    ['GET', `/api/v2/rbac-core/roles/${invalidId}/users`],
-    ['PATCH', `/api/v2/rbac-core/roles/${invalidId}/users`],
-    ['PATCH', `/api/v2/rbac-core/roles/${invalidId}`],
-    ['DELETE', `/api/v2/rbac-core/roles/${invalidId}`],
+    ['GET', `/api/v2/rbac-roles/${invalidId}/permissions`],
+    ['PATCH', `/api/v2/rbac-roles/${invalidId}/permissions`],
+    ['GET', `/api/v2/rbac-roles/${invalidId}/users`],
+    ['PATCH', `/api/v2/rbac-roles/${invalidId}/users`],
+    ['PATCH', `/api/v2/rbac-roles/${invalidId}`],
+    ['DELETE', `/api/v2/rbac-roles/${invalidId}`],
   ])('%s %s → 400 và không gọi facade', async (method, url) => {
     const req =
       method === 'GET'
@@ -88,20 +91,28 @@ describe('RbacRolesController HTTP (UUID params)', () => {
     );
   });
 
-  it('GET roles/:roleId/permissions với UUID hợp lệ → 200 { permissions: [] }', async () => {
+  it('GET :roleId/permissions với UUID hợp lệ → 200 { permissions: [] }', async () => {
     const res = await request(app.getHttpServer()).get(
-      `/api/v2/rbac-core/roles/${VALID_UUID}/permissions`,
+      `/api/v2/rbac-roles/${VALID_UUID}/permissions`,
     );
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ permissions: [] });
     expect(facade.getRolePermissions).toHaveBeenCalledWith(VALID_UUID);
   });
 
-  it('GET roles/:roleId/users với UUID hợp lệ → 200 { users: [] }', async () => {
+  it('GET :roleId/users với UUID hợp lệ → 200 { users: [] }', async () => {
     const res = await request(app.getHttpServer()).get(
-      `/api/v2/rbac-core/roles/${VALID_UUID}/users`,
+      `/api/v2/rbac-roles/${VALID_UUID}/users`,
     );
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ users: [] });
+  });
+
+  it('GET /collections không bị :id nuốt → 200 { resources }', async () => {
+    const res = await request(app.getHttpServer()).get(
+      '/api/v2/rbac-roles/collections',
+    );
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ resources: [] });
   });
 });

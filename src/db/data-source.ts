@@ -113,7 +113,10 @@ import { InventoryMovementsGarageCostLayer } from '@/v2/modules/inventory-moveme
 import { InventoryMovementsGarageReceipt } from '@/v2/modules/inventory-movements-garage-receipts/entities/inventory-movements-garage-receipt.entity'; // api-v2-module:inventory-movements-garage-receipts:entity-imports
 import { InventoryMovementsGarageIssue } from '@/v2/modules/inventory-movements-garage-issues/entities/inventory-movements-garage-issue.entity'; // api-v2-module:inventory-movements-garage-issues:entity-imports
 import { InventoryMovementsGarageAdjustment } from '@/v2/modules/inventory-movements-garage-adjustments/entities/inventory-movements-garage-adjustment.entity'; // api-v2-module:inventory-movements-garage-adjustments:entity-imports
-import { LoanEntity, LoanPaymentEntity } from '@/v2/modules/loans/entities'; // api-v2-module:loans:entity-imports
+import {
+  LoanEntity,
+  LoanPaymentEntity,
+} from '@/v2/modules/loans-tool/entities'; // api-v2-module:loans:entity-imports
 // plop:api-v2-entity-imports
 const entities = [
   ApprovalEvent,

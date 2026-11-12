@@ -69,7 +69,7 @@ import { GarageProcurementOrdersModule } from './v2/modules/procurement-orders-g
 import { InventoryMovementsGarageReceiptsModule } from './v2/modules/inventory-movements-garage-receipts/inventory-movements-garage-receipts.module'; // api-v2-module:inventory-movements-garage-receipts:app-imports
 import { InventoryMovementsGarageIssuesModule } from './v2/modules/inventory-movements-garage-issues/inventory-movements-garage-issues.module'; // api-v2-module:inventory-movements-garage-issues:app-imports
 import { InventoryMovementsGarageAdjustmentsModule } from './v2/modules/inventory-movements-garage-adjustments/inventory-movements-garage-adjustments.module'; // api-v2-module:inventory-movements-garage-adjustments:app-imports
-import { LoansModule } from './v2/modules/loans/loans.module'; // api-v2-module:loans:app-imports
+import { LoansModule } from './v2/modules/loans-tool/loans.module'; // api-v2-module:loans:app-imports
 // plop:api-v2-imports
 
 @Module({

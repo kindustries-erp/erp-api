@@ -108,3 +108,23 @@ describe('paginated-result', () => {
     });
   });
 });
+
+describe('extraData tùy chọn', () => {
+  it('toPagedList không có extraData khi không truyền', () => {
+    const res = toPagedList([1], 1, 20, 1);
+    expect(res).not.toHaveProperty('extraData');
+  });
+
+  it('toPagedList gắn extraData khi truyền', () => {
+    const res = toPagedList([1], 1, 20, 1, { unreadCount: 3 });
+    expect(res.extraData).toEqual({ unreadCount: 3 });
+    expect(res.pagination.total).toBe(1);
+  });
+
+  it('toPaginatedResult chỉ thêm extraData khi truyền', () => {
+    expect(toPaginatedResult([1], 1, 20, 1)).not.toHaveProperty('extraData');
+    expect(
+      toPaginatedResult([1], 1, 20, 1, {}, { unreadCount: 2 }).extraData,
+    ).toEqual({ unreadCount: 2 });
+  });
+});

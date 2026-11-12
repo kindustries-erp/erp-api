@@ -31,7 +31,7 @@ function actorOf(req: RequestWithUser): { id: string; roles: string[] } {
 @ApiTags('inventory-movements-garage-issues')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
-@Controller('inventory-movements-garage-issues')
+@Controller('api/v2/inventory-movements-garage-issues')
 export class InventoryMovementsGarageIssueController {
   constructor(
     private readonly service: InventoryMovementsGarageIssuesService,

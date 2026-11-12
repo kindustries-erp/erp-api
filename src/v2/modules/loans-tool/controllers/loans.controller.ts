@@ -40,7 +40,7 @@ interface RequestWithUser {
 @ApiTags('loans')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
-@Controller('api/v2/loans')
+@Controller('api/v2/loans-tool')
 export class LoansController {
   constructor(private readonly loansService: LoansService) {}
 

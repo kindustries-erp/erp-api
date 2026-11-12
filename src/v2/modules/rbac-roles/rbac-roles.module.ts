@@ -10,7 +10,7 @@ import { RoleCommandService } from './services/role-command.service';
 import { RolePermissionsService } from './services/role-permissions.service';
 import { RoleUsersService } from './services/role-users.service';
 
-/** Module quản trị role (API /api/v2/rbac-core). Dùng engine kiểm quyền từ lõi rbac (@Global). */
+/** Module quản trị role (API /api/v2/rbac-roles). Dùng engine kiểm quyền từ lõi rbac (@Global). */
 @Module({
   imports: [TypeOrmModule.forFeature([CoreRole, CorePermission, CoreUserRole])],
   controllers: [RbacRolesController],

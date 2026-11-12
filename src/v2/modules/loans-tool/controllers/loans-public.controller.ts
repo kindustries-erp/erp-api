@@ -5,7 +5,7 @@ import { SimulateLoanDto } from '../dto/simulate-loan.dto';
 import type { LoanSimulationResult } from '@/v2/core/loans-core';
 
 @ApiTags('loans_public')
-@Controller(['api/v2/public/loans', 'public/loans'])
+@Controller('api/v2/public/loans-tool')
 export class LoansPublicController {
   constructor(private readonly loansService: LoansService) {}
 

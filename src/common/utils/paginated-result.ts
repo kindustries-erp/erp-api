@@ -23,6 +23,8 @@ export interface PaginatedResult<
   items: T[];
   pagination: PaginationMeta;
   summaries: S;
+  /** Dữ liệu phụ của cả danh sách (không thuộc từng dòng), ví dụ `unreadCount`. Chỉ có khi được truyền. */
+  extraData?: Record<string, unknown>;
 }
 
 /** Tạo khối phân trang. `totalPages` tối thiểu bằng 1 kể cả khi không có dòng nào. */
@@ -42,18 +44,39 @@ export const buildPagination = (
   };
 };
 
-/** Response danh sách không có `summaries`: `items` và `pagination`. */
+/** Response danh sách không có `summaries`: `items` và `pagination` (kèm `extraData` khi cần). */
 export type PagedList<T> = { items: T[]; pagination: PaginationMeta };
 
-export const toPagedList = <T>(
+/**
+ * Gom `items` và `pagination`. Truyền `extraData` khi danh sách có dữ liệu phụ chung
+ * (ví dụ `{ unreadCount }`); không truyền thì response không có key `extraData`.
+ */
+export function toPagedList<T>(
   items: T[],
   page: number,
   pageSize: number,
   total: number,
-): PagedList<T> => ({
-  items,
-  pagination: buildPagination(page, pageSize, total),
-});
+): PagedList<T>;
+export function toPagedList<T, E extends Record<string, unknown>>(
+  items: T[],
+  page: number,
+  pageSize: number,
+  total: number,
+  extraData: E,
+): PagedList<T> & { extraData: E };
+export function toPagedList<T>(
+  items: T[],
+  page: number,
+  pageSize: number,
+  total: number,
+  extraData?: Record<string, unknown>,
+): PagedList<T> & { extraData?: Record<string, unknown> } {
+  const result: PagedList<T> = {
+    items,
+    pagination: buildPagination(page, pageSize, total),
+  };
+  return extraData ? { ...result, extraData } : result;
+}
 
 /** Gom items đã map cùng phân trang và tổng thành response danh sách chuẩn v2. */
 export const toPaginatedResult = <
@@ -65,8 +88,10 @@ export const toPaginatedResult = <
   pageSize: number,
   total: number,
   summaries: S = {} as S,
+  extraData?: Record<string, unknown>,
 ): PaginatedResult<T, S> => ({
   items,
   pagination: buildPagination(page, pageSize, total),
   summaries,
+  ...(extraData ? { extraData } : {}),
 });

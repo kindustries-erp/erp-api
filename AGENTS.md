@@ -377,6 +377,8 @@ Source of truth for this repo (`./erp-api`).
 - **Imports**: Use alias imports. Group 3rd-party imports first, followed by a blank line, then custom code imports.
 - **Module boundaries**: New domain work should stay inside `src/<domain>/...`. Cross-domain orchestration is allowed, but hidden coupling and DTO leakage across domains are not.
 - **Reuse-first**: Before creating a new helper/service/util, inspect existing code in `src/common/**`, the current domain, and adjacent ERP domains. If creating a new primitive, note the reason in the task.
+- **Route v2**: `@Controller('api/v2/<tên thư mục module>')`, một chuỗi, không alias `api/v1` (xem `api-structure`, mục 0a).
+- **Response list v2**: `{ items, pagination, summaries?, extraData? }`; dữ liệu phụ chung của list (ví dụ `unreadCount`) đặt trong `extraData`, không thêm key phẳng ở gốc (xem `api-structure`, `references/v2-module.md`).
 - **Definition of done**: A backend task is not done until task checklist is updated, validation evidence is recorded, and commit/push status is stated clearly.
 
 ### Teamwork guardrails

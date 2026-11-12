@@ -76,7 +76,7 @@ Quyền resource: `garage_procurement_orders`. Seed từ `garage_purchase_orders
 
 - Đã gỡ `POST /api/v2/procurement-orders-garage/:id/receipts` và `ReceiveGoodsDto`. Nhận hàng GOODS chỉ qua phiếu nhập kho (GR) `post`; hủy GR đã post hoàn số đã nhận.
 - Nghiệm thu dịch vụ (`acceptances`) không đổi.
-- `erp-procurement-orders` (luồng thường) vẫn giữ `receipts` vì chưa nối GR.
+- `/api/v2/procurement-orders-erp` (luồng thường) vẫn giữ `receipts` vì chưa nối GR.
 
 ## 10. Xóa mềm và xóa cứng (2026-11-05)
 

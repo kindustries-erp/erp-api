@@ -30,7 +30,7 @@ describe('NotificationsInboxService (facade)', () => {
     };
   }
 
-  it('list trả items là response DTO, pagination và unreadCount', async () => {
+  it('list trả items là response DTO, pagination và extraData.unreadCount', async () => {
     const { service, query } = setup();
 
     const res = await service.list('user-a', { page: 2, pageSize: 20 } as any);
@@ -50,7 +50,8 @@ describe('NotificationsInboxService (facade)', () => {
       next: 3,
       previous: 1,
     });
-    expect(res.unreadCount).toBe(5);
+    expect(res.extraData).toEqual({ unreadCount: 5 });
+    expect(res).not.toHaveProperty('unreadCount');
   });
 
   it('thao tác đơn trả { message, data } và dùng userId được truyền vào', async () => {
