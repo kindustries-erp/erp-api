@@ -117,6 +117,8 @@ import {
   LoanEntity,
   LoanPaymentEntity,
 } from '@/v2/modules/loans-tool/entities'; // api-v2-module:loans:entity-imports
+import { GarageItem } from '@/v2/modules/items-garage/entities/garage-item.entity'; // api-v2-module:items-garage:entity-imports
+import { AiHubUsageLog } from '@/v2/modules/ai-hub-gateway/entities/ai-hub-usage-log.entity'; // api-v2-module:ai-hub-gateway:entity-imports
 // plop:api-v2-entity-imports
 const entities = [
   ApprovalEvent,
@@ -232,6 +234,8 @@ const entities = [
   InventoryMovementsGarageAdjustment, // api-v2-module:inventory-movements-garage-adjustments:entities
   LoanEntity, // api-v2-module:loans:entities
   LoanPaymentEntity,
+  GarageItem, // api-v2-module:items-garage:entities
+  AiHubUsageLog, // api-v2-module:ai-hub-gateway:entities
   // plop:api-v2-entities
 ];
 

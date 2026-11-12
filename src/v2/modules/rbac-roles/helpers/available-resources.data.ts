@@ -97,4 +97,13 @@ export const AVAILABLE_RBAC_RESOURCES: AvailableRbacResource[] = [
   },
   { resource: 'dashboard', label: 'Dashboard / Tổng quan hệ thống' },
   { resource: 'attachments', label: 'Attachments / Quản lý tài liệu' },
+  { resource: 'garage_items', label: 'Danh mục mã hàng Garage (Garage Items)' },
+  {
+    resource: 'ai_hub_garage',
+    label: 'Trợ lý AI Garage: đọc hóa đơn tạo đề nghị mua',
+  },
+  {
+    resource: 'ai_hub_gateway',
+    label: 'AI Hub: usage log và kiểm tra gateway',
+  },
 ];

@@ -5,3 +5,4 @@ export * from './entities/core-header.entity';
 export * from './helpers/extra-data.util';
 export * from './helpers/run-in-optional-transaction.util';
 export * from './dto/extra-data.decorator';
+export * from './helpers/text-normalize.util';

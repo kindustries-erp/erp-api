@@ -63,6 +63,7 @@ const GarageProcurementRequestApprovalConfigController =
     GarageProcurementRequestOrderRefService,
   ],
   exports: [
+    GarageProcurementRequestCommandService,
     GarageProcurementRequestQueryService,
     GarageProcurementRequestOrderingService,
   ],

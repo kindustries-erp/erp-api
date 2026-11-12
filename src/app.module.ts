@@ -70,6 +70,9 @@ import { InventoryMovementsGarageReceiptsModule } from './v2/modules/inventory-m
 import { InventoryMovementsGarageIssuesModule } from './v2/modules/inventory-movements-garage-issues/inventory-movements-garage-issues.module'; // api-v2-module:inventory-movements-garage-issues:app-imports
 import { InventoryMovementsGarageAdjustmentsModule } from './v2/modules/inventory-movements-garage-adjustments/inventory-movements-garage-adjustments.module'; // api-v2-module:inventory-movements-garage-adjustments:app-imports
 import { LoansModule } from './v2/modules/loans-tool/loans.module'; // api-v2-module:loans:app-imports
+import { ItemsGarageModule } from './v2/modules/items-garage/items-garage.module'; // api-v2-module:items-garage:app-imports
+import { AiHubGatewayModule } from './v2/modules/ai-hub-gateway/ai-hub-gateway.module'; // api-v2-module:ai-hub-gateway:app-imports
+import { AiHubGarageModule } from './v2/modules/ai-hub-garage/ai-hub-garage.module'; // api-v2-module:ai-hub-garage:app-imports
 // plop:api-v2-imports
 
 @Module({
@@ -199,6 +202,9 @@ import { LoansModule } from './v2/modules/loans-tool/loans.module'; // api-v2-mo
     InventoryMovementsGarageIssuesModule, // api-v2-module:inventory-movements-garage-issues:app-modules
     InventoryMovementsGarageAdjustmentsModule, // api-v2-module:inventory-movements-garage-adjustments:app-modules
     LoansModule, // api-v2-module:loans:app-modules
+    ItemsGarageModule, // api-v2-module:items-garage:app-modules
+    AiHubGatewayModule, // api-v2-module:ai-hub-gateway:app-modules
+    AiHubGarageModule, // api-v2-module:ai-hub-garage:app-modules
     // plop:api-v2-modules
   ],
   controllers: [AppController],
