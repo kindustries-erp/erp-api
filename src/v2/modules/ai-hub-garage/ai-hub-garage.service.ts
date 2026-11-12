@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { AiDocumentFile } from '@/v2/core/ai-hub-core';
-import { GarageItemMatchService } from '@/v2/modules/items-garage/services/garage-item-match.service';
+import { GARAGE_ITEM_CATALOG } from '@/v2/modules/items-garage/items-garage.tokens';
+import type { GarageItemCatalog } from '@/v2/modules/items-garage/items-garage.tokens';
 import { CreatePrFromInvoiceDto } from './dto/create-pr-from-invoice.dto';
 import { InvoicePreviewResponseDto } from './dto/invoice-preview-response.dto';
 import { PrFromInvoiceResponseDto } from './dto/pr-from-invoice-response.dto';
@@ -13,7 +14,8 @@ import { GaragePrFromInvoiceService } from './services/garage-pr-from-invoice.se
 export class AiHubGarageService {
   constructor(
     private readonly extractor: GarageInvoiceExtractService,
-    private readonly items: GarageItemMatchService,
+    @Inject(GARAGE_ITEM_CATALOG)
+    private readonly items: GarageItemCatalog,
     private readonly prFromInvoice: GaragePrFromInvoiceService,
   ) {}
 

@@ -56,6 +56,7 @@ describe('GarageItemMatchService', () => {
         ),
         getRepository: jest.fn(() => ({
           createQueryBuilder: () => queryBuilder([existing]),
+          metadata: { tableName: 'items_garage' },
         })),
         create: jest.fn((_entity: unknown, value: object) => value),
         save: jest.fn((_entity: unknown, value: GarageItem) => {
@@ -80,7 +81,10 @@ describe('GarageItemMatchService', () => {
         manager as unknown as EntityManager,
       );
 
-      expect(manager.query.mock.calls[0][0]).toContain('pg_advisory_xact_lock');
+      expect(manager.query.mock.calls[0]).toEqual([
+        'SELECT pg_advisory_xact_lock(hashtext($1))',
+        ['items_garage:ensure'],
+      ]);
       expect(result.items.map((i) => i.itemCode)).toEqual([
         'VT-000007',
         'VT-000008',

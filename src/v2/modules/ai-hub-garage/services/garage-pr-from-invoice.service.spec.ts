@@ -1,5 +1,5 @@
 import { DataSource } from 'typeorm';
-import { GarageItemMatchService } from '@/v2/modules/items-garage/services/garage-item-match.service';
+import { GarageItemCatalog } from '@/v2/modules/items-garage/items-garage.tokens';
 import { GarageProcurementRequestCommandService } from '@/v2/modules/procurement-requests-garage/services/procurement-request-command.service';
 import { CreatePrFromInvoiceDto } from '../dto/create-pr-from-invoice.dto';
 import { GaragePrFromInvoiceService } from './garage-pr-from-invoice.service';
@@ -45,7 +45,7 @@ describe('GaragePrFromInvoiceService', () => {
     };
     service = new GaragePrFromInvoiceService(
       dataSource as unknown as DataSource,
-      items as unknown as GarageItemMatchService,
+      items as unknown as GarageItemCatalog,
       requests as unknown as GarageProcurementRequestCommandService,
     );
   });

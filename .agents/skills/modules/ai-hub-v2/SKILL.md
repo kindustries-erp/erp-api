@@ -1,6 +1,6 @@
 ---
 name: ai-hub-v2
-description: Tri thức AI Hub v2 trong erp-api (lõi v2/core/ai-hub-core, module ai-hub-gateway gọi 9router theo tier, items-garage là danh mục mã hàng garage, ai-hub-garage đọc ảnh/PDF hóa đơn và tạo đề nghị mua nháp). Đọc trước khi sửa các thư mục này hoặc thêm tính năng AI mới theo chuẩn v2.
+description: Tri thức AI Hub v2 trong erp-api (lõi v2/core/ai-hub-core, module ai-hub-gateway gọi 9router theo tier, items-core + items-garage là danh mục mã hàng garage dùng chung, ai-hub-garage đọc ảnh/PDF hóa đơn và tạo đề nghị mua nháp). Đọc trước khi sửa các thư mục này hoặc thêm tính năng AI mới theo chuẩn v2.
 ---
 
 # AI Hub v2 (erp-api)
@@ -17,7 +17,8 @@ description: Tri thức AI Hub v2 trong erp-api (lõi v2/core/ai-hub-core, modul
 | :--- | :--- |
 | `src/v2/core/ai-hub-core/` | Lõi, không gọi mạng, không bảng. Contract (`AiTier`, `AiGatewayPort`, `AiCompletionRequest`, `AiDocumentFile`), helper thuần (`parseTierModels`, `resolveTier`, `buildVisionMessages`, `parseAiJson`, `toAiNumber`, `toAiText`), `AbstractAiDocumentAgentService<T>` |
 | `src/v2/modules/ai-hub-gateway/` | `AiGatewayClient` (implements `AiGatewayPort`), `AiUsageLogService`, `AiGatewayHealthService`; bảng `ai_hub_usage_logs` |
-| `src/v2/modules/items-garage/` | Danh mục mã hàng garage, bảng `items_garage`; `GarageItemMatchService` |
+| `src/v2/core/items-core/` | Lõi danh mục mã hàng (xem skill `items-core`): `BaseItemEntity`, hàm mã/khớp thuần, `AbstractItemMatchService`, cổng `ItemCatalogPort` |
+| `src/v2/modules/items-garage/` | Danh mục mã hàng garage, bảng `items_garage`; `GarageItemMatchService` kế thừa lõi, export token `GARAGE_ITEM_CATALOG` (xem skill `items-garage`) |
 | `src/v2/modules/ai-hub-garage/` | Trợ lý hóa đơn garage: xem trước và tạo đề nghị mua |
 | `src/v2/core/base-core/helpers/text-normalize.util.ts` | `normalizeVietnamese` (bỏ dấu, chữ thường) dùng chung v2 |
 
@@ -46,6 +47,7 @@ description: Tri thức AI Hub v2 trong erp-api (lõi v2/core/ai-hub-core, modul
 
 - Bảng `items_garage`: `item_code` (unique trong dòng chưa xóa mềm), `item_name`, `name_normalized` (server tự tính), `unit`, `item_type`, `source` (`SEED | AI | MANUAL`), `is_active`.
 - Nhóm hàng cũng là tiền tố mã: `VF` phụ tùng VinFast, `PT` phụ tùng khác, `VT` vật tư tiêu hao, `DV` dịch vụ, `CK` chiết khấu, `CCDC` công cụ dụng cụ, `HC` hành chính.
+- `ai-hub-garage` tiêm cổng bằng `@Inject(GARAGE_ITEM_CATALOG)`, không import service cụ thể.
 - `GarageItemMatchService.match(lines)`: một query cho cả lô; khớp theo mã (kể cả mã đã lưu kèm tiền tố) trước, rồi tới tên không dấu.
 - `ensureItems(lines, manager)`: phải gọi trong transaction. Khóa `pg_advisory_xact_lock`, tra lại danh mục, tạo mã thiếu. Chứng từ có mã gốc: `<TIỀN TỐ>-<MÃ GỐC>`. Không có: `<TIỀN TỐ>-<6 số>` tăng dần theo nhóm. Hai dòng cùng tên trong một lô chỉ tạo một mã.
 - Dòng `DV` vào PR với `lineType = SERVICE`, còn lại `GOODS`. Đơn vị tính lưu ở `extraData.unit` của dòng PR. Header PR có `extraData.source = 'AI_INVOICE'`, kèm `invoiceNo`, `sellerName`.

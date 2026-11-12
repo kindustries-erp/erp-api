@@ -1,4 +1,4 @@
-import { GarageItemMatchService } from '@/v2/modules/items-garage/services/garage-item-match.service';
+import { GarageItemCatalog } from '@/v2/modules/items-garage/items-garage.tokens';
 import { CreatePrFromInvoiceDto } from './dto/create-pr-from-invoice.dto';
 import { GarageInvoiceExtractService } from './services/garage-invoice-extract.service';
 import { GaragePrFromInvoiceService } from './services/garage-pr-from-invoice.service';
@@ -46,7 +46,7 @@ describe('AiHubGarageService', () => {
     };
     service = new AiHubGarageService(
       extractor as unknown as GarageInvoiceExtractService,
-      items as unknown as GarageItemMatchService,
+      items as unknown as GarageItemCatalog,
       prFromInvoice as unknown as GaragePrFromInvoiceService,
     );
   });

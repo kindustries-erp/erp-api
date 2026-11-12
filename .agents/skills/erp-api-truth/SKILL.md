@@ -83,7 +83,7 @@ Tài liệu chi tiết của từng module nằm tại `.agents/skills/modules/<
 - **Đối tác**: `business-partners-core` (lõi `src/v2/core/business-partners-core`, module `src/v2/modules/business-partners-management`)
 - **Chi nhánh**: `branches-core` (lõi `src/v2/core/branches-core`, module `src/v2/modules/branches-management`; entity consumers import canonical v2, route `/api/v2/branches`)
 - **Thông báo (v2, theo user, không RBAC)**: `notifications-inbox` (`/api/v2/notifications-inbox`, bảng `notifications_inbox`; job xóa cứng định kỳ; base dùng chung ở lõi `notifications-core`)
-- **AI Hub v2**: `ai-hub-v2` (lõi `src/v2/core/ai-hub-core`; module `ai-hub-gateway` gọi 9router theo tier từ `NINE_ROUTER_TIER_MODELS`, `items-garage` là danh mục mã hàng garage, `ai-hub-garage` đọc hóa đơn tạo đề nghị mua nháp; không import `ai-hub-core` v1)
+- **AI Hub v2**: `ai-hub-v2` (lõi `src/v2/core/ai-hub-core`; module `ai-hub-gateway` gọi 9router theo tier từ `NINE_ROUTER_TIER_MODELS`, `items-core` (lõi) + `items-garage` (module) là danh mục mã hàng garage dùng chung qua cổng `ItemCatalogPort`, `ai-hub-garage` đọc hóa đơn tạo đề nghị mua nháp; không import `ai-hub-core` v1)
 - **Lịch chạy nền (v2)**: `scheduler-jobs` (tự tìm job kế thừa `ScheduledJob` từ lõi `scheduler-core`, cổng `ENABLE_CRON` duy nhất). Cron mới là class kế thừa `ScheduledJob` trong module
 - **Hệ thống, cấu hình, phân quyền, nhật ký**: `admin-dashboard-core`, `ai-hub-core`, `app-config`, `audit-core`, `module-config`, `rbac-core`, `system-operations-core`
 

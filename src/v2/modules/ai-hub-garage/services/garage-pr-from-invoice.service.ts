@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import { GarageItemMatchService } from '@/v2/modules/items-garage/services/garage-item-match.service';
+import { GARAGE_ITEM_CATALOG } from '@/v2/modules/items-garage/items-garage.tokens';
+import type { GarageItemCatalog } from '@/v2/modules/items-garage/items-garage.tokens';
 import { GarageProcurementRequestCommandService } from '@/v2/modules/procurement-requests-garage/services/procurement-request-command.service';
 import { CreatePrFromInvoiceDto } from '../dto/create-pr-from-invoice.dto';
 import { PrFromInvoiceResponseDto } from '../dto/pr-from-invoice-response.dto';
@@ -14,7 +15,8 @@ import { lineTypeOf } from '../helpers/garage-invoice-extraction.helper';
 export class GaragePrFromInvoiceService {
   constructor(
     private readonly dataSource: DataSource,
-    private readonly items: GarageItemMatchService,
+    @Inject(GARAGE_ITEM_CATALOG)
+    private readonly items: GarageItemCatalog,
     private readonly requests: GarageProcurementRequestCommandService,
   ) {}
 
