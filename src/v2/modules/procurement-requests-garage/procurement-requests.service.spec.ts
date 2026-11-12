@@ -46,6 +46,7 @@ describe('GarageProcurementRequestsService (facade)', () => {
       approvers as never,
       notifier as never,
       {} as never,
+      {} as never,
     );
     const out = await svc.transition('h1', 'approve', 'boss');
 
@@ -79,6 +80,7 @@ describe('GarageProcurementRequestsService (facade)', () => {
       { resolve: jest.fn() } as never,
       { assertEligible: jest.fn() } as never,
       notifier as never,
+      {} as never,
       {} as never,
     );
 
@@ -114,6 +116,7 @@ describe('GarageProcurementRequestsService (facade)', () => {
         approvers as never,
         notifier as never,
         flow as never,
+        { forRequests: jest.fn().mockResolvedValue(new Map()) } as never,
       );
       return { svc, notifier, approvers };
     };

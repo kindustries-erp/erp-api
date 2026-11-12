@@ -20,6 +20,8 @@ import { GarageProcurementRequestQueryService } from './services/procurement-req
 import { GarageProcurementRequestOrderingService } from './services/garage-procurement-request-ordering.service';
 import { ProcurementRequestNotifierService } from './services/procurement-request-notifier.service';
 import { NotificationsInboxModule } from '@/v2/modules/notifications-inbox/notifications-inbox.module';
+import { GarageProcurementOrder } from '@/v2/modules/procurement-orders-garage/entities/procurement-order.entity';
+import { GarageProcurementRequestOrderRefService } from './services/garage-procurement-request-order-ref.service';
 
 const GarageProcurementRequestApprovalConfigController =
   createApprovalConfigController({
@@ -35,6 +37,7 @@ const GarageProcurementRequestApprovalConfigController =
     TypeOrmModule.forFeature([
       GarageProcurementRequest,
       GarageProcurementRequestLine,
+      GarageProcurementOrder,
       ApprovalEvent,
       ApprovalSetting,
       CoreUser,
@@ -57,6 +60,7 @@ const GarageProcurementRequestApprovalConfigController =
     GarageProcurementRequestsService,
     GarageProcurementRequestOrderingService,
     ProcurementRequestNotifierService,
+    GarageProcurementRequestOrderRefService,
   ],
   exports: [
     GarageProcurementRequestQueryService,

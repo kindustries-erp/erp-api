@@ -29,6 +29,7 @@ import { GarageProcurementRequestCommandService } from './services/procurement-r
 import { GarageProcurementRequestFlowService } from './services/garage-procurement-request-flow.service';
 import { GarageProcurementRequestQueryService } from './services/procurement-request-query.service';
 import { ProcurementRequestNotifierService } from './services/procurement-request-notifier.service';
+import { GarageProcurementRequestOrderRefService } from './services/garage-procurement-request-order-ref.service';
 
 /** Facade: điều phối giữa command, query và chuyển sang response DTO. */
 @Injectable()
@@ -41,6 +42,7 @@ export class GarageProcurementRequestsService {
     private readonly approvers: ApproverDirectoryService,
     private readonly notifier: ProcurementRequestNotifierService,
     private readonly flow: GarageProcurementRequestFlowService,
+    private readonly orderRef: GarageProcurementRequestOrderRefService,
   ) {}
 
   async create(
@@ -74,8 +76,11 @@ export class GarageProcurementRequestsService {
   ): Promise<PurchaseRequestListResponseDto> {
     const out = await this.query.list(dto);
     const emailOf = await resolveApprovalEmails(this.actors, out.rows);
+    const related = await this.orderRef.forRequests(out.rows.map((h) => h.id));
     return toPaginatedResult(
-      out.rows.map((h) => toPurchaseRequestResponse(h, [], emailOf)),
+      out.rows.map((h) =>
+        toPurchaseRequestResponse(h, [], emailOf, related.get(h.id) ?? []),
+      ),
       out.page,
       out.pageSize,
       out.total,

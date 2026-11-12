@@ -29,6 +29,7 @@ import { GarageProcurementOrderCommandService } from './services/procurement-ord
 import { GarageProcurementOrderFlowService } from './services/garage-procurement-order-flow.service';
 import { GarageProcurementOrderFulfilmentService } from './services/procurement-order-fulfilment.service';
 import { GarageProcurementOrderQueryService } from './services/procurement-order-query.service';
+import { GarageProcurementOrderRequestRefService } from './services/garage-procurement-order-request-ref.service';
 
 /** Facade: điều phối command, giao nhận, query và chuyển sang response DTO. */
 @Injectable()
@@ -42,6 +43,7 @@ export class GarageProcurementOrdersService {
     private readonly dataSource: DataSource,
     private readonly approvers: ApproverDirectoryService,
     private readonly flow: GarageProcurementOrderFlowService,
+    private readonly requestRef: GarageProcurementOrderRequestRefService,
   ) {}
 
   async create(
@@ -94,8 +96,21 @@ export class GarageProcurementOrdersService {
       deleted: dto.deleted,
     });
     const emailOf = await resolveApprovalEmails(this.actors, out.rows);
+    const requestNos = await this.requestRef.requestNos(
+      out.rows
+        .map((h) => h.requestId)
+        .filter((id): id is string => Boolean(id)),
+    );
     return toPaginatedResult(
-      out.rows.map((h) => toGarageProcurementOrderResponse(h, [], [], emailOf)),
+      out.rows.map((h) =>
+        toGarageProcurementOrderResponse(
+          h,
+          [],
+          [],
+          emailOf,
+          h.requestId ? (requestNos.get(h.requestId) ?? null) : null,
+        ),
+      ),
       out.page,
       out.pageSize,
       out.total,
@@ -128,11 +143,17 @@ export class GarageProcurementOrdersService {
   async findOne(id: string): Promise<GarageProcurementOrderResponseDto> {
     const { header, lines, acceptances } = await this.query.findOne(id);
     const emailOf = await resolveApprovalEmails(this.actors, [header]);
+    const requestNo = header.requestId
+      ? ((await this.requestRef.requestNos([header.requestId])).get(
+          header.requestId,
+        ) ?? null)
+      : null;
     return toGarageProcurementOrderResponse(
       header,
       lines,
       acceptances,
       emailOf,
+      requestNo,
     );
   }
 

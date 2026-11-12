@@ -28,6 +28,7 @@ function makeService(requestBranch: string | null | 'missing') {
     dataSource as never,
     { assertEligible: jest.fn() } as never,
     {} as never,
+    {} as never,
   );
   return { svc, command };
 }
@@ -88,6 +89,7 @@ function makeUpdateService(
     { resolve: jest.fn().mockResolvedValue(new Map()) } as never,
     dataSource as never,
     { assertEligible: jest.fn() } as never,
+    {} as never,
     {} as never,
   );
   return { svc, command };

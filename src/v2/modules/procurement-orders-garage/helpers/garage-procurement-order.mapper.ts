@@ -25,12 +25,16 @@ interface GarageAcceptanceLike {
   isVoided: boolean;
 }
 
-/** Chuyển entity PO garage sang response DTO. Không trả entity ra ngoài. */
+/**
+ * Chuyển entity PO garage sang response DTO. Không trả entity ra ngoài.
+ * `requestNo` do facade tra theo lô (null khi đơn lập trực tiếp).
+ */
 export function toGarageProcurementOrderResponse(
   header: GarageHeaderLike,
   lines: Parameters<typeof toProcurementOrderResponse>[1],
   acceptances: GarageAcceptanceLike[] = [],
   emailOf: ApprovalEmailLookup = () => null,
+  requestNo: string | null = null,
 ): GarageProcurementOrderResponseDto {
   const base = toProcurementOrderResponse(header, lines, emailOf);
   return {
@@ -40,6 +44,7 @@ export function toGarageProcurementOrderResponse(
     paymentStatus: header.paymentStatus,
     supplierInvoiceNo: header.supplierInvoiceNo,
     issuedAt: header.issuedAt ?? null,
+    requestNo,
     acceptances: acceptances.map(
       (a): GarageProcurementOrderAcceptanceDto => ({
         id: a.id,

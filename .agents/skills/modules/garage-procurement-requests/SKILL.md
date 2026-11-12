@@ -133,3 +133,16 @@ Quyền resource: `garage_procurement_requests`. Seed từ `garage_purchase_orde
 - Quyền: tạo cần CREATE + UPDATE; sửa cần UPDATE (AND semantics).
 - Command lõi nhận `manager?` tùy chọn (không truyền thì giữ hành vi cũ).
 - Endpoint cũ `POST /` và `POST /:id/submit` giữ nguyên.
+
+## 14. Cập nhật 2026-11-12: PO liên quan trên danh sách
+
+- `GET` danh sách đề nghị trả thêm `relatedOrders: [{ id, orderNo, status }]` cho mỗi dòng: các PO đã sinh từ đề nghị, bỏ PO đã xóa mềm, sắp `createdAt` tăng dần.
+- Tra cứu bằng `GarageProcurementRequestOrderRefService.forRequests(ids)` (`services/garage-procurement-request-order-ref.service.ts`): một query `IN` cho cả trang, không N+1. Module chỉ đăng ký entity PO (`GarageProcurementOrder`), không import module PO.
+- Chi tiết (`findOne`) không điền `relatedOrders` (để `undefined`). Web coi thiếu field là rỗng.
+
+## 15. Cập nhật 2026-11-12: lọc và gợi ý cột Đơn mua liên quan
+
+- Cột `relatedOrders` có lọc (`column_filters`, `column_search`, `column_operators`) và gợi ý giá trị (`column-options`, `column=relatedOrders`). Không có sắp xếp theo cột này.
+- Quan hệ 1-N nên lọc theo "có ít nhất một PO khớp" bằng `EXISTS` (blank = `NOT EXISTS`). Logic nằm ở `helpers/related-order-filter.helper.ts`; không khai báo trong `TABLE_COLUMNS`, và util `table-query` giữ nguyên.
+- Gợi ý lấy số PO còn hiệu lực (`isDeleted = false`) thuộc các đề nghị khớp bộ lọc cột khác (cascading), qua `findTableColumnOptions` trên bảng PO (`o.orderNo`).
+- Spec: `services/procurement-request-query.service.spec.ts` (EXISTS khi lọc).

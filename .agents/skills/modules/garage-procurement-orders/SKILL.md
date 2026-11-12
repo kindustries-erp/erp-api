@@ -132,3 +132,14 @@ Quyền resource: `garage_procurement_orders`. Seed từ `garage_purchase_orders
 - Điều phối qua `GarageProcurementOrderFlowService.saveAndSubmit`: lưu rồi submit trong MỘT transaction. Lỗi submit (vd. thiếu NCC) rollback cả đơn nháp, nên PR nguồn không bị giữ số lượng bởi đơn mồ côi (đây là gốc của lỗi 409 "vượt phần còn lại").
 - Khóa duyệt PO tắt: submit ghi nhận luôn (APPROVED). Bật: cần `approverId`.
 - Endpoint cũ (`POST /`, `PATCH /:id`, `POST /:id/submit`) giữ nguyên.
+
+## 14. Cập nhật 2026-11-12: requestNo (đề nghị nguồn)
+
+- List và detail đơn mua trả thêm `requestNo` (số đề nghị nguồn). Đơn lập trực tiếp (không có `requestId`) trả `null`.
+- Tra cứu bằng `GarageProcurementOrderRequestRefService.requestNos(ids)` (`services/garage-procurement-order-request-ref.service.ts`): một query theo lô, không lọc `isDeleted` nên đề nghị đã xóa mềm vẫn hiện số. Module chỉ đăng ký entity PR (`GarageProcurementRequest`).
+
+## 15. Cập nhật 2026-11-12: lọc, sắp xếp và gợi ý cột Đề nghị mua
+
+- `requestNo` nằm trong `TABLE_COLUMNS` dưới dạng sub-select (`proc_requests_garage.request_no` theo `h.requestId`), nên lọc, sắp xếp và `column-options` dùng chung cơ chế với các cột khác.
+- Quan hệ 1-1 (mỗi PO tối đa một đề nghị). Đơn lập trực tiếp có `requestNo` rỗng, nên lọc "trống" bắt được chúng.
+- Spec: `services/procurement-order-query.service.spec.ts`.

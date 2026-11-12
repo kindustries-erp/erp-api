@@ -1,6 +1,7 @@
 import {
   PurchaseRequestLineResponseDto,
   PurchaseRequestResponseDto,
+  RelatedOrderDto,
 } from '../dto/procurement-request-response.dto';
 import {
   ApprovalEmailLookup,
@@ -45,11 +46,13 @@ const num = (v: string | null): number | null => (v == null ? null : Number(v));
 /**
  * Chuyển entity sang response DTO. Không bao giờ trả entity ra ngoài.
  * `emailOf` tra email theo lô ở facade; thiếu thì email để null.
+ * `relatedOrders` chỉ truyền ở danh sách; chi tiết để undefined.
  */
 export function toPurchaseRequestResponse(
   header: RequestHeaderLike,
   lines: RequestLineLike[],
   emailOf: ApprovalEmailLookup = () => null,
+  relatedOrders?: RelatedOrderDto[],
 ): PurchaseRequestResponseDto {
   return {
     id: header.id,
@@ -66,6 +69,7 @@ export function toPurchaseRequestResponse(
     createdBy: header.createdBy ?? null,
     createdByEmail: emailOf(header.createdBy),
     approval: toApprovalSummary(header, emailOf),
+    relatedOrders,
     lines: [...lines]
       .sort((a, b) => a.lineNo - b.lineNo)
       .map(
