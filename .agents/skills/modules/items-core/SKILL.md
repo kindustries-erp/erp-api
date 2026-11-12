@@ -20,7 +20,9 @@ description: Lõi v2 danh mục mã hàng (src/v2/core/items-core): entity nền
 
 ## 3. Ai dùng
 - **Kế thừa**: mỗi biến thể là một module `items-*` có entity kế thừa `BaseItemEntity` và service kế thừa `AbstractItemMatchService`. Hiện có `items-garage`. Ứng viên sau này (chưa là v2, chỉ làm khi có lệnh): `items-erp` (`erp_inventory_items`, có cột riêng FK đơn vị/nhóm), `items-vinfast` (`vinfast_parts_catalog`).
-- **Tiêu thụ qua cổng**: lõi và module mua hàng/kho (`procurement-*`, `goods-receipts-*`, `inventory-movements-*`) không import module biến thể trong lõi; chúng nhận `ItemCatalogPort` của biến thể tương ứng. Hiện chỉ `ai-hub-garage` dùng; mua/nhận hàng/kho chưa nối.
+- **Tiêu thụ qua cổng**: lõi và module mua hàng/kho (`procurement-*`, `goods-receipts-*`, `inventory-movements-*`) không import module biến thể trong lõi; chúng nhận `ItemCatalogPort` của biến thể tương ứng. Đã nối (2026-11-12): `ai-hub-garage` (`source: 'AI'`, khớp tên luôn bật) và chứng từ nhập tay qua `AbstractLineItemResolver` (`resolveLines`, `resolveLinesBy`) với `MANUAL_LINE_RESOLVE_OPTIONS`.
+- **Quy tắc dòng chứng từ**: có mã → chỉ khớp theo mã, chưa có thì tạo đúng mã đó (không tiền tố); không mã → khớp tên, không thì sinh `<NHÓM>-<6 số>`; điền tên/đơn vị khi trống; dòng giảm tồn (`create:false`) chỉ chuẩn hóa. `ensureItems` có nhánh nhanh không khóa khi mọi dòng đã khớp.
+- **Hook `prepareLines`** (mặc định no-op) ở lõi `procurement-requests-core`, `procurement-orders-core`, `inventory-movements-core`; module garage override bằng `GarageLineItemResolver`.
 
 ## 4. Tạo biến thể mới
 1. Entity: `class XItem extends BaseItemEntity` + `@Entity('items_x')` + unique partial index trên `itemCode` (`"is_deleted" = false`).

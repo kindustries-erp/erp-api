@@ -18,9 +18,10 @@ description: Module v2 danh mục mã hàng garage (bảng items_garage, route a
 - Dùng: `@Inject(GARAGE_ITEM_CATALOG) private readonly items: GarageItemCatalog` và import module `ItemsGarageModule`. Dùng `import type` cho `GarageItemCatalog` trong tham số decorator.
 - Hiện dùng bởi `ai-hub-garage` (`match` khi xem trước, `ensureItems` trong transaction tạo PR).
 
-## 4. Chưa nối (ghi nhận 2026-11-12)
-- `procurement-requests-garage`, `goods-receipts-garage`, `procurement-flow-garage` (stock adapter) và `inventory-movements-garage-*` vẫn nhận diện hàng bằng chuỗi `item_code`, chưa kiểm tra danh mục. Nối sẽ đổi hành vi nhập liệu, cần plan riêng (chế độ đã chốt: tự tạo mã, `source = MANUAL`, không chặn).
-- Số liệu dữ liệu cũ trên `erp_greenway_staging`: nhiều dòng chứng từ không có mã (`proc_request_lines_garage` 231/340, `proc_order_lines_garage` 103/284, `goods_receipt_lines_garage` 10/97), nên không gom được theo danh mục.
+## 4. Đã nối (2026-11-12)
+- `GarageLineItemResolver` (export của `ItemsGarageModule`) chuẩn hóa mã dòng trong cùng transaction ở: `procurement-requests-garage`, `procurement-orders-garage`, `goods-receipts-garage` (create/update), `procurement-flow-garage` (`postReceiptIn` cấp mã cho dòng nháp cũ thiếu mã rồi lưu vào dòng phiếu), `inventory-movements-garage-{receipts,issues,adjustments}` (IN tạo mã, OUT chỉ chuẩn hóa).
+- Không có orchestrator điều chuyển kho (chưa có nghiệp vụ). Dòng cũ không backfill, được cấp mã khi lưu/ghi sổ.
+- Web: gợi ý mã qua `GET /api/v2/items-garage?search=` (xem skill web `items-garage`).
 
 ## 5. Lưu ý
 - Không đổi tên bảng/route/resource khi chưa có lệnh (kèm migration đổi tên bảng và quyền đã seed).
