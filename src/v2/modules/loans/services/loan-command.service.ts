@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -140,6 +141,36 @@ export class LoanCommandService {
 
     loan.isDeleted = true;
     await repo.save(loan);
+  }
+
+  /** Xóa cứng khoản vay đã xóa mềm. Chặn 409 nếu chưa xóa mềm hoặc còn lịch sử thanh toán. */
+  async hardDelete(id: string): Promise<void> {
+    await this.dataSource.transaction(async (manager) => {
+      const loan = await manager.findOne(LoanEntity, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!loan) {
+        throw new NotFoundException(`Loan with ID "${id}" not found`);
+      }
+      if (!loan.isDeleted) {
+        throw new ConflictException(
+          'Chỉ được xóa vĩnh viễn khoản vay đã xóa mềm',
+        );
+      }
+
+      const paymentCount = await manager.count(LoanPaymentEntity, {
+        where: { loanId: id },
+      });
+      if (paymentCount > 0) {
+        throw new ConflictException(
+          'Không thể xóa vĩnh viễn khoản vay đã có lịch sử thanh toán',
+        );
+      }
+
+      await manager.delete(LoanEntity, id);
+    });
   }
 
   async recordPayment(

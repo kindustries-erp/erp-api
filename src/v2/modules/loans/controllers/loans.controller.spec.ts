@@ -1,9 +1,11 @@
+import 'reflect-metadata';
 import { Test, TestingModule } from '@nestjs/testing';
 import { LoansController } from './loans.controller';
 import { LoansService } from '../loans.service';
 import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
-import { AmortizationMethod, LoanStatus } from '@/v2/core/loans-core';
+import { RBAC_PERMISSIONS_KEY } from '@/auth/decorators/require-permissions.decorator';
+import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
 
 describe('LoansController', () => {
   let controller: LoansController;
@@ -11,13 +13,19 @@ describe('LoansController', () => {
 
   beforeEach(async () => {
     service = {
-      findAll: jest
+      findAll: jest.fn().mockResolvedValue({
+        items: [],
+        pagination: { page: 1, pageSize: 20, total: 0, totalPages: 1 },
+        summaries: {},
+      }),
+      findColumnOptions: jest
         .fn()
-        .mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20 }),
+        .mockResolvedValue({ items: [], total: 0, next: null }),
       findOne: jest.fn().mockResolvedValue({ id: 'l1', title: 'Car Loan' }),
       create: jest.fn().mockResolvedValue({ id: 'l1', title: 'Car Loan' }),
       update: jest.fn().mockResolvedValue({ id: 'l1', title: 'Updated' }),
       remove: jest.fn().mockResolvedValue(undefined),
+      hardDelete: jest.fn().mockResolvedValue({ id: 'l1' }),
       recordPayment: jest.fn().mockResolvedValue({ id: 'l1' }),
       getCashflowProjection: jest
         .fn()
@@ -37,11 +45,60 @@ describe('LoansController', () => {
     controller = module.get<LoansController>(LoansController);
   });
 
-  it('should call findAll', async () => {
+  it('should call findAll and return V2 pagination + summaries', async () => {
     const q = { page: 1, pageSize: 20 };
     const res = await controller.findAll(q);
     expect(service.findAll).toHaveBeenCalledWith(q);
-    expect(res.total).toBe(0);
+    expect(res.pagination).toEqual({
+      page: 1,
+      pageSize: 20,
+      total: 0,
+      totalPages: 1,
+    });
+    expect(res.summaries).toEqual({});
+  });
+
+  it('should clamp columnOptions params and forward deleted=only', async () => {
+    await controller.columnOptions(
+      'lenderName',
+      'VCB',
+      '0',
+      '999',
+      '{"status":["ACTIVE"]}',
+      'only',
+    );
+    expect(service.findColumnOptions).toHaveBeenCalledWith(
+      'lenderName',
+      'VCB',
+      1,
+      200,
+      '{"status":["ACTIVE"]}',
+      'only',
+    );
+  });
+
+  it('should call hardDelete on permanent delete route', async () => {
+    const id = '11111111-1111-1111-1111-111111111111';
+    const res = await controller.hardDelete(id);
+    expect(service.hardDelete).toHaveBeenCalledWith(id);
+    expect(res).toEqual({ id: 'l1' });
+  });
+
+  it('should enforce RBAC permissions for columnOptions and hardDelete', () => {
+    const colPerms = Reflect.getMetadata(
+      RBAC_PERMISSIONS_KEY,
+      LoansController.prototype.columnOptions,
+    );
+    const purgePerms = Reflect.getMetadata(
+      RBAC_PERMISSIONS_KEY,
+      LoansController.prototype.hardDelete,
+    );
+    expect(colPerms).toEqual([
+      { resource: ErpResource.LOANS, action: ErpAction.READ },
+    ]);
+    expect(purgePerms).toEqual([
+      { resource: ErpResource.LOANS, action: ErpAction.PURGE },
+    ]);
   });
 
   it('should call findOne with uuid', async () => {

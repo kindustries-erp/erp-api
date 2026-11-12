@@ -86,12 +86,13 @@ Tuân thủ 100% quy chuẩn `/api-structure`:
   - `enums/loan-amortization.enum.ts`: `AmortizationMethod`, `LoanStatus`.
   - `interfaces/loan-contract.interface.ts`: Contract type.
 - **`src/v2/modules/loans/`**:
-  - `loans.service.ts`: Facade mỏng điều phối, Clean DI constructor.
-  - `services/loan-query.service.ts`: Xử lý phân trang, tìm kiếm, lấy chi tiết kèm tính toán schedule và dự báo dòng tiền hợp nhất.
-  - `services/loan-command.service.ts`: Xử lý tạo, cập nhật (đồng bộ tất cả thông số khoản vay và tự động tính lại `remaining_principal`), xóa mềm và ghi nhận thanh toán với `QueryRunner` transaction.
+  - `constants/loan-table.constants.ts`: Whitelist `TABLE_COLUMNS` (camelCase + snake_case), `SEARCH_COLUMNS`, `SUMMARY_COLUMNS` (`principalAmount`, `totalPaidPrincipal`, `remainingPrincipal`, `totalPaidInterest`) và `toFilterPayload`.
+  - `loans.service.ts`: Facade mỏng điều phối, Clean DI constructor; `findAll` bọc qua `toPaginatedResult` trả `{ items, pagination: { page, pageSize, total, totalPages }, summaries }`; `findColumnOptions` và `hardDelete` delegate sang sub-services.
+  - `services/loan-query.service.ts`: Xử lý phân trang (clamp `1..200`), tìm kiếm đa từ khóa (`applyMultiKeywordMultiFieldFilter`), lọc/sắp xếp chuẩn bảng V2 (`applyTableFilters`, `applyDateBounds`, `applyTableSort` với tie-breaker `loan.id`), tính tổng cột số (`applyListSummaries` trước phân trang), lọc `deleted=only`, gợi ý cột (`findColumnOptions`), lấy chi tiết kèm schedule và dự báo dòng tiền hợp nhất.
+  - `services/loan-command.service.ts`: Xử lý tạo, cập nhật (đồng bộ tất cả thông số khoản vay và tự động tính lại `remaining_principal`), xóa mềm (`isDeleted = true`), xóa cứng (`hardDelete`: khóa `pessimistic_write` trong transaction, chặn `409 ConflictException` nếu chưa xóa mềm hoặc còn `loan_payments_finance`) và ghi nhận thanh toán với `QueryRunner` transaction.
   - `helpers/loan.mapper.ts`: Mapper chuyển đổi giữa Entity sang Response DTO (Zero Entity Leaking).
   - `controllers/loans-public.controller.ts`: Endpoint công khai tính toán nhanh.
-  - `controllers/loans.controller.ts`: Controller có RBAC guard.
+  - `controllers/loans.controller.ts`: Controller có RBAC guard (`JwtAuthGuard`, `CoreRbacGuard`).
 
 ---
 
@@ -100,12 +101,14 @@ Tuân thủ 100% quy chuẩn `/api-structure`:
 | Method | Endpoint | Auth | Quyền (RBAC) | Mô tả |
 | :--- | :--- | :--- | :--- | :--- |
 | `POST` | `/api/v2/public/loans/simulate` | No | None | Tính toán nhanh lịch khấu hao và KPIs |
-| `GET` | `/api/v2/loans` | Yes | `loans:read` | Danh sách khoản vay (phân trang, search, status) |
-| `GET` | `/api/v2/loans/cashflow-projection` | Yes | `loans:read` | Dự báo dòng tiền nợ vay hợp nhất theo tháng |
+| `GET` | `/api/v2/loans` | Yes | `loans:read` | Danh sách khoản vay chuẩn V2 (`{ items, pagination, summaries }`, hỗ trợ `TableQueryDto` + `lenderName` + `deleted=only`) |
+| `GET` | `/api/v2/loans/column-options` | Yes | `loans:read` | Gợi ý giá trị lọc theo cột (`{ items, total, next }`, đặt trước `:id`) |
+| `GET` | `/api/v2/loans/cashflow/projection` | Yes | `loans:read` | Dự báo dòng tiền nợ vay hợp nhất theo tháng |
 | `GET` | `/api/v2/loans/:id` | Yes | `loans:read` | Chi tiết hợp đồng vay kèm schedule & payments |
 | `POST` | `/api/v2/loans` | Yes | `loans:create` | Tạo mới hợp đồng vay |
 | `PATCH` | `/api/v2/loans/:id` | Yes | `loans:update` | Cập nhật hợp đồng vay |
 | `DELETE` | `/api/v2/loans/:id` | Yes | `loans:delete` | Xóa mềm hợp đồng vay |
+| `DELETE` | `/api/v2/loans/:id/permanent` | Yes | `loans:purge` | Xóa cứng khoản vay đã xóa mềm (chặn 409 nếu còn payment) |
 | `POST` | `/api/v2/loans/:id/payments` | Yes | `loans:update` | Ghi nhận thanh toán trả nợ theo kỳ |
 
 ---

@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
+import { toPaginatedResult } from '@/common/utils/paginated-result';
 import { LoanQueryService } from './services/loan-query.service';
 import { LoanCommandService } from './services/loan-command.service';
+import { LoanMapper } from './helpers/loan.mapper';
 import {
   CashflowProjectionResponseDto,
   CreateLoanDto,
@@ -23,8 +25,33 @@ export class LoansService {
     private readonly commandService: LoanCommandService,
   ) {}
 
-  findAll(query: QueryLoanDto): Promise<LoanListResponseDto> {
-    return this.queryService.findAll(query);
+  async findAll(query: QueryLoanDto): Promise<LoanListResponseDto> {
+    const out = await this.queryService.findAll(query);
+    return toPaginatedResult(
+      out.rows.map((item) => LoanMapper.toDto(item, false)),
+      out.page,
+      out.pageSize,
+      out.total,
+      out.summaries,
+    );
+  }
+
+  findColumnOptions(
+    column: string,
+    search: string | undefined,
+    page: number,
+    pageSize: number,
+    filters?: unknown,
+    deleted?: 'only',
+  ) {
+    return this.queryService.findColumnOptions(
+      column,
+      search,
+      page,
+      pageSize,
+      filters,
+      deleted,
+    );
   }
 
   findOne(id: string): Promise<LoanResponseDto> {
@@ -52,6 +79,11 @@ export class LoansService {
 
   remove(id: string): Promise<void> {
     return this.commandService.remove(id);
+  }
+
+  async hardDelete(id: string): Promise<{ id: string }> {
+    await this.commandService.hardDelete(id);
+    return { id };
   }
 
   recordPayment(

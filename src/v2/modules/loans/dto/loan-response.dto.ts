@@ -1,3 +1,9 @@
+import { ApiProperty } from '@nestjs/swagger';
+import { PaginationMetaDto } from '@/common/dto/pagination-meta.dto';
+import {
+  SUMMARIES_SWAGGER_SCHEMA,
+  SummaryMetricDto,
+} from '@/common/dto/summary-metric.dto';
 import {
   AmortizationMethod,
   LoanSchedulePeriod,
@@ -44,11 +50,16 @@ export class LoanResponseDto {
   payments?: LoanPaymentResponseDto[];
 }
 
+/** Response danh sách khoản vay chuẩn v2: `items`, `pagination`, `summaries`. */
 export class LoanListResponseDto {
+  @ApiProperty({ type: () => [LoanResponseDto] })
   items: LoanResponseDto[];
-  total: number;
-  page: number;
-  pageSize: number;
+
+  @ApiProperty({ type: () => PaginationMetaDto })
+  pagination: PaginationMetaDto;
+
+  @ApiProperty(SUMMARIES_SWAGGER_SCHEMA)
+  summaries: Record<string, SummaryMetricDto | null>;
 }
 
 export class CashflowLoanBreakdownDto {
