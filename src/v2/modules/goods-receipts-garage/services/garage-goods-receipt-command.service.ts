@@ -18,6 +18,7 @@ import {
   mergeExtraData,
 } from '@/v2/core/base-core/helpers/extra-data.util';
 import { BaseVoucherEngineService } from '@/v2/core/goods-receipts-core/services/base-voucher-engine.service';
+import { GarageLineItemResolver } from '@/v2/modules/items-garage/services/garage-line-item-resolver.service';
 import { GarageProcurementFlowService } from '@/v2/modules/procurement-flow-garage/services/garage-procurement-flow.service';
 
 @Injectable()
@@ -28,6 +29,7 @@ export class GarageGoodsReceiptCommandService {
     private readonly repo: Repository<GarageGoodsReceipt>,
     private readonly voucherEngine: BaseVoucherEngineService,
     private readonly flow: GarageProcurementFlowService,
+    private readonly itemResolver: GarageLineItemResolver,
   ) {}
 
   async generateDailyReceiptNo(orderDate?: string): Promise<string> {
@@ -55,7 +57,9 @@ export class GarageGoodsReceiptCommandService {
           dto.receiptNo?.trim() ||
           (await this.generateDailyReceiptNo(dto.receiptDate));
 
-        const { lines = [], ...rawHeader } = dto;
+        const { lines: rawLines = [], ...rawHeader } = dto;
+        // Chuẩn hóa mã hàng theo danh mục garage, cùng transaction với việc ghi dòng
+        const lines = await this.itemResolver.resolveLines(manager, rawLines);
         // Phiếu gắn đơn mua: NCC, chi nhánh lấy từ đơn, tổng tiền tính từ dòng (không tin client)
         const order = rawHeader.garageProcurementOrderId
           ? await loadOrderForNewReceipt(
@@ -147,7 +151,11 @@ export class GarageGoodsReceiptCommandService {
         const receiptRepo = manager.getRepository(GarageGoodsReceipt);
         const lineRepo = manager.getRepository(GarageGoodsReceiptLine);
 
-        const { lines, extraData, ...rawHeader } = dto;
+        const { lines: rawLines, extraData, ...rawHeader } = dto;
+        const lines =
+          rawLines === undefined
+            ? undefined
+            : await this.itemResolver.resolveLines(manager, rawLines);
         assertOrderUnchanged(
           receipt.garageProcurementOrderId,
           rawHeader.garageProcurementOrderId,

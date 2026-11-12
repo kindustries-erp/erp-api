@@ -8,6 +8,9 @@ import {
   StockTransactionType,
 } from '@/v2/core/inventory-movements-core';
 import { AbstractStockLineVoucherCommandService } from '@/v2/core/inventory-movements-core';
+import type { BaseCreateStockVoucherLineDto } from '@/v2/core/inventory-movements-core/dto/base-stock-voucher-line.dto';
+import { GarageLineItemResolver } from '@/v2/modules/items-garage/services/garage-line-item-resolver.service';
+import type { EntityManager } from 'typeorm';
 import { InventoryMovementsGarageAdjustment } from '../entities/inventory-movements-garage-adjustment.entity';
 import { InventoryMovementsGarageAdjustmentLine } from '../entities/inventory-movements-garage-adjustment-line.entity';
 import { CreateInventoryMovementsGarageAdjustmentLineDto } from '../dto/create-inventory-movements-garage-adjustment.dto';
@@ -27,8 +30,24 @@ export class InventoryMovementsGarageAdjustmentCommandService extends AbstractSt
     dataSource: DataSource,
     events: ApprovalEventService,
     engine: StockMovementEngineService,
+    private readonly itemResolver: GarageLineItemResolver,
   ) {
     super(dataSource, events, engine);
+  }
+
+  /** Phiếu điều chỉnh: dòng tăng tạo mã theo danh mục, dòng giảm chỉ chuẩn hóa mã đã có. */
+  protected prepareLines(
+    manager: EntityManager,
+    lines: BaseCreateStockVoucherLineDto[],
+  ): Promise<BaseCreateStockVoucherLineDto[]> {
+    return this.itemResolver.resolveLinesBy(
+      manager,
+      lines,
+      (line) =>
+        this.resolveDirection(
+          line as CreateInventoryMovementsGarageAdjustmentLineDto,
+        ) === 'IN',
+    );
   }
 
   /** Phiếu điều chỉnh: chiều của mỗi dòng do người lập chọn (IN tăng, OUT giảm). */

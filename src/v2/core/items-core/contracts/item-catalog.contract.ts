@@ -28,6 +28,19 @@ export interface ItemCatalogKit<TType extends string = string> {
   defaultType: TType;
 }
 
+/** Cách đối chiếu và tạo mã. Mặc định giữ hành vi của luồng hóa đơn AI. */
+export interface ItemResolveOptions {
+  /**
+   * `always`: dòng có mã mà không khớp mã vẫn được khớp theo tên (hóa đơn nhà cung cấp dùng mã khác mã nội bộ).
+   * `whenNoCode`: dòng có mã chỉ khớp theo mã; chỉ dòng không mã mới khớp theo tên (chứng từ nhập tay).
+   */
+  nameFallback?: 'always' | 'whenNoCode';
+  /** Mã mới từ mã gốc trên chứng từ: `true` gắn tiền tố nhóm (mặc định), `false` giữ nguyên mã đã chuẩn hóa. */
+  prefixNewCodes?: boolean;
+  /** Nguồn ghi cho mã mới tạo trong `ensureItems`. Mặc định `MANUAL`. */
+  source?: ItemSource;
+}
+
 /**
  * Cổng danh mục mã hàng. Lõi và module nghiệp vụ phụ thuộc cổng này;
  * module biến thể (vd `items-garage`) cung cấp bản cài đặt.
@@ -37,11 +50,40 @@ export interface ItemCatalogPort<TItem, TType extends string = string> {
   match(
     lines: ItemLookupLine[],
     manager?: EntityManager,
+    options?: ItemResolveOptions,
   ): Promise<ItemMatch<TItem, TType>[]>;
 
   /** Trả mã hàng cho từng dòng, tạo các mã chưa có. Phải gọi trong transaction. */
   ensureItems(
     lines: ItemLookupLine[],
     manager: EntityManager,
+    options?: ItemResolveOptions,
   ): Promise<{ items: TItem[]; created: TItem[] }>;
+}
+
+/** Dòng chứng từ có thể được chuẩn hóa mã hàng theo danh mục. */
+export interface ResolvableLine {
+  itemCode?: string | null;
+  itemName?: string | null;
+  unit?: string | null;
+  itemType?: string | null;
+}
+
+/** Phần của một mã trong danh mục mà dòng chứng từ cần. */
+export interface ResolvedItemRef {
+  itemCode: string;
+  itemName: string;
+  unit?: string | null;
+}
+
+/**
+ * Cổng chuẩn hóa mã hàng cho dòng chứng từ (PR, PO, nhận hàng, phiếu kho).
+ * `create = true`: mã chưa có thì tạo. `create = false`: chỉ chuẩn hóa mã đã có, không tạo.
+ */
+export interface LineItemResolverPort {
+  resolveLines<T extends ResolvableLine>(
+    manager: EntityManager,
+    lines: T[],
+    options?: { create?: boolean },
+  ): Promise<T[]>;
 }

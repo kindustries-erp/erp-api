@@ -29,6 +29,7 @@ export class GaragePrFromInvoiceService {
       const { items, created } = await this.items.ensureItems(
         dto.lines,
         manager,
+        { source: 'AI' },
       );
       // Biến riêng vì chi nhánh là trường của entity garage, nằm ngoài kiểu header chung của lõi
       const header = {

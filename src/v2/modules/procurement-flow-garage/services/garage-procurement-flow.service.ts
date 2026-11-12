@@ -12,6 +12,7 @@ import {
 } from '@/v2/core/procurement-flow-core';
 import { GarageGoodsReceipt } from '@/v2/modules/goods-receipts-garage/entities/garage-goods-receipt.entity';
 import { GarageGoodsReceiptLine } from '@/v2/modules/goods-receipts-garage/entities/garage-goods-receipt-line.entity';
+import { GarageLineItemResolver } from '@/v2/modules/items-garage/services/garage-line-item-resolver.service';
 import { GarageProcurementOrderFulfilmentService } from '@/v2/modules/procurement-orders-garage/services/procurement-order-fulfilment.service';
 import {
   assertGoodsUnused,
@@ -35,6 +36,7 @@ export class GarageProcurementFlowService extends AbstractProcurementFlowService
     protected readonly fulfilment: GarageProcurementOrderFulfilmentService,
     protected readonly stock: GarageProcurementFlowStockAdapter,
     private readonly voucherEngine: BaseVoucherEngineService,
+    private readonly itemResolver: GarageLineItemResolver,
   ) {
     super();
   }
@@ -68,6 +70,7 @@ export class GarageProcurementFlowService extends AbstractProcurementFlowService
     if (lines.length === 0) {
       throw new BadRequestException('Phiếu nhập kho chưa có mặt hàng nào');
     }
+    await this.fillMissingItemCodes(manager, lines);
     if (receipt.garageProcurementOrderId) {
       await assertReceiptMatchesOrder(manager, receipt, lines);
     }
@@ -79,6 +82,23 @@ export class GarageProcurementFlowService extends AbstractProcurementFlowService
     receipt.status = 'POSTED';
     receipt.lines = lines;
     return manager.save(GarageGoodsReceipt, receipt);
+  }
+
+  /**
+   * Phiếu nháp cũ có dòng thiếu mã hàng: cấp mã theo danh mục trước khi ghi sổ (sổ tồn từ chối dòng thiếu mã)
+   * và lưu mã vào dòng phiếu, cùng transaction với việc ghi sổ.
+   */
+  private async fillMissingItemCodes(
+    manager: EntityManager,
+    lines: GarageGoodsReceiptLine[],
+  ): Promise<void> {
+    const missing = lines.filter((line) => !line.itemCode?.trim());
+    if (missing.length === 0) return;
+    const resolved = await this.itemResolver.resolveLines(manager, missing);
+    missing.forEach((line, index) => {
+      line.itemCode = resolved[index].itemCode ?? line.itemCode;
+    });
+    await manager.save(GarageGoodsReceiptLine, missing);
   }
 
   async cancelReceipt(receiptId: string): Promise<GarageGoodsReceipt> {

@@ -10,6 +10,7 @@ import type {
   ItemCatalogPort,
   ItemLookupLine,
   ItemMatch,
+  ItemResolveOptions,
 } from '../contracts/item-catalog.contract';
 import type { BaseItemEntity } from '../entities/base-item.entity';
 import {
@@ -48,10 +49,15 @@ export abstract class AbstractItemMatchService<
   async match(
     lines: ItemLookupLine[],
     manager?: EntityManager,
+    options?: ItemResolveOptions,
   ): Promise<ItemMatch<TItem, TType>[]> {
-    const { codes, names } = collectLookupKeys(lines, this.options.types);
+    const { codes, names } = collectLookupKeys(
+      lines,
+      this.options.types,
+      options,
+    );
     if (!codes.length && !names.length) {
-      return resolveMatches(lines, [], this.options);
+      return resolveMatches(lines, [], this.options, options);
     }
     const repo = manager
       ? manager.getRepository(this.options.entity)
@@ -65,17 +71,24 @@ export abstract class AbstractItemMatchService<
       )
       .orderBy('e.createdAt', 'ASC')
       .getMany();
-    return resolveMatches(lines, found, this.options);
+    return resolveMatches(lines, found, this.options, options);
   }
 
   async ensureItems(
     lines: ItemLookupLine[],
     manager: EntityManager,
+    options?: ItemResolveOptions,
   ): Promise<{ items: TItem[]; created: TItem[] }> {
+    // Nhánh nhanh: mọi dòng đã có trong danh mục thì không cần khóa, không ghi gì.
+    const first = await this.match(lines, manager, options);
+    if (first.every((m) => m.item)) {
+      return { items: first.map((m) => m.item as TItem), created: [] };
+    }
     await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
       this.options.lockKey,
     ]);
-    const matches = await this.match(lines, manager);
+    // Tra lại sau khi có khóa: giao dịch khác có thể vừa tạo cùng mã.
+    const matches = await this.match(lines, manager, options);
     const created = new Map<string, TItem>();
     const sequences = new Map<TType, number>();
     const items: TItem[] = [];
@@ -101,7 +114,7 @@ export abstract class AbstractItemMatchService<
           unit: line.unit?.trim() || undefined,
           itemType:
             itemTypeOfCode(itemCode, this.options.types) ?? match.itemType,
-          source: 'AI',
+          source: options?.source ?? 'MANUAL',
           isActive: true,
           isDeleted: false,
           extraData: {},

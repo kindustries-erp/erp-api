@@ -18,6 +18,7 @@ describe('GarageGoodsReceiptCommandService', () => {
     delete: jest.Mock;
     find: jest.Mock;
   };
+  let itemResolver: { resolveLines: jest.Mock };
   let flow: {
     postReceipt: jest.Mock;
     cancelReceipt: jest.Mock;
@@ -40,6 +41,11 @@ describe('GarageGoodsReceiptCommandService', () => {
       save: jest.fn((value: object) => Promise.resolve(value)),
       delete: jest.fn().mockResolvedValue({}),
       find: jest.fn().mockResolvedValue([]),
+    };
+    itemResolver = {
+      resolveLines: jest.fn((_m: unknown, lines: unknown) =>
+        Promise.resolve(lines),
+      ),
     };
     flow = {
       saveAndPost: jest.fn(
@@ -91,6 +97,7 @@ describe('GarageGoodsReceiptCommandService', () => {
       repo as unknown as Repository<GarageGoodsReceipt>,
       voucherEngine,
       flow as never,
+      itemResolver as never,
     );
   });
 
@@ -121,6 +128,30 @@ describe('GarageGoodsReceiptCommandService', () => {
     );
     expect(repo.save).toHaveBeenCalledTimes(1);
     expect(saved).toMatchObject({ isDeleted: false });
+  });
+
+  it('chuẩn hóa mã hàng theo danh mục trước khi dựng dòng phiếu (cùng transaction)', async () => {
+    itemResolver.resolveLines.mockResolvedValueOnce([
+      {
+        itemCode: 'PT-000001',
+        itemName: 'Bố thắng đĩa',
+        qtyReceived: 1,
+        unitCost: 10,
+      },
+    ]);
+
+    await service.create({
+      receiptNo: 'GGR-20261103-002',
+      receiptDate: '2026-11-03T00:00:00.000Z',
+      lines: [{ itemName: 'Bố thắng đĩa', qtyReceived: 1, unitCost: 10 }],
+    } as CreateGarageGoodsReceiptDto);
+
+    expect(itemResolver.resolveLines).toHaveBeenCalledWith(expect.anything(), [
+      expect.objectContaining({ itemName: 'Bố thắng đĩa' }),
+    ]);
+    expect(lineRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ itemCode: 'PT-000001' }),
+    );
   });
 
   it('keeps existing values when update DTO is empty and status is DRAFT', async () => {

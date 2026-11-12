@@ -79,6 +79,7 @@ describe('GarageItemMatchService', () => {
           { itemName: 'Bugi', itemType: 'VT' },
         ],
         manager as unknown as EntityManager,
+        { source: 'AI' },
       );
 
       expect(manager.query.mock.calls[0]).toEqual([

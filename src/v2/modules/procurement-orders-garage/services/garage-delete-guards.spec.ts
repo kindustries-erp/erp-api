@@ -33,6 +33,7 @@ describe('Chặn xóa cứng của lớp con garage', () => {
       dataSource,
       {} as never,
       {} as never,
+      {} as never,
     );
 
     await expect(svc.hardDeleteDraft('o1')).rejects.toThrow(ConflictException);
@@ -46,6 +47,7 @@ describe('Chặn xóa cứng của lớp con garage', () => {
     const { dataSource, manager } = fakeDataSource(0);
     const svc = new GarageProcurementOrderCommandService(
       dataSource,
+      {} as never,
       {} as never,
       {} as never,
     );
@@ -68,6 +70,7 @@ describe('Chặn xóa cứng của lớp con garage', () => {
       dataSource,
       {} as never,
       {} as never,
+      {} as never,
     );
 
     await svc.hardDeleteDraft('o1');
@@ -81,6 +84,7 @@ describe('Chặn xóa cứng của lớp con garage', () => {
     const { dataSource, manager } = fakeDataSource(1);
     const svc = new GarageProcurementRequestCommandService(
       dataSource,
+      {} as never,
       {} as never,
     );
 

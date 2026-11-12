@@ -445,11 +445,23 @@ export abstract class AbstractProcurementOrderCommandService<
     );
   }
 
+  /**
+   * CUSTOM: chuẩn bị dòng trước khi ghi, trong cùng transaction (ví dụ chuẩn hóa mã hàng theo danh mục).
+   * Không đổi số lượng hay đơn giá. Mặc định trả nguyên dòng.
+   */
+  protected prepareLines(
+    _manager: EntityManager,
+    lines: Array<OrderDraftLineInput & OrderDraftLineFields>,
+  ): Promise<Array<OrderDraftLineInput & OrderDraftLineFields>> {
+    return Promise.resolve(lines);
+  }
+
   private async writeLines(
     manager: EntityManager,
     header: H,
-    lines: Array<OrderDraftLineInput & OrderDraftLineFields>,
+    input: Array<OrderDraftLineInput & OrderDraftLineFields>,
   ): Promise<void> {
+    const lines = await this.prepareLines(manager, input);
     lines.forEach((l) => {
       if (l.extraData !== undefined) assertValidExtraData(l.extraData);
     });

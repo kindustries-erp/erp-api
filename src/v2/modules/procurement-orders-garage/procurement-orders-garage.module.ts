@@ -25,6 +25,7 @@ import {
   GARAGE_PROCUREMENT_REQUEST_LINK,
   GarageProcurementRequestLinkAdapter,
 } from './services/garage-procurement-request-link.adapter';
+import { ItemsGarageModule } from '@/v2/modules/items-garage/items-garage.module';
 
 const GarageProcurementOrderApprovalConfigController =
   createApprovalConfigController({
@@ -47,6 +48,7 @@ const GarageProcurementOrderApprovalConfigController =
       CoreUser,
     ]),
     RbacCoreModule,
+    ItemsGarageModule,
     GarageProcurementRequestsModule,
   ],
   controllers: [

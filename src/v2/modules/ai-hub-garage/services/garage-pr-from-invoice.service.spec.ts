@@ -54,7 +54,9 @@ describe('GaragePrFromInvoiceService', () => {
     const result = await service.create(dto, 'u1');
 
     expect(dataSource.transaction).toHaveBeenCalledTimes(1);
-    expect(items.ensureItems).toHaveBeenCalledWith(dto.lines, manager);
+    expect(items.ensureItems).toHaveBeenCalledWith(dto.lines, manager, {
+      source: 'AI',
+    });
     const [actor, header, lines, usedManager] =
       requests.createDraft.mock.calls[0];
     expect(usedManager).toBe(manager);

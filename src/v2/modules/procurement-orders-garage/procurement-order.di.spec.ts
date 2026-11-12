@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
 import { ApprovalEventService } from '@/v2/core/approval-core/approval-event.service';
+import { GarageLineItemResolver } from '@/v2/modules/items-garage/services/garage-line-item-resolver.service';
 import { GarageProcurementOrderCommandService } from './services/procurement-order-command.service';
 import {
   GARAGE_PROCUREMENT_REQUEST_LINK,
@@ -17,6 +18,7 @@ describe('Nối DI của module PO (token cổng PR)', () => {
         { provide: DataSource, useValue: {} },
         { provide: ApprovalEventService, useValue: {} },
         { provide: GARAGE_PROCUREMENT_REQUEST_LINK, useValue: adapter },
+        { provide: GarageLineItemResolver, useValue: {} },
       ],
     }).compile();
 

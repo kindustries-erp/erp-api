@@ -72,4 +72,40 @@ describe('item-match.helper', () => {
     });
     expect(unknownType.itemType).toBe('AA');
   });
+
+  describe('whenNoCode (chứng từ nhập tay)', () => {
+    const manual = { nameFallback: 'whenNoCode' as const };
+
+    it('dòng có mã không khớp mã thì không khớp theo tên, và không gom tên vào khóa tra', () => {
+      const lines = [{ itemCode: 'XYZ', itemName: 'Lọc dầu' }];
+      expect(collectLookupKeys(lines, kit.types, manual).names).toEqual([]);
+      const [match] = resolveMatches(
+        lines,
+        [item('AA-90915', 'loc dau')],
+        kit,
+        manual,
+      );
+      expect(match.status).toBe('NEW');
+    });
+
+    it('dòng không mã vẫn khớp theo tên', () => {
+      const [match] = resolveMatches(
+        [{ itemName: 'Lọc dầu' }],
+        [item('AA-90915', 'loc dau')],
+        kit,
+        manual,
+      );
+      expect(match).toMatchObject({ status: 'MATCHED', matchedBy: 'NAME' });
+    });
+
+    it('prefixNewCodes=false giữ nguyên mã đã chuẩn hóa cho dòng mới', () => {
+      const [match] = resolveMatches(
+        [{ itemCode: 'ab 12', itemName: 'Pin' }],
+        [],
+        kit,
+        { ...manual, prefixNewCodes: false },
+      );
+      expect(match.suggestedCode).toBe('AB12');
+    });
+  });
 });

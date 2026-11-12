@@ -80,6 +80,11 @@ function setup(
     applyGoodsReceipt: jest.fn().mockResolvedValue(undefined),
     revertGoodsReceipt: jest.fn().mockResolvedValue(undefined),
   };
+  const itemResolver = {
+    resolveLines: jest.fn((_m: unknown, lines: unknown) =>
+      Promise.resolve(lines),
+    ),
+  };
   const stock = {
     post: jest.fn().mockResolvedValue(undefined),
     reverse: jest.fn().mockResolvedValue(undefined),
@@ -90,8 +95,9 @@ function setup(
     fulfilment as never,
     stock as never,
     new BaseVoucherEngineService(),
+    itemResolver as never,
   );
-  return { svc, receipt, manager, publish, fulfilment, stock };
+  return { svc, receipt, manager, publish, fulfilment, stock, itemResolver };
 }
 
 describe('GarageProcurementFlowService.postReceipt', () => {
@@ -239,5 +245,41 @@ describe('GarageProcurementFlowService.saveAndPost', () => {
     await expect(
       svc.saveAndPost(() => Promise.resolve({ id: 'r1' })),
     ).rejects.toThrow('lệch tồn');
+  });
+});
+
+describe('GarageProcurementFlowService.postReceipt - dòng thiếu mã hàng', () => {
+  it('cấp mã theo danh mục trước khi ghi sổ và lưu mã vào dòng phiếu', async () => {
+    const line = Object.assign(new GarageGoodsReceiptLine(), {
+      id: 'rl1',
+      lineNo: 1,
+      itemCode: undefined,
+      itemName: 'Phụ tùng',
+      unit: 'Cái',
+      qtyReceived: '2',
+      unitCost: '10',
+      procurementOrderLineId: ORDER_LINE_1,
+    });
+    const { svc, stock, manager, itemResolver } = setup({ lines: [line] });
+    itemResolver.resolveLines.mockResolvedValueOnce([
+      { itemCode: 'PT-000001' },
+    ]);
+
+    await svc.postReceipt('r1');
+
+    expect(itemResolver.resolveLines).toHaveBeenCalledWith(manager, [line]);
+    expect(manager.save).toHaveBeenCalledWith(GarageGoodsReceiptLine, [line]);
+    expect(stock.post).toHaveBeenCalledWith(
+      manager,
+      expect.objectContaining({
+        lines: [expect.objectContaining({ itemCode: 'PT-000001' })],
+      }),
+    );
+  });
+
+  it('mọi dòng đã có mã thì không gọi danh mục', async () => {
+    const { svc, itemResolver } = setup();
+    await svc.postReceipt('r1');
+    expect(itemResolver.resolveLines).not.toHaveBeenCalled();
   });
 });

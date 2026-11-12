@@ -91,6 +91,7 @@ describe('AbstractItemMatchService', () => {
           { itemName: 'Bugi', itemType: 'BB' },
         ],
         manager as unknown as EntityManager,
+        { source: 'AI' },
       );
 
       expect(manager.query.mock.calls[0]).toEqual([
@@ -116,6 +117,35 @@ describe('AbstractItemMatchService', () => {
       );
       expect(maxQueries).toHaveLength(1);
       expect(String(maxQueries[0][0])).toContain('"test_items"');
+    });
+
+    it('mặc định ghi nguồn MANUAL', async () => {
+      await service.ensureItems(
+        [{ itemName: 'Công sơn', itemType: 'AA' }],
+        manager as unknown as EntityManager,
+      );
+      expect(saved[0].source).toBe('MANUAL');
+    });
+
+    it('nhánh nhanh: mọi dòng đã có thì không khóa, không ghi', async () => {
+      const result = await service.ensureItems(
+        [{ itemName: 'Nhớt Castrol' }],
+        manager as unknown as EntityManager,
+      );
+      expect(result.items).toEqual([existing]);
+      expect(result.created).toEqual([]);
+      expect(manager.query).not.toHaveBeenCalled();
+      expect(manager.save).not.toHaveBeenCalled();
+    });
+
+    it('prefixNewCodes=false giữ nguyên mã gõ vào; dòng có mã không khớp theo tên', async () => {
+      const result = await service.ensureItems(
+        [{ itemCode: 'abc 1', itemName: 'Nhớt Castrol' }],
+        manager as unknown as EntityManager,
+        { nameFallback: 'whenNoCode', prefixNewCodes: false },
+      );
+      expect(result.items[0].itemCode).toBe('ABC1');
+      expect(result.created).toHaveLength(1);
     });
 
     it('hai dòng cùng tên trong một lô chỉ tạo một mã', async () => {

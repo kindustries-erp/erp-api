@@ -384,11 +384,23 @@ export abstract class AbstractPurchaseRequestCommandService<
     await Promise.resolve([manager, id]);
   }
 
+  /**
+   * CUSTOM: chuẩn bị dòng trước khi ghi, trong cùng transaction (ví dụ chuẩn hóa mã hàng theo danh mục).
+   * Không đổi số lượng hay đơn giá. Mặc định trả nguyên dòng.
+   */
+  protected prepareLines(
+    _manager: EntityManager,
+    lines: Array<DraftLineInput & DraftLineFields>,
+  ): Promise<Array<DraftLineInput & DraftLineFields>> {
+    return Promise.resolve(lines);
+  }
+
   private async writeLines(
     manager: EntityManager,
     headerId: string,
-    lines: Array<DraftLineInput & DraftLineFields>,
+    input: Array<DraftLineInput & DraftLineFields>,
   ): Promise<void> {
+    const lines = await this.prepareLines(manager, input);
     lines.forEach((l) => {
       if (l.extraData !== undefined) assertValidExtraData(l.extraData);
     });

@@ -18,6 +18,7 @@ function makeService(currentBranch: string | null, orderCount: number) {
   const svc = new GarageProcurementRequestCommandService(
     dataSource as never,
     {} as never,
+    { resolveLines: jest.fn() } as never,
   );
   return { svc };
 }
@@ -84,5 +85,28 @@ describe('GarageProcurementRequestCommandService.updateHeader - đổi chi nhán
     const manager = { getRepository: jest.fn() } as never;
     await svc.updateHeader('r1', { remarks: 'x' }, manager);
     expect(parentUpdate).toHaveBeenCalledWith('r1', { remarks: 'x' }, manager);
+  });
+});
+
+describe('GarageProcurementRequestCommandService.prepareLines - chuẩn hóa mã hàng', () => {
+  it('đưa dòng qua resolver danh mục (cho tạo mã) trong transaction đang chạy', async () => {
+    const resolved = [{ itemCode: 'PT-000001' }];
+    const resolver = { resolveLines: jest.fn().mockResolvedValue(resolved) };
+    const svc = new GarageProcurementRequestCommandService(
+      {} as never,
+      {} as never,
+      resolver as never,
+    );
+    const manager = {} as never;
+    const lines = [{ itemName: 'Lọc dầu' }] as never;
+
+    const result = await (
+      svc as unknown as {
+        prepareLines(m: unknown, l: unknown): Promise<unknown>;
+      }
+    ).prepareLines(manager, lines);
+
+    expect(resolver.resolveLines).toHaveBeenCalledWith(manager, lines);
+    expect(result).toBe(resolved);
   });
 });
