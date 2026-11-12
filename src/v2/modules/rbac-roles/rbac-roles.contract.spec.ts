@@ -11,7 +11,7 @@ import { RBAC_PERMISSIONS_KEY } from '@/auth/decorators/require-permissions.deco
 import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
 
 /**
- * Hợp đồng API /api/v1/rbac-core sau migrate v2.
+ * Hợp đồng API /api/v2/rbac-core sau migrate v2.
  * Cùng bộ kiểm với bản baseline v1; khác biệt duy nhất có chủ đích: users chỉ có {id, email}.
  */
 
@@ -124,7 +124,7 @@ describe('RBAC Roles API contract (v2)', () => {
 
     it('controller gốc là rbac-core và bảo vệ bằng JwtAuthGuard + CoreRbacGuard', () => {
       expect(Reflect.getMetadata(PATH_METADATA, RbacRolesController)).toBe(
-        'rbac-core',
+        'api/v2/rbac-core',
       );
       const guards =
         Reflect.getMetadata('__guards__', RbacRolesController) ?? [];

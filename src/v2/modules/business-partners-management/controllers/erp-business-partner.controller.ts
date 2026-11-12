@@ -34,7 +34,7 @@ import { BusinessPartnersManagementService } from '../business-partners-manageme
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
 // `api/v2/...` là route chính. `business-partners` (nhận prefix `api/v1`) giữ cho web V1 đang gọi.
-@Controller(['api/v2/business-partners', 'business-partners'])
+@Controller('api/v2/business-partners')
 export class ErpBusinessPartnerController {
   constructor(private readonly service: BusinessPartnersManagementService) {}
 

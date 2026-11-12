@@ -27,10 +27,10 @@ import {
   UpdateCoreRoleUsersDto,
 } from '../dto/rbac-core.dto';
 
-/** Route giữ nguyên như v1: /api/v1/rbac-core/... (UI không đổi). */
+/** Route chuẩn v2: /api/v2/rbac-core/.... */
 @ApiTags('RBAC Core')
 @ApiBearerAuth()
-@Controller('rbac-core')
+@Controller('api/v2/rbac-core')
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
 export class RbacRolesController {
   constructor(private readonly rbacRolesService: RbacRolesService) {}

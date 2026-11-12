@@ -21,7 +21,7 @@ import { ParseBranchBodyPipe } from '../pipes/parse-branch-body.pipe';
 @ApiTags('erp_branches')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
-@Controller('branches')
+@Controller('api/v2/branches')
 export class ErpBranchController {
   constructor(private readonly service: BranchesManagementService) {}
 

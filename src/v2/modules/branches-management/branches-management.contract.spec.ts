@@ -38,7 +38,7 @@ describe('branches v2 HTTP contract', () => {
         Reflect.getMetadata(MODULE_METADATA.CONTROLLERS, moduleType) ?? [];
       return controllers.some(
         (controller: any) =>
-          Reflect.getMetadata(PATH_METADATA, controller) === 'branches',
+          Reflect.getMetadata(PATH_METADATA, controller) === 'api/v2/branches',
       );
     });
     expect(branchesModules).toHaveLength(1);
@@ -86,7 +86,7 @@ describe('branches v2 HTTP contract', () => {
 
   it('keeps GET route, query binding, defaults, sort and response shape', async () => {
     const response = await request(app.getHttpServer())
-      .get('/api/v1/branches?page=1&pageSize=20&sort=code&search=HC')
+      .get('/api/v2/branches?page=1&pageSize=20&sort=code&search=HC')
       .expect(200);
     expect(response.body).toEqual({
       items: [
@@ -115,7 +115,7 @@ describe('branches v2 HTTP contract', () => {
         ]),
       }),
     );
-    await request(app.getHttpServer()).get('/api/v1/branches').expect(200);
+    await request(app.getHttpServer()).get('/api/v2/branches').expect(200);
     expect(repository.findAndCount).toHaveBeenLastCalledWith(
       expect.objectContaining({
         order: { createdAt: 'DESC' },
@@ -123,12 +123,12 @@ describe('branches v2 HTTP contract', () => {
         take: 20,
       }),
     );
-    await request(app.getHttpServer()).get('/api/v2/branches').expect(404);
+    await request(app.getHttpServer()).get('/api/v1/branches').expect(404);
   });
 
   it('keeps body extras accepted but only persists the legacy fields', async () => {
     const response = await request(app.getHttpServer())
-      .post('/api/v1/branches')
+      .post('/api/v2/branches')
       .send({
         code: 'HCM',
         name: 'Ho Chi Minh',
@@ -155,7 +155,7 @@ describe('branches v2 HTTP contract', () => {
   it('keeps PATCH null data on a missing record and DELETE hard-delete response', async () => {
     repository.findOne.mockResolvedValueOnce(null);
     await request(app.getHttpServer())
-      .patch('/api/v1/branches/not-a-uuid')
+      .patch('/api/v2/branches/not-a-uuid')
       .send({ name: 'Updated', address: 'ignored', extra: true })
       .expect(200, { data: null, message: 'Branch updated successfully' });
     expect(repository.update).toHaveBeenCalledWith('not-a-uuid', {
@@ -164,7 +164,7 @@ describe('branches v2 HTTP contract', () => {
       isActive: undefined,
     });
     await request(app.getHttpServer())
-      .delete('/api/v1/branches/not-a-uuid')
+      .delete('/api/v2/branches/not-a-uuid')
       .expect(200, { message: 'Branch deleted successfully' });
     expect(repository.delete).toHaveBeenCalledWith('not-a-uuid');
   });
@@ -172,7 +172,7 @@ describe('branches v2 HTTP contract', () => {
   it('propagates a foreign-key rejection instead of returning success', async () => {
     repository.delete.mockRejectedValueOnce(new Error('foreign key violation'));
     await request(app.getHttpServer())
-      .delete('/api/v1/branches/referenced')
+      .delete('/api/v2/branches/referenced')
       .expect(500);
     expect(repository.delete).toHaveBeenCalledWith('referenced');
   });

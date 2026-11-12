@@ -26,7 +26,7 @@ import { UpdateGarageGoodsReceiptDto } from '../dto/update-garage-goods-receipt.
 @ApiTags('garage-goods-receipts')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
-@Controller('garage-goods-receipts')
+@Controller('api/v2/garage-goods-receipts')
 export class GarageGoodsReceiptController {
   constructor(private readonly service: GarageGoodsReceiptsCoreService) {}
 

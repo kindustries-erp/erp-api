@@ -15,9 +15,9 @@ description: Contract hiện hành của chi nhánh ERP trong kiến trúc API v
 
 `erp_branches`: `id uuid`, `code varchar(100) UNIQUE`, `name varchar(255)`, `address text NULL`, `is_active boolean DEFAULT true`, `created_at`, `updated_at` (timestamp without time zone). Không có `is_deleted`, không có migration khi chuyển v2. Bank accounts, bank transactions, cash books, journal entries, operating expenses có FK chi nhánh `ON DELETE NO ACTION`; xóa bản ghi được tham chiếu có thể bị PostgreSQL từ chối.
 
-## HTTP contract (giữ nguyên để Web không thay đổi)
+## HTTP contract (route `/api/v2/branches`)
 
-Toàn bộ dưới `/api/v1/branches`, guard `JwtAuthGuard` duy nhất và Swagger tag `erp_branches`:
+Toàn bộ dưới `/api/v2/branches`, guard `JwtAuthGuard` duy nhất và Swagger tag `erp_branches`:
 
 | Method | Path | Response |
 | --- | --- | --- |

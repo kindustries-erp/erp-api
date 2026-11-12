@@ -116,7 +116,7 @@ Module `garage-goods-receipts` (`src/v2/modules/goods-receipts-garage/`) sử d�
 ### Phân quyền RBAC
 - **Migration**: `SeedGarageGoodsReceiptsPermissions20261103085000` tự động sao chép các quyền READ, CREATE, UPDATE, DELETE từ resource `garage` sang `garage_goods_receipts`.
 - **Backend Guard**: Controller được bảo vệ bởi `@UseGuards(JwtAuthGuard, CoreRbacGuard)` và `@RequirePermissions({ resource: ErpResource.GARAGE_GOODS_RECEIPTS, action: ... })`.
-- **Rbac Core Collections API**: Đã khai báo `{ resource: ErpResource.GARAGE_GOODS_RECEIPTS, label: 'Nhập kho Garage (Garage Goods Receipts)' }` trong `rbacCoreService.getAvailableResources()` (`GET /api/v1/rbac-core/collections`) để hiển thị trực tiếp trên ma trận phân quyền `ErpPermissionsCorePage`.
+- **Rbac Core Collections API**: Đã khai báo `{ resource: ErpResource.GARAGE_GOODS_RECEIPTS, label: 'Nhập kho Garage (Garage Goods Receipts)' }` trong `rbacCoreService.getAvailableResources()` (`GET /api/v2/rbac-core/collections`) để hiển thị trực tiếp trên ma trận phân quyền `ErpPermissionsCorePage`.
 - **Frontend RBAC**: Khai báo `garage_goods_receipts` trong `RBAC_COLLECTIONS` và `PERMISSION_RESOURCE_GROUPS` (nhóm "Garage & Xưởng dịch vụ") trên Web giúp quản trị viên phân quyền linh hoạt qua Role Drawer và Permission Matrix.
 
 ## 8. Cập nhật 2026-11-05: nối đơn mua Garage
@@ -167,7 +167,7 @@ Module `garage-goods-receipts` (`src/v2/modules/goods-receipts-garage/`) sử d�
 
 ## 13. Cập nhật 2026-11-12: nhập kho một bước và hoàn nhập có kiểm tra
 
-- Endpoint mới: `POST /api/v1/garage-goods-receipts/save-and-post` (tạo rồi ghi sổ) và `PATCH /api/v1/garage-goods-receipts/:id/save-and-post` (sửa nháp rồi ghi sổ). Điều phối qua `GarageProcurementFlowService.saveAndPost`, một transaction.
+- Endpoint mới: `POST /api/v2/garage-goods-receipts/save-and-post` (tạo rồi ghi sổ) và `PATCH /api/v2/garage-goods-receipts/:id/save-and-post` (sửa nháp rồi ghi sổ). Điều phối qua `GarageProcurementFlowService.saveAndPost`, một transaction.
 - `GarageGoodsReceiptCommandService.create/update` nhận `outerManager?` (qua `runInOptionalTransaction`).
 - Response phiếu POSTED có thêm `reversible` và `reverseBlockedReason`. Hoàn nhập bị chặn (409) khi hàng đã xuất/điều chỉnh sau phiếu.
 - Endpoint cũ `POST /:id/post`, `POST /:id/cancel` giữ nguyên.

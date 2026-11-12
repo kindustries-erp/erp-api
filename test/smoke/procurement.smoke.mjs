@@ -127,7 +127,7 @@ await call(duyet, 'POST', `/procurement-orders-garage/${poId}/issue`, {}, [200, 
 // Kiểm sổ tồn garage_stock_* thực tế bằng SQL ở bước riêng (script không đọc DB).
 const poIssued = (await call(tao, 'GET', `/procurement-orders-garage/${poId}`, undefined, [200])).data;
 const poLinesNow = poIssued?.lines ?? [];
-const grRes = await call(tao, 'POST', '/api/v1/garage-goods-receipts', {
+const grRes = await call(tao, 'POST', '/api/v2/garage-goods-receipts', {
   receiptDate: today,
   supplierId: poIssued?.supplierId,
   supplierName: poIssued?.supplierName ?? 'Smoke NCC',
@@ -147,12 +147,12 @@ const grRes = await call(tao, 'POST', '/api/v1/garage-goods-receipts', {
 const unwrap = (res) => res.data?.data ?? res.data;
 const grId = unwrap(grRes)?.id;
 console.log('GR created:', unwrap(grRes)?.receiptNo, unwrap(grRes)?.status);
-const grPost = await call(tao, 'POST', `/api/v1/garage-goods-receipts/${grId}/post`, {}, [200, 201]);
+const grPost = await call(tao, 'POST', `/api/v2/garage-goods-receipts/${grId}/post`, {}, [200, 201]);
 console.log('GR after post:', unwrap(grPost)?.status);
 const poAfterPost = (await call(tao, 'GET', `/procurement-orders-garage/${poId}`, undefined, [200])).data;
 console.log('PO fulfillment after post:', poAfterPost?.fulfillmentStatus);
-await call(tao, 'POST', `/api/v1/garage-goods-receipts/${grId}/post`, {}, [400]);
-const grCancel = await call(tao, 'POST', `/api/v1/garage-goods-receipts/${grId}/cancel`, {}, [200, 201]);
+await call(tao, 'POST', `/api/v2/garage-goods-receipts/${grId}/post`, {}, [400]);
+const grCancel = await call(tao, 'POST', `/api/v2/garage-goods-receipts/${grId}/cancel`, {}, [200, 201]);
 console.log('GR after cancel:', unwrap(grCancel)?.status);
 const poAfterCancel = (await call(tao, 'GET', `/procurement-orders-garage/${poId}`, undefined, [200])).data;
 console.log('PO fulfillment after cancel:', poAfterCancel?.fulfillmentStatus);

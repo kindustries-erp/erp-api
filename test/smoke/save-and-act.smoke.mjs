@@ -100,7 +100,7 @@ const grBody = {
     qtyReceived: Number(l.qtyOrdered), unitCost: Number(l.unitPrice ?? 0), procurementOrderLineId: l.id,
   })),
 };
-const grRes = await call(tao, 'POST', '/api/v1/garage-goods-receipts/save-and-post', grBody, [200, 201]);
+const grRes = await call(tao, 'POST', '/api/v2/garage-goods-receipts/save-and-post', grBody, [200, 201]);
 const gr = unwrap(grRes);
 check('Phiếu nhập save-and-post: POSTED', gr?.status === 'POSTED');
 check('Phiếu đã nhập kho: reversible=true khi hàng chưa dùng', gr?.reversible === true);
@@ -109,14 +109,14 @@ check('PO nhận đủ sau nhập kho (fulfillmentStatus FULL)', poAfter?.fulfil
 
 // 6. Phiếu nhập save-and-post lỗi (dòng sai) không để lại phiếu nháp
 const badGrNo = `${tag}-GR-BAD`;
-const badGr = await call(tao, 'POST', '/api/v1/garage-goods-receipts/save-and-post',
+const badGr = await call(tao, 'POST', '/api/v2/garage-goods-receipts/save-and-post',
   { ...grBody, receiptNo: badGrNo, lines: grBody.lines.map((l) => ({ ...l, qtyReceived: l.qtyReceived + 100 })) }, [400, 409, 422]);
-const badGrList = await call(tao, 'GET', `/api/v1/garage-goods-receipts?search=${encodeURIComponent(badGrNo)}&page=1`, undefined, [200]);
+const badGrList = await call(tao, 'GET', `/api/v2/garage-goods-receipts?search=${encodeURIComponent(badGrNo)}&page=1`, undefined, [200]);
 check('Phiếu nhập lỗi: không còn phiếu nháp mồ côi', (badGrList.data?.items ?? []).length === 0);
 console.log('Phiếu nhập lỗi trả:', badGr.status);
 
 // 7. Hoàn nhập khi hàng chưa dùng: được, phiếu CANCELLED, PO về chưa nhận
-const cancel = await call(tao, 'POST', `/api/v1/garage-goods-receipts/${gr?.id}/cancel`, {}, [200, 201]);
+const cancel = await call(tao, 'POST', `/api/v2/garage-goods-receipts/${gr?.id}/cancel`, {}, [200, 201]);
 check('Hoàn nhập: CANCELLED', unwrap(cancel)?.status === 'CANCELLED');
 const poBack = (await call(tao, 'GET', `/procurement-orders-garage/${poId}`, undefined, [200])).data;
 check('Sau hoàn nhập: PO về NONE', poBack?.fulfillmentStatus === 'NONE');

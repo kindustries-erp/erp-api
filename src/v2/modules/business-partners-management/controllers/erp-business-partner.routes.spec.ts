@@ -44,9 +44,9 @@ describe('ErpBusinessPartnerController routes', () => {
       .expect(200);
   });
 
-  it('keeps serving the list on /api/v1/business-partners', async () => {
+  it('serves the list on /api/v2/business-partners', async () => {
     await request(app.getHttpServer())
-      .get('/api/v1/business-partners')
+      .get('/api/v2/business-partners')
       .expect(200);
   });
 
@@ -56,9 +56,9 @@ describe('ErpBusinessPartnerController routes', () => {
       .expect(200);
   });
 
-  it('serves next-code under /api/v1/business-partners/next-code', async () => {
+  it('serves next-code under /api/v2/business-partners/next-code', async () => {
     await request(app.getHttpServer())
-      .get('/api/v1/business-partners/next-code?partnerType=CUSTOMER')
+      .get('/api/v2/business-partners/next-code?partnerType=CUSTOMER')
       .expect(200);
   });
 });
