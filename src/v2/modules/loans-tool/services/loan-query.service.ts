@@ -1,18 +1,44 @@
-import { toPagedList } from '@/common/utils/paginated-result';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { applyMultiKeywordMultiFieldFilter } from '@/common/utils/query-builder.util';
+import {
+  applyDateBounds,
+  applyListSummaries,
+  applyTableFilters,
+  applyTableSort,
+  emptyOptionsPage,
+  findTableColumnOptions,
+  parseListFilterPayload,
+  parseSummaryKeys,
+  resolveTableColumn,
+  SummaryMetric,
+  TableOptionsPage,
+} from '@/common/utils/table-query';
+import {
+  SEARCH_COLUMNS,
+  SUMMARY_COLUMNS,
+  TABLE_COLUMNS,
+  toFilterPayload,
+} from '../constants/loan-table.constants';
 import { LoanEntity } from '../entities';
 import {
   CashflowLoanBreakdownDto,
   CashflowProjectionResponseDto,
-  LoanListResponseDto,
   LoanResponseDto,
   MonthlyCashflowProjectionDto,
   QueryLoanDto,
 } from '../dto';
 import { LoanMapper } from '../helpers/loan.mapper';
 import { LoanAmortizationEngine, LoanStatus } from '@/v2/core/loans-core';
+
+export interface LoanListPageResult {
+  rows: LoanEntity[];
+  total: number;
+  page: number;
+  pageSize: number;
+  summaries: Record<string, SummaryMetric | null>;
+}
 
 @Injectable()
 export class LoanQueryService {
@@ -21,13 +47,15 @@ export class LoanQueryService {
     private readonly loanRepo: Repository<LoanEntity>,
   ) {}
 
-  async findAll(query: QueryLoanDto): Promise<LoanListResponseDto> {
+  async findAll(query: QueryLoanDto): Promise<LoanListPageResult> {
     const page = Math.max(1, Number(query.page || 1));
-    const pageSize = Math.max(1, Math.min(100, Number(query.pageSize || 20)));
+    const pageSize = Math.max(1, Math.min(200, Number(query.pageSize || 20)));
 
     const qb = this.loanRepo
       .createQueryBuilder('loan')
-      .where('loan.isDeleted = :isDeleted', { isDeleted: false });
+      .where('loan.isDeleted = :deleted', {
+        deleted: query.deleted === 'only',
+      });
 
     if (query.status) {
       qb.andWhere('loan.status = :status', { status: query.status });
@@ -39,24 +67,78 @@ export class LoanQueryService {
       });
     }
 
-    if (query.search) {
-      qb.andWhere(
-        '(loan.loanCode ILIKE :search OR loan.title ILIKE :search OR loan.lenderName ILIKE :search)',
-        { search: `%${query.search}%` },
+    const keyword = query.search?.trim();
+    if (keyword) {
+      applyMultiKeywordMultiFieldFilter(
+        qb,
+        SEARCH_COLUMNS,
+        keyword,
+        'global_search',
       );
     }
 
-    qb.orderBy('loan.startDate', 'DESC');
-    qb.skip((page - 1) * pageSize).take(pageSize);
+    applyTableFilters(
+      qb,
+      parseListFilterPayload(query),
+      TABLE_COLUMNS,
+      'filter',
+    );
+    applyDateBounds(
+      qb,
+      'loan.createdAt',
+      query.date_from,
+      query.date_to,
+      'legacy',
+    );
+    applyTableSort(
+      qb,
+      query.sort,
+      TABLE_COLUMNS,
+      { sql: 'loan.startDate', direction: 'DESC' },
+      'loan.id',
+    );
 
-    const [items, total] = await qb.getManyAndCount();
-
-    return toPagedList(
-      items.map((item) => LoanMapper.toDto(item, false)),
+    // Tổng theo summary_keys trên toàn bộ dòng khớp, nên phải gọi trước khi phân trang
+    const summaries = await applyListSummaries(qb, {
+      columns: SUMMARY_COLUMNS,
+      keys: parseSummaryKeys(query.summary_keys),
       page,
       pageSize,
-      total,
+      tieBreaker: 'loan.id',
+    });
+
+    const [rows, total] = await qb
+      .skip((page - 1) * pageSize)
+      .take(pageSize)
+      .getManyAndCount();
+
+    return { rows, total, page, pageSize, summaries };
+  }
+
+  /** Gợi ý danh sách giá trị của một cột cho Popover Filter trên Header bảng V2. */
+  async findColumnOptions(
+    column: string,
+    search: string | undefined,
+    page: number,
+    pageSize: number,
+    filters: unknown,
+    deleted?: 'only',
+  ): Promise<TableOptionsPage> {
+    const def = resolveTableColumn(TABLE_COLUMNS, column);
+    if (!def) return emptyOptionsPage(page, pageSize);
+
+    const qb = this.loanRepo
+      .createQueryBuilder('loan')
+      .where('loan.isDeleted = :deleted', { deleted: deleted === 'only' });
+
+    applyTableFilters(
+      qb,
+      toFilterPayload(filters),
+      TABLE_COLUMNS,
+      'col_opt',
+      column,
     );
+    return findTableColumnOptions(qb, def, search, page, pageSize);
   }
 
   async findOne(id: string): Promise<LoanResponseDto> {

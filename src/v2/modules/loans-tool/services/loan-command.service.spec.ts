@@ -1,8 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
-import { NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { LoanCommandService } from './loan-command.service';
-import { LoanEntity } from '../entities';
+import { LoanEntity, LoanPaymentEntity } from '../entities';
 import { AmortizationMethod, LoanStatus } from '@/v2/core/loans-core';
 
 describe('LoanCommandService', () => {
@@ -200,5 +200,69 @@ describe('LoanCommandService', () => {
     expect(res.totalPaidPrincipal).toBe(100000000);
     expect(res.remainingPrincipal).toBe(0);
     expect(res.status).toBe(LoanStatus.COMPLETED);
+  });
+
+  describe('hardDelete', () => {
+    it('xóa cứng thành công khi khoản vay đã xóa mềm và không có lịch sử thanh toán', async () => {
+      const manager = {
+        findOne: jest.fn().mockResolvedValue({ id: 'l1', isDeleted: true }),
+        count: jest.fn().mockResolvedValue(0),
+        delete: jest.fn().mockResolvedValue({ affected: 1 }),
+      };
+      dataSource.transaction.mockImplementationOnce(async (cb: any) =>
+        cb(manager),
+      );
+
+      await service.hardDelete('l1');
+
+      expect(manager.findOne).toHaveBeenCalledWith(LoanEntity, {
+        where: { id: 'l1' },
+        lock: { mode: 'pessimistic_write' },
+      });
+      expect(manager.count).toHaveBeenCalledWith(LoanPaymentEntity, {
+        where: { loanId: 'l1' },
+      });
+      expect(manager.delete).toHaveBeenCalledWith(LoanEntity, 'l1');
+    });
+
+    it('ném NotFoundException nếu khoản vay không tồn tại', async () => {
+      const manager = {
+        findOne: jest.fn().mockResolvedValue(null),
+      };
+      dataSource.transaction.mockImplementationOnce(async (cb: any) =>
+        cb(manager),
+      );
+
+      await expect(service.hardDelete('missing')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('ném ConflictException nếu khoản vay chưa xóa mềm', async () => {
+      const manager = {
+        findOne: jest.fn().mockResolvedValue({ id: 'l1', isDeleted: false }),
+        delete: jest.fn(),
+      };
+      dataSource.transaction.mockImplementationOnce(async (cb: any) =>
+        cb(manager),
+      );
+
+      await expect(service.hardDelete('l1')).rejects.toThrow(ConflictException);
+      expect(manager.delete).not.toHaveBeenCalled();
+    });
+
+    it('ném ConflictException nếu khoản vay đã có lịch sử thanh toán', async () => {
+      const manager = {
+        findOne: jest.fn().mockResolvedValue({ id: 'l1', isDeleted: true }),
+        count: jest.fn().mockResolvedValue(2),
+        delete: jest.fn(),
+      };
+      dataSource.transaction.mockImplementationOnce(async (cb: any) =>
+        cb(manager),
+      );
+
+      await expect(service.hardDelete('l1')).rejects.toThrow(ConflictException);
+      expect(manager.delete).not.toHaveBeenCalled();
+    });
   });
 });

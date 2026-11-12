@@ -86,7 +86,7 @@ Quyền resource: `garage_procurement_orders`. Seed từ `garage_purchase_orders
 
 ## 11. Lọc cột và gợi ý giá trị (2026-11-05)
 
-- `GET /api/v2/procurement-orders-garage/column-options?column&search&page&pageSize&filters`: trả `{ items, total, next }` (cùng contract với `garage-procurement-requests`). Cột ngoài whitelist trả rỗng. Nguồn cột: `constants/procurement-order-table.constants.ts` (`TABLE_COLUMNS`), khớp `key` của `procurementOrderColumns` phía web.
+- `GET /api/v2/procurement-orders-garage/column-options?column&search&page&pageSize&filters`: trả `{ items, pagination }` (cùng contract với `garage-procurement-requests`). Cột ngoài whitelist trả rỗng. Nguồn cột: `constants/procurement-order-table.constants.ts` (`TABLE_COLUMNS`), khớp `key` của `procurementOrderColumns` phía web.
 - `GET /` nhận thêm `sort`, `column_filters`, `column_search`, `column_operators`, `date_ranges` (từ `TableQueryDto`). Sắp xếp mặc định `createdAt DESC`.
 - Lỗi đã sửa: endpoint trước đây trả `{ columns }`, khiến web crash `reading 'value'` khi mở popup lọc cột.
 - `createdBy` (uuid) được lọc, sắp xếp và gợi ý theo **email** từ `core_users` (subquery trong `TABLE_COLUMNS`). Danh sách và chi tiết đều trả `createdBy` (id) và `createdByEmail` (tra email qua lô id của approval-core). Không đổi schema.

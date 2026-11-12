@@ -49,10 +49,37 @@ export class LoansController {
     resource: ErpResource.LOANS,
     action: ErpAction.READ,
   })
+  @ApiOkResponse({ type: LoanListResponseDto })
   @ApiOperation({ summary: 'Lấy danh sách các khoản vay' })
   @ApiOkResponse({ type: LoanListResponseDto })
   findAll(@Query() query: QueryLoanDto): Promise<LoanListResponseDto> {
     return this.loansService.findAll(query);
+  }
+
+  @Get('column-options')
+  @RequirePermissions({
+    resource: ErpResource.LOANS,
+    action: ErpAction.READ,
+  })
+  @ApiOperation({
+    summary: 'Gợi ý giá trị của một cột, áp dụng bộ lọc các cột khác',
+  })
+  columnOptions(
+    @Query('column') column: string,
+    @Query('search') search?: string,
+    @Query('page') page = '1',
+    @Query('pageSize') pageSize = '20',
+    @Query('filters') filters?: string,
+    @Query('deleted') deleted?: string,
+  ) {
+    return this.loansService.findColumnOptions(
+      column,
+      search,
+      Math.max(1, parseInt(page, 10) || 1),
+      Math.max(1, Math.min(200, parseInt(pageSize, 10) || 20)),
+      filters,
+      deleted === 'only' ? 'only' : undefined,
+    );
   }
 
   @Get('cashflow/projection')
@@ -122,6 +149,19 @@ export class LoansController {
   @ApiOperation({ summary: 'Xóa mềm khoản vay' })
   remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     return this.loansService.remove(id);
+  }
+
+  @Delete(':id/permanent')
+  @RequirePermissions({
+    resource: ErpResource.LOANS,
+    action: ErpAction.PURGE,
+  })
+  @ApiOperation({
+    summary:
+      'Xóa cứng khoản vay đã xóa mềm (chỉ quyền PURGE, chặn khi có lịch sử thanh toán)',
+  })
+  hardDelete(@Param('id', ParseUUIDPipe) id: string): Promise<{ id: string }> {
+    return this.loansService.hardDelete(id);
   }
 
   @Post(':id/payments')
