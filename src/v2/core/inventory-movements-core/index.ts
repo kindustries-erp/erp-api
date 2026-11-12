@@ -14,6 +14,7 @@ export * from './inventory-movements-core.module';
 export * from './entities/lines/base-stock-voucher-line.entity';
 export * from './dto/base-stock-voucher-line.dto';
 export * from './dto/stock-voucher-response.dto';
+export * from './dto/query-stock-voucher.dto';
 export * from './helpers/stock-voucher.mapper';
 export * from './services/abstract-stock-line-voucher-command.service';
 export * from './services/abstract-stock-line-voucher-query.service';

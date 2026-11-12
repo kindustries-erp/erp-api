@@ -54,3 +54,11 @@ description: Lõi v2 nhập / xuất / điều chỉnh kho dùng chung (sổ s�
 - **Ghi**: tạo mặc định `{}`. Sửa header merge cấp 1 (`null` xóa key). Dòng chứng từ ghi theo payload, không merge.
 - **Giới hạn**: 16 KB, sâu 5 cấp, key ≤ 64 ký tự, cấm `__proto__`/`constructor`/`prototype` (400 qua `RejectUnsafeExtraDataPipe` và service).
 - **Response**: luôn có `extraData` (object).
+
+## Response danh sách (2026-11-12)
+
+- `GET /api/v2/inventory-movements-garage-{adjustments,receipts,issues}` trả `{ items, pagination }` (`StockVoucherListResponseDto`, `PaginationMetaDto`). Không còn key phẳng `total/page/pageSize/totalPages`.
+- `items` là đầu phiếu (`StockVoucherListItemResponseDto`, không có `lines`, không lộ entity), dựng bằng `toVoucherSummaryResponse`. `GET :id` vẫn trả `{ data }` kèm `lines`.
+- Query dùng `QueryStockVoucherDto`: `page` ≥ 1, `pageSize` 1..200, `search` (số chứng từ), `status`. Giá trị sai trả 400.
+- Lõi: `AbstractStockLineVoucherQueryService.findAll` trả `PagedList<H>` qua `toPagedList`.
+- Chưa có `column-options`, `summaries`, `extraData` cho list (thêm khi có màn hình web).

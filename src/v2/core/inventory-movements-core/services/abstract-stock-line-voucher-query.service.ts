@@ -6,6 +6,7 @@ import {
   ILike,
   Repository,
 } from 'typeorm';
+import { PagedList, toPagedList } from '@/common/utils/paginated-result';
 import { BaseVoucherEngineService } from '@/v2/core/goods-receipts-core/services/base-voucher-engine.service';
 import { BaseStockVoucherLineEntity } from '../entities/lines/base-stock-voucher-line.entity';
 
@@ -14,14 +15,6 @@ export interface StockVoucherListQuery {
   pageSize?: number;
   search?: string;
   status?: string;
-}
-
-export interface StockVoucherListResult<T> {
-  items: T[];
-  total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
 }
 
 /**
@@ -48,9 +41,7 @@ export abstract class AbstractStockLineVoucherQueryService<
     protected readonly voucherEngine: BaseVoucherEngineService,
   ) {}
 
-  async findAll(
-    query: StockVoucherListQuery,
-  ): Promise<StockVoucherListResult<H>> {
+  async findAll(query: StockVoucherListQuery): Promise<PagedList<H>> {
     const page = Math.max(1, query.page ?? 1);
     const pageSize = Math.min(200, Math.max(1, query.pageSize ?? 20));
     const where: FindOptionsWhere<H> = {
@@ -71,13 +62,7 @@ export abstract class AbstractStockLineVoucherQueryService<
       skip: (page - 1) * pageSize,
       take: pageSize,
     });
-    return {
-      items,
-      total,
-      page,
-      pageSize,
-      totalPages: Math.max(1, Math.ceil(total / pageSize)),
-    };
+    return toPagedList(items, page, pageSize, total);
   }
 
   /** Chi tiết chứng từ kèm dòng. Ném 404 khi không có hoặc đã xóa mềm. */
