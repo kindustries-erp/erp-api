@@ -11,9 +11,17 @@ describe('LoansController', () => {
 
   beforeEach(async () => {
     service = {
-      findAll: jest
-        .fn()
-        .mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20 }),
+      findAll: jest.fn().mockResolvedValue({
+        items: [],
+        pagination: {
+          page: 1,
+          pageSize: 20,
+          total: 0,
+          totalPages: 1,
+          next: null,
+          previous: null,
+        },
+      }),
       findOne: jest.fn().mockResolvedValue({ id: 'l1', title: 'Car Loan' }),
       create: jest.fn().mockResolvedValue({ id: 'l1', title: 'Car Loan' }),
       update: jest.fn().mockResolvedValue({ id: 'l1', title: 'Updated' }),
@@ -41,7 +49,7 @@ describe('LoansController', () => {
     const q = { page: 1, pageSize: 20 };
     const res = await controller.findAll(q);
     expect(service.findAll).toHaveBeenCalledWith(q);
-    expect(res.total).toBe(0);
+    expect(res.pagination.total).toBe(0);
   });
 
   it('should call findOne with uuid', async () => {

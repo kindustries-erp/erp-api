@@ -122,3 +122,10 @@ cd erp/erp-api && bunx jest src/v2/core/loans-core src/v2/modules/loans --forceE
 # Quét kiểm tra Clean DI và LoC (< 300 dòng Controller, < 500 dòng Service)
 bun .agents/skills/erp-api-structure/scripts/scan-oversized-files.ts --path=src/v2/modules/loans --strict
 ```
+
+## Hợp đồng phân trang chuẩn v2 (pagination)
+
+- List trả `{ items, pagination, summaries? }`; `pagination` = `{ page, pageSize, total, totalPages, next, previous }` (`next`/`previous` là số trang hoặc `null`). Không còn key phẳng `total`/`page`/`totalPages` ở cấp gốc.
+- Column-options trả `{ items: { label, value }[], pagination }`. Dựng bằng `findTableColumnOptions` hoặc `emptyOptionsPage` (`src/common/utils/table-query`).
+- Builder: `buildPagination` / `toPagedList` / `toPaginatedResult` (`src/common/utils/paginated-result.ts`). DTO Swagger: `PaginationMetaDto`, `ColumnOptionsResponseDto`.
+- Web phải đọc `res.pagination.*`. Xem web `src/v2/shared/utils/v2FetchOptionsAdapter.ts`.

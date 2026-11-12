@@ -184,7 +184,7 @@ describe('RBAC Roles API contract (v2)', () => {
   });
 
   describe('facade: danh sách role (GET roles)', () => {
-    it('trả { items, total, page, pageSize, totalPages } với users chỉ {id, email}', async () => {
+    it('trả { items, pagination } với users chỉ {id, email}', async () => {
       const { facade, roleRepository } = makeFacade();
       const createdAt = new Date('2026-01-01T00:00:00Z');
       roleRepository.createQueryBuilder.mockReturnValue(
@@ -221,10 +221,14 @@ describe('RBAC Roles API contract (v2)', () => {
             users: [{ id: 'u1', email: 'a@b.c' }],
           },
         ],
-        total: 1,
-        page: 1,
-        pageSize: 20,
-        totalPages: 1,
+        pagination: {
+          page: 1,
+          pageSize: 20,
+          total: 1,
+          totalPages: 1,
+          next: null,
+          previous: null,
+        },
       });
       expect(JSON.stringify(result)).not.toContain('SECRET');
     });

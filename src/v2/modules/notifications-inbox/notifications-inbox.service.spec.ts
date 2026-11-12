@@ -47,6 +47,8 @@ describe('NotificationsInboxService (facade)', () => {
       pageSize: 20,
       total: 41,
       totalPages: 3,
+      next: 3,
+      previous: 1,
     });
     expect(res.unreadCount).toBe(5);
   });

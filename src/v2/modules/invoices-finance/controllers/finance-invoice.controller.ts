@@ -1,3 +1,4 @@
+import { ColumnOptionsResponseDto } from '@/common/dto/column-options-response.dto';
 import {
   Body,
   Controller,
@@ -11,7 +12,13 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
+import { InvoiceListResponseDto } from '../dto/invoice-list-response.dto';
 import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
 import { RequirePermissions } from '@/auth/decorators/require-permissions.decorator';
@@ -39,6 +46,7 @@ export class FinanceInvoiceController {
     action: ErpAction.READ,
   })
   @ApiOperation({ summary: 'List invoices (paginated, searchable)' })
+  @ApiOkResponse({ type: InvoiceListResponseDto })
   @Get()
   findAll(@Query() query: QueryInvoiceDto) {
     return this.service.findAll(query);
@@ -52,6 +60,7 @@ export class FinanceInvoiceController {
   @ApiOperation({
     summary: 'Distinct values of one column, filtered by the other columns',
   })
+  @ApiOkResponse({ type: ColumnOptionsResponseDto })
   @Get('column-options')
   columnOptions(
     @Query('column') column: string,

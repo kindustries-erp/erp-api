@@ -143,3 +143,10 @@ Quyền resource: `garage_procurement_orders`. Seed từ `garage_purchase_orders
 - `requestNo` nằm trong `TABLE_COLUMNS` dưới dạng sub-select (`proc_requests_garage.request_no` theo `h.requestId`), nên lọc, sắp xếp và `column-options` dùng chung cơ chế với các cột khác.
 - Quan hệ 1-1 (mỗi PO tối đa một đề nghị). Đơn lập trực tiếp có `requestNo` rỗng, nên lọc "trống" bắt được chúng.
 - Spec: `services/procurement-order-query.service.spec.ts`.
+
+## Hợp đồng phân trang chuẩn v2 (pagination)
+
+- List trả `{ items, pagination, summaries? }`; `pagination` = `{ page, pageSize, total, totalPages, next, previous }` (`next`/`previous` là số trang hoặc `null`). Không còn key phẳng `total`/`page`/`totalPages` ở cấp gốc.
+- Column-options trả `{ items: { label, value }[], pagination }`. Dựng bằng `findTableColumnOptions` hoặc `emptyOptionsPage` (`src/common/utils/table-query`).
+- Builder: `buildPagination` / `toPagedList` / `toPaginatedResult` (`src/common/utils/paginated-result.ts`). DTO Swagger: `PaginationMetaDto`, `ColumnOptionsResponseDto`.
+- Web phải đọc `res.pagination.*`. Xem web `src/v2/shared/utils/v2FetchOptionsAdapter.ts`.

@@ -9,11 +9,12 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { PaginationDto } from '@/common/dto/pagination.dto';
 import { BranchesManagementService } from '../branches-management.service';
 import { CreateErpBranchDto } from '../dto/create-erp-branch.dto';
+import { ErpBranchListResponseDto } from '../dto/erp-branch-list-response.dto';
 import { UpdateErpBranchDto } from '../dto/update-erp-branch.dto';
 import { ParseBranchBodyPipe } from '../pipes/parse-branch-body.pipe';
 
@@ -24,6 +25,7 @@ import { ParseBranchBodyPipe } from '../pipes/parse-branch-body.pipe';
 export class ErpBranchController {
   constructor(private readonly service: BranchesManagementService) {}
 
+  @ApiOkResponse({ type: ErpBranchListResponseDto })
   @Get()
   findAll(@Query() query: PaginationDto) {
     return this.service.findAll(query);

@@ -1,3 +1,6 @@
+import { ApiOkResponse } from '@nestjs/swagger';
+import { ColumnOptionsResponseDto } from '@/common/dto/column-options-response.dto';
+import { RoleListResponseDto } from '../dto/rbac-response.dto';
 import {
   Controller,
   Get,
@@ -37,6 +40,7 @@ export class RbacRolesController {
     resource: ErpResource.ADMIN_USERS,
     action: ErpAction.MANAGE,
   })
+  @ApiOkResponse({ type: ColumnOptionsResponseDto })
   @Get('roles/column-options')
   async getRolesColumnOptions(
     @Query('column') column: string,
@@ -58,6 +62,7 @@ export class RbacRolesController {
     resource: ErpResource.ADMIN_USERS,
     action: ErpAction.MANAGE,
   })
+  @ApiOkResponse({ type: RoleListResponseDto })
   @Get('roles')
   async getRoles(@Query() query: ListCoreRolesDto) {
     return this.rbacRolesService.getRolesPaginated(query);

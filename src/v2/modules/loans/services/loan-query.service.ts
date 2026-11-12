@@ -1,3 +1,4 @@
+import { toPagedList } from '@/common/utils/paginated-result';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -50,12 +51,12 @@ export class LoanQueryService {
 
     const [items, total] = await qb.getManyAndCount();
 
-    return {
-      items: items.map((item) => LoanMapper.toDto(item, false)),
-      total,
+    return toPagedList(
+      items.map((item) => LoanMapper.toDto(item, false)),
       page,
       pageSize,
-    };
+      total,
+    );
   }
 
   async findOne(id: string): Promise<LoanResponseDto> {

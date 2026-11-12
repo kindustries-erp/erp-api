@@ -96,10 +96,14 @@ describe('branches v2 HTTP contract', () => {
           updatedAt: branch.updatedAt.toISOString(),
         },
       ],
-      total: 1,
-      page: 1,
-      pageSize: 20,
-      totalPages: 1,
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 1,
+        totalPages: 1,
+        next: null,
+        previous: null,
+      },
     });
     expect(repository.findAndCount).toHaveBeenCalledWith(
       expect.objectContaining({

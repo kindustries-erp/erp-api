@@ -6,6 +6,10 @@ export interface PaginationMeta {
   pageSize: number;
   total: number;
   totalPages: number;
+  /** Số trang kế tiếp, null khi đã ở trang cuối. */
+  next: number | null;
+  /** Số trang trước, null khi đang ở trang đầu. */
+  previous: number | null;
 }
 
 /**
@@ -26,11 +30,29 @@ export const buildPagination = (
   page: number,
   pageSize: number,
   total: number,
-): PaginationMeta => ({
-  page,
-  pageSize,
-  total,
-  totalPages: Math.max(1, Math.ceil(total / Math.max(1, pageSize))),
+): PaginationMeta => {
+  const totalPages = Math.max(1, Math.ceil(total / Math.max(1, pageSize)));
+  return {
+    page,
+    pageSize,
+    total,
+    totalPages,
+    next: page < totalPages ? page + 1 : null,
+    previous: page > 1 ? Math.min(page - 1, totalPages) : null,
+  };
+};
+
+/** Response danh sách không có `summaries`: `items` và `pagination`. */
+export type PagedList<T> = { items: T[]; pagination: PaginationMeta };
+
+export const toPagedList = <T>(
+  items: T[],
+  page: number,
+  pageSize: number,
+  total: number,
+): PagedList<T> => ({
+  items,
+  pagination: buildPagination(page, pageSize, total),
 });
 
 /** Gom items đã map cùng phân trang và tổng thành response danh sách chuẩn v2. */

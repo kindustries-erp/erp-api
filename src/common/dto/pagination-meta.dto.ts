@@ -16,4 +16,20 @@ export class PaginationMetaDto {
     example: 7,
   })
   totalPages: number;
+
+  @ApiProperty({
+    description: 'Số trang kế tiếp, null khi đã ở trang cuối',
+    example: 2,
+    nullable: true,
+    type: Number,
+  })
+  next: number | null;
+
+  @ApiProperty({
+    description: 'Số trang trước, null khi đang ở trang đầu',
+    example: null,
+    nullable: true,
+    type: Number,
+  })
+  previous: number | null;
 }

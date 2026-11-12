@@ -11,9 +11,17 @@ describe('LoansService (Facade)', () => {
 
   beforeEach(async () => {
     queryService = {
-      findAll: jest
-        .fn()
-        .mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20 }),
+      findAll: jest.fn().mockResolvedValue({
+        items: [],
+        pagination: {
+          page: 1,
+          pageSize: 20,
+          total: 0,
+          totalPages: 1,
+          next: null,
+          previous: null,
+        },
+      }),
       findOne: jest.fn().mockResolvedValue({ id: 'l1' }),
       getCashflowProjection: jest
         .fn()

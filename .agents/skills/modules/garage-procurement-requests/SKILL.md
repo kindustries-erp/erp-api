@@ -146,3 +146,10 @@ Quyền resource: `garage_procurement_requests`. Seed từ `garage_purchase_orde
 - Quan hệ 1-N nên lọc theo "có ít nhất một PO khớp" bằng `EXISTS` (blank = `NOT EXISTS`). Logic nằm ở `helpers/related-order-filter.helper.ts`; không khai báo trong `TABLE_COLUMNS`, và util `table-query` giữ nguyên.
 - Gợi ý lấy số PO còn hiệu lực (`isDeleted = false`) thuộc các đề nghị khớp bộ lọc cột khác (cascading), qua `findTableColumnOptions` trên bảng PO (`o.orderNo`).
 - Spec: `services/procurement-request-query.service.spec.ts` (EXISTS khi lọc).
+
+## Hợp đồng phân trang chuẩn v2 (pagination)
+
+- List trả `{ items, pagination, summaries? }`; `pagination` = `{ page, pageSize, total, totalPages, next, previous }` (`next`/`previous` là số trang hoặc `null`). Không còn key phẳng `total`/`page`/`totalPages` ở cấp gốc.
+- Column-options trả `{ items: { label, value }[], pagination }`. Dựng bằng `findTableColumnOptions` hoặc `emptyOptionsPage` (`src/common/utils/table-query`).
+- Builder: `buildPagination` / `toPagedList` / `toPaginatedResult` (`src/common/utils/paginated-result.ts`). DTO Swagger: `PaginationMetaDto`, `ColumnOptionsResponseDto`.
+- Web phải đọc `res.pagination.*`. Xem web `src/v2/shared/utils/v2FetchOptionsAdapter.ts`.

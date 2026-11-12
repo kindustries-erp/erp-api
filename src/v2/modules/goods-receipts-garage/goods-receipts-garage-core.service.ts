@@ -1,3 +1,4 @@
+import { toPaginatedResult } from '@/common/utils/paginated-result';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { GarageGoodsReceipt } from './entities/garage-goods-receipt.entity';
 import { CreateGarageGoodsReceiptDto } from './dto/create-garage-goods-receipt.dto';
@@ -20,19 +21,18 @@ export class GarageGoodsReceiptsCoreService {
     const orders = await this.query.findOrderSummaries(
       page.items.map((item) => item.garageProcurementOrderId ?? ''),
     );
-    return {
-      items: page.items.map((item) =>
+    return toPaginatedResult(
+      page.items.map((item) =>
         toGarageGoodsReceiptResponse(
           item,
           orders.get(item.garageProcurementOrderId ?? ''),
         ),
       ),
-      total: page.total,
-      page: page.page,
-      pageSize: page.pageSize,
-      totalPages: Math.ceil(page.total / page.pageSize),
-      summaries: page.summaries,
-    };
+      page.page,
+      page.pageSize,
+      page.total,
+      page.summaries,
+    );
   }
 
   findColumnOptions(

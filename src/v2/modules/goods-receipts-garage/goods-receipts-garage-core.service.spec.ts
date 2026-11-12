@@ -66,8 +66,10 @@ describe('GarageGoodsReceiptsCoreService', () => {
 
     const result = await service.findAll({} as QueryGarageGoodsReceiptDto);
 
-    expect(result.total).toBe(41);
-    expect(result.totalPages).toBe(3);
+    expect(result.pagination).toMatchObject({
+      total: 41,
+      totalPages: 3,
+    });
     expect(result.items[0]).not.toHaveProperty('isDeleted');
   });
 
@@ -88,8 +90,14 @@ describe('GarageGoodsReceiptsCoreService', () => {
   it('delegates column options to the query service', async () => {
     query.findColumnOptions.mockResolvedValue({
       items: [],
-      total: 0,
-      next: null,
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 1,
+        next: null,
+        previous: null,
+      },
     });
 
     await service.findColumnOptions('code', undefined, 1, 20, undefined);

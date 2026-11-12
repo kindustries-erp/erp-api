@@ -171,3 +171,10 @@ Module `garage-goods-receipts` (`src/v2/modules/goods-receipts-garage/`) sử d�
 - `GarageGoodsReceiptCommandService.create/update` nhận `outerManager?` (qua `runInOptionalTransaction`).
 - Response phiếu POSTED có thêm `reversible` và `reverseBlockedReason`. Hoàn nhập bị chặn (409) khi hàng đã xuất/điều chỉnh sau phiếu.
 - Endpoint cũ `POST /:id/post`, `POST /:id/cancel` giữ nguyên.
+
+## Hợp đồng phân trang chuẩn v2 (pagination)
+
+- List trả `{ items, pagination, summaries? }`; `pagination` = `{ page, pageSize, total, totalPages, next, previous }` (`next`/`previous` là số trang hoặc `null`). Không còn key phẳng `total`/`page`/`totalPages` ở cấp gốc.
+- Column-options trả `{ items: { label, value }[], pagination }`. Dựng bằng `findTableColumnOptions` hoặc `emptyOptionsPage` (`src/common/utils/table-query`).
+- Builder: `buildPagination` / `toPagedList` / `toPaginatedResult` (`src/common/utils/paginated-result.ts`). DTO Swagger: `PaginationMetaDto`, `ColumnOptionsResponseDto`.
+- Web phải đọc `res.pagination.*`. Xem web `src/v2/shared/utils/v2FetchOptionsAdapter.ts`.

@@ -1,3 +1,6 @@
+import { ApiOkResponse } from '@nestjs/swagger';
+import { ColumnOptionsResponseDto } from '@/common/dto/column-options-response.dto';
+import { GarageGoodsReceiptListResponseDto } from '../dto/garage-goods-receipt-list-response.dto';
 import {
   Body,
   Controller,
@@ -34,6 +37,7 @@ export class GarageGoodsReceiptController {
   @ApiOperation({
     summary: 'Danh sách GarageGoodsReceipt (phân trang, tìm kiếm)',
   })
+  @ApiOkResponse({ type: GarageGoodsReceiptListResponseDto })
   @Get()
   findAll(@Query() query: QueryGarageGoodsReceiptDto) {
     return this.service.findAll(query);
@@ -47,6 +51,7 @@ export class GarageGoodsReceiptController {
   @ApiOperation({
     summary: 'Gợi ý giá trị của một cột, áp dụng bộ lọc các cột khác',
   })
+  @ApiOkResponse({ type: ColumnOptionsResponseDto })
   @Get('column-options')
   columnOptions(
     @Query('column') column: string,

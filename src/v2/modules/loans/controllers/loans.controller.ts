@@ -11,7 +11,12 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
 import { RequirePermissions } from '@/auth/decorators/require-permissions.decorator';
@@ -45,6 +50,7 @@ export class LoansController {
     action: ErpAction.READ,
   })
   @ApiOperation({ summary: 'Lấy danh sách các khoản vay' })
+  @ApiOkResponse({ type: LoanListResponseDto })
   findAll(@Query() query: QueryLoanDto): Promise<LoanListResponseDto> {
     return this.loansService.findAll(query);
   }

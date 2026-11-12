@@ -1,3 +1,5 @@
+import { ApiProperty } from '@nestjs/swagger';
+import { PaginationMetaDto } from '@/common/dto/pagination-meta.dto';
 import {
   AmortizationMethod,
   LoanSchedulePeriod,
@@ -45,10 +47,11 @@ export class LoanResponseDto {
 }
 
 export class LoanListResponseDto {
+  @ApiProperty({ type: () => [LoanResponseDto] })
   items: LoanResponseDto[];
-  total: number;
-  page: number;
-  pageSize: number;
+
+  @ApiProperty({ type: () => PaginationMetaDto })
+  pagination: PaginationMetaDto;
 }
 
 export class CashflowLoanBreakdownDto {

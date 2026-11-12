@@ -16,6 +16,7 @@ import {
   findTableColumnOptions,
   parseListFilterPayload,
   resolveTableColumn,
+  emptyOptionsPage,
   TableOptionsPage,
 } from '@/common/utils/table-query';
 import {
@@ -185,7 +186,7 @@ export class GarageProcurementRequestQueryService {
     }
 
     const def = resolveTableColumn(TABLE_COLUMNS, column);
-    if (!def) return { items: [], total: 0, next: null };
+    if (!def) return emptyOptionsPage(page, pageSize);
 
     const qb = headerQb();
     applyTableFilters(

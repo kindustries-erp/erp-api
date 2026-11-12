@@ -1,3 +1,4 @@
+import { ColumnOptionsResponseDto } from '@/common/dto/column-options-response.dto';
 import {
   Body,
   Controller,
@@ -92,6 +93,7 @@ export class GarageProcurementOrderController {
   @ApiOperation({
     summary: 'Gợi ý giá trị của một cột, áp dụng bộ lọc các cột khác',
   })
+  @ApiOkResponse({ type: ColumnOptionsResponseDto })
   @Get('column-options')
   columnOptions(
     @Query('column') column: string,

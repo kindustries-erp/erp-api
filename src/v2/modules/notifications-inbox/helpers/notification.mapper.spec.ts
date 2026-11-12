@@ -73,5 +73,9 @@ describe('notification.mapper', () => {
   it('toPaginationMeta: totalPages tối thiểu 1', () => {
     expect(toPaginationMeta(1, 20, 0).totalPages).toBe(1);
     expect(toPaginationMeta(1, 20, 45).totalPages).toBe(3);
+    expect(toPaginationMeta(1, 20, 45)).toMatchObject({
+      next: 2,
+      previous: null,
+    });
   });
 });
