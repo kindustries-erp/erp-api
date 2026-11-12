@@ -17,10 +17,13 @@ Unit test (`bunx jest --forceExit`, hoặc scope hẹp `bunx jest --forceExit pr
 ## 2. Biến môi trường smoke
 
 - `E2E_PASSWORD`: BẮT BUỘC. Script thoát mã 2 nếu thiếu. Không hardcode.
+  - Nguồn: dòng `E2E_PASSWORD=` trong `erp-api/.env`. Mỗi lần chạy, nếu shell chưa có biến này thì tự đọc từ file đó, không hỏi người dùng. Không in giá trị, không ghi vào repo hay log.
 - `E2E_API_URL` (mặc định `http://localhost:10003`).
 - `E2E_TAO_EMAIL` (mặc định `ai-test-tao@example.com`), `E2E_DUYET_EMAIL` (mặc định `ai-test-duyet@example.com`).
 
-Ví dụ: `E2E_PASSWORD='...' bun run test:smoke:clone`.
+Ví dụ (từ `erp-api/`, lấy mật khẩu từ `.env`, không in ra):
+`E2E_PASSWORD="$(sed -n 's/^E2E_PASSWORD=//p' .env | head -1 | tr -d "\"'")" bun run test:smoke:clone`.
+Trước khi chạy: xác nhận `DATABASE_URL` trong `.env` không phải production và chạy `SELECT current_database();`.
 
 ## 3. Điều kiện trước khi chạy smoke
 
