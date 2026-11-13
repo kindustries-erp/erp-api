@@ -31,6 +31,7 @@ import {
   QueryLoanDto,
   RecordPaymentDto,
   UpdateLoanDto,
+  UpdatePaymentDto,
 } from '../dto';
 
 interface RequestWithUser {
@@ -87,9 +88,15 @@ export class LoansController {
     resource: ErpResource.LOANS,
     action: ErpAction.READ,
   })
-  @ApiOperation({ summary: 'Dự toán dòng tiền trả nợ tương lai đa khoản vay' })
-  getCashflowProjection(): Promise<CashflowProjectionResponseDto> {
-    return this.loansService.getCashflowProjection();
+  @ApiOperation({
+    summary: 'Dự toán dòng tiền trả nợ tương lai hoặc toàn kỳ đa khoản vay',
+  })
+  getCashflowProjection(
+    @Query('includeAllPeriods') includeAllPeriods?: string,
+  ): Promise<CashflowProjectionResponseDto> {
+    return this.loansService.getCashflowProjection(
+      includeAllPeriods === 'true' || includeAllPeriods === '1',
+    );
   }
 
   @Get(':id')
@@ -176,5 +183,32 @@ export class LoansController {
     @Req() req: RequestWithUser,
   ): Promise<LoanResponseDto> {
     return this.loansService.recordPayment(id, dto, req.user?.sub);
+  }
+
+  @Patch(':id/payments/:paymentId')
+  @RequirePermissions({
+    resource: ErpResource.LOANS,
+    action: ErpAction.UPDATE,
+  })
+  @ApiOperation({ summary: 'Cập nhật bản ghi thanh toán của khoản vay' })
+  updatePayment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
+    @Body() dto: UpdatePaymentDto,
+  ): Promise<LoanResponseDto> {
+    return this.loansService.updatePayment(id, paymentId, dto);
+  }
+
+  @Delete(':id/payments/:paymentId')
+  @RequirePermissions({
+    resource: ErpResource.LOANS,
+    action: ErpAction.UPDATE,
+  })
+  @ApiOperation({ summary: 'Xóa bản ghi thanh toán của khoản vay' })
+  deletePayment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
+  ): Promise<LoanResponseDto> {
+    return this.loansService.deletePayment(id, paymentId);
   }
 }

@@ -202,6 +202,96 @@ describe('LoanCommandService', () => {
     expect(res.status).toBe(LoanStatus.COMPLETED);
   });
 
+  describe('updatePayment', () => {
+    it('should update payment details and recalculate totals from all payments', async () => {
+      const mockLoan = {
+        id: 'l1',
+        isDeleted: false,
+        principalAmount: '100000000',
+        annualInterestRate: '10',
+        tenorMonths: 12,
+        amortizationMethod: AmortizationMethod.AMORTIZED,
+        startDate: '2026-01-01',
+        firstPaymentDate: '2026-01-01',
+        totalPaidPrincipal: '20000000',
+        totalPaidInterest: '5000000',
+        remainingPrincipal: '80000000',
+        status: LoanStatus.ACTIVE,
+      };
+
+      const mockPayment = {
+        id: 'p1',
+        loanId: 'l1',
+        periodNumber: 1,
+        paymentDate: '2026-02-01',
+        principalPaid: '20000000',
+        interestPaid: '5000000',
+        totalPaid: '25000000',
+      };
+
+      queryRunner.manager.findOne
+        .mockResolvedValueOnce(mockLoan)
+        .mockResolvedValueOnce(mockPayment);
+
+      queryRunner.manager.find = jest.fn().mockResolvedValueOnce([
+        {
+          id: 'p1',
+          loanId: 'l1',
+          principalPaid: '30000000',
+          interestPaid: '4000000',
+        },
+      ]);
+
+      const res = await service.updatePayment('l1', 'p1', {
+        principalPaid: 30000000,
+        interestPaid: 4000000,
+      });
+
+      expect(queryRunner.manager.save).toHaveBeenCalled();
+      expect(res.totalPaidPrincipal).toBe(30000000);
+      expect(res.totalPaidInterest).toBe(4000000);
+      expect(res.remainingPrincipal).toBe(70000000);
+    });
+  });
+
+  describe('deletePayment', () => {
+    it('should delete payment and recalculate totals, reopening status if needed', async () => {
+      const mockLoan = {
+        id: 'l1',
+        isDeleted: false,
+        principalAmount: '100000000',
+        annualInterestRate: '10',
+        tenorMonths: 12,
+        amortizationMethod: AmortizationMethod.AMORTIZED,
+        startDate: '2026-01-01',
+        firstPaymentDate: '2026-01-01',
+        totalPaidPrincipal: '100000000',
+        totalPaidInterest: '5000000',
+        remainingPrincipal: '0',
+        status: LoanStatus.COMPLETED,
+      };
+
+      const mockPayment = {
+        id: 'p1',
+        loanId: 'l1',
+      };
+
+      queryRunner.manager.findOne
+        .mockResolvedValueOnce(mockLoan)
+        .mockResolvedValueOnce(mockPayment);
+
+      queryRunner.manager.remove = jest.fn().mockResolvedValueOnce(mockPayment);
+      queryRunner.manager.find = jest.fn().mockResolvedValueOnce([]);
+
+      const res = await service.deletePayment('l1', 'p1');
+
+      expect(queryRunner.manager.remove).toHaveBeenCalledWith(mockPayment);
+      expect(res.totalPaidPrincipal).toBe(0);
+      expect(res.remainingPrincipal).toBe(100000000);
+      expect(res.status).toBe(LoanStatus.ACTIVE);
+    });
+  });
+
   describe('hardDelete', () => {
     it('xóa cứng thành công khi khoản vay đã xóa mềm và không có lịch sử thanh toán', async () => {
       const manager = {

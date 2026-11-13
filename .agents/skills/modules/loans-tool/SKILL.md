@@ -103,13 +103,15 @@ Tuân thủ 100% quy chuẩn `/api-structure`:
 | `POST` | `/api/v2/public/loans-tool/simulate` | No | None | Tính toán nhanh lịch khấu hao và KPIs |
 | `GET` | `/api/v2/loans-tool` | Yes | `loans:read` | Danh sách khoản vay chuẩn V2 (`{ items, pagination, summaries }`, hỗ trợ `TableQueryDto` + `lenderName` + `deleted=only`) |
 | `GET` | `/api/v2/loans-tool/column-options` | Yes | `loans:read` | Gợi ý giá trị lọc theo cột (`{ items, pagination }`, đặt trước `:id`) |
-| `GET` | `/api/v2/loans-tool/cashflow/projection` | Yes | `loans:read` | Dự báo dòng tiền nợ vay hợp nhất theo tháng |
+| `GET` | `/api/v2/loans-tool/cashflow/projection` | Yes | `loans:read` | Dòng tiền trả nợ hợp nhất theo tháng (hỗ trợ query `includeAllPeriods=true` để lấy cả kỳ đã trả) |
 | `GET` | `/api/v2/loans-tool/:id` | Yes | `loans:read` | Chi tiết hợp đồng vay kèm schedule & payments |
 | `POST` | `/api/v2/loans-tool` | Yes | `loans:create` | Tạo mới hợp đồng vay |
 | `PATCH` | `/api/v2/loans-tool/:id` | Yes | `loans:update` | Cập nhật hợp đồng vay |
 | `DELETE` | `/api/v2/loans-tool/:id` | Yes | `loans:delete` | Xóa mềm hợp đồng vay |
 | `DELETE` | `/api/v2/loans-tool/:id/permanent` | Yes | `loans:purge` | Xóa cứng khoản vay đã xóa mềm (chặn 409 nếu còn payment) |
 | `POST` | `/api/v2/loans-tool/:id/payments` | Yes | `loans:update` | Ghi nhận thanh toán trả nợ theo kỳ |
+| `PATCH` | `/api/v2/loans-tool/:id/payments/:paymentId` | Yes | `loans:update` | Cập nhật bản ghi thanh toán, tự động tính lại dư nợ gốc |
+| `DELETE` | `/api/v2/loans-tool/:id/payments/:paymentId` | Yes | `loans:update` | Xóa bản ghi thanh toán, tự động tính lại dư nợ gốc |
 
 ---
 

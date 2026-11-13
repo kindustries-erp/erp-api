@@ -155,9 +155,12 @@ export class LoanQueryService {
     return LoanMapper.toDto(loan, true);
   }
 
-  async getCashflowProjection(): Promise<CashflowProjectionResponseDto> {
+  async getCashflowProjection(
+    includeAllPeriods = false,
+  ): Promise<CashflowProjectionResponseDto> {
     const activeLoans = await this.loanRepo.find({
       where: { isDeleted: false, status: LoanStatus.ACTIVE },
+      relations: ['payments'],
     });
 
     const monthMap = new Map<
@@ -166,6 +169,13 @@ export class LoanQueryService {
         principalDue: number;
         interestDue: number;
         totalDue: number;
+        scheduledPrincipalDue: number;
+        scheduledInterestDue: number;
+        scheduledTotalDue: number;
+        actualPrincipalPaid: number;
+        actualInterestPaid: number;
+        actualTotalPaid: number;
+        allPaid: boolean;
         endingBalances: Map<string, number>;
         activeLoanIds: Set<string>;
         breakdown: CashflowLoanBreakdownDto[];
@@ -173,16 +183,40 @@ export class LoanQueryService {
     >();
 
     for (const loan of activeLoans) {
-      const schedule = LoanAmortizationEngine.generateSchedule({
-        principalAmount: Number(loan.principalAmount || 0),
-        annualInterestRate: Number(loan.annualInterestRate || 0),
-        tenorMonths: loan.tenorMonths,
-        amortizationMethod: loan.amortizationMethod,
-        startDate: loan.startDate,
-        firstPaymentDate: loan.firstPaymentDate,
-      }).schedule;
+      const scheduleResult =
+        loan.payments && loan.payments.length > 0
+          ? LoanAmortizationEngine.recalculateSchedule({
+              principalAmount: Number(loan.principalAmount || 0),
+              annualInterestRate: Number(loan.annualInterestRate || 0),
+              tenorMonths: loan.tenorMonths,
+              amortizationMethod: loan.amortizationMethod,
+              startDate: loan.startDate,
+              firstPaymentDate: loan.firstPaymentDate,
+              remainingPrincipal: Number(loan.remainingPrincipal || 0),
+              payments: loan.payments.map((p) => ({
+                periodNumber: p.periodNumber,
+                paymentDate: p.paymentDate,
+                principalPaid: Number(p.principalPaid || 0),
+                interestPaid: Number(p.interestPaid || 0),
+                paymentRef: p.paymentRef,
+              })),
+            })
+          : LoanAmortizationEngine.generateSchedule({
+              principalAmount: Number(loan.principalAmount || 0),
+              annualInterestRate: Number(loan.annualInterestRate || 0),
+              tenorMonths: loan.tenorMonths,
+              amortizationMethod: loan.amortizationMethod,
+              startDate: loan.startDate,
+              firstPaymentDate: loan.firstPaymentDate,
+            });
 
-      for (const p of schedule) {
+      const selectedPeriods = includeAllPeriods
+        ? scheduleResult.schedule
+        : scheduleResult.schedule.filter(
+            (p) => !p.isPaid && p.totalPaymentDue > 0,
+          );
+
+      for (const p of selectedPeriods) {
         const month = p.dueDate.substring(0, 7); // YYYY-MM
         let entry = monthMap.get(month);
         if (!entry) {
@@ -190,15 +224,41 @@ export class LoanQueryService {
             principalDue: 0,
             interestDue: 0,
             totalDue: 0,
+            scheduledPrincipalDue: 0,
+            scheduledInterestDue: 0,
+            scheduledTotalDue: 0,
+            actualPrincipalPaid: 0,
+            actualInterestPaid: 0,
+            actualTotalPaid: 0,
+            allPaid: true,
             endingBalances: new Map<string, number>(),
             activeLoanIds: new Set<string>(),
             breakdown: [],
           };
           monthMap.set(month, entry);
         }
-        entry.principalDue += p.principalDue;
-        entry.interestDue += p.interestDue;
-        entry.totalDue += p.totalPaymentDue;
+
+        const isPeriodPaid = !!p.isPaid;
+        if (!isPeriodPaid) {
+          entry.allPaid = false;
+          entry.principalDue += p.principalDue;
+          entry.interestDue += p.interestDue;
+          entry.totalDue += p.totalPaymentDue;
+        }
+
+        const pActualPrincipal = Number(p.actualPrincipalPaid || 0);
+        const pActualInterest = Number(p.actualInterestPaid || 0);
+        const pActualTotal = Number(
+          p.actualTotalPaid || pActualPrincipal + pActualInterest,
+        );
+
+        entry.scheduledPrincipalDue += p.principalDue;
+        entry.scheduledInterestDue += p.interestDue;
+        entry.scheduledTotalDue += p.totalPaymentDue;
+        entry.actualPrincipalPaid += pActualPrincipal;
+        entry.actualInterestPaid += pActualInterest;
+        entry.actualTotalPaid += pActualTotal;
+
         entry.endingBalances.set(loan.id, p.endingBalance);
         entry.activeLoanIds.add(loan.id);
         entry.breakdown.push({
@@ -209,6 +269,13 @@ export class LoanQueryService {
           interestDue: Math.round(p.interestDue),
           totalPayment: Math.round(p.totalPaymentDue),
           endingBalance: Math.round(p.endingBalance),
+          scheduledPrincipal: Math.round(p.principalDue),
+          scheduledInterest: Math.round(p.interestDue),
+          scheduledTotal: Math.round(p.totalPaymentDue),
+          actualPrincipalPaid: Math.round(pActualPrincipal),
+          actualInterestPaid: Math.round(pActualInterest),
+          actualTotalPaid: Math.round(pActualTotal),
+          isPaid: isPeriodPaid,
         });
       }
     }
@@ -217,6 +284,10 @@ export class LoanQueryService {
     const monthlyProjections: MonthlyCashflowProjectionDto[] = [];
     let grandPrincipal = 0;
     let grandInterest = 0;
+    let grandScheduledPrincipal = 0;
+    let grandScheduledInterest = 0;
+    let grandActualPrincipal = 0;
+    let grandActualInterest = 0;
 
     for (const m of sortedMonths) {
       const data = monthMap.get(m)!;
@@ -227,6 +298,10 @@ export class LoanQueryService {
 
       grandPrincipal += data.principalDue;
       grandInterest += data.interestDue;
+      grandScheduledPrincipal += data.scheduledPrincipalDue;
+      grandScheduledInterest += data.scheduledInterestDue;
+      grandActualPrincipal += data.actualPrincipalPaid;
+      grandActualInterest += data.actualInterestPaid;
 
       monthlyProjections.push({
         month: m,
@@ -235,6 +310,14 @@ export class LoanQueryService {
         totalPaymentDue: Math.round(data.totalDue),
         cumulativeRemainingPrincipal: Math.round(cumBal),
         activeLoanCount: data.activeLoanIds.size,
+        scheduledPrincipalDue: Math.round(data.scheduledPrincipalDue),
+        scheduledInterestDue: Math.round(data.scheduledInterestDue),
+        scheduledTotalDue: Math.round(data.scheduledTotalDue),
+        actualPrincipalPaid: Math.round(data.actualPrincipalPaid),
+        actualInterestPaid: Math.round(data.actualInterestPaid),
+        actualTotalPaid: Math.round(data.actualTotalPaid),
+        isPaid:
+          data.breakdown.length > 0 && data.breakdown.every((b) => b.isPaid),
         breakdown: data.breakdown,
       });
     }
@@ -244,6 +327,14 @@ export class LoanQueryService {
       totalPrincipalDue: Math.round(grandPrincipal),
       totalInterestDue: Math.round(grandInterest),
       totalObligationDue: Math.round(grandPrincipal + grandInterest),
+      totalScheduledPrincipal: Math.round(grandScheduledPrincipal),
+      totalScheduledInterest: Math.round(grandScheduledInterest),
+      totalScheduledObligation: Math.round(
+        grandScheduledPrincipal + grandScheduledInterest,
+      ),
+      totalActualPrincipalPaid: Math.round(grandActualPrincipal),
+      totalActualInterestPaid: Math.round(grandActualInterest),
+      totalActualPaid: Math.round(grandActualPrincipal + grandActualInterest),
     };
   }
 }

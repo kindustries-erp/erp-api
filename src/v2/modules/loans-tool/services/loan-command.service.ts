@@ -6,7 +6,12 @@ import {
 } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { LoanEntity, LoanPaymentEntity } from '../entities';
-import { CreateLoanDto, RecordPaymentDto, UpdateLoanDto } from '../dto';
+import {
+  CreateLoanDto,
+  RecordPaymentDto,
+  UpdateLoanDto,
+  UpdatePaymentDto,
+} from '../dto';
 import { LoanResponseDto } from '../dto/loan-response.dto';
 import { LoanMapper } from '../helpers/loan.mapper';
 import { LoanStatus } from '@/v2/core/loans-core';
@@ -18,6 +23,16 @@ export class LoanCommandService {
   private generateLoanCode(): string {
     const timestamp = Date.now().toString().slice(-6);
     return `LOAN-${timestamp}`;
+  }
+
+  private resolveFirstPaymentDate(
+    startDate: string,
+    firstPaymentDate?: string | null,
+  ): string {
+    if (firstPaymentDate && firstPaymentDate >= startDate) {
+      return firstPaymentDate;
+    }
+    return startDate;
   }
 
   async create(dto: CreateLoanDto, userId?: string): Promise<LoanResponseDto> {
@@ -33,7 +48,10 @@ export class LoanCommandService {
       tenorMonths: dto.tenorMonths,
       amortizationMethod: dto.amortizationMethod,
       startDate: dto.startDate,
-      firstPaymentDate: dto.firstPaymentDate || dto.startDate,
+      firstPaymentDate: this.resolveFirstPaymentDate(
+        dto.startDate,
+        dto.firstPaymentDate,
+      ),
       totalPaidPrincipal: '0',
       totalPaidInterest: '0',
       remainingPrincipal: String(dto.principalAmount),
@@ -66,7 +84,10 @@ export class LoanCommandService {
           tenorMonths: dto.tenorMonths,
           amortizationMethod: dto.amortizationMethod,
           startDate: dto.startDate,
-          firstPaymentDate: dto.firstPaymentDate || dto.startDate,
+          firstPaymentDate: this.resolveFirstPaymentDate(
+            dto.startDate,
+            dto.firstPaymentDate,
+          ),
           totalPaidPrincipal: '0',
           totalPaidInterest: '0',
           remainingPrincipal: String(dto.principalAmount),
@@ -116,13 +137,18 @@ export class LoanCommandService {
       loan.startDate = dto.startDate;
       if (
         dto.firstPaymentDate === undefined &&
-        (!loan.firstPaymentDate || loan.firstPaymentDate === prevStart)
+        (!loan.firstPaymentDate ||
+          loan.firstPaymentDate === prevStart ||
+          loan.firstPaymentDate < dto.startDate)
       ) {
         loan.firstPaymentDate = dto.startDate;
       }
     }
     if (dto.firstPaymentDate !== undefined) {
-      loan.firstPaymentDate = dto.firstPaymentDate || loan.startDate;
+      loan.firstPaymentDate = this.resolveFirstPaymentDate(
+        loan.startDate,
+        dto.firstPaymentDate,
+      );
     }
     if (dto.notes !== undefined) loan.notes = dto.notes || null;
     if (dto.status !== undefined) loan.status = dto.status;
@@ -227,6 +253,181 @@ export class LoanCommandService {
 
       if (newRemaining <= 0) {
         loan.status = LoanStatus.COMPLETED;
+      }
+
+      const updatedLoan = await qr.manager.save(loan);
+      await qr.commitTransaction();
+
+      return LoanMapper.toDto(updatedLoan, true);
+    } catch (err) {
+      await qr.rollbackTransaction();
+      throw err;
+    } finally {
+      await qr.release();
+    }
+  }
+
+  async updatePayment(
+    loanId: string,
+    paymentId: string,
+    dto: UpdatePaymentDto,
+  ): Promise<LoanResponseDto> {
+    const qr = this.dataSource.createQueryRunner();
+    await qr.connect();
+    await qr.startTransaction();
+
+    try {
+      const loan = await qr.manager.findOne(LoanEntity, {
+        where: { id: loanId, isDeleted: false },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!loan) {
+        throw new NotFoundException(`Loan with ID "${loanId}" not found`);
+      }
+
+      const payment = await qr.manager.findOne(LoanPaymentEntity, {
+        where: { id: paymentId, loanId },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!payment) {
+        throw new NotFoundException(
+          `Payment with ID "${paymentId}" not found for loan "${loanId}"`,
+        );
+      }
+
+      if (dto.periodNumber !== undefined) {
+        payment.periodNumber = dto.periodNumber;
+      }
+      if (dto.paymentDate !== undefined) {
+        payment.paymentDate = dto.paymentDate;
+      }
+      if (dto.principalPaid !== undefined) {
+        payment.principalPaid = String(dto.principalPaid);
+      }
+      if (dto.interestPaid !== undefined) {
+        payment.interestPaid = String(dto.interestPaid);
+      }
+      const curPrincipal = Number(payment.principalPaid || 0);
+      const curInterest = Number(payment.interestPaid || 0);
+      const newTotal = curPrincipal + curInterest;
+      if (newTotal <= 0) {
+        throw new BadRequestException(
+          'Total payment amount must be greater than 0',
+        );
+      }
+      payment.totalPaid = String(newTotal);
+
+      if (dto.paymentRef !== undefined) {
+        payment.paymentRef = dto.paymentRef || null;
+      }
+      if (dto.notes !== undefined) {
+        payment.notes = dto.notes || null;
+      }
+
+      await qr.manager.save(payment);
+
+      // Recalculate totals directly from all active payments of this loan
+      const allPayments = await qr.manager.find(LoanPaymentEntity, {
+        where: { loanId },
+      });
+
+      const totalPrincipalPaid = allPayments.reduce(
+        (acc, p) => acc + Number(p.principalPaid || 0),
+        0,
+      );
+      const totalInterestPaid = allPayments.reduce(
+        (acc, p) => acc + Number(p.interestPaid || 0),
+        0,
+      );
+
+      const principalOrig = Number(loan.principalAmount || 0);
+      const remainingPrincipal = Math.max(
+        0,
+        principalOrig - totalPrincipalPaid,
+      );
+
+      loan.totalPaidPrincipal = String(totalPrincipalPaid);
+      loan.totalPaidInterest = String(totalInterestPaid);
+      loan.remainingPrincipal = String(remainingPrincipal);
+
+      if (remainingPrincipal <= 0) {
+        loan.status = LoanStatus.COMPLETED;
+      } else if (loan.status === LoanStatus.COMPLETED) {
+        loan.status = LoanStatus.ACTIVE;
+      }
+
+      const updatedLoan = await qr.manager.save(loan);
+      await qr.commitTransaction();
+
+      return LoanMapper.toDto(updatedLoan, true);
+    } catch (err) {
+      await qr.rollbackTransaction();
+      throw err;
+    } finally {
+      await qr.release();
+    }
+  }
+
+  async deletePayment(
+    loanId: string,
+    paymentId: string,
+  ): Promise<LoanResponseDto> {
+    const qr = this.dataSource.createQueryRunner();
+    await qr.connect();
+    await qr.startTransaction();
+
+    try {
+      const loan = await qr.manager.findOne(LoanEntity, {
+        where: { id: loanId, isDeleted: false },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!loan) {
+        throw new NotFoundException(`Loan with ID "${loanId}" not found`);
+      }
+
+      const payment = await qr.manager.findOne(LoanPaymentEntity, {
+        where: { id: paymentId, loanId },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!payment) {
+        throw new NotFoundException(
+          `Payment with ID "${paymentId}" not found for loan "${loanId}"`,
+        );
+      }
+
+      await qr.manager.remove(payment);
+
+      const allPayments = await qr.manager.find(LoanPaymentEntity, {
+        where: { loanId },
+      });
+
+      const totalPrincipalPaid = allPayments.reduce(
+        (acc, p) => acc + Number(p.principalPaid || 0),
+        0,
+      );
+      const totalInterestPaid = allPayments.reduce(
+        (acc, p) => acc + Number(p.interestPaid || 0),
+        0,
+      );
+
+      const principalOrig = Number(loan.principalAmount || 0);
+      const remainingPrincipal = Math.max(
+        0,
+        principalOrig - totalPrincipalPaid,
+      );
+
+      loan.totalPaidPrincipal = String(totalPrincipalPaid);
+      loan.totalPaidInterest = String(totalInterestPaid);
+      loan.remainingPrincipal = String(remainingPrincipal);
+
+      if (remainingPrincipal <= 0) {
+        loan.status = LoanStatus.COMPLETED;
+      } else if (loan.status === LoanStatus.COMPLETED) {
+        loan.status = LoanStatus.ACTIVE;
       }
 
       const updatedLoan = await qr.manager.save(loan);

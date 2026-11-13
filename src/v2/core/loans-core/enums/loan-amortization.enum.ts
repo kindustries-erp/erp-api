@@ -7,6 +7,10 @@ export enum AmortizationMethod {
   BULLET = 'BULLET',
   /** Lãi phẳng tính trên dư nợ gốc ban đầu */
   FLAT = 'FLAT',
+  /** Ân hạn nợ gốc: Chỉ trả lãi giai đoạn đầu, gốc trả sau */
+  GRACE_PERIOD = 'GRACE_PERIOD',
+  /** Thanh toán toàn bộ 1 lần khi đáo hạn: Cả gốc và lãi trả cuối kỳ */
+  MATURITY_LUMP_SUM = 'MATURITY_LUMP_SUM',
 }
 
 export enum LoanStatus {

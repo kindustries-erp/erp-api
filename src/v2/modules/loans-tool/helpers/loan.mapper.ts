@@ -59,15 +59,35 @@ export class LoanMapper {
     };
 
     if (includeSchedule) {
-      const sim = LoanAmortizationEngine.generateSchedule({
-        principalAmount,
-        annualInterestRate,
-        tenorMonths: entity.tenorMonths,
-        amortizationMethod: entity.amortizationMethod,
-        startDate: entity.startDate,
-        firstPaymentDate: entity.firstPaymentDate,
-      });
-      dto.schedule = sim.schedule;
+      if (entity.payments && entity.payments.length > 0) {
+        const sim = LoanAmortizationEngine.recalculateSchedule({
+          principalAmount,
+          annualInterestRate,
+          tenorMonths: entity.tenorMonths,
+          amortizationMethod: entity.amortizationMethod,
+          startDate: entity.startDate,
+          firstPaymentDate: entity.firstPaymentDate,
+          remainingPrincipal: Number(entity.remainingPrincipal || 0),
+          payments: entity.payments.map((p) => ({
+            periodNumber: p.periodNumber,
+            paymentDate: p.paymentDate,
+            principalPaid: Number(p.principalPaid || 0),
+            interestPaid: Number(p.interestPaid || 0),
+            paymentRef: p.paymentRef,
+          })),
+        });
+        dto.schedule = sim.schedule;
+      } else {
+        const sim = LoanAmortizationEngine.generateSchedule({
+          principalAmount,
+          annualInterestRate,
+          tenorMonths: entity.tenorMonths,
+          amortizationMethod: entity.amortizationMethod,
+          startDate: entity.startDate,
+          firstPaymentDate: entity.firstPaymentDate,
+        });
+        dto.schedule = sim.schedule;
+      }
     }
 
     return dto;

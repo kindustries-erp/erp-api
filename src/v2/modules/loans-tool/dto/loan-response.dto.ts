@@ -70,6 +70,13 @@ export class CashflowLoanBreakdownDto {
   interestDue: number;
   totalPayment: number;
   endingBalance: number;
+  scheduledPrincipal?: number;
+  scheduledInterest?: number;
+  scheduledTotal?: number;
+  actualPrincipalPaid?: number;
+  actualInterestPaid?: number;
+  actualTotalPaid?: number;
+  isPaid?: boolean;
 }
 
 export class MonthlyCashflowProjectionDto {
@@ -79,6 +86,13 @@ export class MonthlyCashflowProjectionDto {
   totalPaymentDue: number;
   cumulativeRemainingPrincipal: number;
   activeLoanCount: number;
+  scheduledPrincipalDue?: number;
+  scheduledInterestDue?: number;
+  scheduledTotalDue?: number;
+  actualPrincipalPaid?: number;
+  actualInterestPaid?: number;
+  actualTotalPaid?: number;
+  isPaid?: boolean;
   breakdown?: CashflowLoanBreakdownDto[];
 }
 
@@ -87,4 +101,10 @@ export class CashflowProjectionResponseDto {
   totalPrincipalDue: number;
   totalInterestDue: number;
   totalObligationDue: number;
+  totalScheduledPrincipal?: number;
+  totalScheduledInterest?: number;
+  totalScheduledObligation?: number;
+  totalActualPrincipalPaid?: number;
+  totalActualInterestPaid?: number;
+  totalActualPaid?: number;
 }

@@ -12,6 +12,7 @@ import {
   RecordPaymentDto,
   SimulateLoanDto,
   UpdateLoanDto,
+  UpdatePaymentDto,
 } from './dto';
 import {
   LoanAmortizationEngine,
@@ -58,8 +59,10 @@ export class LoansService {
     return this.queryService.findOne(id);
   }
 
-  getCashflowProjection(): Promise<CashflowProjectionResponseDto> {
-    return this.queryService.getCashflowProjection();
+  getCashflowProjection(
+    includeAllPeriods = false,
+  ): Promise<CashflowProjectionResponseDto> {
+    return this.queryService.getCashflowProjection(includeAllPeriods);
   }
 
   create(dto: CreateLoanDto, userId?: string): Promise<LoanResponseDto> {
@@ -92,6 +95,18 @@ export class LoansService {
     userId?: string,
   ): Promise<LoanResponseDto> {
     return this.commandService.recordPayment(loanId, dto, userId);
+  }
+
+  updatePayment(
+    loanId: string,
+    paymentId: string,
+    dto: UpdatePaymentDto,
+  ): Promise<LoanResponseDto> {
+    return this.commandService.updatePayment(loanId, paymentId, dto);
+  }
+
+  deletePayment(loanId: string, paymentId: string): Promise<LoanResponseDto> {
+    return this.commandService.deletePayment(loanId, paymentId);
   }
 
   simulate(dto: SimulateLoanDto): LoanSimulationResult {
