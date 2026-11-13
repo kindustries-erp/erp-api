@@ -47,6 +47,14 @@ export const AVAILABLE_RBAC_RESOURCES: AvailableRbacResource[] = [
     label: 'Điều chỉnh kho Garage',
   },
   {
+    resource: ErpResource.GARAGE_STOCK_VOUCHERS,
+    label: 'Chứng từ kho Garage (danh sách gộp)',
+  },
+  {
+    resource: ErpResource.GARAGE_STOCK_LEDGER,
+    label: 'Tồn kho Garage (số dư và thẻ kho)',
+  },
+  {
     resource: 'accounting_configs',
     label: 'Accounting Configs (Cấu hình kế toán)',
   },
