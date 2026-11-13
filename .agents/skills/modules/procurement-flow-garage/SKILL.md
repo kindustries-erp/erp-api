@@ -5,7 +5,7 @@ description: Orchestrator chuỗi mua garage (PR → PO → nhận hàng GR → 
 
 # procurement-flow-garage
 
-## 1. Cấu trúc (/api-structure Phần B)
+## 1. Cấu trúc (/erp-api-structure Phần B)
 - Lõi `src/v2/core/procurement-flow-core/` (style `orchestrator`, không entity/controller): `contracts/` (cổng `ProcurementOrderFulfilmentPort`, `ProcurementReceiptStockPort`, `ProcurementFlowEventPort`), `services/abstract-procurement-flow.service.ts` (`runInTransaction`, `applyReceipt`, `revertReceipt`, `publishAfterCommit`).
 - Module `src/v2/modules/procurement-flow-garage/`: `GarageProcurementFlowService` (facade, Clean DI một chữ ký), `GarageProcurementFlowStockAdapter` (engine + `INVENTORY_MOVEMENTS_GARAGE_LEDGER`), `GarageProcurementFlowEventsService` (thông báo), `helpers/garage-receipt-flow.helper.ts`. Không controller, không route.
 - `GarageGoodsReceiptsCoreModule` import `GarageProcurementFlowModule`; module flow KHÔNG import module GR (chỉ dùng entity theo đường dẫn file) để tránh vòng.

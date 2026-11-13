@@ -2,7 +2,7 @@
 description: Quy trình chuẩn tổ chức cấu trúc erp-api (NestJS). Phần A tách Controller/Service vượt ngưỡng (Sub-Controllers, Sub-Services Facade, Pure Engines, Clean DI, Zero-Regression). Phần B tạo hoặc chuyển module sang kiến trúc v2 (bằng plop: api-core, api-thin-module, api-workflow-module hoặc api-module-v2)
 ---
 
-# 🏗️ ERP API Structure Workflow (`/api-structure`)
+# 🏗️ ERP API Structure Workflow (`/erp-api-structure`)
 
 Workflow gộp hai quy trình cấu trúc backend. **Phần A** dùng khi một Controller hoặc Service cũ vượt ngưỡng. **Phần B** dùng khi tạo module mới hoặc chuyển module sang v2. Playbook, ngưỡng và checklist nằm ở skill `erp-api-structure`.
 
@@ -279,7 +279,7 @@ bun .agents/skills/erp-api-structure/scripts/scan-oversized-files.ts
 
 Áp dụng khi refactor module v1 (track T1). Mục tiêu: hình dạng code sau refactor trùng với `api-module-v2`, để migrate về sau chỉ còn di chuyển và wiring.
 
-| Refactor v1 tạo ra | Tương ứng v2 (`/api-structure`) |
+| Refactor v1 tạo ra | Tương ứng v2 (`/erp-api-structure`) |
 | :--- | :--- |
 | `<module>.service.ts` là Facade delegate | Facade y hệt |
 | `services/<e>-query.service.ts` + `services/<e>-command.service.ts` | y hệt |
@@ -291,7 +291,7 @@ Quy tắc:
 - Tách theo trục đọc/ghi trước, rồi mới tách theo nghiệp vụ.
 - Giữ nguyên route, RBAC, response, DTO public.
 - **Không** tạo `src/v2/` bằng tay. `src/v2` chỉ sinh bằng `bunx plop api-module-v2` khi có lệnh migrate (track T2).
-- Module đã migrate hoặc đang migrate v2: không refactor v1 nữa, chuyển sang `/api-structure`.
+- Module đã migrate hoặc đang migrate v2: không refactor v1 nữa, chuyển sang `/erp-api-structure`.
 - Khi chạy scanner, dùng `--path=src/v2` để tách báo cáo v2 khỏi v1.
 
 ### 🧰 Script độc lập (`scripts/`, `src/**/scripts/`)
@@ -363,7 +363,7 @@ Workflow này định nghĩa **API v2** trong `erp-api`: route chuẩn là `api/
 Skill đi kèm (quy ước, bẫy, checklist): [`./../skills/erp-api-structure/references/v2-module.md`](../skills/erp-api-structure/references/v2-module.md)
 Generator: `api-module-v2` (xem [`plop-generate`](../skills/plop-generate/SKILL.md), mục Generator 3)
 
-#### Chọn generator (đồng bộ với `ui-structure` Phần B)
+#### Chọn generator (đồng bộ với `erp-ui-structure` Phần B)
 
 | Tình huống | Generator | Kết quả |
 | :--- | :--- | :--- |
@@ -418,7 +418,7 @@ Bốn quy tắc cứng:
 1. **Không lộ entity**: controller và facade chỉ trả response DTO (mapper làm việc đó).
 2. **Constructor DI sạch**: một chữ ký duy nhất, không overload, không union type.
 3. **Spec co-located**: mỗi đơn vị có `*.spec.ts` cạnh file nguồn.
-4. **Ngưỡng kích thước**: controller ≤ 300 LoC, service ≤ 500 LoC, helper/engine ≤ 800 LoC. Vượt ngưỡng thì dùng `/api-structure`.
+4. **Ngưỡng kích thước**: controller ≤ 300 LoC, service ≤ 500 LoC, helper/engine ≤ 800 LoC. Vượt ngưỡng thì dùng `/erp-api-structure`.
 
 ---
 

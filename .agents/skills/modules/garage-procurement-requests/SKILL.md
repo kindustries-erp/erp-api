@@ -73,7 +73,7 @@ Quyền resource: `garage_procurement_requests`. Seed từ `garage_purchase_orde
 
 - `DELETE /api/v2/procurement-requests-garage/:id`: xóa mềm nháp. Quyền `DELETE`. Chặn khi không phải `DRAFT` hoặc còn số lượng đang được đơn mua giữ.
 - `DELETE /api/v2/procurement-requests-garage/:id/permanent`: xóa cứng nháp. Quyền `PURGE` (chỉ admin). Chặn khi còn đơn mua tham chiếu, kể cả đơn đã xóa mềm (khóa ngoại RESTRICT). Xóa dòng rồi đầu đề; lịch sử duyệt được giữ.
-- Chính sách và điều kiện chung: `.agents/workflows/api-structure.md` mục "Chính sách xóa".
+- Chính sách và điều kiện chung: `.agents/workflows/erp-api-structure.md` mục "Chính sách xóa".
 
 ## 11. Khóa duyệt và chọn người duyệt (2026-11-06)
 

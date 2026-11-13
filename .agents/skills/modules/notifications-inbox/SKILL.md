@@ -104,4 +104,4 @@ Kiểm tra bố cục lõi: `bun test plop-helpers/apiCoreLayout.test.mjs`.
 
 ## 7. Liên kết
 - Plan: `/home/lio/.claude/plans/anh-mu-n-t-o-api-v2-notification-glistening-reddy.md`
-- Quy tắc tên bảng và lõi/module: `.agents/workflows/api-structure.md` Phần B.
+- Quy tắc tên bảng và lõi/module: `.agents/workflows/erp-api-structure.md` Phần B.

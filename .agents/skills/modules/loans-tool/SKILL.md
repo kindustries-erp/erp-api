@@ -79,7 +79,7 @@ loans_finance (Hợp đồng vay)
 
 ## 3. Kiến Trúc V2 Module (`erp-api`)
 
-Tuân thủ 100% quy chuẩn `/api-structure`:
+Tuân thủ 100% quy chuẩn `/erp-api-structure`:
 - **`src/v2/core/loans-core/`**:
   - `engines/loan-amortization.engine.ts`: Pure TypeScript class không phụ thuộc TypeORM hay NestJS context. 100% co-located unit test.
   - `entities/base-loan.entity.ts`: Kế thừa `CoreSoftDeletableEntity`.

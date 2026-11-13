@@ -1,7 +1,7 @@
 
 # Kỹ Năng API v2 Refactor (`erp-api`)
 
-Workflow đầy đủ: [`../../../workflows/api-structure.md`](../../../workflows/api-structure.md). Skill này là checklist và quy ước để thực thi workflow.
+Workflow đầy đủ: [`../../../workflows/erp-api-structure.md`](../../../workflows/erp-api-structure.md). Skill này là checklist và quy ước để thực thi workflow.
 
 ## 0. Vị trí
 
@@ -39,7 +39,7 @@ Kiến trúc API V2 được tổ chức phân cấp tương tự Web V2 (`erp-w
 | DTO ra | `dto/*-response.dto.ts` | Không trả entity ra ngoài module |
 | Mapper | `helpers/*.mapper.ts` | Hàm thuần. Hai chiều: entity→response, DTO→entity (bỏ `undefined`) |
 | Đọc | `services/*-query.service.ts` | Chỉ đọc, lọc `isDeleted = false` |
-| Ghi | `services/*-command.service.ts` | create / update / softDelete / hardDelete (có điều kiện, xem `api-structure` Phần B mục "Chính sách xóa") |
+| Ghi | `services/*-command.service.ts` | create / update / softDelete / hardDelete (có điều kiện, xem `erp-api-structure` Phần B mục "Chính sách xóa") |
 | Facade | `<module>.service.ts` | Điều phối, `NotFoundException`, luôn trả response DTO |
 | Controller | `controllers/*.controller.ts` | `@RequirePermissions({ resource: ErpResource.X, action: ErpAction.READ\|CREATE\|UPDATE\|DELETE\|PURGE })`; xóa cứng dùng `PURGE` và route `:id/permanent` |
 

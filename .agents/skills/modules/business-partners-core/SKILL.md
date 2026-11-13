@@ -12,7 +12,7 @@ description: Module tri thức Đối tác (Khách hàng & Nhà cung cấp) phí
 - Xóa là xóa mềm (`isDeleted`). Không có audit log, không có khóa bi quan (không có số dư).
 - Web tiêu thụ: V1 `src/modules/business-partners-core`, `src/modules/partners`, PO drawers; V2 `src/v2/modules/business-partners-customers` và `business-partners-suppliers` (xem skill `business-partners` của erp-web).
 
-## 2. Cấu trúc (Theo chuẩn `/api-structure` V2 Core & Modules)
+## 2. Cấu trúc (Theo chuẩn `/erp-api-structure` V2 Core & Modules)
 
 ```text
 src/v2/
@@ -114,7 +114,7 @@ bun .agents/skills/erp-api-structure/scripts/scan-oversized-files.ts --strict --
 
 ## 8. Liên quan
 
-- Skill tổng: `api-structure` (hợp đồng, bẫy, quy trình chuyển module cũ).
+- Skill tổng: `erp-api-structure` (hợp đồng, bẫy, quy trình chuyển module cũ).
 - Web: `erp-web/.agents/skills/modules/business-partners/SKILL.md`.
 
 ## extraData (JSON tùy biến, 2026-11-08)

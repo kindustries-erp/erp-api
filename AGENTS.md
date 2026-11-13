@@ -77,8 +77,8 @@ Global workflows in `./.agents/workflows/`:
 - `erp-continue.md` — resume an in-progress task: read the checkpoint, verify git/Plane, wait for confirmation.
 - `clean-brain.md` — session and plan cleanup.
 - `erp-git-workflow.md` — ERP master-first Git workflow.
-- `ui-structure.md` — ERP Web structure: Atomic 5 tầng (Phần A) và migrate V1 → V2 (Phần B).
-- `api-structure.md` — ERP API structure: tách Controller/Service lớn (Phần A) và module v2 (Phần B).
+- `erp-ui-structure.md` — ERP Web structure: Atomic 5 tầng (Phần A) và migrate V1 → V2 (Phần B).
+- `erp-api-structure.md` — ERP API structure: tách Controller/Service lớn (Phần A) và module v2 (Phần B).
 - `standardize-table.md` — ERP table standardization.
 
 ERP workflows in `./erp/.agents/workflows/`:
@@ -124,7 +124,7 @@ Repo-level workflows (e.g. `erp/erp-web/.agents/workflows/standardize-drawer.md`
 3. Ensure form fields use proper validation and translation keys.
 
 ### Scenario 5: Refactoring Large Service (ERP API)
-1. Load `/api-structure` workflow.
+1. Load `/erp-api-structure` workflow.
 2. Scan file sizes: Controller >300 LoC, Service >500 LoC.
 3. Choose a pattern: Sub-Controllers, Sub-Services Facade, Pure Engine.
 4. Maintain 100% backward compatibility via the Facade pattern.
@@ -220,9 +220,9 @@ Skills nằm ở `erp-api/.agents/skills/` và `erp-web/.agents/skills/`, đăng
 Workflow ERP nằm ở `./.agents/workflows/`:
 
 - `erp-branch-sync-workflow.md` — sync `erp-master` sang nhánh downstream.
-- `routing.md`, `clean-brain.md`, `api-structure.md`, `ui-structure.md`.
+- `routing.md`, `clean-brain.md`, `erp-api-structure.md`, `erp-ui-structure.md`.
 
-Workflow global (`erp-plan.md`, `erp-continue.md`, `erp-git-workflow.md`, `standardize-table.md`, `api-structure.md`, `ui-structure.md`, ...) xem catalog ở `../AGENTS.md`.
+Workflow global (`erp-plan.md`, `erp-continue.md`, `erp-git-workflow.md`, `standardize-table.md`, `erp-api-structure.md`, `erp-ui-structure.md`, ...) xem catalog ở `../AGENTS.md`.
 
 Kế hoạch trình trong hội thoại và được `OK` trước khi làm; task theo dõi trên Plane (project KINDU) bằng skill `plane-work-items`. Antigravity Brain (`implementation_plan.md` -> `walkthrough.md`) là bản phụ khi chạy trong Antigravity.
 
@@ -316,7 +316,7 @@ Source of truth for this repo (`./erp-api`).
 - extend/adapt before forking parallel patterns
 - cancel or delete actions must have modal confirm (on UI side)
 - delete operations must be soft delete with `isDeleted` flag
-  - Ngoại lệ có điều kiện: xóa cứng chứng từ nháp (PO/PR garage) qua quyền `PURGE`, chỉ admin, chặn khi còn bản ghi phụ thuộc. Chi tiết: `.agents/workflows/api-structure.md` mục "Chính sách xóa".
+  - Ngoại lệ có điều kiện: xóa cứng chứng từ nháp (PO/PR garage) qua quyền `PURGE`, chỉ admin, chặn khi còn bản ghi phụ thuộc. Chi tiết: `.agents/workflows/erp-api-structure.md` mục "Chính sách xóa".
 - **NEVER** leave ad-hoc `.ts` files at the repo root (they bypass `tsconfig.build.json` and shift `dist/` output structure from `dist/main.js` to `dist/src/main.js`, crashing the container). Root-level `.ts` files that are not `src/` code must be added to `.gitignore` or deleted before commit.
 - After `bun run build`, verify `dist/main.js` exists (not `dist/src/main.js`) before declaring build PASS.
 
@@ -377,8 +377,8 @@ Source of truth for this repo (`./erp-api`).
 - **Imports**: Use alias imports. Group 3rd-party imports first, followed by a blank line, then custom code imports.
 - **Module boundaries**: New domain work should stay inside `src/<domain>/...`. Cross-domain orchestration is allowed, but hidden coupling and DTO leakage across domains are not.
 - **Reuse-first**: Before creating a new helper/service/util, inspect existing code in `src/common/**`, the current domain, and adjacent ERP domains. If creating a new primitive, note the reason in the task.
-- **Route v2**: `@Controller('api/v2/<tên thư mục module>')`, một chuỗi, không alias `api/v1` (xem `api-structure`, mục 0a).
-- **Response list v2**: `{ items, pagination, summaries?, extraData? }`; dữ liệu phụ chung của list (ví dụ `unreadCount`) đặt trong `extraData`, không thêm key phẳng ở gốc (xem `api-structure`, `references/v2-module.md`).
+- **Route v2**: `@Controller('api/v2/<tên thư mục module>')`, một chuỗi, không alias `api/v1` (xem `erp-api-structure`, mục 0a).
+- **Response list v2**: `{ items, pagination, summaries?, extraData? }`; dữ liệu phụ chung của list (ví dụ `unreadCount`) đặt trong `extraData`, không thêm key phẳng ở gốc (xem `erp-api-structure`, `references/v2-module.md`).
 - **Definition of done**: A backend task is not done until task checklist is updated, validation evidence is recorded, and commit/push status is stated clearly.
 
 ### Teamwork guardrails

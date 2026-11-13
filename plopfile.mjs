@@ -326,7 +326,7 @@ export default function (plop) {
 
   // 3. GENERATOR: API v2 module (Facade + sub-services + helpers + response DTO + spec co-located)
   plop.setGenerator('api-module-v2', {
-    description: 'Tạo module API v2 theo kiến trúc Facade + sub-services, kèm spec (xem skill api-structure)',
+    description: 'Tạo module API v2 theo kiến trúc Facade + sub-services, kèm spec (xem skill erp-api-structure)',
     prompts: [
       {
         type: 'input',

@@ -55,7 +55,7 @@ Chỉ nhận họ có `style: abstract-services` trong manifest; họ CRUD dùng
 
 ### 📦 Generator: `api-module-v2` (Module API v2 đứng riêng: Facade + sub-services + spec)
 
-Sinh module theo kiến trúc v2 (Facade, sub-services Query/Command, mapper, response DTO, controller có RBAC `ErpResource`/`ErpAction`, spec co-located). Quy ước và bẫy xem skill [`api-structure`](../api-structure/SKILL.md).
+Sinh module theo kiến trúc v2 (Facade, sub-services Query/Command, mapper, response DTO, controller có RBAC `ErpResource`/`ErpAction`, spec co-located). Quy ước và bẫy xem skill [`erp-api-structure`](../erp-api-structure/SKILL.md).
 
 ```bash
 bunx plop api-module-v2 <module-core> <Entity> "<fieldSpec>" "<tableName>" "<routePath>" "<permissionResource>" <wire>
@@ -64,15 +64,15 @@ bunx plop api-module-v2 customer-claims-core CustomerClaim "code:string:required
 ```
 
 - Tham số theo thứ tự: `moduleInput`, `entityInput`, `fieldSpecInput`, `tableNameInput`, `routePathInput`, `permissionResourceInput`, `wireInput`. Chuỗi rỗng = mặc định.
-- Mặc định `tableNameInput`: `<gốc>` (tên module, không có `_core`), không prefix `erp_`. Quy tắc đầy đủ: `api-structure` mục "Quy tắc đặt tên bảng". Lưu ý: `api-core` đã sinh lõi base-only (không module, không provider). Họ cũ có module lõi vẫn chạy bình thường: `api-thin-module` và `api-workflow-module` chỉ import module lõi khi manifest khai báo `module`.
+- Mặc định `tableNameInput`: `<gốc>` (tên module, không có `_core`), không prefix `erp_`. Quy tắc đầy đủ: `erp-api-structure` mục "Quy tắc đặt tên bảng". Lưu ý: `api-core` đã sinh lõi base-only (không module, không provider). Họ cũ có module lõi vẫn chạy bình thường: `api-thin-module` và `api-workflow-module` chỉ import module lõi khi manifest khai báo `module`.
 - `wire = true`: nối vào `app.module.ts` và `data-source.ts`. Resource RBAC luôn được đăng ký trong `erp-resource.enum.ts`.
 - Input sai bị chặn trước khi ghi file nào.
 - Test generator: `bun test plop-helpers`.
-- Hợp đồng sinh ra: list `{ items, total, page, pageSize, totalPages, summaries }`, bản ghi đơn `{ message, data }`, `GET column-options` và lọc/sắp xếp/tổng qua `src/common/utils/table-query/`. Chi tiết xem `api-structure` mục 2b.
+- Hợp đồng sinh ra: list `{ items, total, page, pageSize, totalPages, summaries }`, bản ghi đơn `{ message, data }`, `GET column-options` và lọc/sắp xếp/tổng qua `src/common/utils/table-query/`. Chi tiết xem `erp-api-structure` mục 2b.
 - Cột `number`/`decimal` có thể tổng qua `summary_keys`: list trả `summaries[key] = { total, pageSubtotal, cumulative }` (hoặc `null`) nhờ helper `applyListSummaries`. Generator không tự viết SUM; sau khi sinh, khai báo `SUMMARY_COLUMNS` trong service và nối tie-breaker id. Chi tiết: `erp-api-structure` mục 2b.
 - Resource RBAC đã có trong enum thì generator không chèn lại (`enumEntryExists`).
 - Entity nullable (`string | null`) được map sang `undefined` trong response.
-- Module đã có entity/service cũ: không chạy trực tiếp lên thư mục đó. Làm theo `api-structure` mục 3b.
+- Module đã có entity/service cũ: không chạy trực tiếp lên thư mục đó. Làm theo `erp-api-structure` mục 3b.
 
 ### 🧱 Generator: `api-voucher-v2` (Chứng từ Header + Lines, không có lõi)
 
