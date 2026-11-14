@@ -1,6 +1,9 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { RequestMethod } from '@nestjs/common';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
+import { UpdateCoreRolePermissionsDto } from './dto/rbac-core.dto';
 import { RbacRolesController } from './controllers/rbac-roles.controller';
 import { RbacRolesService } from './rbac-roles.service';
 import { RoleQueryService } from './services/role-query.service';
@@ -276,6 +279,28 @@ describe('RBAC Roles API contract (v2)', () => {
         roleId: 'r1',
       });
       expect(permissionRepository.save).toHaveBeenCalled();
+    });
+
+    it('UpdateCoreRolePermissionsDto chấp nhận metadata entity (id, roleId, createdAt, updatedAt)', async () => {
+      const dto = plainToInstance(UpdateCoreRolePermissionsDto, {
+        permissions: [
+          {
+            id: 'perm-uuid-1',
+            roleId: 'role-uuid-1',
+            resource: 'loans',
+            action: 'read',
+            conditions: null,
+            createdAt: '2026-11-14T00:00:00Z',
+            updatedAt: '2026-11-14T00:00:00Z',
+          },
+        ],
+      });
+
+      const errors = await validate(dto, {
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      });
+      expect(errors).toHaveLength(0);
     });
 
     it('updateRoleUsers thay toàn bộ người dùng của role', async () => {
