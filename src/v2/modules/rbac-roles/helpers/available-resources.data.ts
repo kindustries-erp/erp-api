@@ -114,4 +114,8 @@ export const AVAILABLE_RBAC_RESOURCES: AvailableRbacResource[] = [
     resource: 'ai_hub_gateway',
     label: 'AI Hub: usage log và kiểm tra gateway',
   },
+  {
+    resource: ErpResource.LOANS,
+    label: 'Khoản vay & Lãi suất (Loans Tool)',
+  },
 ];

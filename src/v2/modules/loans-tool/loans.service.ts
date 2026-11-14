@@ -26,8 +26,11 @@ export class LoansService {
     private readonly commandService: LoanCommandService,
   ) {}
 
-  async findAll(query: QueryLoanDto): Promise<LoanListResponseDto> {
-    const out = await this.queryService.findAll(query);
+  async findAll(
+    query: QueryLoanDto,
+    userId?: string,
+  ): Promise<LoanListResponseDto> {
+    const out = await this.queryService.findAll(query, userId);
     return toPaginatedResult(
       out.rows.map((item) => LoanMapper.toDto(item, false)),
       out.page,
@@ -44,6 +47,7 @@ export class LoansService {
     pageSize: number,
     filters?: unknown,
     deleted?: 'only',
+    userId?: string,
   ) {
     return this.queryService.findColumnOptions(
       column,
@@ -52,17 +56,19 @@ export class LoansService {
       pageSize,
       filters,
       deleted,
+      userId,
     );
   }
 
-  findOne(id: string): Promise<LoanResponseDto> {
-    return this.queryService.findOne(id);
+  findOne(id: string, userId?: string): Promise<LoanResponseDto> {
+    return this.queryService.findOne(id, userId);
   }
 
   getCashflowProjection(
     includeAllPeriods = false,
+    userId?: string,
   ): Promise<CashflowProjectionResponseDto> {
-    return this.queryService.getCashflowProjection(includeAllPeriods);
+    return this.queryService.getCashflowProjection(includeAllPeriods, userId);
   }
 
   create(dto: CreateLoanDto, userId?: string): Promise<LoanResponseDto> {
@@ -76,16 +82,20 @@ export class LoansService {
     return this.commandService.createBatch(dtos, userId);
   }
 
-  update(id: string, dto: UpdateLoanDto): Promise<LoanResponseDto> {
-    return this.commandService.update(id, dto);
+  update(
+    id: string,
+    dto: UpdateLoanDto,
+    userId?: string,
+  ): Promise<LoanResponseDto> {
+    return this.commandService.update(id, dto, userId);
   }
 
-  remove(id: string): Promise<void> {
-    return this.commandService.remove(id);
+  remove(id: string, userId?: string): Promise<void> {
+    return this.commandService.remove(id, userId);
   }
 
-  async hardDelete(id: string): Promise<{ id: string }> {
-    await this.commandService.hardDelete(id);
+  async hardDelete(id: string, userId?: string): Promise<{ id: string }> {
+    await this.commandService.hardDelete(id, userId);
     return { id };
   }
 
@@ -101,12 +111,17 @@ export class LoansService {
     loanId: string,
     paymentId: string,
     dto: UpdatePaymentDto,
+    userId?: string,
   ): Promise<LoanResponseDto> {
-    return this.commandService.updatePayment(loanId, paymentId, dto);
+    return this.commandService.updatePayment(loanId, paymentId, dto, userId);
   }
 
-  deletePayment(loanId: string, paymentId: string): Promise<LoanResponseDto> {
-    return this.commandService.deletePayment(loanId, paymentId);
+  deletePayment(
+    loanId: string,
+    paymentId: string,
+    userId?: string,
+  ): Promise<LoanResponseDto> {
+    return this.commandService.deletePayment(loanId, paymentId, userId);
   }
 
   simulate(dto: SimulateLoanDto): LoanSimulationResult {

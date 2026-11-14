@@ -63,7 +63,7 @@ describe('LoansController', () => {
   it('should call findAll and return V2 pagination + summaries', async () => {
     const q = { page: 1, pageSize: 20 };
     const res = await controller.findAll(q);
-    expect(service.findAll).toHaveBeenCalledWith(q);
+    expect(service.findAll).toHaveBeenCalledWith(q, undefined);
     expect(res.pagination).toEqual({
       page: 1,
       pageSize: 20,
@@ -91,13 +91,14 @@ describe('LoansController', () => {
       200,
       '{"status":["ACTIVE"]}',
       'only',
+      undefined,
     );
   });
 
   it('should call hardDelete on permanent delete route', async () => {
     const id = '11111111-1111-1111-1111-111111111111';
     const res = await controller.hardDelete(id);
-    expect(service.hardDelete).toHaveBeenCalledWith(id);
+    expect(service.hardDelete).toHaveBeenCalledWith(id, undefined);
     expect(res).toEqual({ id: 'l1' });
   });
 
@@ -124,6 +125,7 @@ describe('LoansController', () => {
     );
     expect(service.findOne).toHaveBeenCalledWith(
       '11111111-1111-1111-1111-111111111111',
+      undefined,
     );
     expect(res.title).toBe('Car Loan');
   });

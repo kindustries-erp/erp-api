@@ -12,7 +12,11 @@ Module `loans-tool` (nằm tại `src/v2/modules/loans-tool/` và kế thừa en
 ### 1.1. Các tính năng cốt lõi:
 - **Chế độ Kép (Dual Mode)**:
   - **Public Calculator (`/api/v2/public/loans-tool/simulate`)**: Cho phép khách vãng lai hoặc nhân viên tính toán nhanh lịch trả nợ tức thì, không cần đăng nhập.
-  - **Authenticated RBAC (`/api/v2/loans-tool-tool`)**: Quản lý lưu trữ hợp đồng vay, lịch sử thanh toán và dự báo dòng tiền doanh nghiệp với quyền kiểm soát `loans:read`, `loans:create`, `loans:update`, `loans:delete`.
+  - **Authenticated RBAC (`/api/v2/loans-tool`)**: Quản lý lưu trữ hợp đồng vay, lịch sử thanh toán và dự báo dòng tiền doanh nghiệp với quyền kiểm soát `loans:read`, `loans:create`, `loans:update`, `loans:delete`.
+- **Cách Ly Dữ Liệu Theo Người Tạo (Row-Level Data Scoping)**:
+  - User thường: Chỉ thấy và thao tác trên khoản vay do chính mình tạo (`loan.createdBy = :userId`).
+  - Super Admin / Toàn quyền (`*:*`, `admin_users:manage`, `loans:manage`): Được bypass bộ lọc và xem/quản lý toàn bộ danh mục khoản vay của doanh nghiệp.
+  - Guard bảo vệ: `assertLoanOwnership` helper (Pattern C) chặn `ForbiddenException` khi user thường cố truy cập/chỉnh sửa/xóa khoản vay hoặc thanh toán của user khác.
 - **4 Phương thức Trả Nợ Chuẩn Ngân Hàng**:
   - `AMORTIZED` (Niên kim cố định / gốc + lãi đều): Dùng công thức tài chính quốc tế $A = P \times \frac{r(1+r)^n}{(1+r)^n - 1}$.
   - `EQUAL_PRINCIPAL` (Dư nợ giảm dần / gốc đều): Gốc cố định $P/n$, lãi giảm dần theo dư nợ thực tế.
@@ -56,6 +60,7 @@ loans_finance (Hợp đồng vay)
 | `remaining_principal` | `numeric(15,2)` | Dư nợ gốc còn lại |
 | `status` | `varchar(32)` | `DRAFT`, `ACTIVE`, `COMPLETED`, `OVERDUE` |
 | `notes` | `text` | Ghi chú hợp đồng |
+| `created_by` | `uuid` | User ID người tạo (Index `IDX_loans_finance_created_by` từ migration `1794653000000-AddIndexCreatedByLoansFinance.ts`) |
 | `extra_data` | `jsonb` | Dữ liệu mở rộng chuẩn `CoreBaseEntity` (mặc định `{}`) |
 | `created_at` / `updated_at` | `timestamptz` | Audit timestamp |
 | `is_deleted` | `boolean` | Cờ xóa mềm (kế thừa từ `CoreSoftDeletableEntity`) |
@@ -87,12 +92,14 @@ Tuân thủ 100% quy chuẩn `/erp-api-structure`:
   - `interfaces/loan-contract.interface.ts`: Contract type.
 - **`src/v2/modules/loans-tool/`**:
   - `constants/loan-table.constants.ts`: Whitelist `TABLE_COLUMNS` (camelCase + snake_case), `SEARCH_COLUMNS`, `SUMMARY_COLUMNS` (`principalAmount`, `totalPaidPrincipal`, `remainingPrincipal`, `totalPaidInterest`) và `toFilterPayload`.
+  - `helpers/loan-ownership.helper.ts`: Pattern C helper chứa `isLoanSuperAdmin` (kiểm tra `*:*`, `admin_users:manage`, `loans:manage`), `assertLoanOwnership` (bảo vệ quyền truy cập theo người tạo), `generateLoanCode`, `resolveFirstPaymentDate`. Co-located test `loan-ownership.helper.spec.ts`.
   - `loans.service.ts`: Facade mỏng điều phối, Clean DI constructor; `findAll` bọc qua `toPaginatedResult` trả `{ items, pagination: { page, pageSize, total, totalPages, next, previous }, summaries }`; `findColumnOptions` và `hardDelete` delegate sang sub-services.
-  - `services/loan-query.service.ts`: Xử lý phân trang (clamp `1..200`), tìm kiếm đa từ khóa (`applyMultiKeywordMultiFieldFilter`), lọc/sắp xếp chuẩn bảng V2 (`applyTableFilters`, `applyDateBounds`, `applyTableSort` với tie-breaker `loan.id`), tính tổng cột số (`applyListSummaries` trước phân trang), lọc `deleted=only`, gợi ý cột (`findColumnOptions`), lấy chi tiết kèm schedule và dự báo dòng tiền hợp nhất.
-  - `services/loan-command.service.ts`: Xử lý tạo, cập nhật (đồng bộ tất cả thông số khoản vay và tự động tính lại `remaining_principal`), xóa mềm (`isDeleted = true`), xóa cứng (`hardDelete`: khóa `pessimistic_write` trong transaction, chặn `409 ConflictException` nếu chưa xóa mềm hoặc còn `loan_payments_finance`) và ghi nhận thanh toán với `QueryRunner` transaction.
+  - `services/loan-query.service.ts`: Xử lý phân trang (clamp `1..200`), tìm kiếm đa từ khóa (`applyMultiKeywordMultiFieldFilter`), lọc theo `createdBy = :userId` cho user thường, lọc/sắp xếp chuẩn bảng V2 (`applyTableFilters`, `applyDateBounds`, `applyTableSort` với tie-breaker `loan.id`), tính tổng cột số (`applyListSummaries` trước phân trang), lọc `deleted=only`, gợi ý cột (`findColumnOptions`), lấy chi tiết kèm schedule và dự báo dòng tiền hợp nhất.
+  - `services/loan-command.service.ts`: Xử lý tạo (gán `createdBy`), cập nhật, xóa mềm (`isDeleted = true`), xóa cứng (`hardDelete`: khóa `pessimistic_write` trong transaction, chặn `409 ConflictException` nếu chưa xóa mềm hoặc còn `loan_payments_finance`) và ghi nhận thanh toán với `QueryRunner` transaction. Tất cả mutate đều gọi `assertLoanOwnership`.
   - `helpers/loan.mapper.ts`: Mapper chuyển đổi giữa Entity sang Response DTO (Zero Entity Leaking).
   - `controllers/loans-public.controller.ts`: Endpoint công khai tính toán nhanh.
-  - `controllers/loans.controller.ts`: Controller có RBAC guard (`JwtAuthGuard`, `CoreRbacGuard`).
+  - `controllers/loans.controller.ts`: Controller có RBAC guard (`JwtAuthGuard`, `CoreRbacGuard`), inject `@Req() req: RequestWithUser` để truyền `userId` xuống service.
+  - **RBAC Resources**: Đăng ký `ErpResource.LOANS` (`loans`) vào `AVAILABLE_RBAC_RESOURCES` (`src/v2/modules/rbac-roles/helpers/available-resources.data.ts`).
 
 ---
 

@@ -31,6 +31,11 @@ import {
 } from '../dto';
 import { LoanMapper } from '../helpers/loan.mapper';
 import { LoanAmortizationEngine, LoanStatus } from '@/v2/core/loans-core';
+import { RbacCoreService } from '@/v2/core/rbac-core';
+import {
+  assertLoanOwnership,
+  isLoanSuperAdmin,
+} from '../helpers/loan-ownership.helper';
 
 export interface LoanListPageResult {
   rows: LoanEntity[];
@@ -45,9 +50,13 @@ export class LoanQueryService {
   constructor(
     @InjectRepository(LoanEntity)
     private readonly loanRepo: Repository<LoanEntity>,
+    private readonly rbacCoreService: RbacCoreService,
   ) {}
 
-  async findAll(query: QueryLoanDto): Promise<LoanListPageResult> {
+  async findAll(
+    query: QueryLoanDto,
+    userId?: string,
+  ): Promise<LoanListPageResult> {
     const page = Math.max(1, Number(query.page || 1));
     const pageSize = Math.max(1, Math.min(200, Number(query.pageSize || 20)));
 
@@ -56,6 +65,11 @@ export class LoanQueryService {
       .where('loan.isDeleted = :deleted', {
         deleted: query.deleted === 'only',
       });
+
+    const isSuperAdmin = await isLoanSuperAdmin(this.rbacCoreService, userId);
+    if (!isSuperAdmin && userId) {
+      qb.andWhere('loan.createdBy = :userId', { userId });
+    }
 
     if (query.status) {
       qb.andWhere('loan.status = :status', { status: query.status });
@@ -123,6 +137,7 @@ export class LoanQueryService {
     pageSize: number,
     filters: unknown,
     deleted?: 'only',
+    userId?: string,
   ): Promise<TableOptionsPage> {
     const def = resolveTableColumn(TABLE_COLUMNS, column);
     if (!def) return emptyOptionsPage(page, pageSize);
@@ -130,6 +145,11 @@ export class LoanQueryService {
     const qb = this.loanRepo
       .createQueryBuilder('loan')
       .where('loan.isDeleted = :deleted', { deleted: deleted === 'only' });
+
+    const isSuperAdmin = await isLoanSuperAdmin(this.rbacCoreService, userId);
+    if (!isSuperAdmin && userId) {
+      qb.andWhere('loan.createdBy = :userId', { userId });
+    }
 
     applyTableFilters(
       qb,
@@ -141,7 +161,7 @@ export class LoanQueryService {
     return findTableColumnOptions(qb, def, search, page, pageSize);
   }
 
-  async findOne(id: string): Promise<LoanResponseDto> {
+  async findOne(id: string, userId?: string): Promise<LoanResponseDto> {
     const loan = await this.loanRepo.findOne({
       where: { id, isDeleted: false },
       relations: ['payments'],
@@ -152,14 +172,24 @@ export class LoanQueryService {
       throw new NotFoundException(`Loan with ID "${id}" not found`);
     }
 
+    const isSuperAdmin = await isLoanSuperAdmin(this.rbacCoreService, userId);
+    assertLoanOwnership(loan, userId, isSuperAdmin);
+
     return LoanMapper.toDto(loan, true);
   }
 
   async getCashflowProjection(
     includeAllPeriods = false,
+    userId?: string,
   ): Promise<CashflowProjectionResponseDto> {
+    const isSuperAdmin = await isLoanSuperAdmin(this.rbacCoreService, userId);
+    const whereCondition: any = { isDeleted: false, status: LoanStatus.ACTIVE };
+    if (!isSuperAdmin && userId) {
+      whereCondition.createdBy = userId;
+    }
+
     const activeLoans = await this.loanRepo.find({
-      where: { isDeleted: false, status: LoanStatus.ACTIVE },
+      where: whereCondition,
       relations: ['payments'],
     });
 
