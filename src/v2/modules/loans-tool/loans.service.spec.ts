@@ -87,7 +87,7 @@ describe('LoansService (Facade)', () => {
     const q = { page: 2, pageSize: 20, summary_keys: 'principalAmount' };
     const res = await service.findAll(q);
 
-    expect(queryService.findAll).toHaveBeenCalledWith(q);
+    expect(queryService.findAll).toHaveBeenCalledWith(q, undefined);
     expect(res.items).toHaveLength(1);
     expect(res.items[0].principalAmount).toBe(100000000);
     expect(res.pagination).toEqual({
@@ -116,12 +116,13 @@ describe('LoansService (Facade)', () => {
       20,
       '{}',
       'only',
+      undefined,
     );
   });
 
   it('should delegate hardDelete to LoanCommandService and return id', async () => {
     const res = await service.hardDelete('l1');
-    expect(commandService.hardDelete).toHaveBeenCalledWith('l1');
+    expect(commandService.hardDelete).toHaveBeenCalledWith('l1', undefined);
     expect(res).toEqual({ id: 'l1' });
   });
 

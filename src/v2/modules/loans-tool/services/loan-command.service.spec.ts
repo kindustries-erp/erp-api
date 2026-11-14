@@ -4,6 +4,7 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { LoanCommandService } from './loan-command.service';
 import { LoanEntity, LoanPaymentEntity } from '../entities';
 import { AmortizationMethod, LoanStatus } from '@/v2/core/loans-core';
+import { RbacCoreService } from '@/v2/core/rbac-core';
 
 describe('LoanCommandService', () => {
   let service: LoanCommandService;
@@ -44,6 +45,12 @@ describe('LoanCommandService', () => {
         {
           provide: DataSource,
           useValue: dataSource,
+        },
+        {
+          provide: RbacCoreService,
+          useValue: {
+            hasAnyPermission: jest.fn().mockResolvedValue(true),
+          },
         },
       ],
     }).compile();

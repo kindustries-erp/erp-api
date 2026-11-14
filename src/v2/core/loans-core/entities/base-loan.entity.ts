@@ -94,6 +94,7 @@ export abstract class BaseLoanEntity extends CoreSoftDeletableEntity {
   @Column({ type: 'text', nullable: true })
   notes: string | null;
 
+  @Index()
   @Column({ type: 'varchar', length: 100, name: 'created_by', nullable: true })
   createdBy: string | null;
 }

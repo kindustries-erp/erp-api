@@ -15,25 +15,20 @@ import {
 import { LoanResponseDto } from '../dto/loan-response.dto';
 import { LoanMapper } from '../helpers/loan.mapper';
 import { LoanStatus } from '@/v2/core/loans-core';
+import { RbacCoreService } from '@/v2/core/rbac-core';
+import {
+  assertLoanOwnership,
+  generateLoanCode,
+  isLoanSuperAdmin,
+  resolveFirstPaymentDate,
+} from '../helpers/loan-ownership.helper';
 
 @Injectable()
 export class LoanCommandService {
-  constructor(private readonly dataSource: DataSource) {}
-
-  private generateLoanCode(): string {
-    const timestamp = Date.now().toString().slice(-6);
-    return `LOAN-${timestamp}`;
-  }
-
-  private resolveFirstPaymentDate(
-    startDate: string,
-    firstPaymentDate?: string | null,
-  ): string {
-    if (firstPaymentDate && firstPaymentDate >= startDate) {
-      return firstPaymentDate;
-    }
-    return startDate;
-  }
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly rbacCoreService: RbacCoreService,
+  ) {}
 
   /** Mỗi kỳ của một khoản vay chỉ được có một thanh toán (gọi sau khi đã khóa khoản vay). */
   private async assertPeriodAvailable(
@@ -55,7 +50,7 @@ export class LoanCommandService {
     const repo = this.dataSource.getRepository(LoanEntity);
 
     const loan = repo.create({
-      loanCode: dto.loanCode || this.generateLoanCode(),
+      loanCode: dto.loanCode || generateLoanCode(),
       title: dto.title,
       lenderName: dto.lenderName,
       partnerId: dto.partnerId || null,
@@ -64,7 +59,7 @@ export class LoanCommandService {
       tenorMonths: dto.tenorMonths,
       amortizationMethod: dto.amortizationMethod,
       startDate: dto.startDate,
-      firstPaymentDate: this.resolveFirstPaymentDate(
+      firstPaymentDate: resolveFirstPaymentDate(
         dto.startDate,
         dto.firstPaymentDate,
       ),
@@ -91,7 +86,7 @@ export class LoanCommandService {
       for (let i = 0; i < dtos.length; i++) {
         const dto = dtos[i];
         const loan = repo.create({
-          loanCode: dto.loanCode || `${this.generateLoanCode()}-${i + 1}`,
+          loanCode: dto.loanCode || `${generateLoanCode()}-${i + 1}`,
           title: dto.title,
           lenderName: dto.lenderName,
           partnerId: dto.partnerId || null,
@@ -100,7 +95,7 @@ export class LoanCommandService {
           tenorMonths: dto.tenorMonths,
           amortizationMethod: dto.amortizationMethod,
           startDate: dto.startDate,
-          firstPaymentDate: this.resolveFirstPaymentDate(
+          firstPaymentDate: resolveFirstPaymentDate(
             dto.startDate,
             dto.firstPaymentDate,
           ),
@@ -120,13 +115,20 @@ export class LoanCommandService {
     });
   }
 
-  async update(id: string, dto: UpdateLoanDto): Promise<LoanResponseDto> {
+  async update(
+    id: string,
+    dto: UpdateLoanDto,
+    userId?: string,
+  ): Promise<LoanResponseDto> {
     const repo = this.dataSource.getRepository(LoanEntity);
     const loan = await repo.findOne({ where: { id, isDeleted: false } });
 
     if (!loan) {
       throw new NotFoundException(`Loan with ID "${id}" not found`);
     }
+
+    const isSuperAdmin = await isLoanSuperAdmin(this.rbacCoreService, userId);
+    assertLoanOwnership(loan, userId, isSuperAdmin);
 
     if (dto.loanCode !== undefined && dto.loanCode.trim()) {
       loan.loanCode = dto.loanCode.trim();
@@ -161,7 +163,7 @@ export class LoanCommandService {
       }
     }
     if (dto.firstPaymentDate !== undefined) {
-      loan.firstPaymentDate = this.resolveFirstPaymentDate(
+      loan.firstPaymentDate = resolveFirstPaymentDate(
         loan.startDate,
         dto.firstPaymentDate,
       );
@@ -173,7 +175,7 @@ export class LoanCommandService {
     return LoanMapper.toDto(saved, true);
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string, userId?: string): Promise<void> {
     const repo = this.dataSource.getRepository(LoanEntity);
     const loan = await repo.findOne({ where: { id, isDeleted: false } });
 
@@ -181,12 +183,15 @@ export class LoanCommandService {
       throw new NotFoundException(`Loan with ID "${id}" not found`);
     }
 
+    const isSuperAdmin = await isLoanSuperAdmin(this.rbacCoreService, userId);
+    assertLoanOwnership(loan, userId, isSuperAdmin);
+
     loan.isDeleted = true;
     await repo.save(loan);
   }
 
   /** Xóa cứng khoản vay đã xóa mềm. Chặn 409 nếu chưa xóa mềm hoặc còn lịch sử thanh toán. */
-  async hardDelete(id: string): Promise<void> {
+  async hardDelete(id: string, userId?: string): Promise<void> {
     await this.dataSource.transaction(async (manager) => {
       const loan = await manager.findOne(LoanEntity, {
         where: { id },
@@ -196,6 +201,10 @@ export class LoanCommandService {
       if (!loan) {
         throw new NotFoundException(`Loan with ID "${id}" not found`);
       }
+
+      const isSuperAdmin = await isLoanSuperAdmin(this.rbacCoreService, userId);
+      assertLoanOwnership(loan, userId, isSuperAdmin);
+
       if (!loan.isDeleted) {
         throw new ConflictException(
           'Chỉ được xóa vĩnh viễn khoản vay đã xóa mềm',
@@ -233,6 +242,9 @@ export class LoanCommandService {
       if (!loan) {
         throw new NotFoundException(`Loan with ID "${loanId}" not found`);
       }
+
+      const isSuperAdmin = await isLoanSuperAdmin(this.rbacCoreService, userId);
+      assertLoanOwnership(loan, userId, isSuperAdmin);
 
       const totalPaid = dto.principalPaid + dto.interestPaid;
       if (totalPaid <= 0) {
@@ -289,6 +301,7 @@ export class LoanCommandService {
     loanId: string,
     paymentId: string,
     dto: UpdatePaymentDto,
+    userId?: string,
   ): Promise<LoanResponseDto> {
     const qr = this.dataSource.createQueryRunner();
     await qr.connect();
@@ -303,6 +316,9 @@ export class LoanCommandService {
       if (!loan) {
         throw new NotFoundException(`Loan with ID "${loanId}" not found`);
       }
+
+      const isSuperAdmin = await isLoanSuperAdmin(this.rbacCoreService, userId);
+      assertLoanOwnership(loan, userId, isSuperAdmin);
 
       const payment = await qr.manager.findOne(LoanPaymentEntity, {
         where: { id: paymentId, loanId },
@@ -397,6 +413,7 @@ export class LoanCommandService {
   async deletePayment(
     loanId: string,
     paymentId: string,
+    userId?: string,
   ): Promise<LoanResponseDto> {
     const qr = this.dataSource.createQueryRunner();
     await qr.connect();
@@ -411,6 +428,9 @@ export class LoanCommandService {
       if (!loan) {
         throw new NotFoundException(`Loan with ID "${loanId}" not found`);
       }
+
+      const isSuperAdmin = await isLoanSuperAdmin(this.rbacCoreService, userId);
+      assertLoanOwnership(loan, userId, isSuperAdmin);
 
       const payment = await qr.manager.findOne(LoanPaymentEntity, {
         where: { id: paymentId, loanId },

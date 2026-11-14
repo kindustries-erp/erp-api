@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { RbacCoreModule } from '@/v2/core/rbac-core';
 import { LoanEntity, LoanPaymentEntity } from './entities';
 import { LoansController } from './controllers/loans.controller';
 import { LoansPublicController } from './controllers/loans-public.controller';
@@ -8,7 +9,10 @@ import { LoanQueryService } from './services/loan-query.service';
 import { LoanCommandService } from './services/loan-command.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([LoanEntity, LoanPaymentEntity])],
+  imports: [
+    TypeOrmModule.forFeature([LoanEntity, LoanPaymentEntity]),
+    RbacCoreModule,
+  ],
   controllers: [LoansController, LoansPublicController],
   providers: [LoansService, LoanQueryService, LoanCommandService],
   exports: [LoansService, LoanQueryService, LoanCommandService],

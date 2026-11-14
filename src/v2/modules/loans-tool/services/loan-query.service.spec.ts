@@ -6,6 +6,7 @@ import { applyListSummaries } from '@/common/utils/table-query';
 import { LoanQueryService } from './loan-query.service';
 import { LoanEntity } from '../entities';
 import { AmortizationMethod, LoanStatus } from '@/v2/core/loans-core';
+import { RbacCoreService } from '@/v2/core/rbac-core';
 
 jest.mock('@/common/utils/table-query', () => {
   const actual = jest.requireActual('@/common/utils/table-query');
@@ -63,6 +64,12 @@ describe('LoanQueryService', () => {
         {
           provide: getRepositoryToken(LoanEntity),
           useValue: repo,
+        },
+        {
+          provide: RbacCoreService,
+          useValue: {
+            hasAnyPermission: jest.fn().mockResolvedValue(true),
+          },
         },
       ],
     }).compile();
@@ -250,5 +257,40 @@ describe('LoanQueryService', () => {
       loanName: 'Vay dự án A',
       principalDue: 12000000,
     });
+  });
+
+  it('áp dụng filter loan.createdBy cho user thông thường và bỏ qua cho super admin', async () => {
+    const mockRbac = (service as any).rbacCoreService;
+
+    // 1. User thường
+    mockRbac.hasAnyPermission.mockResolvedValueOnce(false);
+    await service.findAll({ page: 1, pageSize: 20 }, 'regular-user-1');
+    expect(qb.andWhere).toHaveBeenCalledWith('loan.createdBy = :userId', {
+      userId: 'regular-user-1',
+    });
+
+    // 2. Super admin
+    qb.andWhere.mockClear();
+    mockRbac.hasAnyPermission.mockResolvedValueOnce(true);
+    await service.findAll({ page: 1, pageSize: 20 }, 'super-admin-1');
+    expect(qb.andWhere).not.toHaveBeenCalledWith(
+      'loan.createdBy = :userId',
+      expect.anything(),
+    );
+  });
+
+  it('getCashflowProjection lọc theo createdBy khi là user thông thường', async () => {
+    const mockRbac = (service as any).rbacCoreService;
+    mockRbac.hasAnyPermission.mockResolvedValueOnce(false);
+    repo.find.mockResolvedValueOnce([]);
+
+    await service.getCashflowProjection(false, 'regular-user-1');
+    expect(repo.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          createdBy: 'regular-user-1',
+        }),
+      }),
+    );
   });
 });

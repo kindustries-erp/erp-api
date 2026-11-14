@@ -53,8 +53,11 @@ export class LoansController {
   @ApiOkResponse({ type: LoanListResponseDto })
   @ApiOperation({ summary: 'Lấy danh sách các khoản vay' })
   @ApiOkResponse({ type: LoanListResponseDto })
-  findAll(@Query() query: QueryLoanDto): Promise<LoanListResponseDto> {
-    return this.loansService.findAll(query);
+  findAll(
+    @Query() query: QueryLoanDto,
+    @Req() req?: RequestWithUser,
+  ): Promise<LoanListResponseDto> {
+    return this.loansService.findAll(query, req?.user?.sub);
   }
 
   @Get('column-options')
@@ -72,6 +75,7 @@ export class LoansController {
     @Query('pageSize') pageSize = '20',
     @Query('filters') filters?: string,
     @Query('deleted') deleted?: string,
+    @Req() req?: RequestWithUser,
   ) {
     return this.loansService.findColumnOptions(
       column,
@@ -80,6 +84,7 @@ export class LoansController {
       Math.max(1, Math.min(200, parseInt(pageSize, 10) || 20)),
       filters,
       deleted === 'only' ? 'only' : undefined,
+      req?.user?.sub,
     );
   }
 
@@ -93,9 +98,11 @@ export class LoansController {
   })
   getCashflowProjection(
     @Query('includeAllPeriods') includeAllPeriods?: string,
+    @Req() req?: RequestWithUser,
   ): Promise<CashflowProjectionResponseDto> {
     return this.loansService.getCashflowProjection(
       includeAllPeriods === 'true' || includeAllPeriods === '1',
+      req?.user?.sub,
     );
   }
 
@@ -105,8 +112,11 @@ export class LoansController {
     action: ErpAction.READ,
   })
   @ApiOperation({ summary: 'Chi tiết khoản vay kèm bảng phân kỳ' })
-  findOne(@Param('id', ParseUUIDPipe) id: string): Promise<LoanResponseDto> {
-    return this.loansService.findOne(id);
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req?: RequestWithUser,
+  ): Promise<LoanResponseDto> {
+    return this.loansService.findOne(id, req?.user?.sub);
   }
 
   @Post()
@@ -117,9 +127,9 @@ export class LoansController {
   @ApiOperation({ summary: 'Tạo mới hợp đồng vay' })
   create(
     @Body() dto: CreateLoanDto,
-    @Req() req: RequestWithUser,
+    @Req() req?: RequestWithUser,
   ): Promise<LoanResponseDto> {
-    return this.loansService.create(dto, req.user?.sub);
+    return this.loansService.create(dto, req?.user?.sub);
   }
 
   @Post('batch')
@@ -130,9 +140,9 @@ export class LoansController {
   @ApiOperation({ summary: 'Tạo hàng loạt hợp đồng vay (Batch)' })
   createBatch(
     @Body() dto: BatchCreateLoansDto,
-    @Req() req: RequestWithUser,
+    @Req() req?: RequestWithUser,
   ): Promise<LoanResponseDto[]> {
-    return this.loansService.createBatch(dto.loans, req.user?.sub);
+    return this.loansService.createBatch(dto.loans, req?.user?.sub);
   }
 
   @Patch(':id')
@@ -144,8 +154,9 @@ export class LoansController {
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateLoanDto,
+    @Req() req?: RequestWithUser,
   ): Promise<LoanResponseDto> {
-    return this.loansService.update(id, dto);
+    return this.loansService.update(id, dto, req?.user?.sub);
   }
 
   @Delete(':id')
@@ -154,8 +165,11 @@ export class LoansController {
     action: ErpAction.DELETE,
   })
   @ApiOperation({ summary: 'Xóa mềm khoản vay' })
-  remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    return this.loansService.remove(id);
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req?: RequestWithUser,
+  ): Promise<void> {
+    return this.loansService.remove(id, req?.user?.sub);
   }
 
   @Delete(':id/permanent')
@@ -167,8 +181,11 @@ export class LoansController {
     summary:
       'Xóa cứng khoản vay đã xóa mềm (chỉ quyền PURGE, chặn khi có lịch sử thanh toán)',
   })
-  hardDelete(@Param('id', ParseUUIDPipe) id: string): Promise<{ id: string }> {
-    return this.loansService.hardDelete(id);
+  hardDelete(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req?: RequestWithUser,
+  ): Promise<{ id: string }> {
+    return this.loansService.hardDelete(id, req?.user?.sub);
   }
 
   @Post(':id/payments')
@@ -180,9 +197,9 @@ export class LoansController {
   recordPayment(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: RecordPaymentDto,
-    @Req() req: RequestWithUser,
+    @Req() req?: RequestWithUser,
   ): Promise<LoanResponseDto> {
-    return this.loansService.recordPayment(id, dto, req.user?.sub);
+    return this.loansService.recordPayment(id, dto, req?.user?.sub);
   }
 
   @Patch(':id/payments/:paymentId')
@@ -195,8 +212,9 @@ export class LoansController {
     @Param('id', ParseUUIDPipe) id: string,
     @Param('paymentId', ParseUUIDPipe) paymentId: string,
     @Body() dto: UpdatePaymentDto,
+    @Req() req?: RequestWithUser,
   ): Promise<LoanResponseDto> {
-    return this.loansService.updatePayment(id, paymentId, dto);
+    return this.loansService.updatePayment(id, paymentId, dto, req?.user?.sub);
   }
 
   @Delete(':id/payments/:paymentId')
@@ -208,7 +226,8 @@ export class LoansController {
   deletePayment(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('paymentId', ParseUUIDPipe) paymentId: string,
+    @Req() req?: RequestWithUser,
   ): Promise<LoanResponseDto> {
-    return this.loansService.deletePayment(id, paymentId);
+    return this.loansService.deletePayment(id, paymentId, req?.user?.sub);
   }
 }
