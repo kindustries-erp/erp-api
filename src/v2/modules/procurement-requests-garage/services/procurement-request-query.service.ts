@@ -16,6 +16,7 @@ import {
   findTableColumnOptions,
   parseListFilterPayload,
   resolveTableColumn,
+  emptyOptionsPage,
   TableOptionsPage,
 } from '@/common/utils/table-query';
 import {
@@ -24,6 +25,11 @@ import {
   TABLE_COLUMNS,
   toFilterPayload,
 } from '../constants/procurement-request-table.constants';
+import { GarageProcurementOrder } from '@/v2/modules/procurement-orders-garage/entities/procurement-order.entity';
+import {
+  applyRelatedOrderFilter,
+  RELATED_ORDERS_KEY,
+} from '../helpers/related-order-filter.helper';
 
 export { TABLE_COLUMNS, SEARCH_COLUMNS };
 
@@ -39,6 +45,8 @@ export class GarageProcurementRequestQueryService {
     private readonly lines: Repository<GarageProcurementRequestLine>,
     @InjectRepository(ApprovalEvent)
     private readonly events: Repository<ApprovalEvent>,
+    @InjectRepository(GarageProcurementOrder)
+    private readonly orders: Repository<GarageProcurementOrder>,
   ) {}
 
   /** Nhật ký duyệt của một đề nghị Garage, theo thứ tự thời gian. */
@@ -106,7 +114,9 @@ export class GarageProcurementRequestQueryService {
       );
     }
 
-    applyTableFilters(qb, parseListFilterPayload(dto), TABLE_COLUMNS, 'filter');
+    const listPayload = parseListFilterPayload(dto);
+    applyTableFilters(qb, listPayload, TABLE_COLUMNS, 'filter');
+    applyRelatedOrderFilter(qb, this.orders, listPayload, 'relOrd');
 
     applyDateBounds(qb, 'h.createdAt', dto.date_from, dto.date_to, 'legacy');
 
@@ -144,13 +154,41 @@ export class GarageProcurementRequestQueryService {
     filters: unknown,
     deleted?: 'only',
   ): Promise<TableOptionsPage> {
+    const isDeleted = deleted === 'only';
+    const headerQb = () =>
+      this.headers
+        .createQueryBuilder('h')
+        .where('h.isDeleted = :deleted', { deleted: isDeleted });
+
+    if (column === RELATED_ORDERS_KEY) {
+      // Gợi ý số PO: PO còn hiệu lực thuộc các đề nghị khớp bộ lọc cột khác (cascading).
+      const headerIds = headerQb().select('h.id');
+      applyTableFilters(
+        headerIds,
+        toFilterPayload(filters),
+        TABLE_COLUMNS,
+        'rel_opt_h',
+        column,
+      );
+      const orderQb = this.orders
+        .createQueryBuilder('o')
+        .where('o.isDeleted = false')
+        .andWhere(`o.requestId IN (${headerIds.getQuery()})`)
+        .setParameters(headerIds.getParameters());
+      return findTableColumnOptions(
+        orderQb,
+        { sql: 'o.orderNo', type: 'text' },
+        search,
+        page,
+        pageSize,
+        'rel_opt',
+      );
+    }
+
     const def = resolveTableColumn(TABLE_COLUMNS, column);
-    if (!def) return { items: [], total: 0, next: null };
+    if (!def) return emptyOptionsPage(page, pageSize);
 
-    const qb = this.headers
-      .createQueryBuilder('h')
-      .where('h.isDeleted = :deleted', { deleted: deleted === 'only' });
-
+    const qb = headerQb();
     applyTableFilters(
       qb,
       toFilterPayload(filters),

@@ -113,6 +113,12 @@ import { InventoryMovementsGarageCostLayer } from '@/v2/modules/inventory-moveme
 import { InventoryMovementsGarageReceipt } from '@/v2/modules/inventory-movements-garage-receipts/entities/inventory-movements-garage-receipt.entity'; // api-v2-module:inventory-movements-garage-receipts:entity-imports
 import { InventoryMovementsGarageIssue } from '@/v2/modules/inventory-movements-garage-issues/entities/inventory-movements-garage-issue.entity'; // api-v2-module:inventory-movements-garage-issues:entity-imports
 import { InventoryMovementsGarageAdjustment } from '@/v2/modules/inventory-movements-garage-adjustments/entities/inventory-movements-garage-adjustment.entity'; // api-v2-module:inventory-movements-garage-adjustments:entity-imports
+import {
+  LoanEntity,
+  LoanPaymentEntity,
+} from '@/v2/modules/loans-tool/entities'; // api-v2-module:loans:entity-imports
+import { GarageItem } from '@/v2/modules/items-garage/entities/garage-item.entity'; // api-v2-module:items-garage:entity-imports
+import { AiHubUsageLog } from '@/v2/modules/ai-hub-gateway/entities/ai-hub-usage-log.entity'; // api-v2-module:ai-hub-gateway:entity-imports
 // plop:api-v2-entity-imports
 const entities = [
   ApprovalEvent,
@@ -226,6 +232,10 @@ const entities = [
   InventoryMovementsGarageReceipt, // api-v2-module:inventory-movements-garage-receipts:entities
   InventoryMovementsGarageIssue, // api-v2-module:inventory-movements-garage-issues:entities
   InventoryMovementsGarageAdjustment, // api-v2-module:inventory-movements-garage-adjustments:entities
+  LoanEntity, // api-v2-module:loans:entities
+  LoanPaymentEntity,
+  GarageItem, // api-v2-module:items-garage:entities
+  AiHubUsageLog, // api-v2-module:ai-hub-gateway:entities
   // plop:api-v2-entities
 ];
 

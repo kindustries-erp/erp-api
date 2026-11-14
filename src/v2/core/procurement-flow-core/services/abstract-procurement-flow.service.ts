@@ -1,14 +1,13 @@
-import { Logger } from '@nestjs/common';
-import { DataSource, EntityManager } from 'typeorm';
+import { EntityManager } from 'typeorm';
 import type {
   ProcurementFlowEvent,
-  ProcurementFlowEventPort,
   ProcurementFlowReceiptInput,
   ProcurementFlowStockDocument,
   ProcurementOrderFulfilmentPort,
   ProcurementReceiptStockPort,
 } from '../contracts/procurement-flow-core.contract';
 import { PROCUREMENT_FLOW_EVENTS } from '../contracts/procurement-flow-core.contract';
+import { AbstractTransactionalFlow } from './abstract-transactional-flow.service';
 
 /**
  * Khung điều phối procurement-flow-core (abstract): chạy các bước trong MỘT transaction, gom sự kiện,
@@ -19,32 +18,9 @@ import { PROCUREMENT_FLOW_EVENTS } from '../contracts/procurement-flow-core.cont
  * Lõi chỉ định nghĩa THỨ TỰ bước của chuỗi mua (nhận hàng vào đơn mua, ghi sổ tồn, phát sự kiện).
  * Khóa chứng từ, kiểm hợp lệ và đổi trạng thái phiếu là việc của lớp con.
  */
-export abstract class AbstractProcurementFlowService {
-  protected readonly logger = new Logger(this.constructor.name);
-  protected abstract readonly dataSource: DataSource;
-  protected abstract readonly events: ProcurementFlowEventPort;
+export abstract class AbstractProcurementFlowService extends AbstractTransactionalFlow {
   protected abstract readonly fulfilment: ProcurementOrderFulfilmentPort;
   protected abstract readonly stock: ProcurementReceiptStockPort;
-
-  /**
-   * Chạy `work` trong một transaction. `emit` chỉ gom sự kiện; sự kiện được phát sau commit.
-   * Transaction lỗi (rollback) thì không phát sự kiện nào.
-   */
-  protected async runInTransaction<T>(
-    work: (
-      manager: EntityManager,
-      emit: (event: ProcurementFlowEvent) => void,
-    ) => Promise<T>,
-  ): Promise<T> {
-    const pending: ProcurementFlowEvent[] = [];
-    const result = await this.dataSource.transaction((manager) =>
-      work(manager, (event) => {
-        pending.push(event);
-      }),
-    );
-    await this.publishAfterCommit(pending);
-    return result;
-  }
 
   /**
    * Nhận hàng: nếu phiếu gắn đơn mua thì cộng số đã nhận trên đơn trước (đơn kiểm số lượng và trạng thái),
@@ -83,23 +59,6 @@ export abstract class AbstractProcurementFlowService {
     }
     await this.stock.reverse(manager, input.stock);
     emit(this.receiptEvent(PROCUREMENT_FLOW_EVENTS.receiptCancelled, input));
-  }
-
-  /** Phát sự kiện đã commit. Lỗi phát chỉ ghi log, không làm hỏng kết quả đã commit. */
-  protected async publishAfterCommit(
-    events: ProcurementFlowEvent[],
-  ): Promise<void> {
-    for (const event of events) {
-      try {
-        await this.events.publish(event);
-      } catch (error) {
-        this.logger.warn(
-          `Không phát được sự kiện ${event.type} (${event.documentType} ${event.documentId}): ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      }
-    }
   }
 
   private receiptEvent(

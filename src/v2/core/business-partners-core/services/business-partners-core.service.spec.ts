@@ -185,7 +185,7 @@ describe('BusinessPartnersCoreService', () => {
 
       const result = await service.findAll({} as never);
 
-      expect(result.totalPages).toBe(2);
+      expect(result.pagination.totalPages).toBe(2);
       expect(result.items[0]).not.toHaveProperty('isDeleted');
     });
 

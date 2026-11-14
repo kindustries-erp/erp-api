@@ -11,7 +11,7 @@ import { RBAC_PERMISSIONS_KEY } from '@/auth/decorators/require-permissions.deco
 import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
 
 /**
- * Hợp đồng API /api/v1/rbac-core sau migrate v2.
+ * Hợp đồng API /api/v2/rbac-roles sau migrate v2.
  * Cùng bộ kiểm với bản baseline v1; khác biệt duy nhất có chủ đích: users chỉ có {id, email}.
  */
 
@@ -23,32 +23,32 @@ const ROUTES: Array<{
   {
     method: 'getRolesColumnOptions',
     http: RequestMethod.GET,
-    path: 'roles/column-options',
+    path: 'column-options',
   },
-  { method: 'getRoles', http: RequestMethod.GET, path: 'roles' },
-  { method: 'createRole', http: RequestMethod.POST, path: 'roles' },
-  { method: 'getRole', http: RequestMethod.GET, path: 'roles/:id' },
-  { method: 'updateRole', http: RequestMethod.PATCH, path: 'roles/:id' },
-  { method: 'deleteRole', http: RequestMethod.DELETE, path: 'roles/:id' },
+  { method: 'getRoles', http: RequestMethod.GET, path: '/' },
+  { method: 'createRole', http: RequestMethod.POST, path: '/' },
+  { method: 'getRole', http: RequestMethod.GET, path: ':id' },
+  { method: 'updateRole', http: RequestMethod.PATCH, path: ':id' },
+  { method: 'deleteRole', http: RequestMethod.DELETE, path: ':id' },
   {
     method: 'getRolePermissions',
     http: RequestMethod.GET,
-    path: 'roles/:roleId/permissions',
+    path: ':roleId/permissions',
   },
   {
     method: 'updateRolePermissions',
     http: RequestMethod.PATCH,
-    path: 'roles/:roleId/permissions',
+    path: ':roleId/permissions',
   },
   {
     method: 'getRoleUsers',
     http: RequestMethod.GET,
-    path: 'roles/:roleId/users',
+    path: ':roleId/users',
   },
   {
     method: 'updateRoleUsers',
     http: RequestMethod.PATCH,
-    path: 'roles/:roleId/users',
+    path: ':roleId/users',
   },
   {
     method: 'getAvailableResources',
@@ -122,9 +122,9 @@ describe('RBAC Roles API contract (v2)', () => {
       },
     );
 
-    it('controller gốc là rbac-core và bảo vệ bằng JwtAuthGuard + CoreRbacGuard', () => {
+    it('controller gốc là rbac-roles và bảo vệ bằng JwtAuthGuard + CoreRbacGuard', () => {
       expect(Reflect.getMetadata(PATH_METADATA, RbacRolesController)).toBe(
-        'rbac-core',
+        'api/v2/rbac-roles',
       );
       const guards =
         Reflect.getMetadata('__guards__', RbacRolesController) ?? [];
@@ -147,7 +147,7 @@ describe('RBAC Roles API contract (v2)', () => {
         deleteRole: jest.fn(async () => ({ success: true })),
       }) as any;
 
-    it('GET roles/:roleId/permissions → { permissions }', async () => {
+    it('GET :roleId/permissions → { permissions }', async () => {
       await expect(
         new RbacRolesController(stub()).getRolePermissions('r1'),
       ).resolves.toEqual({
@@ -155,7 +155,7 @@ describe('RBAC Roles API contract (v2)', () => {
       });
     });
 
-    it('GET roles/:roleId/users → { users: [{id, email}] }', async () => {
+    it('GET :roleId/users → { users: [{id, email}] }', async () => {
       await expect(
         new RbacRolesController(stub()).getRoleUsers('r1'),
       ).resolves.toEqual({
@@ -171,7 +171,7 @@ describe('RBAC Roles API contract (v2)', () => {
       });
     });
 
-    it('PATCH permissions/users và DELETE roles/:id → { success: true }', async () => {
+    it('PATCH permissions/users và DELETE :id → { success: true }', async () => {
       const ctrl = new RbacRolesController(stub());
       await expect(
         ctrl.updateRolePermissions('r1', { permissions: [] }),
@@ -184,7 +184,7 @@ describe('RBAC Roles API contract (v2)', () => {
   });
 
   describe('facade: danh sách role (GET roles)', () => {
-    it('trả { items, total, page, pageSize, totalPages } với users chỉ {id, email}', async () => {
+    it('trả { items, pagination } với users chỉ {id, email}', async () => {
       const { facade, roleRepository } = makeFacade();
       const createdAt = new Date('2026-01-01T00:00:00Z');
       roleRepository.createQueryBuilder.mockReturnValue(
@@ -221,10 +221,14 @@ describe('RBAC Roles API contract (v2)', () => {
             users: [{ id: 'u1', email: 'a@b.c' }],
           },
         ],
-        total: 1,
-        page: 1,
-        pageSize: 20,
-        totalPages: 1,
+        pagination: {
+          page: 1,
+          pageSize: 20,
+          total: 1,
+          totalPages: 1,
+          next: null,
+          previous: null,
+        },
       });
       expect(JSON.stringify(result)).not.toContain('SECRET');
     });

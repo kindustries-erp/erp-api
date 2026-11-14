@@ -73,7 +73,7 @@ Quyền resource: `garage_procurement_requests`. Seed từ `garage_purchase_orde
 
 - `DELETE /api/v2/procurement-requests-garage/:id`: xóa mềm nháp. Quyền `DELETE`. Chặn khi không phải `DRAFT` hoặc còn số lượng đang được đơn mua giữ.
 - `DELETE /api/v2/procurement-requests-garage/:id/permanent`: xóa cứng nháp. Quyền `PURGE` (chỉ admin). Chặn khi còn đơn mua tham chiếu, kể cả đơn đã xóa mềm (khóa ngoại RESTRICT). Xóa dòng rồi đầu đề; lịch sử duyệt được giữ.
-- Chính sách và điều kiện chung: `.agents/workflows/api-structure.md` mục "Chính sách xóa".
+- Chính sách và điều kiện chung: `.agents/workflows/erp-api-structure.md` mục "Chính sách xóa".
 
 ## 11. Khóa duyệt và chọn người duyệt (2026-11-06)
 
@@ -124,4 +124,32 @@ Quyền resource: `garage_procurement_requests`. Seed từ `garage_purchase_orde
 
 ## Cập nhật 2026-11-11: thu hồi
 
-- Thu hồi (`recall`) chỉ người tạo (lõi `procurement-requests-core`); người duyệt/người khác nhận 403. Áp dụng cho cả họ thường (`erp-procurement-requests`, `erp-procurement-orders`).
+- Thu hồi (`recall`) chỉ người tạo (lõi `procurement-requests-core`); người duyệt/người khác nhận 403. Áp dụng cho cả họ thường (`/api/v2/procurement-requests-erp`, `/api/v2/procurement-orders-erp`).
+
+## 13. Cập nhật 2026-11-12: lưu và gửi duyệt một bước (save-and-submit)
+
+- Endpoint mới: `POST /api/v2/procurement-requests-garage/save-and-submit` (tạo) và `PATCH /api/v2/procurement-requests-garage/:id/save-and-submit` (sửa nháp, kèm dòng). Body là DTO tạo/sửa + `approverId?` (bắt buộc khi khóa duyệt bật).
+- Điều phối qua `GarageProcurementRequestFlowService.saveAndSubmit` (lõi `AbstractTransactionalFlow`): lưu rồi gửi duyệt trong MỘT transaction, lỗi gửi duyệt rollback cả phần lưu, không để lại nháp mồ côi. Thông báo gửi sau commit.
+- Quyền: tạo cần CREATE + UPDATE; sửa cần UPDATE (AND semantics).
+- Command lõi nhận `manager?` tùy chọn (không truyền thì giữ hành vi cũ).
+- Endpoint cũ `POST /` và `POST /:id/submit` giữ nguyên.
+
+## 14. Cập nhật 2026-11-12: PO liên quan trên danh sách
+
+- `GET` danh sách đề nghị trả thêm `relatedOrders: [{ id, orderNo, status }]` cho mỗi dòng: các PO đã sinh từ đề nghị, bỏ PO đã xóa mềm, sắp `createdAt` tăng dần.
+- Tra cứu bằng `GarageProcurementRequestOrderRefService.forRequests(ids)` (`services/garage-procurement-request-order-ref.service.ts`): một query `IN` cho cả trang, không N+1. Module chỉ đăng ký entity PO (`GarageProcurementOrder`), không import module PO.
+- Chi tiết (`findOne`) không điền `relatedOrders` (để `undefined`). Web coi thiếu field là rỗng.
+
+## 15. Cập nhật 2026-11-12: lọc và gợi ý cột Đơn mua liên quan
+
+- Cột `relatedOrders` có lọc (`column_filters`, `column_search`, `column_operators`) và gợi ý giá trị (`column-options`, `column=relatedOrders`). Không có sắp xếp theo cột này.
+- Quan hệ 1-N nên lọc theo "có ít nhất một PO khớp" bằng `EXISTS` (blank = `NOT EXISTS`). Logic nằm ở `helpers/related-order-filter.helper.ts`; không khai báo trong `TABLE_COLUMNS`, và util `table-query` giữ nguyên.
+- Gợi ý lấy số PO còn hiệu lực (`isDeleted = false`) thuộc các đề nghị khớp bộ lọc cột khác (cascading), qua `findTableColumnOptions` trên bảng PO (`o.orderNo`).
+- Spec: `services/procurement-request-query.service.spec.ts` (EXISTS khi lọc).
+
+## Hợp đồng phân trang chuẩn v2 (pagination)
+
+- List trả `{ items, pagination, summaries? }`; `pagination` = `{ page, pageSize, total, totalPages, next, previous }` (`next`/`previous` là số trang hoặc `null`). Không còn key phẳng `total`/`page`/`totalPages` ở cấp gốc.
+- Column-options trả `{ items: { label, value }[], pagination }`. Dựng bằng `findTableColumnOptions` hoặc `emptyOptionsPage` (`src/common/utils/table-query`).
+- Builder: `buildPagination` / `toPagedList` / `toPaginatedResult` (`src/common/utils/paginated-result.ts`). DTO Swagger: `PaginationMetaDto`, `ColumnOptionsResponseDto`.
+- Web phải đọc `res.pagination.*`. Xem web `src/v2/shared/utils/v2FetchOptionsAdapter.ts`.

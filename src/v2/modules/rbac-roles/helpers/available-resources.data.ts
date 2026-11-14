@@ -47,6 +47,14 @@ export const AVAILABLE_RBAC_RESOURCES: AvailableRbacResource[] = [
     label: 'Điều chỉnh kho Garage',
   },
   {
+    resource: ErpResource.GARAGE_STOCK_VOUCHERS,
+    label: 'Chứng từ kho Garage (danh sách gộp)',
+  },
+  {
+    resource: ErpResource.GARAGE_STOCK_LEDGER,
+    label: 'Tồn kho Garage (số dư và thẻ kho)',
+  },
+  {
     resource: 'accounting_configs',
     label: 'Accounting Configs (Cấu hình kế toán)',
   },
@@ -97,4 +105,13 @@ export const AVAILABLE_RBAC_RESOURCES: AvailableRbacResource[] = [
   },
   { resource: 'dashboard', label: 'Dashboard / Tổng quan hệ thống' },
   { resource: 'attachments', label: 'Attachments / Quản lý tài liệu' },
+  { resource: 'garage_items', label: 'Danh mục mã hàng Garage (Garage Items)' },
+  {
+    resource: 'ai_hub_garage',
+    label: 'Trợ lý AI Garage: đọc hóa đơn tạo đề nghị mua',
+  },
+  {
+    resource: 'ai_hub_gateway',
+    label: 'AI Hub: usage log và kiểm tra gateway',
+  },
 ];

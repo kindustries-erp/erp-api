@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import type {
   ProcurementFlowFulfilmentItem,
@@ -7,6 +7,7 @@ import type {
 } from '@/v2/core/procurement-flow-core';
 import { GarageGoodsReceipt } from '@/v2/modules/goods-receipts-garage/entities/garage-goods-receipt.entity';
 import { GarageGoodsReceiptLine } from '@/v2/modules/goods-receipts-garage/entities/garage-goods-receipt-line.entity';
+import { InventoryMovementsGarageTransaction } from '@/v2/modules/inventory-movements-garage-ledger/entities/inventory-movements-garage-transaction.entity';
 import { GarageProcurementOrder } from '@/v2/modules/procurement-orders-garage/entities/procurement-order.entity';
 
 /** Loại chứng từ ghi vào sổ tồn garage khi phiếu nhập kho được ghi sổ. */
@@ -78,4 +79,52 @@ export async function assertReceiptMatchesOrder(
     throw new BadRequestException('Phiếu nhập khác nhà cung cấp với đơn mua');
   }
   toFulfilmentItems(lines);
+}
+
+export const GOODS_USED_MESSAGE =
+  'Hàng đã xuất/điều chỉnh sau khi nhập kho, không thể hoàn nhập';
+
+/**
+ * Lý do chặn hoàn nhập, hoặc null nếu hàng chưa dùng: sau lúc ghi sổ phiếu không có phiếu xuất/điều chỉnh
+ * nào của cùng mã hàng và chi nhánh trong sổ garage_stock_transactions.
+ */
+export async function findReverseBlockedReason(
+  manager: EntityManager,
+  receipt: GarageGoodsReceipt,
+  lines: GarageGoodsReceiptLine[],
+): Promise<string | null> {
+  const codes = [...new Set(toStockLines(lines).map((l) => l.itemCode))];
+  if (codes.length === 0) return null;
+  const repo = manager.getRepository(InventoryMovementsGarageTransaction);
+  const posted = await repo
+    .createQueryBuilder('t')
+    .select('MIN(t.createdAt)', 'at')
+    .where('t.documentType = :dt AND t.documentId = :id', {
+      dt: GARAGE_GOODS_RECEIPT_DOC_TYPE,
+      id: receipt.id,
+    })
+    .andWhere("t.transactionType = 'RECEIPT'")
+    .getRawOne<{ at: Date | null }>();
+  if (!posted?.at) return null;
+  const qb = repo
+    .createQueryBuilder('t')
+    .where('t.itemCode IN (:...codes)', { codes })
+    .andWhere("t.transactionType IN ('ISSUE', 'ADJUSTMENT')")
+    .andWhere('t.createdAt > :at', { at: posted.at });
+  if (receipt.branchId) {
+    qb.andWhere('t.branchId = :branch', { branch: receipt.branchId });
+  } else {
+    qb.andWhere('t.branchId IS NULL');
+  }
+  return (await qb.getCount()) > 0 ? GOODS_USED_MESSAGE : null;
+}
+
+/** Chỉ cho hoàn nhập khi hàng của phiếu chưa xuất/điều chỉnh (409 nếu đã dùng). */
+export async function assertGoodsUnused(
+  manager: EntityManager,
+  receipt: GarageGoodsReceipt,
+  lines: GarageGoodsReceiptLine[],
+): Promise<void> {
+  const reason = await findReverseBlockedReason(manager, receipt, lines);
+  if (reason) throw new ConflictException(reason);
 }

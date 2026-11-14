@@ -1,12 +1,12 @@
 ---
 name: notifications-inbox
-description: Module backend thông báo theo user (v2) tại /api/v2/notifications, bảng notifications_inbox, chạy song song v1 /notifications. Không RBAC; mỗi user chỉ thấy thông báo của chính mình. Base dùng chung nằm ở lõi notifications-core.
+description: Module backend thông báo theo user (v2) tại /api/v2/notifications-inbox, bảng notifications_inbox, chạy song song v1 /notifications. Không RBAC; mỗi user chỉ thấy thông báo của chính mình. Base dùng chung nằm ở lõi notifications-core.
 ---
 
 # 🔔 Module Backend Tri Thức: Notifications Inbox (`notifications-inbox`)
 
 ## 1. Tổng quan & trách nhiệm
-- **Endpoint** (prefix `/api/v2/notifications`, `JwtAuthGuard`, không `RequirePermissions`):
+- **Endpoint** (prefix `/api/v2/notifications-inbox`, `JwtAuthGuard`, không `RequirePermissions`):
   - `GET /` danh sách phân trang, lọc `unreadOnly`, `type`
   - `GET /unread-count`
   - `PATCH /read-all`
@@ -41,7 +41,7 @@ description: Module backend thông báo theo user (v2) tại /api/v2/notificatio
 
 Index: `IDX_notifications_inbox_user_list` trên `(user_id, is_deleted, is_read, created_at DESC)`.
 
-Response list: `{ items, pagination: { page, pageSize, total, totalPages }, unreadCount }`.
+Response list: `{ items, pagination: { page, pageSize, total, totalPages, next, previous }, extraData: { unreadCount } }` (`unreadCount` nằm trong `extraData`, không còn ở gốc; dựng bằng `toPagedList(..., { unreadCount })`).
 
 Mỗi item có `target: { module, id, action } | null`. `null` khi thông báo không gắn chứng từ.
 
@@ -84,7 +84,7 @@ await this.notificationsPublisher.createForUsers(userIds, {
 ## 5. Ràng buộc đã biết
 - Đã chuyển sang v2: `erp-invoices-core` (controller, cron, invoice-portal), `sinvoice-cron`, `kgara-sync.scheduler`. Mọi producer dùng `NotificationsPublisherService` (`/usr/bin/grep -rn NotificationsPublisherService src` để xem danh sách).
 - Module v1 `NotificationsModule` và bảng `core_notifications` còn nguyên cho Web cũ chưa deploy. Gỡ v1 là task riêng.
-- Web (`erp-web` `@/core/api/notifications`) đã gọi `/api/v2/notifications`. `findAll` lấy `items` với `pageSize=50`. Chưa dùng `unreadCount` của API (3 consumer còn tự đếm).
+- Web (`erp-web` `@/core/api/notifications`) đã gọi `/api/v2/notifications-inbox`. `findAll` lấy `items` với `pageSize=50`. Chưa dùng `unreadCount` của API (3 consumer còn tự đếm).
 - Chưa có realtime (SSE/WebSocket). Web chỉ polling hoặc refetch.
 - Đổi tên bảng đã chạy trên staging chỉ sau khi có lệnh riêng. Tiến trình API đang chạy phải khởi động lại sau khi migrate.
 
@@ -104,4 +104,4 @@ Kiểm tra bố cục lõi: `bun test plop-helpers/apiCoreLayout.test.mjs`.
 
 ## 7. Liên kết
 - Plan: `/home/lio/.claude/plans/anh-mu-n-t-o-api-v2-notification-glistening-reddy.md`
-- Quy tắc tên bảng và lõi/module: `.agents/workflows/api-structure.md` Phần B.
+- Quy tắc tên bảng và lõi/module: `.agents/workflows/erp-api-structure.md` Phần B.

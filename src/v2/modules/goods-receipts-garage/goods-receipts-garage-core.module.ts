@@ -10,6 +10,7 @@ import { GarageGoodsReceiptQueryService } from './services/garage-goods-receipt-
 import { GoodsReceiptsCoreModule } from '@/v2/core/goods-receipts-core/goods-receipts-core.module';
 import { GarageProcurementFlowModule } from '@/v2/modules/procurement-flow-garage/procurement-flow-garage.module';
 import { GarageProcurementOrdersModule } from '@/v2/modules/procurement-orders-garage/procurement-orders-garage.module';
+import { ItemsGarageModule } from '@/v2/modules/items-garage/items-garage.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { GarageProcurementOrdersModule } from '@/v2/modules/procurement-orders-g
     GoodsReceiptsCoreModule,
     GarageProcurementOrdersModule,
     GarageProcurementFlowModule,
+    ItemsGarageModule,
   ],
   controllers: [GarageGoodsReceiptController],
   providers: [

@@ -13,8 +13,5 @@
   },
   "serviceFile": "abstract-procurement-flow.service.ts",
   "permissionPattern": "procurement-flow-core",
-  "requiredModuleFiles": [
-    "services"
-  ]
+  "requiredModuleFiles": ["services"]
 }
-

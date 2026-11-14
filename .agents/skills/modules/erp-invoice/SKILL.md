@@ -689,7 +689,7 @@ Phân hệ Hóa đơn trên frontend đã được hợp nhất vào một route
   5. `tab=out-lines`: **Chi tiết bán ra** (Lines Table chiều `OUT`, bộ lọc `subcat`).
   6. `tab=draft`: **Hóa đơn nháp** (`ErpInvoicesDraftPage` - Quản lý hóa đơn SInvoice Viettel nháp).
 
-### 8.2. Cấu trúc Source Code Atomic 3 Tầng (`ui-structure`)
+### 8.2. Cấu trúc Source Code Atomic 3 Tầng (`erp-ui-structure`)
 Toàn bộ source code frontend của module nằm tại `src/modules/erp-invoices-core/` và tuân thủ nghiêm ngặt chuẩn Atomic 3 tầng:
 
 ```text
@@ -883,3 +883,10 @@ Script sửa mã đã gán sai: `src/erp-invoices-core/scripts/fix-vinfast-item-
 - **Ghi**: tạo mặc định `{}`. Sửa header merge cấp 1 (`null` xóa key). Dòng chứng từ ghi theo payload, không merge.
 - **Giới hạn**: 16 KB, sâu 5 cấp, key ≤ 64 ký tự, cấm `__proto__`/`constructor`/`prototype` (400 qua `RejectUnsafeExtraDataPipe` và service).
 - **Response**: luôn có `extraData` (object).
+
+## Hợp đồng phân trang chuẩn v2 (pagination)
+
+- List trả `{ items, pagination, summaries? }`; `pagination` = `{ page, pageSize, total, totalPages, next, previous }` (`next`/`previous` là số trang hoặc `null`). Không còn key phẳng `total`/`page`/`totalPages` ở cấp gốc.
+- Column-options trả `{ items: { label, value }[], pagination }`. Dựng bằng `findTableColumnOptions` hoặc `emptyOptionsPage` (`src/common/utils/table-query`).
+- Builder: `buildPagination` / `toPagedList` / `toPaginatedResult` (`src/common/utils/paginated-result.ts`). DTO Swagger: `PaginationMetaDto`, `ColumnOptionsResponseDto`.
+- Web phải đọc `res.pagination.*`. Xem web `src/v2/shared/utils/v2FetchOptionsAdapter.ts`.

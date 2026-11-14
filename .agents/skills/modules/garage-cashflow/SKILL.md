@@ -122,7 +122,7 @@ src/kgara-api-core/
 | `PUT` | `/:id` | `UPDATE` | Cập nhật phiếu thu/chi. Tự động đồng bộ sang record cấn trừ tương ứng. Trả về `KgaraCashflowVoucherResponseDto`. |
 | `DELETE` | `/:id` | `DELETE` | Xóa phiếu thu/chi, đồng thời xóa record cấn trừ liên kết. |
 
-## 5. Logic Nghiệp vụ & Kiến trúc Chuẩn Hóa (/api-structure)
+## 5. Logic Nghiệp vụ & Kiến trúc Chuẩn Hóa (/erp-api-structure)
 - **Zero-Entity Leaking Mandate (Pattern D)**:
   - 100% Endpoints của `GarageCashflowController` không trả trực tiếp TypeORM Entity `KgaraCashflowVoucher` ra ngoài.
   - Sử dụng hàm chuẩn hóa `toKgaraCashflowVoucherResponse(voucher: KgaraCashflowVoucher): KgaraCashflowVoucherResponseDto` để map dữ liệu an toàn.
@@ -134,7 +134,7 @@ src/kgara-api-core/
 - **Express Body Parser & Exception Handling (10MB & HTTP 413)**:
   - Cấu hình tại `erp-api/src/main.ts` nâng giới hạn `bodyParser` lên 10MB: `json({ limit: '10mb' })` và `urlencoded({ limit: '10mb', extended: true })`.
   - `AllExceptionsFilter` (`src/common/filters/all-exceptions.filter.ts`) tự động bắt lỗi `PayloadTooLargeError` hoặc HTTP status 413 từ Express/Body-Parser để trả về mã chuẩn HTTP 413 Payload Too Large thay vì rơi vào 500 Internal Server Error.
-- **Transaction Safety & Audit Trail (`/api-structure`)**:
+- **Transaction Safety & Audit Trail (`/erp-api-structure`)**:
   - Toàn bộ thao tác Create, Update, Delete đều sử dụng `queryRunner.startTransaction()` để đảm bảo tính nhất quán (ACID) giữa bảng `kgara_cashflow_vouchers` và `kgara_case_settlements`.
   - Tích hợp `AuditCoreService` với Clean DI constructor (`@Optional() private readonly auditCoreService?: AuditCoreService`).
   - Tự động ghi nhận `recordAction` vào `erp_audit_logs` khi tạo mới (`actionType: 'CREATE'`), cập nhật (`actionType: 'UPDATE'` kèm `beforeSnapshot` và `afterSnapshot`), và xóa (`actionType: 'DELETE'`).
@@ -157,7 +157,7 @@ src/kgara-api-core/
 - **kgara-cases**: Lấy thông tin khách hàng (`khachHangName`) từ `KgaraCase` để gán `partnerName` vào phiếu cấn trừ `KgaraCaseSettlement`. Hiển thị `soChungTu` qua selective join.
 
 ## 7. Cấu trúc Source Code Frontend (Web)
-Tuân thủ nghiêm ngặt **Atomic UI** (Folder-per-Component, < 180 LoC/file, co-located tests, No Blue Mandate) theo `/ui-structure`:
+Tuân thủ nghiêm ngặt **Atomic UI** (Folder-per-Component, < 180 LoC/file, co-located tests, No Blue Mandate) theo `/erp-ui-structure`:
 ```text
 src/modules/garage/components/
 ├── molecules/
@@ -317,7 +317,7 @@ Nguồn quy tắc: `helpers/garage-cashflow-payment-rules.ts` (có spec). Áp d�
   - Mặc định truy cập `/garage-cashflow` render `GarageCashflowTab` (Layer 3 Organism), tự động đồng bộ query param hai chiều `?tab=dashboard` (URL gắn `?tab=dashboard`, tương tự `/cashflow`).
   - Gồm 2 Top Tabs: **"Tổng quan"** (`dashboard`) và **"Danh sách phiếu thu chi"** (`vouchers`).
   - Cơ chế **Keep-Alive DOM**: Sử dụng `mountedViewsRef.current` và toggling qua CSS `className={currentTabKey === ... ? "..." : "hidden"}`, đảm bảo không mất state lọc/bảng khi chuyển đổi qua lại giữa Dashboard và Danh sách phiếu.
-- **Cấu trúc Atomic Design 5 tầng (`/ui-structure`, 100% file < 180 LoC)**:
+- **Cấu trúc Atomic Design 5 tầng (`/erp-ui-structure`, 100% file < 180 LoC)**:
   - **L1 Atoms**: `cashflow-kpi-badge` (`CashflowKpiBadge.tsx`, 35 LoC)
   - **L2 Molecules**:
     - `cashflow-legend-item` (`CashflowLegendItem.tsx`, 18 LoC)

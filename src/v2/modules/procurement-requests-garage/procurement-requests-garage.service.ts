@@ -18,14 +18,18 @@ import { toApprovalEventResponse } from '@/v2/core/approval-core/helpers/approva
 import { ApprovalActorService } from '@/v2/core/approval-core/approval-actor.service';
 import { ApprovalEventResponseDto } from '@/v2/core/approval-core/dto/approval-event-response.dto';
 import {
+  CreateAndSubmitProcurementRequestDto,
   CreateProcurementRequestDto,
   ListProcurementRequestsDto,
   ReplaceRequestLinesDto,
+  UpdateAndSubmitProcurementRequestDto,
   UpdateProcurementRequestHeaderDto,
 } from './dto/procurement-request.dto';
 import { GarageProcurementRequestCommandService } from './services/procurement-request-command.service';
+import { GarageProcurementRequestFlowService } from './services/garage-procurement-request-flow.service';
 import { GarageProcurementRequestQueryService } from './services/procurement-request-query.service';
 import { ProcurementRequestNotifierService } from './services/procurement-request-notifier.service';
+import { GarageProcurementRequestOrderRefService } from './services/garage-procurement-request-order-ref.service';
 
 /** Facade: điều phối giữa command, query và chuyển sang response DTO. */
 @Injectable()
@@ -37,6 +41,8 @@ export class GarageProcurementRequestsService {
     private readonly actors: ApprovalActorService,
     private readonly approvers: ApproverDirectoryService,
     private readonly notifier: ProcurementRequestNotifierService,
+    private readonly flow: GarageProcurementRequestFlowService,
+    private readonly orderRef: GarageProcurementRequestOrderRefService,
   ) {}
 
   async create(
@@ -70,8 +76,11 @@ export class GarageProcurementRequestsService {
   ): Promise<PurchaseRequestListResponseDto> {
     const out = await this.query.list(dto);
     const emailOf = await resolveApprovalEmails(this.actors, out.rows);
+    const related = await this.orderRef.forRequests(out.rows.map((h) => h.id));
     return toPaginatedResult(
-      out.rows.map((h) => toPurchaseRequestResponse(h, [], emailOf)),
+      out.rows.map((h) =>
+        toPurchaseRequestResponse(h, [], emailOf, related.get(h.id) ?? []),
+      ),
       out.page,
       out.pageSize,
       out.total,
@@ -142,6 +151,49 @@ export class GarageProcurementRequestsService {
     );
     await this.notifier.afterTransition(action, header, actorId, reason);
     return this.findOne(id);
+  }
+
+  /** Tạo đề nghị rồi gửi duyệt trong một bước (một transaction qua orchestrator). */
+  createAndSubmit(
+    dto: CreateAndSubmitProcurementRequestDto,
+    actorId: string,
+  ): Promise<PurchaseRequestResponseDto> {
+    const { lines, approverId, ...header } = dto;
+    return this.saveAndSubmit(null, header, lines, approverId, actorId);
+  }
+
+  /** Cập nhật đề nghị nháp rồi gửi duyệt trong một bước. */
+  updateAndSubmit(
+    id: string,
+    dto: UpdateAndSubmitProcurementRequestDto,
+    actorId: string,
+  ): Promise<PurchaseRequestResponseDto> {
+    const { lines, approverId, ...header } = dto;
+    return this.saveAndSubmit(id, header, lines, approverId, actorId);
+  }
+
+  private async saveAndSubmit(
+    id: string | null,
+    header: CreateProcurementRequestDto | UpdateProcurementRequestHeaderDto,
+    lines: CreateProcurementRequestDto['lines'],
+    approverId: string | undefined,
+    actorId: string,
+  ): Promise<PurchaseRequestResponseDto> {
+    if (approverId) {
+      await this.approvers.assertEligible(
+        ErpResource.GARAGE_PROCUREMENT_REQUESTS,
+        approverId,
+        actorId,
+      );
+    }
+    const saved = await this.flow.saveAndSubmit(
+      id,
+      { header, lines },
+      { id: actorId, roles: await this.roles(actorId) },
+      approverId ?? null,
+    );
+    await this.notifier.afterTransition('submit', saved, actorId, undefined);
+    return this.findOne(saved.id);
   }
 
   /** Xóa mềm đề nghị nháp. */

@@ -126,4 +126,13 @@ describe('toPurchaseRequestResponse', () => {
     );
     expect(out.approval.issue).toBeNull();
   });
+
+  it('truyền relatedOrders khi có; chi tiết không truyền thì để undefined', () => {
+    const related = [{ id: 'o1', orderNo: 'PO-1', status: 'ISSUED' }];
+
+    expect(
+      toPurchaseRequestResponse(header, [], () => null, related).relatedOrders,
+    ).toEqual(related);
+    expect(toPurchaseRequestResponse(header, []).relatedOrders).toBeUndefined();
+  });
 });

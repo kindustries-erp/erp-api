@@ -116,7 +116,7 @@ Module `garage-goods-receipts` (`src/v2/modules/goods-receipts-garage/`) sử d�
 ### Phân quyền RBAC
 - **Migration**: `SeedGarageGoodsReceiptsPermissions20261103085000` tự động sao chép các quyền READ, CREATE, UPDATE, DELETE từ resource `garage` sang `garage_goods_receipts`.
 - **Backend Guard**: Controller được bảo vệ bởi `@UseGuards(JwtAuthGuard, CoreRbacGuard)` và `@RequirePermissions({ resource: ErpResource.GARAGE_GOODS_RECEIPTS, action: ... })`.
-- **Rbac Core Collections API**: Đã khai báo `{ resource: ErpResource.GARAGE_GOODS_RECEIPTS, label: 'Nhập kho Garage (Garage Goods Receipts)' }` trong `rbacCoreService.getAvailableResources()` (`GET /api/v1/rbac-core/collections`) để hiển thị trực tiếp trên ma trận phân quyền `ErpPermissionsCorePage`.
+- **Rbac Core Collections API**: Đã khai báo `{ resource: ErpResource.GARAGE_GOODS_RECEIPTS, label: 'Nhập kho Garage (Garage Goods Receipts)' }` trong `rbacCoreService.getAvailableResources()` (`GET /api/v2/rbac-roles/collections`) để hiển thị trực tiếp trên ma trận phân quyền `ErpPermissionsCorePage`.
 - **Frontend RBAC**: Khai báo `garage_goods_receipts` trong `RBAC_COLLECTIONS` và `PERMISSION_RESOURCE_GROUPS` (nhóm "Garage & Xưởng dịch vụ") trên Web giúp quản trị viên phân quyền linh hoạt qua Role Drawer và Permission Matrix.
 
 ## 8. Cập nhật 2026-11-05: nối đơn mua Garage
@@ -156,3 +156,25 @@ Module `garage-goods-receipts` (`src/v2/modules/goods-receipts-garage/`) sử d�
 - Không tạo `garage_stock_receipts`: phiếu GR là chứng từ nhập duy nhất.
 - Đã gỡ `GarageInventoryBalanceService` và cơ chế kẹp tồn về 0 khi hủy. Engine chặn tồn âm; dòng có `qty_received <= 0` giờ làm post lỗi (trước đây cộng 0).
 - Thứ tự khóa: phiếu GR → PO → dòng PO → dòng sổ tồn.
+
+## 12. Cập nhật 2026-11-11: phiếu nhập bắt buộc gắn đơn mua
+
+- `CreateGarageGoodsReceiptDto.garageProcurementOrderId` **bắt buộc** (`@IsUUID`). Update không đổi được đơn (400 "Không đổi được đơn mua của phiếu nhập"); phiếu cũ chưa có đơn được gắn đơn lần đầu.
+- Create/update nạp đơn (`helpers/garage-receipt-order.helper.ts`): đơn phải tồn tại, chưa xóa, `ISSUED`, chưa `FULL`. **NCC và chi nhánh ghi đè theo đơn** (bỏ giá trị client); **tổng tiền = tổng dòng nhận** do server tính (bỏ `totalAmount` client).
+- Response thêm `garageProcurementOrderNo` và `orderTotalAmount` (join một truy vấn cho cả trang: `GarageGoodsReceiptQueryService.findOrderSummaries`).
+- Danh sách lọc được theo `garageProcurementOrderId` (`column_filters`), dùng cho lịch sử nhập kho của đơn.
+- Phiếu cũ không có đơn vẫn đọc/sửa được như trước.
+
+## 13. Cập nhật 2026-11-12: nhập kho một bước và hoàn nhập có kiểm tra
+
+- Endpoint mới: `POST /api/v2/garage-goods-receipts/save-and-post` (tạo rồi ghi sổ) và `PATCH /api/v2/garage-goods-receipts/:id/save-and-post` (sửa nháp rồi ghi sổ). Điều phối qua `GarageProcurementFlowService.saveAndPost`, một transaction.
+- `GarageGoodsReceiptCommandService.create/update` nhận `outerManager?` (qua `runInOptionalTransaction`).
+- Response phiếu POSTED có thêm `reversible` và `reverseBlockedReason`. Hoàn nhập bị chặn (409) khi hàng đã xuất/điều chỉnh sau phiếu.
+- Endpoint cũ `POST /:id/post`, `POST /:id/cancel` giữ nguyên.
+
+## Hợp đồng phân trang chuẩn v2 (pagination)
+
+- List trả `{ items, pagination, summaries? }`; `pagination` = `{ page, pageSize, total, totalPages, next, previous }` (`next`/`previous` là số trang hoặc `null`). Không còn key phẳng `total`/`page`/`totalPages` ở cấp gốc.
+- Column-options trả `{ items: { label, value }[], pagination }`. Dựng bằng `findTableColumnOptions` hoặc `emptyOptionsPage` (`src/common/utils/table-query`).
+- Builder: `buildPagination` / `toPagedList` / `toPaginatedResult` (`src/common/utils/paginated-result.ts`). DTO Swagger: `PaginationMetaDto`, `ColumnOptionsResponseDto`.
+- Web phải đọc `res.pagination.*`. Xem web `src/v2/shared/utils/v2FetchOptionsAdapter.ts`.

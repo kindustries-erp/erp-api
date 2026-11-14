@@ -50,6 +50,8 @@ function setup(
     receipt?: GarageGoodsReceipt;
     order?: GarageProcurementOrder | null;
     lines?: GarageGoodsReceiptLine[];
+    /** Số giao dịch xuất/điều chỉnh sau phiếu trong sổ (0 = hàng chưa dùng). */
+    usedAfter?: number;
   } = {},
 ) {
   const receipt = opts.receipt ?? makeReceipt();
@@ -60,6 +62,15 @@ function setup(
     ),
     find: jest.fn().mockResolvedValue(opts.lines ?? makeLines()),
     save: jest.fn(async (_t: unknown, v: unknown) => v),
+    getRepository: jest.fn(() => {
+      const qb: Record<string, jest.Mock> = {};
+      for (const m of ['select', 'where', 'andWhere']) {
+        qb[m] = jest.fn(() => qb);
+      }
+      qb.getRawOne = jest.fn().mockResolvedValue({ at: new Date() });
+      qb.getCount = jest.fn().mockResolvedValue(opts.usedAfter ?? 0);
+      return { createQueryBuilder: jest.fn(() => qb) };
+    }),
   };
   const dataSource = {
     transaction: (cb: (m: unknown) => Promise<unknown>) => cb(manager),
@@ -68,6 +79,11 @@ function setup(
   const fulfilment = {
     applyGoodsReceipt: jest.fn().mockResolvedValue(undefined),
     revertGoodsReceipt: jest.fn().mockResolvedValue(undefined),
+  };
+  const itemResolver = {
+    resolveLines: jest.fn((_m: unknown, lines: unknown) =>
+      Promise.resolve(lines),
+    ),
   };
   const stock = {
     post: jest.fn().mockResolvedValue(undefined),
@@ -79,8 +95,9 @@ function setup(
     fulfilment as never,
     stock as never,
     new BaseVoucherEngineService(),
+    itemResolver as never,
   );
-  return { svc, receipt, manager, publish, fulfilment, stock };
+  return { svc, receipt, manager, publish, fulfilment, stock, itemResolver };
 }
 
 describe('GarageProcurementFlowService.postReceipt', () => {
@@ -197,5 +214,72 @@ describe('GarageProcurementFlowService.cancelReceipt', () => {
     expect(out.status).toBe('CANCELLED');
     expect(fulfilment.revertGoodsReceipt).not.toHaveBeenCalled();
     expect(stock.reverse).not.toHaveBeenCalled();
+  });
+
+  it('hàng đã xuất/điều chỉnh sau phiếu: 409, không đảo sổ, không hoàn đơn mua', async () => {
+    const { svc, fulfilment, stock } = setup({
+      receipt: makeReceipt({ status: 'POSTED' }),
+      usedAfter: 1,
+    });
+    await expect(svc.cancelReceipt('r1')).rejects.toThrow(
+      'Hàng đã xuất/điều chỉnh sau khi nhập kho, không thể hoàn nhập',
+    );
+    expect(stock.reverse).not.toHaveBeenCalled();
+    expect(fulfilment.revertGoodsReceipt).not.toHaveBeenCalled();
+  });
+});
+
+describe('GarageProcurementFlowService.saveAndPost', () => {
+  it('lưu rồi ghi sổ trong một transaction, trả phiếu POSTED', async () => {
+    const { svc, stock } = setup();
+    const save = jest.fn().mockResolvedValue({ id: 'r1' });
+    const out = await svc.saveAndPost(save);
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(stock.post).toHaveBeenCalled();
+    expect(out.status).toBe('POSTED');
+  });
+
+  it('ghi sổ lỗi thì lỗi nổi lên (transaction rollback phiếu vừa lưu)', async () => {
+    const { svc, stock } = setup();
+    stock.post.mockRejectedValueOnce(new Error('lệch tồn'));
+    await expect(
+      svc.saveAndPost(() => Promise.resolve({ id: 'r1' })),
+    ).rejects.toThrow('lệch tồn');
+  });
+});
+
+describe('GarageProcurementFlowService.postReceipt - dòng thiếu mã hàng', () => {
+  it('cấp mã theo danh mục trước khi ghi sổ và lưu mã vào dòng phiếu', async () => {
+    const line = Object.assign(new GarageGoodsReceiptLine(), {
+      id: 'rl1',
+      lineNo: 1,
+      itemCode: undefined,
+      itemName: 'Phụ tùng',
+      unit: 'Cái',
+      qtyReceived: '2',
+      unitCost: '10',
+      procurementOrderLineId: ORDER_LINE_1,
+    });
+    const { svc, stock, manager, itemResolver } = setup({ lines: [line] });
+    itemResolver.resolveLines.mockResolvedValueOnce([
+      { itemCode: 'PT-000001' },
+    ]);
+
+    await svc.postReceipt('r1');
+
+    expect(itemResolver.resolveLines).toHaveBeenCalledWith(manager, [line]);
+    expect(manager.save).toHaveBeenCalledWith(GarageGoodsReceiptLine, [line]);
+    expect(stock.post).toHaveBeenCalledWith(
+      manager,
+      expect.objectContaining({
+        lines: [expect.objectContaining({ itemCode: 'PT-000001' })],
+      }),
+    );
+  });
+
+  it('mọi dòng đã có mã thì không gọi danh mục', async () => {
+    const { svc, itemResolver } = setup();
+    await svc.postReceipt('r1');
+    expect(itemResolver.resolveLines).not.toHaveBeenCalled();
   });
 });

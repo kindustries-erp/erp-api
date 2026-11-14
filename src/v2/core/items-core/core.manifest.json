@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "layer": "api",
+  "family": "items-core",
+  "entity": "BaseItemEntity",
+  "style": "v2-core",
+  "barrel": "src/v2/core/items-core/index.ts",
+  "module": null,
+  "moduleFile": null,
+  "baseClasses": {
+    "entity": "BaseItemEntity",
+    "createDto": null,
+    "contract": "ItemCatalogPort",
+    "service": "AbstractItemMatchService"
+  },
+  "serviceFile": "services/abstract-item-match.service.ts",
+  "permissionPattern": null,
+  "requiredModuleFiles": []
+}

@@ -47,7 +47,7 @@ Phân hệ Quản lý Khách Hàng & Công Nợ Dịch Vụ Garage (`garage-cust
   - Phân rã kiến trúc Atomic Design 5 tầng, toàn bộ file component/organism khống chế nghiêm ngặt < 180 LoC.
   - **Tab Tổng quan (`garage-debts?tab=overview`)**: Tái cấu trúc thành Organism chuẩn `garage-debts-dashboard-tab/` (< 150 LoC/file), gỡ bỏ hoàn toàn Filter Panel (phễu lọc & trượt phải) để tối ưu không gian hiển thị và tránh rối người dùng, dữ liệu phân tích tự động lấy theo chi nhánh kích hoạt. Trang bị cụm nút thao tác chuẩn gồm nút chính dạng Split Button **Xuất Excel** (kèm dropdown Xuất nâng cao / Đồng bộ) và nút **Tải lại (Reload)** đồng bộ 100% với các tab danh sách `SpreadsheetPageTemplate`.
 - **Hồ Sơ Chi Tiết & Drawer Bán Hàng 2 Cột (`GarageCustomerDetailDrawer`)**:
-  - Chuẩn `StandardFormDrawer` layout `2-columns` (`size="full"`, tuân thủ `/ui-structure` < 200 LoC/file, 100% i18n VI/EN).
+  - Chuẩn `StandardFormDrawer` layout `2-columns` (`size="full"`, tuân thủ `/erp-ui-structure` < 200 LoC/file, 100% i18n VI/EN).
   - **Cột phải (Right Panel)**: `CustomerSidebarSummary` (Tên, Mã KH, SL xe, SL phiếu DV hoàn thành, Phân bổ 4 tầng tuổi nợ theo ngày HT, Thông tin xe đang làm dự thu).
   - **Cột trái (Left Panel / Main Content)**: `CustomerKpiSummaryCards` + Thanh điều hướng `PillTabs` 4 sub-tabs:
     - **Tab 1. Phiếu DV hoàn thành (`CustomerCasesTableTab`)**: `<DataTable>` hiển thị các phiếu hoàn thành có công nợ, tính tuổi nợ theo ngày hoàn tất, tích hợp Quick Actions (Xem chi tiết, Cấn trừ sao kê, Liên kết HĐ VAT).
@@ -344,7 +344,7 @@ Màn hình `garage-debts` (`src/modules/garage/pages/GarageDebts.tsx`) áp dụn
   - **Top Payables**: Khối `topPayableSuppliers` xếp hạng Top Khách Hàng có chi phí sổ báo giá cao nhất kèm số lượng phiếu.
   - **Aging Comparison & Cash Trend**: Aging payable tính trên số còn phải chi. `cashTrend` theo tháng hoàn tất vụ việc: `cashIn` = Đã thu (`tien_da_thanh_toan`), `cashOut` = Đã chi (tổng PAYMENT), `netCash = cashIn − cashOut`. Doanh thu/chi phí tổng hợp xem ở trang khác (dashboard garage). Biểu đồ web nhãn "Đã thu"/"Đã chi".
 
-### 8.3. Kiến Trúc Backend (`/api-structure`)
+### 8.3. Kiến Trúc Backend (`/erp-api-structure`)
 - **`KgaraSuppliersDebtQueryEngine`** (`src/kgara-api-core/services/engines/kgara-suppliers-debt-query.engine.ts` - 587 LoC < 800 LoC, Pattern C):
   - Chuyên trách toàn bộ logic xây dựng truy vấn SQL, gom nhóm theo Biển số xe, lọc đa chiều (`exact`, `multi`, `blank`), sắp xếp (`licensePlate`, `costAmount`, ...) và phân trang column options.
   - Co-located unit test `kgara-suppliers-debt-query.engine.spec.ts` pass 100%.
@@ -356,7 +356,7 @@ Màn hình `garage-debts` (`src/modules/garage/pages/GarageDebts.tsx`) áp dụn
     - `GET /greenway/payables/suppliers-debt/column-options`
     - `GET /greenway/payables/by-supplier/:supplierId/cases`
 
-### 8.4. Kiến Trúc Frontend (`/ui-structure` 5 Tầng & `/standardize-table`)
+### 8.4. Kiến Trúc Frontend (`/erp-ui-structure` 5 Tầng & `/standardize-table`)
 - **Tầng 1 (Atoms)**: `src/modules/garage/components/atoms/license-plate-cell/`:
   - `LicensePlateCell.tsx` (39 LoC < 80 LoC): Component Atom dùng chung cho cả `GarageDebtsTable` và `GaragePayablesTable`, đảm bảo Unidirectional Import Top-Down, triệt tiêu import chéo ngang hàng giữa 2 Organisms.
   - `LicensePlateCell.type.ts` (4 LoC) & `LicensePlateCell.test.tsx` (16 LoC).
@@ -393,13 +393,13 @@ Màn hình `garage-debts` (`src/modules/garage/pages/GarageDebts.tsx`) áp dụn
   - **Section 1: THÔNG TIN KHÁCH HÀNG**: Tiêu đề kèm icon `Building2`, `collapsible={true}`, `defaultCollapsed={false}`, hiển thị các hàng `DrawerRow` (Mã KH, Tên KH, SL phiếu hoàn thành, Số lượng xe).
   - **Section 2: CHỈ SỐ CÔNG NỢ & THU HỒI** (`CustomerKpiSummaryCards`): Tiêu đề kèm icon `Scale`, `collapsible={true}`, `defaultCollapsed={false}`, hiển thị 4 mini cards dạng compact grid 2x2 (Tổng DT/Chi phí, Đã thu/Đã chi & Tỷ lệ thu hồi, Còn nợ/Còn phải chi, Tuổi nợ max).
   - Di chuyển khối KPI sang cột phải giúp giải phóng 100% không gian dọc cho bảng dữ liệu chính (`StandardTable`) ở cột trái.
-- **Kiến trúc Backend (`/api-structure`)**:
+- **Kiến trúc Backend (`/erp-api-structure`)**:
   - **`KgaraCustomerCasesDetailService`** (`src/kgara-api-core/services/kgara-customer-cases-detail.service.ts` < 150 LoC, Pattern B Sub-Service Facade):
     - Clean DI Constructor, query `kgara_cases` kết hợp `kgara_gross_profit` và nhóm `kgara_case_settlements` (`RECEIPT` / `PAYMENT`) qua map in-memory.
     - Đảm bảo Zero-Entity Leaking, trả về DTO đồng nhất cho cả 2 luồng Phải thu và Phải trả.
     - Co-located unit test `kgara-customer-cases-detail.service.spec.ts` pass 100%.
   - **`KgaraCustomersController`** (`src/kgara-api-core/controllers/kgara-customers.controller.ts` < 200 LoC): Delegate method `getCasesByCustomer` qua Sub-Service.
-- **Kiến trúc Frontend (`/ui-structure` & `/standardize-table`)**:
+- **Kiến trúc Frontend (`/erp-ui-structure` & `/standardize-table`)**:
   - Khống chế cứng toàn bộ các file trong organism `< 180 LoC/file`.
   - Table trong Drawer dùng `<StandardTable variant="spreadsheet" />`.
   - Tuân thủ nghiêm ngặt 100% **No Blue Mandate** và 100% đa ngôn ngữ qua `useTranslation`.
@@ -415,7 +415,7 @@ Màn hình `garage-debts` (`src/modules/garage/pages/GarageDebts.tsx`) áp dụn
 - **Điểm Kích Hoạt (Entry Points)**:
   1. **Từ Drawer Tổng Quát (`GarageMonthDetailDrawer`)**: Khi nhấp vào nút Xem chi tiết hoặc tên đối tượng trong bảng `MonthInvoicePartnerTable`.
   2. **Từ Drawer Hồ Sơ Khách Hàng (`GarageCustomerDetailDrawer`)**: Bảng thống kê biến động theo tháng trong tab Phân tích tuổi nợ (`CustomerDebtAgingChartTab`), cho phép click xem chi tiết bất kỳ tháng phát sinh nào.
-- **Kiến Trúc Atomic Design (`/ui-structure`)**:
+- **Kiến Trúc Atomic Design (`/erp-ui-structure`)**:
   - Toàn bộ component đặt tại `src/modules/garage/components/organisms/garage-partner-month-detail-drawer/`.
   - Mọi file đều khống chế nghiêm ngặt **< 180 LoC/file** (tách riêng helper phân loại `PartnerMonthClassification.helper.ts` và columns `PartnerMonthCasesTable.columns.tsx`).
   - 100% **No Blue Mandate** (sử dụng token Tailwind emerald, amber, rose, slate/neutral/muted).

@@ -8,6 +8,9 @@ import {
   StockTransactionType,
 } from '@/v2/core/inventory-movements-core';
 import { AbstractStockLineVoucherCommandService } from '@/v2/core/inventory-movements-core';
+import type { BaseCreateStockVoucherLineDto } from '@/v2/core/inventory-movements-core/dto/base-stock-voucher-line.dto';
+import { GarageLineItemResolver } from '@/v2/modules/items-garage/services/garage-line-item-resolver.service';
+import type { EntityManager } from 'typeorm';
 import { InventoryMovementsGarageReceipt } from '../entities/inventory-movements-garage-receipt.entity';
 import { InventoryMovementsGarageReceiptLine } from '../entities/inventory-movements-garage-receipt-line.entity';
 
@@ -26,8 +29,17 @@ export class InventoryMovementsGarageReceiptCommandService extends AbstractStock
     dataSource: DataSource,
     events: ApprovalEventService,
     engine: StockMovementEngineService,
+    private readonly itemResolver: GarageLineItemResolver,
   ) {
     super(dataSource, events, engine);
+  }
+
+  /** Phiếu nhập: chuẩn hóa mã theo danh mục garage, mã chưa có sẽ được tạo. */
+  protected prepareLines(
+    manager: EntityManager,
+    lines: BaseCreateStockVoucherLineDto[],
+  ): Promise<BaseCreateStockVoucherLineDto[]> {
+    return this.itemResolver.resolveLines(manager, lines);
   }
 
   /** Phiếu nhập: mọi dòng là nhập. */

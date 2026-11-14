@@ -44,7 +44,7 @@ CHECK: `line_type IN ('GOODS','SERVICE')`; `source_type IN ('DIRECT','REQUEST')`
 - Các endpoint còn lại dùng quyền UPDATE; đọc dùng READ.
 - Quyền resource: `procurement_orders`. Seed từ `purchase_orders` (read/create/update/delete).
 
-## 6. Endpoint (`/api/v2/erp-procurement-orders`)
+## 6. Endpoint (`/api/v2/procurement-orders-erp`)
 
 | Method | Path | Quyền |
 | :--- | :--- | :--- |

@@ -33,7 +33,9 @@ Source of truth for this repo (`./erp-api`).
 ### 5. E2E/Smoke Mandate
 
 - Luồng nghiệp vụ nhiều bước (PR/PO, nhân bản, duyệt, tồn kho) phải có unit/integration spec, và smoke trên API đang chạy trong `test/smoke/` khi thay đổi hành vi nghiệp vụ. Ghi vào skill `erp-e2e-api-smoke`.
+- Mỗi lần API test/smoke/E2E: đọc `PORT` trong `erp/erp-api/.env` và đặt `E2E_API_URL=http://localhost:<PORT>`. Web đi kèm theo: API 10001→5171, 10002→5172, 10003→5173 (bảng đầy đủ trong skill `erp-e2e-api-smoke`). Không dùng port mặc định cố định.
 - Smoke không hardcode mật khẩu hay URL; đọc qua biến môi trường (`E2E_PASSWORD` bắt buộc).
+- Mỗi lần chạy smoke/E2E: nếu shell chưa có `E2E_PASSWORD`, đọc dòng `E2E_PASSWORD=` trong `erp-api/.env` (nguồn chuẩn) và nạp vào tiến trình chạy script (xem skill `erp-e2e-api-smoke`). Không in giá trị ra log, không ghi vào repo, không hỏi lại người dùng nếu `.env` đã có.
 - Trước khi ghi DB, xác nhận `SELECT current_database();`. Không chạy smoke trên DB production.
 
 ---
@@ -79,7 +81,7 @@ Source of truth for this repo (`./erp-api`).
 - extend/adapt before forking parallel patterns
 - cancel or delete actions must have modal confirm (on UI side)
 - delete operations must be soft delete with `isDeleted` flag
-  - Ngoại lệ có điều kiện: xóa cứng chứng từ nháp (PO/PR garage) qua quyền `PURGE`, chỉ admin, chặn khi còn bản ghi phụ thuộc. Chi tiết: `.agents/workflows/api-structure.md` mục "Chính sách xóa".
+  - Ngoại lệ có điều kiện: xóa cứng chứng từ nháp (PO/PR garage) qua quyền `PURGE`, chỉ admin, chặn khi còn bản ghi phụ thuộc. Chi tiết: `.agents/workflows/erp-api-structure.md` mục "Chính sách xóa".
 - **NEVER** leave ad-hoc `.ts` files at the repo root (they bypass `tsconfig.build.json` and shift `dist/` output structure from `dist/main.js` to `dist/src/main.js`, crashing the container). Root-level `.ts` files that are not `src/` code must be added to `.gitignore` or deleted before commit.
 - After `bun run build`, verify `dist/main.js` exists (not `dist/src/main.js`) before declaring build PASS.
 
@@ -140,6 +142,8 @@ Source of truth for this repo (`./erp-api`).
 - **Imports**: Use alias imports. Group 3rd-party imports first, followed by a blank line, then custom code imports.
 - **Module boundaries**: New domain work should stay inside `src/<domain>/...`. Cross-domain orchestration is allowed, but hidden coupling and DTO leakage across domains are not.
 - **Reuse-first**: Before creating a new helper/service/util, inspect existing code in `src/common/**`, the current domain, and adjacent ERP domains. If creating a new primitive, note the reason in the task.
+- **Route v2**: `@Controller('api/v2/<tên thư mục module>')`, một chuỗi, không alias `api/v1` (xem `erp-api-structure`, mục 0a).
+- **Response list v2**: `{ items, pagination, summaries?, extraData? }`; dữ liệu phụ chung của list (ví dụ `unreadCount`) đặt trong `extraData`, không thêm key phẳng ở gốc (xem `erp-api-structure`, `references/v2-module.md`).
 - **Definition of done**: A backend task is not done until task checklist is updated, validation evidence is recorded, and commit/push status is stated clearly.
 
 ### Teamwork guardrails

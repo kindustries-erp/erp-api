@@ -54,7 +54,7 @@ describe('NotificationController HTTP routes', () => {
     service.list.mockResolvedValue({
       items: [],
       pagination: {},
-      unreadCount: 0,
+      extraData: { unreadCount: 0 },
     });
     service.unreadCount.mockResolvedValue({ unreadCount: 0 });
     service.markRead.mockResolvedValue({ message: 'ok', data: null });
@@ -69,9 +69,11 @@ describe('NotificationController HTTP routes', () => {
     });
   });
 
-  it('GET /api/v2/notifications dùng userId từ token, không nhận từ query', async () => {
+  it('GET /api/v2/notifications-inbox dùng userId từ token, không nhận từ query', async () => {
     await request(app.getHttpServer())
-      .get('/api/v2/notifications?userId=other&unreadOnly=true&pageSize=10')
+      .get(
+        '/api/v2/notifications-inbox?userId=other&unreadOnly=true&pageSize=10',
+      )
       .expect(200);
 
     expect(service.list).toHaveBeenCalledWith(
@@ -82,10 +84,10 @@ describe('NotificationController HTTP routes', () => {
 
   it('GET unread-count và PATCH read-all đi đúng route tĩnh', async () => {
     await request(app.getHttpServer())
-      .get('/api/v2/notifications/unread-count')
+      .get('/api/v2/notifications-inbox/unread-count')
       .expect(200);
     await request(app.getHttpServer())
-      .patch('/api/v2/notifications/read-all')
+      .patch('/api/v2/notifications-inbox/read-all')
       .expect(200);
 
     expect(service.unreadCount).toHaveBeenCalledWith('user-from-token');
@@ -94,7 +96,7 @@ describe('NotificationController HTTP routes', () => {
 
   it('DELETE /all không bị bắt bởi route :id (không trả 400)', async () => {
     await request(app.getHttpServer())
-      .delete('/api/v2/notifications/all')
+      .delete('/api/v2/notifications-inbox/all')
       .expect(200);
 
     expect(service.removeAll).toHaveBeenCalledWith('user-from-token');
@@ -103,10 +105,10 @@ describe('NotificationController HTTP routes', () => {
 
   it('PATCH :id/read và DELETE :id truyền id hợp lệ và userId từ token', async () => {
     await request(app.getHttpServer())
-      .patch(`/api/v2/notifications/${UUID}/read`)
+      .patch(`/api/v2/notifications-inbox/${UUID}/read`)
       .expect(200);
     await request(app.getHttpServer())
-      .delete(`/api/v2/notifications/${UUID}`)
+      .delete(`/api/v2/notifications-inbox/${UUID}`)
       .expect(200);
 
     expect(service.markRead).toHaveBeenCalledWith(UUID, 'user-from-token');
@@ -115,13 +117,15 @@ describe('NotificationController HTTP routes', () => {
 
   it('id không phải UUID ⇒ 400', async () => {
     await request(app.getHttpServer())
-      .patch('/api/v2/notifications/abc/read')
+      .patch('/api/v2/notifications-inbox/abc/read')
       .expect(400);
     expect(service.markRead).not.toHaveBeenCalled();
   });
 
   it('chưa đăng nhập ⇒ 401', async () => {
     authenticated = false;
-    await request(app.getHttpServer()).get('/api/v2/notifications').expect(401);
+    await request(app.getHttpServer())
+      .get('/api/v2/notifications-inbox')
+      .expect(401);
   });
 });

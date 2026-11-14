@@ -22,7 +22,7 @@ import { NotificationsInboxService } from '../notifications-inbox.service';
 @ApiTags('notifications_v2')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
-@Controller('api/v2/notifications')
+@Controller('api/v2/notifications-inbox')
 export class NotificationController {
   constructor(private readonly service: NotificationsInboxService) {}
 

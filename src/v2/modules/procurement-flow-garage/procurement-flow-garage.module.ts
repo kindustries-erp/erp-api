@@ -7,6 +7,7 @@ import { GarageProcurementOrdersModule } from '@/v2/modules/procurement-orders-g
 import { GarageProcurementFlowService } from './services/garage-procurement-flow.service';
 import { GarageProcurementFlowEventsService } from './services/garage-procurement-flow-events.service';
 import { GarageProcurementFlowStockAdapter } from './services/garage-procurement-flow-stock.adapter';
+import { ItemsGarageModule } from '@/v2/modules/items-garage/items-garage.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { GarageProcurementFlowStockAdapter } from './services/garage-procurement
     InventoryMovementsGarageLedgerModule,
     GoodsReceiptsCoreModule,
     NotificationsInboxModule,
+    ItemsGarageModule,
   ],
   providers: [
     GarageProcurementFlowService,

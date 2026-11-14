@@ -10,6 +10,8 @@ import { ApproverDirectoryService } from '@/v2/core/approval-core/approver-direc
 import { createApprovalConfigController } from '@/v2/core/approval-core/approval-config.controller';
 import { CoreUser } from '@/users/entities/core-user.entity';
 import { GarageProcurementRequestsModule } from '@/v2/modules/procurement-requests-garage/procurement-requests-garage.module';
+import { GarageProcurementRequest } from '@/v2/modules/procurement-requests-garage/entities/procurement-request.entity';
+import { GarageProcurementOrderRequestRefService } from './services/garage-procurement-order-request-ref.service';
 import { GarageProcurementOrder } from './entities/procurement-order.entity';
 import { GarageProcurementOrderLine } from './entities/procurement-order-line.entity';
 import { GarageProcurementOrderAcceptance } from './entities/procurement-order-acceptance.entity';
@@ -17,11 +19,13 @@ import { GarageProcurementOrderController } from './controllers/procurement-orde
 import { GarageProcurementOrdersService } from './procurement-orders-garage.service';
 import { GarageProcurementOrderCommandService } from './services/procurement-order-command.service';
 import { GarageProcurementOrderFulfilmentService } from './services/procurement-order-fulfilment.service';
+import { GarageProcurementOrderFlowService } from './services/garage-procurement-order-flow.service';
 import { GarageProcurementOrderQueryService } from './services/procurement-order-query.service';
 import {
   GARAGE_PROCUREMENT_REQUEST_LINK,
   GarageProcurementRequestLinkAdapter,
 } from './services/garage-procurement-request-link.adapter';
+import { ItemsGarageModule } from '@/v2/modules/items-garage/items-garage.module';
 
 const GarageProcurementOrderApprovalConfigController =
   createApprovalConfigController({
@@ -38,11 +42,13 @@ const GarageProcurementOrderApprovalConfigController =
       GarageProcurementOrder,
       GarageProcurementOrderLine,
       GarageProcurementOrderAcceptance,
+      GarageProcurementRequest,
       ApprovalEvent,
       ApprovalSetting,
       CoreUser,
     ]),
     RbacCoreModule,
+    ItemsGarageModule,
     GarageProcurementRequestsModule,
   ],
   controllers: [
@@ -55,11 +61,13 @@ const GarageProcurementOrderApprovalConfigController =
     ApprovalSettingsService,
     ApproverDirectoryService,
     GarageProcurementRequestLinkAdapter,
+    GarageProcurementOrderRequestRefService,
     {
       provide: GARAGE_PROCUREMENT_REQUEST_LINK,
       useExisting: GarageProcurementRequestLinkAdapter,
     },
     GarageProcurementOrderCommandService,
+    GarageProcurementOrderFlowService,
     GarageProcurementOrderFulfilmentService,
     GarageProcurementOrderQueryService,
     GarageProcurementOrdersService,
