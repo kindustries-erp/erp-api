@@ -1,11 +1,12 @@
 // Smoke API PR/PO garage (chạy trên API đang chạy, không qua UI).
 // Cấu hình qua biến môi trường (xem erp-api/.agents/skills/erp-e2e-api-smoke/SKILL.md):
-//   E2E_API_URL      (mặc định http://localhost:10003)
+//   E2E_API_URL      (mặc định suy từ PORT trong erp-api/.env, xem e2e-ports.mjs)
 //   E2E_PASSWORD     (BẮT BUỘC, mật khẩu tài khoản test; không hardcode)
 //   E2E_TAO_EMAIL    (mặc định ai-test-tao@example.com)
 //   E2E_DUYET_EMAIL  (mặc định ai-test-duyet@example.com)
 // Chạy: bun run test:smoke:procurement
-const BASE = process.env.E2E_API_URL ?? 'http://localhost:10003';
+import { resolveApiUrl } from './e2e-ports.mjs';
+const BASE = resolveApiUrl();
 const PASSWORD = process.env.E2E_PASSWORD;
 const TAO_EMAIL = process.env.E2E_TAO_EMAIL ?? 'ai-test-tao@example.com';
 const DUYET_EMAIL = process.env.E2E_DUYET_EMAIL ?? 'ai-test-duyet@example.com';

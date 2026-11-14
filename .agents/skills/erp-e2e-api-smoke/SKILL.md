@@ -18,7 +18,16 @@ Unit test (`bunx jest --forceExit`, hoặc scope hẹp `bunx jest --forceExit pr
 
 - `E2E_PASSWORD`: BẮT BUỘC. Script thoát mã 2 nếu thiếu. Không hardcode.
   - Nguồn: dòng `E2E_PASSWORD=` trong `erp-api/.env`. Mỗi lần chạy, nếu shell chưa có biến này thì tự đọc từ file đó, không hỏi người dùng. Không in giá trị, không ghi vào repo hay log.
-- `E2E_API_URL` (mặc định `http://localhost:10003`).
+- `E2E_API_URL`: BẮT BUỘC suy từ `PORT` trong `erp/erp-api/.env` (đọc bằng `sed -n 's/^PORT=//p' .env | head -1`, không in secret). Đặt `E2E_API_URL=http://localhost:<PORT>`. Không dùng mặc định cố định. Chỉ ghi đè khi người dùng yêu cầu rõ.
+  - Quy tắc PORT API ↔ Web (dùng chung với `erp-e2e-playwright`):
+
+| API `PORT` | Workspace | Web port (`E2E_WEB_URL`) |
+|---|---|---|
+| 10001 | repos-dev-01 | 5171 |
+| 10002 | repos-dev-02 | 5172 |
+| 10003 | repos-dev-03 | 5173 |
+
+  - `PORT` ngoài ba giá trị trên: dừng và hỏi người dùng trước khi chạy.
 - `E2E_TAO_EMAIL` (mặc định `ai-test-tao@example.com`), `E2E_DUYET_EMAIL` (mặc định `ai-test-duyet@example.com`).
 
 Ví dụ (từ `erp-api/`, lấy mật khẩu từ `.env`, không in ra):
@@ -27,7 +36,7 @@ Trước khi chạy: xác nhận `DATABASE_URL` trong `.env` không phải produ
 
 ## 3. Điều kiện trước khi chạy smoke
 
-1. API chạy đúng `PORT` trong `.env` (`bun start:dev`). Không chạy smoke trên DB production.
+1. API chạy đúng `PORT` trong `.env` (`bun start:dev`), và `E2E_API_URL` khớp `PORT` đó. Web (nếu cần E2E UI) chạy theo bảng ở mục 2. Không chạy smoke trên DB production.
 2. Trước khi ghi DB: `SELECT current_database();`, báo tên DB cho người dùng. Không suy ra DB từ tên file env.
 3. Smoke tạo dữ liệu mới (tên có tag, số chứng từ mới). Dữ liệu này không tự dọn, nên ghi rõ trong báo cáo nếu người dùng cần dọn.
 

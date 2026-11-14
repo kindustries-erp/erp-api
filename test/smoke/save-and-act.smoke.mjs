@@ -1,9 +1,10 @@
 // Smoke API orchestration "lưu rồi hành động một request": PR save-and-submit, PO save-and-confirm,
 // phiếu nhập save-and-post và hoàn nhập. Chạy trên API đang chạy (xem erp-e2e-api-smoke/SKILL.md).
-//   E2E_API_URL (mặc định http://localhost:10003), E2E_PASSWORD (BẮT BUỘC),
+//   E2E_API_URL (mặc định suy từ PORT trong erp-api/.env, xem e2e-ports.mjs), E2E_PASSWORD (BẮT BUỘC),
 //   E2E_TAO_EMAIL, E2E_DUYET_EMAIL (mặc định ai-test-tao / ai-test-duyet @example.com)
 // Chạy: bun run test:smoke:save-and-act
-const BASE = process.env.E2E_API_URL ?? 'http://localhost:10003';
+import { resolveApiUrl } from './e2e-ports.mjs';
+const BASE = resolveApiUrl();
 const PASSWORD = process.env.E2E_PASSWORD;
 const TAO_EMAIL = process.env.E2E_TAO_EMAIL ?? 'ai-test-tao@example.com';
 const DUYET_EMAIL = process.env.E2E_DUYET_EMAIL ?? 'ai-test-duyet@example.com';

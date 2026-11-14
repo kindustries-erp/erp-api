@@ -269,6 +269,7 @@ Source of truth for this repo (`./erp-api`).
 ### 5. E2E/Smoke Mandate
 
 - Luồng nghiệp vụ nhiều bước (PR/PO, nhân bản, duyệt, tồn kho) phải có unit/integration spec, và smoke trên API đang chạy trong `test/smoke/` khi thay đổi hành vi nghiệp vụ. Ghi vào skill `erp-e2e-api-smoke`.
+- Mỗi lần API test/smoke/E2E: đọc `PORT` trong `erp/erp-api/.env` và đặt `E2E_API_URL=http://localhost:<PORT>`. Web đi kèm theo: API 10001→5171, 10002→5172, 10003→5173 (bảng đầy đủ trong skill `erp-e2e-api-smoke`). Không dùng port mặc định cố định.
 - Smoke không hardcode mật khẩu hay URL; đọc qua biến môi trường (`E2E_PASSWORD` bắt buộc).
 - Mỗi lần chạy smoke/E2E: nếu shell chưa có `E2E_PASSWORD`, đọc dòng `E2E_PASSWORD=` trong `erp-api/.env` (nguồn chuẩn) và nạp vào tiến trình chạy script (xem skill `erp-e2e-api-smoke`). Không in giá trị ra log, không ghi vào repo, không hỏi lại người dùng nếu `.env` đã có.
 - Trước khi ghi DB, xác nhận `SELECT current_database();`. Không chạy smoke trên DB production.
