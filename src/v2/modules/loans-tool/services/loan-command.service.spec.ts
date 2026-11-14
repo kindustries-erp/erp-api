@@ -26,6 +26,7 @@ describe('LoanCommandService', () => {
       release: jest.fn(),
       manager: {
         findOne: jest.fn(),
+        count: jest.fn().mockResolvedValue(0),
         create: jest.fn((entity, dto) => ({ id: 'pay-id', ...dto })),
         save: jest.fn((entity) => Promise.resolve(entity)),
       },
@@ -251,6 +252,98 @@ describe('LoanCommandService', () => {
       expect(res.totalPaidPrincipal).toBe(30000000);
       expect(res.totalPaidInterest).toBe(4000000);
       expect(res.remainingPrincipal).toBe(70000000);
+    });
+  });
+
+  describe('chống trùng kỳ thanh toán', () => {
+    const baseLoan = {
+      id: 'l1',
+      isDeleted: false,
+      principalAmount: '100000000',
+      totalPaidPrincipal: '0',
+      totalPaidInterest: '0',
+      remainingPrincipal: '100000000',
+      annualInterestRate: '12',
+      tenorMonths: 10,
+      amortizationMethod: AmortizationMethod.EQUAL_PRINCIPAL,
+      startDate: '2026-01-01',
+      firstPaymentDate: '2026-02-01',
+      status: LoanStatus.ACTIVE,
+    };
+
+    const payload = {
+      periodNumber: 1,
+      paymentDate: '2026-02-01',
+      principalPaid: 10000000,
+      interestPaid: 1000000,
+    };
+
+    it('recordPayment ném ConflictException khi kỳ đã có thanh toán', async () => {
+      queryRunner.manager.findOne.mockResolvedValue({ ...baseLoan });
+      queryRunner.manager.count.mockResolvedValueOnce(1);
+
+      await expect(service.recordPayment('l1', payload)).rejects.toThrow(
+        ConflictException,
+      );
+      expect(queryRunner.manager.save).not.toHaveBeenCalled();
+      expect(queryRunner.rollbackTransaction).toHaveBeenCalled();
+    });
+
+    it('recordPayment cho phép ghi kỳ chưa có thanh toán', async () => {
+      queryRunner.manager.findOne.mockResolvedValue({ ...baseLoan });
+      queryRunner.manager.count.mockResolvedValueOnce(0);
+
+      await expect(service.recordPayment('l1', payload)).resolves.toBeDefined();
+      expect(queryRunner.commitTransaction).toHaveBeenCalled();
+    });
+
+    it('updatePayment ném ConflictException khi đổi sang kỳ của thanh toán khác', async () => {
+      queryRunner.manager.findOne
+        .mockResolvedValueOnce({ ...baseLoan, totalPaidPrincipal: '10000000' })
+        .mockResolvedValueOnce({
+          id: 'p1',
+          loanId: 'l1',
+          periodNumber: 1,
+          paymentDate: '2026-02-01',
+          principalPaid: '10000000',
+          interestPaid: '1000000',
+          totalPaid: '11000000',
+        });
+      queryRunner.manager.count.mockResolvedValueOnce(1);
+
+      await expect(
+        service.updatePayment('l1', 'p1', { periodNumber: 2 }),
+      ).rejects.toThrow(ConflictException);
+      expect(queryRunner.manager.save).not.toHaveBeenCalled();
+    });
+
+    it('updatePayment cho phép giữ nguyên kỳ của chính thanh toán đang sửa', async () => {
+      queryRunner.manager.findOne
+        .mockResolvedValueOnce({ ...baseLoan, totalPaidPrincipal: '10000000' })
+        .mockResolvedValueOnce({
+          id: 'p1',
+          loanId: 'l1',
+          periodNumber: 1,
+          paymentDate: '2026-02-01',
+          principalPaid: '10000000',
+          interestPaid: '1000000',
+          totalPaid: '11000000',
+        });
+      queryRunner.manager.find = jest.fn().mockResolvedValueOnce([]);
+      queryRunner.manager.count.mockResolvedValueOnce(0);
+
+      await expect(
+        service.updatePayment('l1', 'p1', {
+          periodNumber: 1,
+          interestPaid: 2000000,
+        }),
+      ).resolves.toBeDefined();
+      expect(queryRunner.manager.count).toHaveBeenCalledWith(
+        LoanPaymentEntity,
+        expect.objectContaining({
+          where: expect.objectContaining({ loanId: 'l1', periodNumber: 1 }),
+        }),
+      );
     });
   });
 

@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { DataSource, EntityManager, Not } from 'typeorm';
 import { LoanEntity, LoanPaymentEntity } from '../entities';
 import {
   CreateLoanDto,
@@ -33,6 +33,22 @@ export class LoanCommandService {
       return firstPaymentDate;
     }
     return startDate;
+  }
+
+  /** Mỗi kỳ của một khoản vay chỉ được có một thanh toán (gọi sau khi đã khóa khoản vay). */
+  private async assertPeriodAvailable(
+    manager: EntityManager,
+    loanId: string,
+    periodNumber: number,
+    excludePaymentId?: string,
+  ): Promise<void> {
+    const where = excludePaymentId
+      ? { loanId, periodNumber, id: Not(excludePaymentId) }
+      : { loanId, periodNumber };
+    const existing = await manager.count(LoanPaymentEntity, { where });
+    if (existing > 0) {
+      throw new ConflictException(`Kỳ ${periodNumber} đã có thanh toán`);
+    }
   }
 
   async create(dto: CreateLoanDto, userId?: string): Promise<LoanResponseDto> {
@@ -225,6 +241,8 @@ export class LoanCommandService {
         );
       }
 
+      await this.assertPeriodAvailable(qr.manager, loanId, dto.periodNumber);
+
       const payment = qr.manager.create(LoanPaymentEntity, {
         loanId,
         periodNumber: dto.periodNumber,
@@ -298,6 +316,12 @@ export class LoanCommandService {
       }
 
       if (dto.periodNumber !== undefined) {
+        await this.assertPeriodAvailable(
+          qr.manager,
+          loanId,
+          dto.periodNumber,
+          paymentId,
+        );
         payment.periodNumber = dto.periodNumber;
       }
       if (dto.paymentDate !== undefined) {

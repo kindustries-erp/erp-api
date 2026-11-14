@@ -134,3 +134,8 @@ bun .agents/skills/erp-api-structure/scripts/scan-oversized-files.ts --path=src/
 - Column-options trả `{ items: { label, value }[], pagination }`. Dựng bằng `findTableColumnOptions` hoặc `emptyOptionsPage` (`src/common/utils/table-query`).
 - Builder: `buildPagination` / `toPagedList` / `toPaginatedResult` (`src/common/utils/paginated-result.ts`). DTO Swagger: `PaginationMetaDto`, `ColumnOptionsResponseDto`.
 - Web phải đọc `res.pagination.*`. Xem web `src/v2/shared/utils/v2FetchOptionsAdapter.ts`.
+
+## Chống trùng kỳ thanh toán (cập nhật)
+- `LoanCommandService.recordPayment` và `updatePayment` gọi `assertPeriodAvailable` sau khi khóa khoản vay (`pessimistic_write`). Nếu kỳ đã có thanh toán khác thì trả `409 Conflict` (`ConflictException`).
+- Khi sửa, thanh toán đang sửa được loại trừ khỏi kiểm tra, nên giữ nguyên kỳ của nó vẫn hợp lệ.
+- Không thêm unique index DB: dữ liệu cũ có thể đã trùng kỳ, và việc kiểm tra nằm trong transaction đã khóa.
