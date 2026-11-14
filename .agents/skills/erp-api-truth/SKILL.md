@@ -23,6 +23,7 @@ Chỉ dùng trong repo `erp/erp-api`. Skill này chỉ giữ ngữ cảnh ngắn
 ## 3. Hợp đồng DB và runtime
 
 - Nguồn sự thật về schema là Postgres runtime, truy cập qua `DATABASE_URL`. Mẫu cấu hình nằm trong `.env.example`. Không ghi credential thật vào repo.
+- Endpoint PostgreSQL chuẩn (cập nhật 2026-11-14): Production DB đặt tại `db-elite.liouni.com:5432` (trên Elite); Dev DB đặt tại `db-dev.liouni.com:5433` (trên Dev). Không dùng domain cũ `db.liouni.com`.
 - Trước khi đổi DTO, filter, persistence hoặc business rule: query trực tiếp DB để xác nhận tên cột, kiểu dữ liệu, constraint và relation. Skill hỗ trợ: `erp-gate-0-precheck`.
 - Không đoán tên field.
 
