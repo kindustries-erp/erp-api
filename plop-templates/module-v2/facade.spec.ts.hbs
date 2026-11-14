@@ -50,11 +50,12 @@ describe('{{serviceClass}}', () => {
   });
 
   it('passes summaries through with the page', async () => {
-    query.findAll.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20, summaries: { amount: 9 } });
+    const metric = { total: 9, pageSubtotal: 9, cumulative: 9 };
+    query.findAll.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20, summaries: { amount: metric } });
 
     const result = await service.findAll({} as Query{{entityName}}Dto);
 
-    expect(result.summaries).toEqual({ amount: 9 });
+    expect(result.summaries).toEqual({ amount: metric });
   });
 
   it('delegates column options to the query service', async () => {

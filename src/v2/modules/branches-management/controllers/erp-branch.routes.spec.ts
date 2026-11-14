@@ -82,7 +82,7 @@ describe('ErpBranchController HTTP routes', () => {
 
   it('keeps list path and validated pagination DTO', async () => {
     await request(app.getHttpServer())
-      .get('/api/v1/branches?page=2&pageSize=5&sort=code')
+      .get('/api/v2/branches?page=2&pageSize=5&sort=code')
       .expect(200, {
         items: [row],
         total: 1,
@@ -98,12 +98,12 @@ describe('ErpBranchController HTTP routes', () => {
       }),
     );
     await request(app.getHttpServer())
-      .get('/api/v1/branches?page=0')
+      .get('/api/v2/branches?page=0')
       .expect(400);
-    await request(app.getHttpServer()).get('/api/v2/branches').expect(404);
-    await request(app.getHttpServer()).get('/api/v1/branches/id-1').expect(404);
+    await request(app.getHttpServer()).get('/api/v1/branches').expect(404);
+    await request(app.getHttpServer()).get('/api/v2/branches/id-1').expect(404);
     await request(app.getHttpServer())
-      .get('/api/v1/branches/column-options')
+      .get('/api/v2/branches/column-options')
       .expect(404);
   });
 
@@ -117,11 +117,11 @@ describe('ErpBranchController HTTP routes', () => {
     };
     const accepted = { code: 'HN', name: 'Ha Noi', is_active: false };
     await request(app.getHttpServer())
-      .post('/api/v1/branches')
+      .post('/api/v2/branches')
       .send(body)
       .expect(201, { data: row, message: 'Branch created successfully' });
     await request(app.getHttpServer())
-      .patch('/api/v1/branches/not-a-uuid')
+      .patch('/api/v2/branches/not-a-uuid')
       .send(body)
       .expect(200, { data: null, message: 'Branch updated successfully' });
     expect(service.create).toHaveBeenCalledWith(accepted);
@@ -130,11 +130,11 @@ describe('ErpBranchController HTTP routes', () => {
 
   it('accepts the exact UI payload shape and an empty PATCH body', async () => {
     await request(app.getHttpServer())
-      .post('/api/v1/branches')
+      .post('/api/v2/branches')
       .send({ code: 'HN', name: 'Ha Noi' })
       .expect(201);
     await request(app.getHttpServer())
-      .patch('/api/v1/branches/id-1')
+      .patch('/api/v2/branches/id-1')
       .send({})
       .expect(200);
     expect(service.create).toHaveBeenLastCalledWith({
@@ -146,19 +146,19 @@ describe('ErpBranchController HTTP routes', () => {
 
   it('rejects wrong-typed or missing fields with 400 before reaching the facade', async () => {
     await request(app.getHttpServer())
-      .post('/api/v1/branches')
+      .post('/api/v2/branches')
       .send({ code: 'HN' })
       .expect(400);
     await request(app.getHttpServer())
-      .post('/api/v1/branches')
+      .post('/api/v2/branches')
       .send({ code: 'HN', name: 'Ha Noi', is_active: 'abc' })
       .expect(400);
     await request(app.getHttpServer())
-      .post('/api/v1/branches')
+      .post('/api/v2/branches')
       .send({ code: 'x'.repeat(101), name: 'Ha Noi' })
       .expect(400);
     await request(app.getHttpServer())
-      .patch('/api/v1/branches/id-1')
+      .patch('/api/v2/branches/id-1')
       .send({ name: null })
       .expect(400);
     expect(service.create).not.toHaveBeenCalled();
@@ -167,20 +167,20 @@ describe('ErpBranchController HTTP routes', () => {
 
   it('keeps hard DELETE and JWT-only protection on every route', async () => {
     await request(app.getHttpServer())
-      .delete('/api/v1/branches/not-a-uuid')
+      .delete('/api/v2/branches/not-a-uuid')
       .expect(200, { message: 'Branch deleted successfully' });
     allowed = false;
-    await request(app.getHttpServer()).get('/api/v1/branches').expect(401);
+    await request(app.getHttpServer()).get('/api/v2/branches').expect(401);
     await request(app.getHttpServer())
-      .post('/api/v1/branches')
+      .post('/api/v2/branches')
       .send({})
       .expect(401);
     await request(app.getHttpServer())
-      .patch('/api/v1/branches/id-1')
+      .patch('/api/v2/branches/id-1')
       .send({})
       .expect(401);
     await request(app.getHttpServer())
-      .delete('/api/v1/branches/id-1')
+      .delete('/api/v2/branches/id-1')
       .expect(401);
   });
 });

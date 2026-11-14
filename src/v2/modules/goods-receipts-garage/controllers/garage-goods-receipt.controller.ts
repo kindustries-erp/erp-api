@@ -1,3 +1,6 @@
+import { ApiOkResponse } from '@nestjs/swagger';
+import { ColumnOptionsResponseDto } from '@/common/dto/column-options-response.dto';
+import { GarageGoodsReceiptListResponseDto } from '../dto/garage-goods-receipt-list-response.dto';
 import {
   Body,
   Controller,
@@ -23,7 +26,7 @@ import { UpdateGarageGoodsReceiptDto } from '../dto/update-garage-goods-receipt.
 @ApiTags('garage-goods-receipts')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
-@Controller('garage-goods-receipts')
+@Controller('api/v2/garage-goods-receipts')
 export class GarageGoodsReceiptController {
   constructor(private readonly service: GarageGoodsReceiptsCoreService) {}
 
@@ -34,6 +37,7 @@ export class GarageGoodsReceiptController {
   @ApiOperation({
     summary: 'Danh sách GarageGoodsReceipt (phân trang, tìm kiếm)',
   })
+  @ApiOkResponse({ type: GarageGoodsReceiptListResponseDto })
   @Get()
   findAll(@Query() query: QueryGarageGoodsReceiptDto) {
     return this.service.findAll(query);
@@ -47,6 +51,7 @@ export class GarageGoodsReceiptController {
   @ApiOperation({
     summary: 'Gợi ý giá trị của một cột, áp dụng bộ lọc các cột khác',
   })
+  @ApiOkResponse({ type: ColumnOptionsResponseDto })
   @Get('column-options')
   columnOptions(
     @Query('column') column: string,
@@ -105,6 +110,37 @@ export class GarageGoodsReceiptController {
     @Body() dto: UpdateGarageGoodsReceiptDto,
   ) {
     return this.service.update(id, dto);
+  }
+
+  @RequirePermissions(
+    {
+      resource: ErpResource.GARAGE_GOODS_RECEIPTS,
+      action: ErpAction.CREATE,
+    },
+    {
+      resource: ErpResource.GARAGE_GOODS_RECEIPTS,
+      action: ErpAction.UPDATE,
+    },
+  )
+  @ApiOperation({
+    summary: 'Tạo phiếu và nhập kho trong một bước (một transaction)',
+  })
+  @Post('save-and-post')
+  createAndPost(@Body() dto: CreateGarageGoodsReceiptDto) {
+    return this.service.createAndPost(dto);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_GOODS_RECEIPTS,
+    action: ErpAction.UPDATE,
+  })
+  @ApiOperation({ summary: 'Cập nhật phiếu nháp và nhập kho trong một bước' })
+  @Patch(':id/save-and-post')
+  updateAndPost(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateGarageGoodsReceiptDto,
+  ) {
+    return this.service.updateAndPost(id, dto);
   }
 
   @RequirePermissions({

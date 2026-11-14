@@ -10,19 +10,26 @@ import {
   PurchaseRequestPoDraftDto,
   PurchaseRequestResponseDto,
 } from '@/v2/core/procurement-requests-core/dto/procurement-request-response.dto';
-import { resolvePurchaseRequestPeople } from '@/v2/core/procurement-requests-core/helpers/procurement-request-people';
+import { PurchaseRequestListResponseDto } from '@/v2/core/procurement-requests-core/dto/procurement-request-list-response.dto';
+import { toPaginatedResult } from '@/common/utils/paginated-result';
+import { resolveApprovalEmails } from '@/v2/core/approval-core/helpers/approval-people';
 import { remainingPoDraftLinesOf } from '@/v2/core/procurement-requests-core/services/procurement-request-engine.service';
 import { toApprovalEventResponse } from '@/v2/core/approval-core/helpers/approval-event.mapper';
 import { ApprovalActorService } from '@/v2/core/approval-core/approval-actor.service';
 import { ApprovalEventResponseDto } from '@/v2/core/approval-core/dto/approval-event-response.dto';
 import {
+  CreateAndSubmitProcurementRequestDto,
   CreateProcurementRequestDto,
   ListProcurementRequestsDto,
   ReplaceRequestLinesDto,
+  UpdateAndSubmitProcurementRequestDto,
   UpdateProcurementRequestHeaderDto,
 } from './dto/procurement-request.dto';
 import { GarageProcurementRequestCommandService } from './services/procurement-request-command.service';
+import { GarageProcurementRequestFlowService } from './services/garage-procurement-request-flow.service';
 import { GarageProcurementRequestQueryService } from './services/procurement-request-query.service';
+import { ProcurementRequestNotifierService } from './services/procurement-request-notifier.service';
+import { GarageProcurementRequestOrderRefService } from './services/garage-procurement-request-order-ref.service';
 
 /** Facade: điều phối giữa command, query và chuyển sang response DTO. */
 @Injectable()
@@ -33,6 +40,9 @@ export class GarageProcurementRequestsService {
     private readonly rbac: RbacCoreService,
     private readonly actors: ApprovalActorService,
     private readonly approvers: ApproverDirectoryService,
+    private readonly notifier: ProcurementRequestNotifierService,
+    private readonly flow: GarageProcurementRequestFlowService,
+    private readonly orderRef: GarageProcurementRequestOrderRefService,
   ) {}
 
   async create(
@@ -48,15 +58,34 @@ export class GarageProcurementRequestsService {
     return this.findOne(saved.id);
   }
 
-  async list(dto: ListProcurementRequestsDto) {
+  /** Nhân bản đề nghị đã từ chối/hủy thành nháp mới (giữ chi nhánh). */
+  async clone(
+    id: string,
+    actorId: string,
+  ): Promise<PurchaseRequestResponseDto> {
+    const saved = await this.command.cloneDraft(
+      id,
+      { id: actorId, roles: await this.roles(actorId) },
+      ['branchId', 'branchName'],
+    );
+    return this.findOne(saved.id);
+  }
+
+  async list(
+    dto: ListProcurementRequestsDto,
+  ): Promise<PurchaseRequestListResponseDto> {
     const out = await this.query.list(dto);
-    const people = await resolvePurchaseRequestPeople(this.actors, out.rows);
-    return {
-      ...out,
-      rows: out.rows.map((h) =>
-        toPurchaseRequestResponse(h, [], people.get(h.id)),
+    const emailOf = await resolveApprovalEmails(this.actors, out.rows);
+    const related = await this.orderRef.forRequests(out.rows.map((h) => h.id));
+    return toPaginatedResult(
+      out.rows.map((h) =>
+        toPurchaseRequestResponse(h, [], emailOf, related.get(h.id) ?? []),
       ),
-    };
+      out.page,
+      out.pageSize,
+      out.total,
+      out.summaries,
+    );
   }
 
   findColumnOptions(
@@ -65,6 +94,7 @@ export class GarageProcurementRequestsService {
     page: number,
     pageSize: number,
     filters?: string,
+    deleted?: 'only',
   ) {
     return this.query.findColumnOptions(
       column,
@@ -72,13 +102,14 @@ export class GarageProcurementRequestsService {
       page,
       pageSize,
       filters,
+      deleted,
     );
   }
 
   async findOne(id: string): Promise<PurchaseRequestResponseDto> {
     const { header, lines } = await this.query.findOne(id);
-    const people = await resolvePurchaseRequestPeople(this.actors, [header]);
-    return toPurchaseRequestResponse(header, lines, people.get(header.id));
+    const emailOf = await resolveApprovalEmails(this.actors, [header]);
+    return toPurchaseRequestResponse(header, lines, emailOf);
   }
 
   async updateHeader(
@@ -111,14 +142,58 @@ export class GarageProcurementRequestsService {
         actorId,
       );
     }
-    await this.command.transition(
+    const header = await this.command.transition(
       id,
       action,
       { id: actorId, roles: await this.roles(actorId) },
       reason,
       approverId ?? null,
     );
+    await this.notifier.afterTransition(action, header, actorId, reason);
     return this.findOne(id);
+  }
+
+  /** Tạo đề nghị rồi gửi duyệt trong một bước (một transaction qua orchestrator). */
+  createAndSubmit(
+    dto: CreateAndSubmitProcurementRequestDto,
+    actorId: string,
+  ): Promise<PurchaseRequestResponseDto> {
+    const { lines, approverId, ...header } = dto;
+    return this.saveAndSubmit(null, header, lines, approverId, actorId);
+  }
+
+  /** Cập nhật đề nghị nháp rồi gửi duyệt trong một bước. */
+  updateAndSubmit(
+    id: string,
+    dto: UpdateAndSubmitProcurementRequestDto,
+    actorId: string,
+  ): Promise<PurchaseRequestResponseDto> {
+    const { lines, approverId, ...header } = dto;
+    return this.saveAndSubmit(id, header, lines, approverId, actorId);
+  }
+
+  private async saveAndSubmit(
+    id: string | null,
+    header: CreateProcurementRequestDto | UpdateProcurementRequestHeaderDto,
+    lines: CreateProcurementRequestDto['lines'],
+    approverId: string | undefined,
+    actorId: string,
+  ): Promise<PurchaseRequestResponseDto> {
+    if (approverId) {
+      await this.approvers.assertEligible(
+        ErpResource.GARAGE_PROCUREMENT_REQUESTS,
+        approverId,
+        actorId,
+      );
+    }
+    const saved = await this.flow.saveAndSubmit(
+      id,
+      { header, lines },
+      { id: actorId, roles: await this.roles(actorId) },
+      approverId ?? null,
+    );
+    await this.notifier.afterTransition('submit', saved, actorId, undefined);
+    return this.findOne(saved.id);
   }
 
   /** Xóa mềm đề nghị nháp. */

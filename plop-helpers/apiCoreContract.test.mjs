@@ -34,13 +34,24 @@ describe('hợp đồng lõi API v2 (src/v2/core/*)', () => {
         expect(existsSync(join(repoRoot, manifest.barrel))).toBe(true);
       });
 
-      it('khai báo class nền (entity, create DTO, service, module) trong thư mục họ', () => {
+      it('khai báo class nền (entity, create DTO, service) và module nếu họ có module', () => {
         const source = sourceOf(dir);
-        for (const name of [manifest.baseClasses.entity, manifest.baseClasses.createDto, manifest.baseClasses.service]) {
+        // Orchestrator không có entity và DTO: chỉ kiểm service (class) và contract (interface)
+        const classNames =
+          manifest.style === 'orchestrator'
+            ? [manifest.baseClasses.service]
+            : [manifest.baseClasses.entity, manifest.baseClasses.createDto, manifest.baseClasses.service];
+        for (const name of classNames) {
           const declared = new RegExp(`export (abstract )?class ${name}\\b`);
           expect(declared.test(source)).toBe(true);
         }
-        expect(new RegExp(`export class ${manifest.module}\\b`).test(source)).toBe(true);
+        if (manifest.style === 'orchestrator') {
+          expect(new RegExp(`export interface ${manifest.baseClasses.contract}\\b`).test(source)).toBe(true);
+        }
+        // Module Nest của lõi chỉ tồn tại ở họ cũ; họ base mới không khai báo module
+        if (manifest.module) {
+          expect(new RegExp(`export class ${manifest.module}\\b`).test(source)).toBe(true);
+        }
       });
     });
   }

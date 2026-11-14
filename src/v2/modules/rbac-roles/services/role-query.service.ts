@@ -3,6 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CoreRole } from '@/v2/core/rbac-core/entities/core-role.entity';
 import { applyMultiKeywordFilter } from '@/common/utils/query-builder.util';
+import {
+  buildPagination,
+  PaginationMeta,
+} from '@/common/utils/paginated-result';
 import { ListCoreRolesDto } from '../dto/rbac-core.dto';
 import type {
   RoleListResponse,
@@ -22,8 +26,7 @@ import { toRoleListItem, toRoleResponse } from '../helpers/rbac-role.mapper';
 
 export interface RoleColumnOptionsResponse {
   items: { label: string; value: string }[];
-  total: number;
-  next: number | null;
+  pagination: PaginationMeta;
 }
 
 /** Truy vấn chỉ đọc cho role: danh sách phân trang và danh sách giá trị cột. */
@@ -57,10 +60,7 @@ export class RoleQueryService {
 
     return {
       items: mappedItems,
-      total,
-      page,
-      pageSize,
-      totalPages: Math.ceil(total / pageSize),
+      pagination: buildPagination(page, pageSize, total),
     };
   }
 
@@ -73,7 +73,7 @@ export class RoleQueryService {
   ): Promise<RoleColumnOptionsResponse> {
     const rawSqlField = mapRoleColumnToSqlField(column);
     if (!rawSqlField) {
-      return { items: [], total: 0, next: null };
+      return { items: [], pagination: buildPagination(page, pageSize, 0) };
     }
 
     const qb = this.roleRepository.createQueryBuilder('role');
@@ -110,8 +110,7 @@ export class RoleQueryService {
       return { label, value: String(r.value) };
     });
 
-    const next = page * pageSize < total ? page + 1 : null;
-    return { items, total, next };
+    return { items, pagination: buildPagination(page, pageSize, total) };
   }
 
   async getRoleById(id: string): Promise<RoleResponse> {

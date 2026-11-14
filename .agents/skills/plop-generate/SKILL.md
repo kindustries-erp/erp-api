@@ -15,11 +15,12 @@ Chạy từ thư mục `erp/erp-api`. Thứ tự chọn generator cho module V2:
 
 ### 🧬 Generator: `api-core` (Lõi họ V2: khung dùng chung)
 
-Sinh `src/v2/core/<họ>/`: contracts, Base entity, Base create DTO, service nền, module lõi, barrel `index.ts`, spec và `core.manifest.json`. Chỉ sinh khung, không có logic nghiệp vụ.
+Sinh `src/v2/core/<họ>/`: contracts, Base entity (abstract, không `@Entity`), Base create DTO, service nền (abstract), barrel `index.ts`, spec và `core.manifest.json`. Lõi là base để kế thừa: **không sinh module Nest và không có provider**; module con tự đăng ký lớp cụ thể. Chỉ sinh khung, không có logic nghiệp vụ.
 
 **Prompts (tương tác):** `familyInput` (kebab-case, ví dụ `customer-claims`), `entityInput` (PascalCase), `styleInput`:
-- `engine`: `Base<Họ>EngineService`, dùng cho lõi kiểu voucher (ví dụ `goods-receipts`, `invoices`).
-- `abstract-services`: khung workflow cho chứng từ có trạng thái: contract (`<E>Action`, bảng `<E>_TRANSITIONS` rỗng), entity có `status`/`createdBy`, và `Abstract<E>CommandService` với `transition()`, `createDraft()` cùng hook `// CUSTOM`. Module lõi không đăng ký lớp abstract làm provider (Nest không khởi tạo được lớp abstract).
+- `engine`: `Base<Họ>EngineService` (abstract, không `@Injectable`), dùng cho lõi kiểu voucher (ví dụ `goods-receipts`, `invoices`).
+- `orchestrator`: lõi điều phối nhiều module (không entity/controller): contract các cổng (port), `Abstract<Họ>FlowService` với `runInTransaction` (sự kiện phát sau commit), spec và barrel. Module con kế thừa, nối cổng vào service cụ thể. Ví dụ: `procurement-flow-core`.
+- `abstract-services`: khung workflow cho chứng từ có trạng thái: contract (`<E>Action`, bảng `<E>_TRANSITIONS` rỗng), entity có `status`/`createdBy`, và `Abstract<E>CommandService` với `transition()`, `createDraft()` cùng hook `// CUSTOM`. Lớp abstract không được đăng ký làm provider ở lõi.
 
 - Từ chối nếu `src/v2/core/<họ>` đã tồn tại.
 - `core.manifest.json` là nguồn duy nhất để `api-thin-module` đọc tên class và kiểu lõi.
@@ -54,7 +55,7 @@ Chỉ nhận họ có `style: abstract-services` trong manifest; họ CRUD dùng
 
 ### 📦 Generator: `api-module-v2` (Module API v2 đứng riêng: Facade + sub-services + spec)
 
-Sinh module theo kiến trúc v2 (Facade, sub-services Query/Command, mapper, response DTO, controller có RBAC `ErpResource`/`ErpAction`, spec co-located). Quy ước và bẫy xem skill [`api-structure`](../api-structure/SKILL.md).
+Sinh module theo kiến trúc v2 (Facade, sub-services Query/Command, mapper, response DTO, controller có RBAC `ErpResource`/`ErpAction`, spec co-located). Quy ước và bẫy xem skill [`erp-api-structure`](../erp-api-structure/SKILL.md).
 
 ```bash
 bunx plop api-module-v2 <module-core> <Entity> "<fieldSpec>" "<tableName>" "<routePath>" "<permissionResource>" <wire>
@@ -63,18 +64,23 @@ bunx plop api-module-v2 customer-claims-core CustomerClaim "code:string:required
 ```
 
 - Tham số theo thứ tự: `moduleInput`, `entityInput`, `fieldSpecInput`, `tableNameInput`, `routePathInput`, `permissionResourceInput`, `wireInput`. Chuỗi rỗng = mặc định.
+- Mặc định `tableNameInput`: `<gốc>` (tên module, không có `_core`), không prefix `erp_`. Quy tắc đầy đủ: `erp-api-structure` mục "Quy tắc đặt tên bảng". Lưu ý: `api-core` đã sinh lõi base-only (không module, không provider). Họ cũ có module lõi vẫn chạy bình thường: `api-thin-module` và `api-workflow-module` chỉ import module lõi khi manifest khai báo `module`.
 - `wire = true`: nối vào `app.module.ts` và `data-source.ts`. Resource RBAC luôn được đăng ký trong `erp-resource.enum.ts`.
 - Input sai bị chặn trước khi ghi file nào.
 - Test generator: `bun test plop-helpers`.
-- Hợp đồng sinh ra: list `{ items, total, page, pageSize, totalPages, summaries }`, bản ghi đơn `{ message, data }`, `GET column-options` và lọc/sắp xếp/tổng qua `src/common/utils/table-query/`. Chi tiết xem `api-structure` mục 2b.
-- Cột `number`/`decimal` được cộng vào `summaries` (SUM trên toàn bộ dòng khớp bộ lọc).
+- Hợp đồng sinh ra: list `{ items, total, page, pageSize, totalPages, summaries }`, bản ghi đơn `{ message, data }`, `GET column-options` và lọc/sắp xếp/tổng qua `src/common/utils/table-query/`. Chi tiết xem `erp-api-structure` mục 2b.
+- Cột `number`/`decimal` có thể tổng qua `summary_keys`: list trả `summaries[key] = { total, pageSubtotal, cumulative }` (hoặc `null`) nhờ helper `applyListSummaries`. Generator không tự viết SUM; sau khi sinh, khai báo `SUMMARY_COLUMNS` trong service và nối tie-breaker id. Chi tiết: `erp-api-structure` mục 2b.
 - Resource RBAC đã có trong enum thì generator không chèn lại (`enumEntryExists`).
 - Entity nullable (`string | null`) được map sang `undefined` trong response.
-- Module đã có entity/service cũ: không chạy trực tiếp lên thư mục đó. Làm theo `api-structure` mục 3b.
+- Module đã có entity/service cũ: không chạy trực tiếp lên thư mục đó. Làm theo `erp-api-structure` mục 3b.
 
 ### 🧱 Generator: `api-voucher-v2` (Chứng từ Header + Lines, không có lõi)
 
 Giữ nguyên để tương thích. Khi họ đã có `src/v2/core/<họ>/core.manifest.json`, generator chỉ in cảnh báo: dùng `api-thin-module` thay cho module đứng riêng.
+
+- Template `plop-templates/voucher-v2/` đã đồng bộ với helper `table-query` hiện hành (query service dùng `applyListSummaries`). Được chốt bởi `plop-helpers/apiVoucherData.test.mjs`.
+- Output sinh ra chưa được format: chạy `bunx prettier --write "src/v2/modules/<module>-core/**/*.ts"` trước khi lint.
+- Đã kiểm chứng với module tạm `zz-smoke-voucher-core` (đã xóa): `tsc --noEmit` 0 lỗi, jest 14/14, eslint sạch sau prettier.
 
 ---
 

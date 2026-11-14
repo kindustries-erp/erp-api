@@ -16,6 +16,21 @@ export class GarageGoodsReceiptResponseDto extends BaseGoodsReceiptResponseDto {
   @ApiPropertyOptional()
   garageProcurementOrderId?: string;
 
+  @ApiPropertyOptional({ description: 'Số đơn mua nguồn' })
+  garageProcurementOrderNo?: string;
+
+  @ApiPropertyOptional({ description: 'Tổng tiền của đơn mua nguồn' })
+  orderTotalAmount?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Phiếu đã nhập kho còn hoàn nhập được (hàng chưa xuất/điều chỉnh)',
+  })
+  reversible?: boolean;
+
+  @ApiPropertyOptional({ description: 'Lý do không hoàn nhập được' })
+  reverseBlockedReason?: string;
+
   @ApiPropertyOptional({ type: [GarageGoodsReceiptLineResponseDto] })
   declare lines?: GarageGoodsReceiptLineResponseDto[];
 }

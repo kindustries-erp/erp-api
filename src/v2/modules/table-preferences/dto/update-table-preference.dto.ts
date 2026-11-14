@@ -1,0 +1,169 @@
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsDefined,
+  IsOptional,
+  IsString,
+  MaxLength,
+  ValidateNested,
+} from 'class-validator';
+import { IsBoundedRecord } from './table-preference-validators';
+import { TABLE_PREFERENCE_LIMITS } from './table-preference-limits';
+
+export class TablePreferenceColumnsDto {
+  @ApiPropertyOptional({ example: { notes: false } })
+  @IsOptional()
+  @IsBoundedRecord((v) => typeof v === 'boolean', 'boolean')
+  visibility?: Record<string, boolean>;
+
+  @ApiPropertyOptional({ example: ['poNumber', 'vendor', 'status'] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(TABLE_PREFERENCE_LIMITS.orderMax)
+  @IsString({ each: true })
+  @MaxLength(TABLE_PREFERENCE_LIMITS.orderItemMax, { each: true })
+  order?: string[];
+
+  @ApiPropertyOptional({ example: { poNumber: 150 } })
+  @IsOptional()
+  @IsBoundedRecord((v) => typeof v === 'number', 'number')
+  sizing?: Record<string, number>;
+}
+
+export class TablePreferenceCustomViewDto {
+  @IsString()
+  @MaxLength(TABLE_PREFERENCE_LIMITS.keyMax)
+  key: string;
+
+  @IsString()
+  @MaxLength(TABLE_PREFERENCE_LIMITS.labelMax)
+  label: string;
+
+  @IsString()
+  @MaxLength(TABLE_PREFERENCE_LIMITS.keyMax)
+  baseKey: string;
+
+  @IsBoundedRecord((v) => typeof v === 'boolean', 'boolean')
+  visibility: Record<string, boolean>;
+
+  @IsArray()
+  @ArrayMaxSize(TABLE_PREFERENCE_LIMITS.orderMax)
+  @IsString({ each: true })
+  @MaxLength(TABLE_PREFERENCE_LIMITS.orderItemMax, { each: true })
+  order: string[];
+
+  /** Bộ lọc có sẵn (filter group) đi kèm view; view cũ không có trường này */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(TABLE_PREFERENCE_LIMITS.keyMax)
+  filterKey?: string;
+}
+
+/** Snapshot điều kiện bảng (cùng định dạng query string của URL V2) */
+export class TablePreferenceFilterQueryDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(TABLE_PREFERENCE_LIMITS.filterQueryFieldMax)
+  sort?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(TABLE_PREFERENCE_LIMITS.filterQueryFieldMax)
+  q?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(TABLE_PREFERENCE_LIMITS.filterQueryFieldMax)
+  cf?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(TABLE_PREFERENCE_LIMITS.filterQueryFieldMax)
+  cs?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(TABLE_PREFERENCE_LIMITS.filterQueryFieldMax)
+  co?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(TABLE_PREFERENCE_LIMITS.filterQueryFieldMax)
+  dr?: string;
+}
+
+/** Bộ lọc tùy chỉnh do user lưu từ điều kiện đang áp dụng trên bảng */
+export class TablePreferenceCustomFilterDto {
+  @IsString()
+  @MaxLength(TABLE_PREFERENCE_LIMITS.keyMax)
+  key: string;
+
+  @IsString()
+  @MaxLength(TABLE_PREFERENCE_LIMITS.labelMax)
+  label: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(TABLE_PREFERENCE_LIMITS.keyMax)
+  groupKey?: string;
+
+  @IsDefined()
+  @ValidateNested()
+  @Type(() => TablePreferenceFilterQueryDto)
+  query: TablePreferenceFilterQueryDto;
+}
+
+export class TablePreferenceViewsDto {
+  @ApiPropertyOptional({ type: [TablePreferenceCustomViewDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(TABLE_PREFERENCE_LIMITS.customViewsMax)
+  @ValidateNested({ each: true })
+  @Type(() => TablePreferenceCustomViewDto)
+  customViews?: TablePreferenceCustomViewDto[];
+
+  @ApiPropertyOptional({ type: [TablePreferenceCustomFilterDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(TABLE_PREFERENCE_LIMITS.customFiltersMax)
+  @ValidateNested({ each: true })
+  @Type(() => TablePreferenceCustomFilterDto)
+  customFilters?: TablePreferenceCustomFilterDto[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(TABLE_PREFERENCE_LIMITS.keyMax)
+  activeKey?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(TABLE_PREFERENCE_LIMITS.keyMax)
+  filterKey?: string;
+}
+
+/** Ghi đè từng phần: trường không gửi thì giữ nguyên trên server */
+export class UpdateTablePreferenceDto {
+  @ApiPropertyOptional({ type: TablePreferenceColumnsDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TablePreferenceColumnsDto)
+  columns?: TablePreferenceColumnsDto;
+
+  @ApiPropertyOptional({ type: TablePreferenceViewsDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TablePreferenceViewsDto)
+  views?: TablePreferenceViewsDto;
+}

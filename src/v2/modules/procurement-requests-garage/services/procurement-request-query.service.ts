@@ -10,18 +10,26 @@ import {
   applyDateBounds,
   applyTableFilters,
   applyTableSort,
+  applyListSummaries,
+  parseSummaryKeys,
+  SummaryMetric,
   findTableColumnOptions,
-  parseFilterRecord,
+  parseListFilterPayload,
   resolveTableColumn,
-  TableDateRange,
-  TableOperatorFilter,
+  emptyOptionsPage,
   TableOptionsPage,
 } from '@/common/utils/table-query';
 import {
   SEARCH_COLUMNS,
+  SUMMARY_COLUMNS,
   TABLE_COLUMNS,
   toFilterPayload,
 } from '../constants/procurement-request-table.constants';
+import { GarageProcurementOrder } from '@/v2/modules/procurement-orders-garage/entities/procurement-order.entity';
+import {
+  applyRelatedOrderFilter,
+  RELATED_ORDERS_KEY,
+} from '../helpers/related-order-filter.helper';
 
 export { TABLE_COLUMNS, SEARCH_COLUMNS };
 
@@ -37,6 +45,8 @@ export class GarageProcurementRequestQueryService {
     private readonly lines: Repository<GarageProcurementRequestLine>,
     @InjectRepository(ApprovalEvent)
     private readonly events: Repository<ApprovalEvent>,
+    @InjectRepository(GarageProcurementOrder)
+    private readonly orders: Repository<GarageProcurementOrder>,
   ) {}
 
   /** Nhật ký duyệt của một đề nghị Garage, theo thứ tự thời gian. */
@@ -56,6 +66,7 @@ export class GarageProcurementRequestQueryService {
     total: number;
     page: number;
     pageSize: number;
+    summaries: Record<string, SummaryMetric | null>;
   }>;
   async list(
     page: number,
@@ -66,6 +77,7 @@ export class GarageProcurementRequestQueryService {
     total: number;
     page: number;
     pageSize: number;
+    summaries: Record<string, SummaryMetric | null>;
   }>;
   async list(
     dtoOrPage: ListProcurementRequestsDto | number = 1,
@@ -82,7 +94,7 @@ export class GarageProcurementRequestQueryService {
 
     const qb = this.headers
       .createQueryBuilder('h')
-      .where('h.isDeleted = :notDeleted', { notDeleted: false });
+      .where('h.isDeleted = :deleted', { deleted: dto.deleted === 'only' });
 
     if (dto.branchId) {
       qb.andWhere('h.branchId = :branchId', { branchId: dto.branchId });
@@ -102,31 +114,27 @@ export class GarageProcurementRequestQueryService {
       );
     }
 
-    applyTableFilters(
-      qb,
-      {
-        columnFilters: parseFilterRecord<Record<string, string[]>>(
-          dto.column_filters,
-        ),
-        columnSearch: parseFilterRecord<Record<string, string>>(
-          dto.column_search,
-        ),
-        columnOperators: parseFilterRecord<Record<string, TableOperatorFilter>>(
-          dto.column_operators,
-        ),
-        dateRanges: parseFilterRecord<Record<string, TableDateRange>>(
-          dto.date_ranges,
-        ),
-      },
-      TABLE_COLUMNS,
-      'filter',
-    );
+    const listPayload = parseListFilterPayload(dto);
+    applyTableFilters(qb, listPayload, TABLE_COLUMNS, 'filter');
+    applyRelatedOrderFilter(qb, this.orders, listPayload, 'relOrd');
 
     applyDateBounds(qb, 'h.createdAt', dto.date_from, dto.date_to, 'legacy');
 
-    applyTableSort(qb, dto.sort, TABLE_COLUMNS, {
-      sql: 'h.createdAt',
-      direction: 'DESC',
+    applyTableSort(
+      qb,
+      dto.sort,
+      TABLE_COLUMNS,
+      { sql: 'h.createdAt', direction: 'DESC' },
+      'h.id',
+    );
+
+    // Tổng theo summary_keys trên toàn bộ dòng khớp, nên phải gọi trước khi phân trang
+    const summaries = await applyListSummaries(qb, {
+      columns: SUMMARY_COLUMNS,
+      keys: parseSummaryKeys(dto.summary_keys),
+      page,
+      pageSize,
+      tieBreaker: 'h.id',
     });
 
     const [rows, total] = await qb
@@ -134,7 +142,7 @@ export class GarageProcurementRequestQueryService {
       .take(pageSize)
       .getManyAndCount();
 
-    return { rows, total, page, pageSize };
+    return { rows, total, page, pageSize, summaries };
   }
 
   /** Gợi ý danh sách giá trị của một cột cho Popover Filter trên Header bảng V2. */
@@ -144,14 +152,43 @@ export class GarageProcurementRequestQueryService {
     page: number,
     pageSize: number,
     filters: unknown,
+    deleted?: 'only',
   ): Promise<TableOptionsPage> {
+    const isDeleted = deleted === 'only';
+    const headerQb = () =>
+      this.headers
+        .createQueryBuilder('h')
+        .where('h.isDeleted = :deleted', { deleted: isDeleted });
+
+    if (column === RELATED_ORDERS_KEY) {
+      // Gợi ý số PO: PO còn hiệu lực thuộc các đề nghị khớp bộ lọc cột khác (cascading).
+      const headerIds = headerQb().select('h.id');
+      applyTableFilters(
+        headerIds,
+        toFilterPayload(filters),
+        TABLE_COLUMNS,
+        'rel_opt_h',
+        column,
+      );
+      const orderQb = this.orders
+        .createQueryBuilder('o')
+        .where('o.isDeleted = false')
+        .andWhere(`o.requestId IN (${headerIds.getQuery()})`)
+        .setParameters(headerIds.getParameters());
+      return findTableColumnOptions(
+        orderQb,
+        { sql: 'o.orderNo', type: 'text' },
+        search,
+        page,
+        pageSize,
+        'rel_opt',
+      );
+    }
+
     const def = resolveTableColumn(TABLE_COLUMNS, column);
-    if (!def) return { items: [], total: 0, next: null };
+    if (!def) return emptyOptionsPage(page, pageSize);
 
-    const qb = this.headers
-      .createQueryBuilder('h')
-      .where('h.isDeleted = :notDeleted', { notDeleted: false });
-
+    const qb = headerQb();
     applyTableFilters(
       qb,
       toFilterPayload(filters),

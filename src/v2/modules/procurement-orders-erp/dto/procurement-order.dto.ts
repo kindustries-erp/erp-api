@@ -114,4 +114,12 @@ export class ListProcurementOrdersDto {
   @Min(1)
   @Max(200)
   pageSize?: number = 20;
+
+  @ApiPropertyOptional({
+    description:
+      'Các key cột cần tổng, CSV (ví dụ `totalAmount`), tối đa 10. Key không tính được trả null trong summaries.',
+  })
+  @IsOptional()
+  @IsString()
+  summary_keys?: string;
 }

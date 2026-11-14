@@ -12,6 +12,7 @@ import { InventoryMovementsGarageReceiptController } from './controllers/invento
 import { InventoryMovementsGarageReceiptCommandService } from './services/inventory-movements-garage-receipt-command.service';
 import { InventoryMovementsGarageReceiptQueryService } from './services/inventory-movements-garage-receipt-query.service';
 import { InventoryMovementsGarageReceiptsService } from './inventory-movements-garage-receipts.service';
+import { ItemsGarageModule } from '@/v2/modules/items-garage/items-garage.module';
 
 /** Module nhập kho Garage: ghép lõi inventory-movements-core (sổ tồn) và goods-receipts-core (đánh số phiếu). */
 @Module({
@@ -24,6 +25,7 @@ import { InventoryMovementsGarageReceiptsService } from './inventory-movements-g
     ]),
     RbacCoreModule,
     InventoryMovementsCoreModule,
+    ItemsGarageModule,
     GoodsReceiptsCoreModule,
   ],
   controllers: [InventoryMovementsGarageReceiptController],

@@ -99,6 +99,15 @@ export class ListProcurementRequestsDto extends TableQueryDto {
   @IsOptional()
   @IsUUID()
   branchId?: string;
+
+  @ApiPropertyOptional({
+    enum: ['only'],
+    description:
+      'only: chỉ liệt kê đề nghị đã xóa mềm (cần quyền purge để xóa cứng)',
+  })
+  @IsOptional()
+  @IsIn(['only'])
+  deleted?: 'only';
 }
 
 export class ReasonBodyDto {
@@ -147,4 +156,27 @@ export class UpdateProcurementRequestHeaderDto {
   /** Merge cấp 1 với dữ liệu hiện có; giá trị null xóa key. */
   @ExtraDataField()
   extraData?: Record<string, unknown>;
+}
+
+/** Tạo đề nghị rồi gửi duyệt trong một bước. `approverId` bắt buộc khi khóa duyệt bật. */
+export class CreateAndSubmitProcurementRequestDto extends CreateProcurementRequestDto {
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  approverId?: string;
+}
+
+/** Cập nhật đề nghị nháp (đầu đề + dòng) rồi gửi duyệt trong một bước. */
+export class UpdateAndSubmitProcurementRequestDto extends UpdateProcurementRequestHeaderDto {
+  @ApiProperty({ type: [GarageProcurementRequestLineDto] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => GarageProcurementRequestLineDto)
+  lines: GarageProcurementRequestLineDto[];
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  approverId?: string;
 }

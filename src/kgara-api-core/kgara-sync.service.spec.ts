@@ -11,7 +11,7 @@ import { KgaraCaseService } from './entities/kgara_case_service.entity';
 import { GwSyncRun } from './entities/kgara_sync_run.entity';
 import { KgaraCaseLinkedInvoice } from './entities/kgara_case_linked_invoice.entity';
 import { KgaraCaseSettlement } from './entities/kgara_case_settlement.entity';
-import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsPublisherService } from '@/v2/modules/notifications-inbox';
 import { SyncRunLoggerService } from './services/sync-run-logger.service';
 import { SyncDeletionService } from './services/sync-deletion.service';
 import { SyncGrossProfitService } from './services/sync-gross-profit.service';
@@ -102,7 +102,7 @@ describe('KgaraSyncService', () => {
           useValue: clientService,
         },
         {
-          provide: NotificationsService,
+          provide: NotificationsPublisherService,
           useValue: notificationsService,
         },
         {

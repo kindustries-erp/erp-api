@@ -75,6 +75,11 @@ export class CreateProcurementOrderDto {
   supplierName?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() requestId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() remarks?: string;
+  @ApiPropertyOptional({ description: 'Số hóa đơn của NCC' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  supplierInvoiceNo?: string;
   @ExtraDataField()
   extraData?: Record<string, unknown>;
 
@@ -84,6 +89,14 @@ export class CreateProcurementOrderDto {
   @ValidateNested({ each: true })
   @Type(() => GarageProcurementOrderLineDto)
   lines: GarageProcurementOrderLineDto[];
+}
+
+/** Tạo đơn mua rồi gửi duyệt/ghi nhận trong một bước. `approverId` bắt buộc khi khóa duyệt bật. */
+export class CreateAndConfirmProcurementOrderDto extends CreateProcurementOrderDto {
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  approverId?: string;
 }
 
 export class ReplaceOrderLinesDto {
@@ -170,11 +183,35 @@ export class UpdateProcurementOrderHeaderDto {
   extraData?: Record<string, unknown>;
 }
 
+/** Cập nhật đơn nháp (đầu đơn + dòng) rồi gửi duyệt/ghi nhận trong một bước. */
+export class UpdateAndConfirmProcurementOrderDto extends UpdateProcurementOrderHeaderDto {
+  @ApiProperty({ type: [GarageProcurementOrderLineDto] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => GarageProcurementOrderLineDto)
+  lines: GarageProcurementOrderLineDto[];
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  approverId?: string;
+}
+
 export class ListProcurementOrdersDto extends TableQueryDto {
   @ApiPropertyOptional({ description: 'Lọc theo chi nhánh' })
   @IsOptional()
   @IsUUID()
   branchId?: string;
+
+  @ApiPropertyOptional({
+    enum: ['only'],
+    description:
+      'only: chỉ liệt kê đơn đã xóa mềm (cần quyền purge để xóa cứng)',
+  })
+  @IsOptional()
+  @IsIn(['only'])
+  deleted?: 'only';
 
   @ApiPropertyOptional({ description: 'Lọc theo nhà cung cấp' })
   @IsOptional()

@@ -10,7 +10,13 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
+import { PurchaseRequestListResponseDto } from '@/v2/core/procurement-requests-core/dto/procurement-request-list-response.dto';
 import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
 import { RequirePermissions } from '@/auth/decorators/require-permissions.decorator';
@@ -31,7 +37,7 @@ interface RequestWithUser {
 @ApiTags('procurement_requests')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
-@Controller('erp-procurement-requests')
+@Controller('api/v2/procurement-requests-erp')
 export class ErpProcurementRequestController {
   constructor(private readonly service: ErpProcurementRequestsService) {}
 
@@ -52,6 +58,7 @@ export class ErpProcurementRequestController {
     resource: ErpResource.PROCUREMENT_REQUESTS,
     action: ErpAction.READ,
   })
+  @ApiOkResponse({ type: PurchaseRequestListResponseDto })
   @Get()
   list(@Query() dto: ListProcurementRequestsDto) {
     return this.service.list(dto);

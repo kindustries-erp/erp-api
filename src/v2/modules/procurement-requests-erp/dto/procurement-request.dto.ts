@@ -99,6 +99,14 @@ export class ListProcurementRequestsDto {
   @Min(1)
   @Max(200)
   pageSize?: number = 20;
+
+  @ApiPropertyOptional({
+    description:
+      'Các key cột cần tổng, CSV (ví dụ `estimatedTotal`), tối đa 10. Key không tính được trả null trong summaries.',
+  })
+  @IsOptional()
+  @IsString()
+  summary_keys?: string;
 }
 
 export class ReasonBodyDto {

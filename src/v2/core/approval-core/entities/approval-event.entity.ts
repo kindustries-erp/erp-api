@@ -7,7 +7,8 @@ import {
 } from 'typeorm';
 
 /**
- * Nhật ký mọi bước chuyển trạng thái của chứng từ duyệt (PR, PO).
+ * Nhật ký mọi bước chuyển trạng thái của chứng từ duyệt: PR, PO (erp và garage)
+ * và chứng từ kho dùng chung approval-core (inventory-movements-*).
  * Bảng chỉ ghi thêm, không sửa, không xóa.
  */
 @Entity({ name: 'erp_approval_events' })

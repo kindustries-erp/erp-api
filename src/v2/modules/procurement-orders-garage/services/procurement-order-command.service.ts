@@ -2,7 +2,12 @@ import { ConflictException, Inject, Injectable } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
 import { GarageGoodsReceipt } from '@/v2/modules/goods-receipts-garage/entities/garage-goods-receipt.entity';
 import { ApprovalEventService } from '@/v2/core/approval-core/approval-event.service';
-import { AbstractProcurementOrderCommandService } from '@/v2/core/procurement-orders-core/services/abstract-procurement-order-command.service';
+import {
+  AbstractProcurementOrderCommandService,
+  OrderDraftLineFields,
+} from '@/v2/core/procurement-orders-core/services/abstract-procurement-order-command.service';
+import type { OrderDraftLineInput } from '@/v2/core/procurement-orders-core/services/procurement-order-engine.service';
+import { GarageLineItemResolver } from '@/v2/modules/items-garage/services/garage-line-item-resolver.service';
 import type { RequestLinkPort } from '@/v2/core/procurement-orders-core/services/request-link.port';
 import { GarageProcurementOrder } from '../entities/procurement-order.entity';
 import { GarageProcurementOrderLine } from '../entities/procurement-order-line.entity';
@@ -18,13 +23,24 @@ export class GarageProcurementOrderCommandService extends AbstractProcurementOrd
   protected readonly lineForeignKey = 'orderId' as const;
   protected readonly docType = 'GARAGE_PROCUREMENT_ORDER';
   protected readonly numberPrefix = 'GDMH';
+  /** Garage: NCC có thể gõ tự do (không bắt buộc danh mục) khi gửi duyệt. */
+  protected readonly requireSupplierId = false;
 
   constructor(
     dataSource: DataSource,
     events: ApprovalEventService,
     @Inject(GARAGE_PROCUREMENT_REQUEST_LINK) link: RequestLinkPort,
+    private readonly itemResolver: GarageLineItemResolver,
   ) {
     super(dataSource, events, link);
+  }
+
+  /** Chuẩn hóa mã hàng theo danh mục garage trước khi ghi dòng; mã chưa có sẽ được tạo. */
+  protected prepareLines(
+    manager: EntityManager,
+    lines: Array<OrderDraftLineInput & OrderDraftLineFields>,
+  ): Promise<Array<OrderDraftLineInput & OrderDraftLineFields>> {
+    return this.itemResolver.resolveLines(manager, lines);
   }
 
   /** Phiếu nhập garage (kể cả đã hủy) giữ khóa ngoại RESTRICT tới đơn mua. */

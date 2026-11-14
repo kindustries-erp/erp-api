@@ -1,3 +1,4 @@
+import { toPaginatedResult } from '@/common/utils/paginated-result';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ErpBusinessPartner } from '../entities/erp_business_partner.entity';
 import { CreateErpBusinessPartnerDto } from '../dto/create-erp-business-partner.dto';
@@ -61,14 +62,13 @@ export class BusinessPartnersCoreService {
 
   async findAll(dto: QueryErpBusinessPartnerDto) {
     const page = await this.query.findAll(dto);
-    return {
-      items: page.items.map((item) => toErpBusinessPartnerResponse(item)),
-      total: page.total,
-      page: page.page,
-      pageSize: page.pageSize,
-      totalPages: Math.ceil(page.total / page.pageSize),
-      summaries: page.summaries,
-    };
+    return toPaginatedResult(
+      page.items.map((item) => toErpBusinessPartnerResponse(item)),
+      page.page,
+      page.pageSize,
+      page.total,
+      page.summaries,
+    );
   }
 
   findColumnOptions(

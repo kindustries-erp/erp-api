@@ -27,6 +27,20 @@ describe('approval.engine', () => {
     );
   });
 
+  it('resolveTransition ném 409 kèm code INVALID_STATUS_TRANSITION và trạng thái hiện tại', () => {
+    try {
+      resolveTransition(rules, 'APPROVED', 'approve');
+      fail('expected ConflictException');
+    } catch (err) {
+      expect(err).toBeInstanceOf(ConflictException);
+      expect((err as ConflictException).getResponse()).toMatchObject({
+        code: 'INVALID_STATUS_TRANSITION',
+        action: 'approve',
+        currentStatus: 'APPROVED',
+      });
+    }
+  });
+
   it('resolveTransition ném 400 khi hành động không có luật', () => {
     expect(() => resolveTransition(rules, 'DRAFT', 'issue' as never)).toThrow(
       BadRequestException,

@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { ApprovalSummaryDto } from '@/v2/core/approval-core/dto/approval-summary.dto';
 
 export class PurchaseRequestLineResponseDto {
   @ApiProperty() id: string;
@@ -17,6 +18,13 @@ export class PurchaseRequestLineResponseDto {
   @ApiProperty({ nullable: true }) notes: string | null;
 }
 
+/** PO đã sinh từ đề nghị này (chỉ điền ở danh sách, bỏ qua PO đã xóa mềm). */
+export class RelatedOrderDto {
+  @ApiProperty() id: string;
+  @ApiProperty() orderNo: string;
+  @ApiProperty() status: string;
+}
+
 export class PurchaseRequestResponseDto {
   @ApiProperty() id: string;
   @ApiProperty({ type: 'object', additionalProperties: true })
@@ -30,22 +38,20 @@ export class PurchaseRequestResponseDto {
   @ApiProperty() orderingStatus: string;
   @ApiProperty() estimatedTotal: number;
   @ApiProperty({ nullable: true }) remarks: string | null;
+  @ApiProperty({ nullable: true, description: 'Id người tạo' })
+  createdBy: string | null;
   @ApiProperty({ nullable: true, description: 'Email người tạo' })
   createdByEmail: string | null;
-  @ApiProperty({ nullable: true }) submittedBy: string | null;
-  @ApiProperty({ nullable: true }) approvedBy: string | null;
-  @ApiProperty({ nullable: true }) approverId: string | null;
-  @ApiProperty({
-    nullable: true,
-    description: 'Email người duyệt (đã duyệt, chưa duyệt thì người được giao)',
-  })
-  approverEmail: string | null;
-  @ApiProperty({ nullable: true }) rejectedBy: string | null;
-  @ApiProperty({ nullable: true }) rejectReason: string | null;
-  @ApiProperty({ nullable: true }) cancelReason: string | null;
-  @ApiProperty({ nullable: true }) closeReason: string | null;
+  @ApiProperty({ type: ApprovalSummaryDto })
+  approval: ApprovalSummaryDto;
   @ApiProperty({ type: [PurchaseRequestLineResponseDto] })
   lines: PurchaseRequestLineResponseDto[];
+  @ApiProperty({
+    type: [RelatedOrderDto],
+    required: false,
+    description: 'Chỉ có ở danh sách',
+  })
+  relatedOrders?: RelatedOrderDto[];
 }
 
 /** Một dòng gợi ý khi tạo PO từ PR: phần số lượng còn lại chưa đặt. */

@@ -48,10 +48,14 @@ describe('branches v2 DI and entity identity', () => {
     );
     expect(await facade.findAll({})).toEqual({
       items: [],
-      total: 0,
-      page: 1,
-      pageSize: 20,
-      totalPages: 0,
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 1,
+        next: null,
+        previous: null,
+      },
     });
     await moduleRef.close();
   });

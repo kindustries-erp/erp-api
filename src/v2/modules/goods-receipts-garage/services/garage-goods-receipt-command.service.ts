@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { GarageGoodsReceipt } from '../entities/garage-goods-receipt.entity';
@@ -11,16 +7,19 @@ import { CreateGarageGoodsReceiptDto } from '../dto/create-garage-goods-receipt.
 import { UpdateGarageGoodsReceiptDto } from '../dto/update-garage-goods-receipt.dto';
 import { toGarageGoodsReceiptEntityFields } from '../helpers/garage-goods-receipt.mapper';
 import {
+  assertOrderUnchanged,
+  loadOrderForNewReceipt,
+  receiptFieldsFromOrder,
+  stripOrderOwnedFields,
+} from '../helpers/garage-receipt-order.helper';
+import { runInOptionalTransaction } from '@/v2/core/base-core/helpers/run-in-optional-transaction.util';
+import {
   assertValidExtraData,
   mergeExtraData,
 } from '@/v2/core/base-core/helpers/extra-data.util';
 import { BaseVoucherEngineService } from '@/v2/core/goods-receipts-core/services/base-voucher-engine.service';
-import { GarageProcurementOrder } from '@/v2/modules/procurement-orders-garage/entities/procurement-order.entity';
-import { GarageProcurementOrderFulfilmentService } from '@/v2/modules/procurement-orders-garage/services/procurement-order-fulfilment.service';
-import {
-  BalanceMove,
-  GarageInventoryBalanceService,
-} from './garage-inventory-balance.service';
+import { GarageLineItemResolver } from '@/v2/modules/items-garage/services/garage-line-item-resolver.service';
+import { GarageProcurementFlowService } from '@/v2/modules/procurement-flow-garage/services/garage-procurement-flow.service';
 
 @Injectable()
 export class GarageGoodsReceiptCommandService {
@@ -29,8 +28,8 @@ export class GarageGoodsReceiptCommandService {
     @InjectRepository(GarageGoodsReceipt)
     private readonly repo: Repository<GarageGoodsReceipt>,
     private readonly voucherEngine: BaseVoucherEngineService,
-    private readonly procurementFulfilment: GarageProcurementOrderFulfilmentService,
-    private readonly balances: GarageInventoryBalanceService,
+    private readonly flow: GarageProcurementFlowService,
+    private readonly itemResolver: GarageLineItemResolver,
   ) {}
 
   async generateDailyReceiptNo(orderDate?: string): Promise<string> {
@@ -42,109 +41,54 @@ export class GarageGoodsReceiptCommandService {
     );
   }
 
-  async create(dto: CreateGarageGoodsReceiptDto): Promise<GarageGoodsReceipt> {
-    this.assertExtraData(dto.extraData, dto.lines);
-    return this.dataSource.transaction(async (manager) => {
-      const receiptRepo = manager.getRepository(GarageGoodsReceipt);
-      const lineRepo = manager.getRepository(GarageGoodsReceiptLine);
-
-      const receiptNo =
-        dto.receiptNo?.trim() ||
-        (await this.generateDailyReceiptNo(dto.receiptDate));
-
-      const { lines = [], ...headerDto } = dto;
-      const entityFields = toGarageGoodsReceiptEntityFields({
-        ...headerDto,
-        receiptNo,
-        status: headerDto.status || 'DRAFT',
-        paymentStatus: headerDto.paymentStatus || 'UNPAID',
-      });
-
-      // Calculate total from lines using core voucher engine
-      const lineEntities: GarageGoodsReceiptLine[] = [];
-      let lineNo = 1;
-      for (const l of lines) {
-        const qty = Number(l.qtyReceived || 0);
-        const cost = Number(l.unitCost || 0);
-        const amount = l.amount !== undefined ? Number(l.amount) : qty * cost;
-
-        const line = lineRepo.create({
-          lineNo: lineNo++,
-          itemCode: l.itemCode ?? undefined,
-          itemName: l.itemName,
-          unit: l.unit || 'Cái',
-          qtyReceived: String(qty),
-          unitCost: String(cost),
-          amount: String(amount),
-          notes: l.notes ?? undefined,
-          procurementOrderLineId: l.procurementOrderLineId ?? null,
-          extraData: l.extraData ?? {},
-        });
-        lineEntities.push(line);
-      }
-
-      const calculatedTotal = this.voucherEngine.sumLineAmounts(lineEntities);
-
-      if (dto.totalAmount !== undefined && dto.totalAmount !== null) {
-        entityFields.totalAmount = String(dto.totalAmount);
-      } else if (lineEntities.length > 0) {
-        entityFields.totalAmount = String(calculatedTotal);
-      }
-
-      const receipt = receiptRepo.create({
-        ...entityFields,
-        isDeleted: false,
-        extraData: dto.extraData ?? {},
-      });
-      const savedReceipt = await receiptRepo.save(receipt);
-
-      for (const line of lineEntities) {
-        line.garageGoodsReceiptId = savedReceipt.id;
-        await lineRepo.save(line);
-      }
-
-      savedReceipt.lines = lineEntities;
-      return savedReceipt;
-    });
-  }
-
-  /**
-   * Sửa phiếu nháp. Khóa phiếu (pessimistic_write) rồi mới kiểm trạng thái trên bản đã khóa,
-   * để không sửa dòng sau khi một lần post đồng thời đã chuyển phiếu sang POSTED.
-   */
-  async update(
-    entity: GarageGoodsReceipt,
-    dto: UpdateGarageGoodsReceiptDto,
+  async create(
+    dto: CreateGarageGoodsReceiptDto,
+    outerManager?: EntityManager,
   ): Promise<GarageGoodsReceipt> {
     this.assertExtraData(dto.extraData, dto.lines);
-    return this.dataSource.transaction(async (manager) => {
-      const receipt = await this.lockReceipt(manager, entity.id);
-      this.voucherEngine.validateVoucherTransition(receipt.status, 'update');
+    return runInOptionalTransaction(
+      this.dataSource,
+      outerManager,
+      async (manager) => {
+        const receiptRepo = manager.getRepository(GarageGoodsReceipt);
+        const lineRepo = manager.getRepository(GarageGoodsReceiptLine);
 
-      const receiptRepo = manager.getRepository(GarageGoodsReceipt);
-      const lineRepo = manager.getRepository(GarageGoodsReceiptLine);
+        const receiptNo =
+          dto.receiptNo?.trim() ||
+          (await this.generateDailyReceiptNo(dto.receiptDate));
 
-      const { lines, extraData, ...headerDto } = dto;
-      const entityFields = toGarageGoodsReceiptEntityFields(headerDto);
-      Object.assign(receipt, entityFields);
-      if (extraData !== undefined) {
-        receipt.extraData = mergeExtraData(receipt.extraData, extraData);
-      }
+        const { lines: rawLines = [], ...rawHeader } = dto;
+        // Chuẩn hóa mã hàng theo danh mục garage, cùng transaction với việc ghi dòng
+        const lines = await this.itemResolver.resolveLines(manager, rawLines);
+        // Phiếu gắn đơn mua: NCC, chi nhánh lấy từ đơn, tổng tiền tính từ dòng (không tin client)
+        const order = rawHeader.garageProcurementOrderId
+          ? await loadOrderForNewReceipt(
+              manager,
+              rawHeader.garageProcurementOrderId,
+            )
+          : null;
+        const headerDto = order
+          ? {
+              ...stripOrderOwnedFields(rawHeader),
+              ...receiptFieldsFromOrder(order),
+            }
+          : rawHeader;
+        const entityFields = toGarageGoodsReceiptEntityFields({
+          ...(headerDto as typeof rawHeader),
+          receiptNo,
+          status: headerDto.status || 'DRAFT',
+          paymentStatus: headerDto.paymentStatus || 'UNPAID',
+        });
 
-      if (lines !== undefined) {
-        // Xóa các lines cũ và chèn lại
-        await lineRepo.delete({ garageGoodsReceiptId: receipt.id });
-
+        // Calculate total from lines using core voucher engine
         const lineEntities: GarageGoodsReceiptLine[] = [];
         let lineNo = 1;
-
         for (const l of lines) {
           const qty = Number(l.qtyReceived || 0);
           const cost = Number(l.unitCost || 0);
           const amount = l.amount !== undefined ? Number(l.amount) : qty * cost;
 
           const line = lineRepo.create({
-            garageGoodsReceiptId: receipt.id,
             lineNo: lineNo++,
             itemCode: l.itemCode ?? undefined,
             itemName: l.itemName,
@@ -156,90 +100,160 @@ export class GarageGoodsReceiptCommandService {
             procurementOrderLineId: l.procurementOrderLineId ?? null,
             extraData: l.extraData ?? {},
           });
-          lineEntities.push(await lineRepo.save(line));
+          lineEntities.push(line);
         }
 
-        if (dto.totalAmount === undefined) {
-          receipt.totalAmount = String(
-            this.voucherEngine.sumLineAmounts(lineEntities),
-          );
-        }
-        receipt.lines = lineEntities;
-      }
+        const calculatedTotal = this.voucherEngine.sumLineAmounts(lineEntities);
 
-      return receiptRepo.save(receipt);
-    });
+        if (order) {
+          entityFields.totalAmount = String(calculatedTotal);
+        } else if (dto.totalAmount !== undefined && dto.totalAmount !== null) {
+          entityFields.totalAmount = String(dto.totalAmount);
+        } else if (lineEntities.length > 0) {
+          entityFields.totalAmount = String(calculatedTotal);
+        }
+
+        const receipt = receiptRepo.create({
+          ...entityFields,
+          isDeleted: false,
+          extraData: dto.extraData ?? {},
+        });
+        const savedReceipt = await receiptRepo.save(receipt);
+
+        for (const line of lineEntities) {
+          line.garageGoodsReceiptId = savedReceipt.id;
+          await lineRepo.save(line);
+        }
+
+        savedReceipt.lines = lineEntities;
+        return savedReceipt;
+      },
+    );
   }
 
   /**
-   * Ghi sổ: khóa phiếu, kiểm trạng thái trên bản đã khóa, rồi nhận hàng vào đơn mua và cộng tồn
-   * trong cùng transaction. Hai lần post đồng thời cùng phiếu: lần sau đọc trạng thái POSTED và bị chặn.
+   * Sửa phiếu nháp. Khóa phiếu (pessimistic_write) rồi mới kiểm trạng thái trên bản đã khóa,
+   * để không sửa dòng sau khi một lần post đồng thời đã chuyển phiếu sang POSTED.
    */
-  async post(entity: GarageGoodsReceipt): Promise<GarageGoodsReceipt> {
-    return this.dataSource.transaction(async (manager) => {
-      const receiptRepo = manager.getRepository(GarageGoodsReceipt);
-      const lineRepo = manager.getRepository(GarageGoodsReceiptLine);
+  async update(
+    entity: GarageGoodsReceipt,
+    dto: UpdateGarageGoodsReceiptDto,
+    outerManager?: EntityManager,
+  ): Promise<GarageGoodsReceipt> {
+    this.assertExtraData(dto.extraData, dto.lines);
+    return runInOptionalTransaction(
+      this.dataSource,
+      outerManager,
+      async (manager) => {
+        const receipt = await this.lockReceipt(manager, entity.id);
+        this.voucherEngine.validateVoucherTransition(receipt.status, 'update');
 
-      const receipt = await this.lockReceipt(manager, entity.id);
-      this.voucherEngine.validateVoucherTransition(receipt.status, 'post');
+        const receiptRepo = manager.getRepository(GarageGoodsReceipt);
+        const lineRepo = manager.getRepository(GarageGoodsReceiptLine);
 
-      const lines = await lineRepo.find({
-        where: { garageGoodsReceiptId: receipt.id },
-        order: { lineNo: 'ASC' },
-      });
-      if (lines.length === 0) {
-        throw new BadRequestException('Phiếu nhập kho chưa có mặt hàng nào');
-      }
-
-      if (receipt.garageProcurementOrderId) {
-        await this.assertMatchesOrder(manager, receipt, lines);
-        await this.procurementFulfilment.applyGoodsReceipt(
-          manager,
+        const { lines: rawLines, extraData, ...rawHeader } = dto;
+        const lines =
+          rawLines === undefined
+            ? undefined
+            : await this.itemResolver.resolveLines(manager, rawLines);
+        assertOrderUnchanged(
           receipt.garageProcurementOrderId,
-          this.toFulfilmentItems(lines),
+          rawHeader.garageProcurementOrderId,
         );
-      }
+        // Phiếu đã có đơn: NCC, chi nhánh, tổng tiền do đơn/dòng quyết định, bỏ giá trị client
+        let headerDto = receipt.garageProcurementOrderId
+          ? stripOrderOwnedFields(rawHeader)
+          : rawHeader;
+        // Phiếu cũ chưa có đơn được gắn đơn lần đầu: áp NCC, chi nhánh từ đơn
+        if (
+          !receipt.garageProcurementOrderId &&
+          rawHeader.garageProcurementOrderId
+        ) {
+          const order = await loadOrderForNewReceipt(
+            manager,
+            rawHeader.garageProcurementOrderId,
+          );
+          headerDto = {
+            ...stripOrderOwnedFields(rawHeader),
+            ...receiptFieldsFromOrder(order),
+          } as typeof rawHeader;
+        }
+        const hasOrder = Boolean(
+          receipt.garageProcurementOrderId ||
+          rawHeader.garageProcurementOrderId,
+        );
+        const entityFields = toGarageGoodsReceiptEntityFields(headerDto);
+        Object.assign(receipt, entityFields);
+        if (extraData !== undefined) {
+          receipt.extraData = mergeExtraData(receipt.extraData, extraData);
+        }
 
-      await this.balances.apply(manager, receipt.branchId, this.toMoves(lines));
+        if (lines !== undefined) {
+          // Xóa các lines cũ và chèn lại
+          await lineRepo.delete({ garageGoodsReceiptId: receipt.id });
 
-      receipt.status = 'POSTED';
-      receipt.lines = lines;
-      return receiptRepo.save(receipt);
+          const lineEntities: GarageGoodsReceiptLine[] = [];
+          let lineNo = 1;
+
+          for (const l of lines) {
+            const qty = Number(l.qtyReceived || 0);
+            const cost = Number(l.unitCost || 0);
+            const amount =
+              l.amount !== undefined ? Number(l.amount) : qty * cost;
+
+            const line = lineRepo.create({
+              garageGoodsReceiptId: receipt.id,
+              lineNo: lineNo++,
+              itemCode: l.itemCode ?? undefined,
+              itemName: l.itemName,
+              unit: l.unit || 'Cái',
+              qtyReceived: String(qty),
+              unitCost: String(cost),
+              amount: String(amount),
+              notes: l.notes ?? undefined,
+              procurementOrderLineId: l.procurementOrderLineId ?? null,
+              extraData: l.extraData ?? {},
+            });
+            lineEntities.push(await lineRepo.save(line));
+          }
+
+          if (hasOrder || dto.totalAmount === undefined) {
+            receipt.totalAmount = String(
+              this.voucherEngine.sumLineAmounts(lineEntities),
+            );
+          }
+          receipt.lines = lineEntities;
+        }
+
+        return receiptRepo.save(receipt);
+      },
+    );
+  }
+
+  /** Ghi sổ qua orchestrator: đơn mua, sổ garage_stock_*, thông báo sau commit. */
+  async post(entity: GarageGoodsReceipt): Promise<GarageGoodsReceipt> {
+    return this.flow.postReceipt(entity.id);
+  }
+
+  /**
+   * Lưu nháp (tạo mới khi `id` null, sửa khi có id) rồi ghi sổ nhập kho trong MỘT transaction.
+   * Lỗi ghi sổ (vd. lệch đơn mua) rollback cả phiếu vừa lưu, không để nháp mồ côi.
+   */
+  saveAndPost(
+    id: string | null,
+    dto: CreateGarageGoodsReceiptDto | UpdateGarageGoodsReceiptDto,
+  ): Promise<GarageGoodsReceipt> {
+    return this.flow.saveAndPost(async (manager) => {
+      const saved = id
+        ? await this.update({ id } as GarageGoodsReceipt, dto, manager)
+        : await this.create(dto as CreateGarageGoodsReceiptDto, manager);
+      return { id: saved.id };
     });
   }
 
-  /** Hủy: nếu đã post thì hoàn số đã nhận trên đơn và trừ tồn, trong cùng transaction có khóa. */
+  /** Hủy qua orchestrator: đã post thì hoàn số nhận trên đơn và đảo sổ tồn. */
   async cancel(entity: GarageGoodsReceipt): Promise<GarageGoodsReceipt> {
-    return this.dataSource.transaction(async (manager) => {
-      const receiptRepo = manager.getRepository(GarageGoodsReceipt);
-      const lineRepo = manager.getRepository(GarageGoodsReceiptLine);
-
-      const receipt = await this.lockReceipt(manager, entity.id);
-      this.voucherEngine.validateVoucherTransition(receipt.status, 'cancel');
-
-      if (receipt.status === 'POSTED') {
-        const lines = await lineRepo.find({
-          where: { garageGoodsReceiptId: receipt.id },
-          order: { lineNo: 'ASC' },
-        });
-
-        if (receipt.garageProcurementOrderId) {
-          await this.procurementFulfilment.revertGoodsReceipt(
-            manager,
-            receipt.garageProcurementOrderId,
-            this.toFulfilmentItems(lines),
-          );
-        }
-        await this.balances.revert(
-          manager,
-          receipt.branchId,
-          this.toMoves(lines),
-        );
-      }
-
-      receipt.status = 'CANCELLED';
-      return receiptRepo.save(receipt);
-    });
+    return this.flow.cancelReceipt(entity.id);
   }
 
   /** Kiểm `extraData` của phiếu và các dòng trước khi mở transaction. */
@@ -266,57 +280,9 @@ export class GarageGoodsReceiptCommandService {
     return receipt;
   }
 
-  private toMoves(lines: GarageGoodsReceiptLine[]): BalanceMove[] {
-    return lines.map((line) => ({
-      itemCode: line.itemCode || line.itemName,
-      itemName: line.itemName,
-      unit: line.unit || 'Cái',
-      qty: Number(line.qtyReceived || 0),
-      cost: Number(line.unitCost || 0),
-    }));
-  }
-
   async softDelete(entity: GarageGoodsReceipt): Promise<GarageGoodsReceipt> {
     this.voucherEngine.validateVoucherTransition(entity.status, 'delete');
     entity.isDeleted = true;
     return this.repo.save(entity);
-  }
-  /** Dòng phiếu nhập gắn đơn mua phải có dòng đơn mua tương ứng và cùng chi nhánh, NCC với đơn. */
-  private async assertMatchesOrder(
-    manager: EntityManager,
-    receipt: GarageGoodsReceipt,
-    lines: GarageGoodsReceiptLine[],
-  ): Promise<void> {
-    const order = await manager.findOne(GarageProcurementOrder, {
-      where: {
-        id: receipt.garageProcurementOrderId as string,
-        isDeleted: false,
-      },
-    });
-    if (!order) {
-      throw new BadRequestException('Không tìm thấy đơn mua garage liên kết');
-    }
-    if ((receipt.branchId ?? null) !== (order.branchId ?? null)) {
-      throw new BadRequestException('Phiếu nhập khác chi nhánh với đơn mua');
-    }
-    if ((receipt.supplierId ?? null) !== (order.supplierId ?? null)) {
-      throw new BadRequestException('Phiếu nhập khác nhà cung cấp với đơn mua');
-    }
-    this.toFulfilmentItems(lines);
-  }
-
-  /** Mỗi dòng phiếu nhập phải trỏ tới một dòng đơn mua. */
-  private toFulfilmentItems(lines: GarageGoodsReceiptLine[]) {
-    return lines.map((line) => {
-      if (!line.procurementOrderLineId) {
-        throw new BadRequestException(
-          `Dòng ${line.lineNo} chưa gắn dòng đơn mua`,
-        );
-      }
-      return {
-        orderLineId: line.procurementOrderLineId,
-        qty: Number(line.qtyReceived || 0),
-      };
-    });
   }
 }

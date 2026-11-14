@@ -86,11 +86,18 @@ export abstract class BaseProcurementOrderEntity extends BaseApprovalFields {
   @Column({ type: 'text', name: 'cancel_reason', nullable: true })
   cancelReason: string | null;
 
+  @Column({ type: 'uuid', name: 'closed_by', nullable: true })
+  closedBy: string | null;
+
   @Column({ type: 'timestamptz', name: 'closed_at', nullable: true })
   closedAt: Date | null;
 
   @Column({ type: 'text', name: 'close_reason', nullable: true })
   closeReason: string | null;
+
+  /** Chứng từ gốc khi đơn này được nhân bản từ đơn đã từ chối/hủy. */
+  @Column({ type: 'uuid', name: 'cloned_from_id', nullable: true })
+  clonedFromId: string | null;
 
   @Column({ type: 'text', name: 'remarks', nullable: true })
   remarks: string | null;

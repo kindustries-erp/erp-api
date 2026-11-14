@@ -8,14 +8,17 @@ import { applyMultiKeywordMultiFieldFilter } from '@/common/utils/query-builder.
 import {
   applyDateBounds,
   applyTableFilters,
+  applyListSummaries,
   applyTableSort,
-  computeTableSummaries,
   findTableColumnOptions,
   parseFilterRecord,
+  parseSummaryKeys,
   resolveTableColumn,
+  SummaryMetric,
   TableDateRange,
   TableFilterPayload,
   TableOperatorFilter,
+  emptyOptionsPage,
   TableOptionsPage,
   TABLE_BLANK_VALUE,
 } from '@/common/utils/table-query';
@@ -45,7 +48,7 @@ export interface InvoicePageResult {
   total: number;
   page: number;
   pageSize: number;
-  summaries: Record<string, number>;
+  summaries: Record<string, SummaryMetric | null>;
 }
 
 /** Đọc dữ liệu: lọc, sắp xếp, phân trang, gợi ý giá trị cột và tổng. Chỉ đọc các dòng chưa xóa mềm. */
@@ -84,13 +87,22 @@ export class FinanceInvoiceQueryService {
       query.date_to,
       'legacy',
     );
-    applyTableSort(qb, query.sort, INVOICE_TABLE_COLUMNS, {
-      sql: 'e.invoiceDate',
-      direction: 'DESC',
-    });
+    applyTableSort(
+      qb,
+      query.sort,
+      INVOICE_TABLE_COLUMNS,
+      { sql: 'e.invoiceDate', direction: 'DESC' },
+      'e.id',
+    );
 
-    // Tổng tính trên toàn bộ dòng khớp, nên phải gọi trước khi phân trang
-    const summaries = await computeTableSummaries(qb, INVOICE_SUMMARY_COLUMNS);
+    // Tổng theo summary_keys trên toàn bộ dòng khớp, nên phải gọi trước khi phân trang
+    const summaries = await applyListSummaries(qb, {
+      columns: INVOICE_SUMMARY_COLUMNS,
+      keys: parseSummaryKeys(query.summary_keys),
+      page,
+      pageSize,
+      tieBreaker: 'e.id',
+    });
     const total = await qb.clone().getCount();
 
     // offset/limit thay cho skip/take: tránh subquery DISTINCT khi sắp xếp theo biểu thức cấn trừ
@@ -122,7 +134,7 @@ export class FinanceInvoiceQueryService {
     filters: unknown,
   ): Promise<TableOptionsPage> {
     const def = resolveTableColumn(INVOICE_TABLE_COLUMNS, column);
-    if (!def) return { items: [], total: 0, next: null };
+    if (!def) return emptyOptionsPage(page, pageSize);
 
     const qb = this.baseQuery();
     applyTableFilters(

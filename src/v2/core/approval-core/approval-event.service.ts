@@ -2,6 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { EntityManager } from 'typeorm';
 import { ApprovalEvent } from './entities/approval-event.entity';
 
+/**
+ * Đầu vào ghi nhật ký. `docType` là mã họ chứng từ, dùng chung cho PR, PO
+ * và chứng từ kho (inventory-movements-*) trong approval-core.
+ */
 export interface RecordApprovalEventInput {
   docType: string;
   docId: string;

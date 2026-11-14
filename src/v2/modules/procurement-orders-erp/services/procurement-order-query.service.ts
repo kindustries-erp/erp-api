@@ -5,9 +5,19 @@ import { ProcurementOrder } from '../entities/procurement-order.entity';
 import { ProcurementOrderLine } from '../entities/procurement-order-line.entity';
 import { ProcurementOrderAcceptance } from '../entities/procurement-order-acceptance.entity';
 import { ApprovalEvent } from '@/v2/core/approval-core/entities/approval-event.entity';
+import {
+  applyListSummaries,
+  parseSummaryKeys,
+  TableSummaryColumn,
+} from '@/common/utils/table-query';
 
 /** Mã loại chứng từ trong nhật ký duyệt. Khớp với docType của command. */
 const DOC_TYPE = 'PROCUREMENT_ORDER';
+
+/** Cột số được cộng vào `summaries` của danh sách PO erp. */
+const SUMMARY_COLUMNS: TableSummaryColumn[] = [
+  { key: 'totalAmount', sql: 'h.totalAmount' },
+];
 
 @Injectable()
 export class ProcurementOrderQueryService {
@@ -30,14 +40,25 @@ export class ProcurementOrderQueryService {
     });
   }
 
-  async list(page: number, pageSize: number) {
-    const [rows, total] = await this.headers.findAndCount({
-      where: { isDeleted: false },
-      order: { createdAt: 'DESC' },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
+  async list(page: number, pageSize: number, summaryKeys?: string) {
+    const qb = this.headers
+      .createQueryBuilder('h')
+      .where('h.isDeleted = :notDeleted', { notDeleted: false })
+      .orderBy('h.createdAt', 'DESC')
+      .addOrderBy('h.id', 'ASC');
+    // Tổng theo summary_keys trên toàn bộ dòng khớp, nên phải gọi trước khi phân trang
+    const summaries = await applyListSummaries(qb, {
+      columns: SUMMARY_COLUMNS,
+      keys: parseSummaryKeys(summaryKeys),
+      page,
+      pageSize,
+      tieBreaker: 'h.id',
     });
-    return { rows, total, page, pageSize };
+    const [rows, total] = await qb
+      .skip((page - 1) * pageSize)
+      .take(pageSize)
+      .getManyAndCount();
+    return { rows, total, page, pageSize, summaries };
   }
 
   async findOne(id: string) {

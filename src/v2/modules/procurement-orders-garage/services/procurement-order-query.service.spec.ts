@@ -36,7 +36,6 @@ describe('GarageProcurementOrderQueryService', () => {
       {} as any,
       {} as any,
       {} as any,
-      usersRepo as any,
     );
   });
 
@@ -66,25 +65,6 @@ describe('GarageProcurementOrderQueryService', () => {
       expect.stringContaining('h.totalAmount'),
       expect.any(Object),
     );
-  });
-
-  it('list trả createdByEmails tra theo một truy vấn cho các người tạo trong trang', async () => {
-    const rows = [
-      { createdBy: 'u-1' },
-      { createdBy: 'u-1' },
-      { createdBy: 'u-2' },
-    ];
-    qb.getManyAndCount.mockResolvedValueOnce([rows, 3]);
-    usersRepo.find.mockResolvedValueOnce([
-      { id: 'u-1', email: 'a@liouni.com' },
-      { id: 'u-2', email: 'b@liouni.com' },
-    ]);
-
-    const out = await service.list({ page: 1, pageSize: 20 });
-
-    expect(usersRepo.find).toHaveBeenCalledTimes(1);
-    expect(out.createdByEmails.get('u-1')).toBe('a@liouni.com');
-    expect(out.createdByEmails.get('u-2')).toBe('b@liouni.com');
   });
 
   it('list áp bộ lọc column_filters trên cột status', async () => {
@@ -124,8 +104,14 @@ describe('GarageProcurementOrderQueryService', () => {
         { label: 'Công ty A', value: 'Công ty A' },
         { label: 'Công ty B', value: 'Công ty B' },
       ],
-      total: 2,
-      next: null,
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 2,
+        totalPages: 1,
+        next: null,
+        previous: null,
+      },
     });
   });
 
@@ -139,6 +125,16 @@ describe('GarageProcurementOrderQueryService', () => {
     );
 
     expect(headersRepo.createQueryBuilder).not.toHaveBeenCalled();
-    expect(result).toEqual({ items: [], total: 0, next: null });
+    expect(result).toEqual({
+      items: [],
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 1,
+        next: null,
+        previous: null,
+      },
+    });
   });
 });

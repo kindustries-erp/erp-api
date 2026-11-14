@@ -2,7 +2,13 @@ import { Repository } from 'typeorm';
 import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
 import { QueryInvoiceDto } from '../dto/query-invoice.dto';
+import { applyListSummaries } from '@/common/utils/table-query';
 import { InvoiceQueryService } from './finance-invoice-query.service';
+
+jest.mock('@/common/utils/table-query', () => {
+  const actual = jest.requireActual('@/common/utils/table-query');
+  return { ...actual, applyListSummaries: jest.fn() };
+});
 
 describe('InvoiceQueryService', () => {
   let qb: Record<string, jest.Mock>;
@@ -144,35 +150,33 @@ describe('InvoiceQueryService', () => {
     expect(qb.andWhere).toHaveBeenCalledTimes(1);
   });
 
-  it('sums numeric columns over the filtered rows before paging', async () => {
-    qb.getRawOne.mockResolvedValue({
-      preVatAmount: 0,
-      vatRate: 0,
-      vatAmount: 0,
-      discountAmount: 0,
-      totalAmount: 0,
-      netOffAmount: 0,
-      remainingAmount: 0,
+  it('computes summaries for the requested keys through applyListSummaries, before paging', async () => {
+    const metric = { total: 900, pageSubtotal: 300, cumulative: 600 };
+    (applyListSummaries as jest.Mock).mockResolvedValueOnce({
+      totalAmount: metric,
+      unknownKey: null,
     });
 
     const result = await service.findAll({
       page: 3,
       pageSize: 10,
+      summary_keys: 'totalAmount,unknownKey',
     } as QueryInvoiceDto);
 
-    expect(qb.select).toHaveBeenCalledWith(
-      expect.stringContaining('COALESCE(SUM('),
-      expect.any(String),
+    expect(result.summaries).toEqual({ totalAmount: metric, unknownKey: null });
+    expect(applyListSummaries).toHaveBeenCalledWith(
+      qb,
+      expect.objectContaining({
+        keys: ['totalAmount', 'unknownKey'],
+        page: 3,
+        pageSize: 10,
+        tieBreaker: 'e.id',
+      }),
     );
-    expect(result.summaries).toEqual({
-      preVatAmount: 0,
-      vatRate: 0,
-      vatAmount: 0,
-      discountAmount: 0,
-      totalAmount: 0,
-      netOffAmount: 0,
-      remainingAmount: 0,
-    });
+    const summaryOrder = (applyListSummaries as jest.Mock).mock
+      .invocationCallOrder[0];
+    const offsetOrder = qb.offset.mock.invocationCallOrder[0];
+    expect(summaryOrder).toBeLessThan(offsetOrder);
   });
 
   it('finds an active row by id', async () => {

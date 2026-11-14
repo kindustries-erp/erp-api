@@ -19,7 +19,7 @@ const thinAnswers = {
   entityInput: 'GarageGoodsReceipt',
   fieldSpecInput: 'code:string:required,status:status',
   // Tên thật của module đã triển khai: truyền tường minh, không để generator suy ra từ tên thư mục.
-  tableNameInput: 'erp_garage_goods_receipts',
+  tableNameInput: 'garage_goods_receipts',
   routePathInput: 'garage-goods-receipts',
   permissionResourceInput: 'garage_goods_receipts',
   wireInput: false,
@@ -41,10 +41,17 @@ describe('buildApiThinData', () => {
     expect(data.modulePath).toBe('src/v2/modules/goods-receipts-garage');
     expect(data.moduleClass).toBe('GoodsReceiptsGarage');
     expect(data.coreBarrel).toBe('@/v2/core/goods-receipts-core');
+    // Họ sinh mới không có module lõi: module mỏng không import gì từ lõi
+    expect(data.coreModule).toBe('');
+  });
+
+  it('họ cũ còn khai báo module lõi vẫn được module mỏng import (tương thích ngược)', () => {
+    const legacy = { ...engineManifest, module: 'GoodsReceiptsCoreModule' };
+    const data = buildApiThinData(thinAnswers, legacy);
     expect(data.coreModule).toBe('GoodsReceiptsCoreModule');
     expect(data.baseEntity).toBe('BaseGoodsReceiptEntity');
     expect(data.baseCreateDto).toBe('BaseCreateGoodsReceiptDto');
-    expect(data.tableName).toBe('erp_garage_goods_receipts');
+    expect(data.tableName).toBe('garage_goods_receipts');
     expect(data.resourceKey).toBe('GARAGE_GOODS_RECEIPTS');
     expect(data.customFields.map((f) => f.name)).toEqual(['code', 'status']);
     expect(data.wire).toBe(false);
@@ -122,5 +129,24 @@ describe('đọc manifest họ', () => {
 
   it('thư mục gốc không có src/v2/core trả về danh sách rỗng', () => {
     expect(listCoreFamilies(mkdtempSync(join(tmpdir(), 'empty-')))).toEqual([]);
+  });
+});
+
+describe('lõi orchestrator và module mỏng', () => {
+  const orchestratorManifest = buildCoreManifest(
+    buildApiCoreData({ familyInput: 'procurement-flow', entityInput: 'ProcurementFlow', styleInput: 'orchestrator' }),
+  );
+
+  it('module mỏng từ chối ghép với lõi orchestrator (không có entity)', () => {
+    expect(() => buildApiThinData(thinAnswers, orchestratorManifest)).toThrow(/orchestrator/);
+  });
+
+  it('đọc được manifest orchestrator chỉ có contract và service', () => {
+    const base = mkdtempSync(join(tmpdir(), 'api-core-orch-'));
+    const dir = join(base, 'src/v2/core/procurement-flow-core');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'core.manifest.json'), JSON.stringify(orchestratorManifest));
+    expect(readCoreManifest(base, 'procurement-flow-core').style).toBe('orchestrator');
+    expect(listCoreFamilies(base)).toEqual(['procurement-flow-core']);
   });
 });

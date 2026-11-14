@@ -38,12 +38,23 @@ export function assertEditable(status: ProcurementOrderStatus): void {
   }
 }
 
+export interface ReadyToSubmitOptions {
+  /** Tên NCC gõ tự do (Garage). Chỉ dùng khi `requireSupplierId` = false. */
+  supplierName?: string | null;
+  /** Mặc định true: bắt buộc có supplierId (ERP). Garage đặt false để chấp nhận tên NCC tự do. */
+  requireSupplierId?: boolean;
+}
+
 /** Gửi duyệt phải có NCC và đơn giá ở mọi dòng. */
 export function assertReadyToSubmit(
   supplierId: string | null,
   lines: SubmitCheckLine[],
+  options: ReadyToSubmitOptions = {},
 ): void {
-  if (!supplierId) {
+  const { supplierName = null, requireSupplierId = true } = options;
+  const hasFreeTextSupplier =
+    !requireSupplierId && Boolean(supplierName?.trim());
+  if (!supplierId && !hasFreeTextSupplier) {
     throw new BadRequestException(
       'Đơn mua cần chọn nhà cung cấp trước khi gửi duyệt',
     );

@@ -15,7 +15,7 @@ import { CompanyProfile } from '../../company-profile/entities/company-profile.e
 import { ErpBranch } from '@/v2/core/branches-core/entities/erp_branch.entity';
 import { PortalFetchDto } from '../dto/portal-invoice.dto';
 import { R2Service } from '../../r2/r2.service';
-import { NotificationsService } from '../../notifications/notifications.service';
+import { NotificationsPublisherService } from '@/v2/modules/notifications-inbox';
 import { InvoiceLifecycleService } from './invoice-lifecycle.service';
 import { InvoiceBranchService } from './invoice-branch.service';
 import { readBranchIds } from '../../common/utils/branch-ids.util';
@@ -103,7 +103,7 @@ export class InvoicePortalService implements OnModuleInit {
     @InjectRepository(ErpBranch)
     private readonly branchRepository: Repository<ErpBranch>,
     private readonly r2: R2Service,
-    private readonly notificationsService: NotificationsService,
+    private readonly notificationsService: NotificationsPublisherService,
     private readonly lifecycleService: InvoiceLifecycleService,
     private readonly branchService: InvoiceBranchService,
     private readonly vinfastPartsService: VinfastPartsService,

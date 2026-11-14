@@ -7,19 +7,19 @@ import { GarageProcurementOrder } from '../entities/procurement-order.entity';
 import { GarageProcurementOrderLine } from '../entities/procurement-order-line.entity';
 import { GarageProcurementOrderAcceptance } from '../entities/procurement-order-acceptance.entity';
 import { GARAGE_PROCUREMENT_ORDER_PREFIX } from '../procurement-orders-garage.constants';
-import { CoreUser } from '../../../../users/entities/core-user.entity';
-import { resolveCreatedByEmails } from '../helpers/resolve-created-by-email';
 import {
   applyTableFilters,
+  applyListSummaries,
   applyTableSort,
   findTableColumnOptions,
-  parseFilterRecord,
+  parseListFilterPayload,
+  parseSummaryKeys,
   resolveTableColumn,
-  TableDateRange,
-  TableOperatorFilter,
+  emptyOptionsPage,
   TableOptionsPage,
 } from '@/common/utils/table-query';
 import {
+  SUMMARY_COLUMNS,
   TABLE_COLUMNS,
   toFilterPayload,
 } from '../constants/procurement-order-table.constants';
@@ -41,6 +41,8 @@ export interface GarageProcurementOrderFilter {
   column_search?: unknown;
   column_operators?: unknown;
   date_ranges?: unknown;
+  summary_keys?: string;
+  deleted?: 'only';
 }
 
 @Injectable()
@@ -55,8 +57,6 @@ export class GarageProcurementOrderQueryService {
     private readonly acceptances: Repository<GarageProcurementOrderAcceptance>,
     @InjectRepository(ApprovalEvent)
     private readonly events: Repository<ApprovalEvent>,
-    @InjectRepository(CoreUser)
-    private readonly users: Repository<CoreUser>,
   ) {}
 
   /** Nhật ký duyệt của một đơn mua Garage, theo thứ tự thời gian. */
@@ -70,7 +70,7 @@ export class GarageProcurementOrderQueryService {
   async list(filter: GarageProcurementOrderFilter) {
     const qb = this.headers
       .createQueryBuilder('h')
-      .where('h.isDeleted = :notDeleted', { notDeleted: false });
+      .where('h.isDeleted = :deleted', { deleted: filter.deleted === 'only' });
     if (filter.branchId) {
       qb.andWhere('h.branchId = :branchId', { branchId: filter.branchId });
     }
@@ -95,41 +95,35 @@ export class GarageProcurementOrderQueryService {
     }
     applyTableFilters(
       qb,
-      {
-        columnFilters: parseFilterRecord<Record<string, string[]>>(
-          filter.column_filters,
-        ),
-        columnSearch: parseFilterRecord<Record<string, string>>(
-          filter.column_search,
-        ),
-        columnOperators: parseFilterRecord<Record<string, TableOperatorFilter>>(
-          filter.column_operators,
-        ),
-        dateRanges: parseFilterRecord<Record<string, TableDateRange>>(
-          filter.date_ranges,
-        ),
-      },
+      parseListFilterPayload(filter),
       TABLE_COLUMNS,
       'filter',
     );
-    applyTableSort(qb, filter.sort, TABLE_COLUMNS, {
-      sql: 'h.createdAt',
-      direction: 'DESC',
+    applyTableSort(
+      qb,
+      filter.sort,
+      TABLE_COLUMNS,
+      { sql: 'h.createdAt', direction: 'DESC' },
+      'h.id',
+    );
+    // Tổng theo summary_keys trên toàn bộ dòng khớp, nên phải gọi trước khi phân trang
+    const summaries = await applyListSummaries(qb, {
+      columns: SUMMARY_COLUMNS,
+      keys: parseSummaryKeys(filter.summary_keys),
+      page: filter.page,
+      pageSize: filter.pageSize,
+      tieBreaker: 'h.id',
     });
     const [rows, total] = await qb
       .skip((filter.page - 1) * filter.pageSize)
       .take(filter.pageSize)
       .getManyAndCount();
-    const createdByEmails = await resolveCreatedByEmails(
-      this.users,
-      rows.map((row) => row.createdBy),
-    );
     return {
       rows,
       total,
       page: filter.page,
       pageSize: filter.pageSize,
-      createdByEmails,
+      summaries,
     };
   }
 
@@ -140,13 +134,14 @@ export class GarageProcurementOrderQueryService {
     page: number,
     pageSize: number,
     filters: unknown,
+    deleted?: 'only',
   ): Promise<TableOptionsPage> {
     const def = resolveTableColumn(TABLE_COLUMNS, column);
-    if (!def) return { items: [], total: 0, next: null };
+    if (!def) return emptyOptionsPage(page, pageSize);
 
     const qb = this.headers
       .createQueryBuilder('h')
-      .where('h.isDeleted = :notDeleted', { notDeleted: false });
+      .where('h.isDeleted = :deleted', { deleted: deleted === 'only' });
 
     applyTableFilters(
       qb,

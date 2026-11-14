@@ -79,6 +79,12 @@ export class UpdateCoreRoleDto {
 }
 
 export class CorePermissionDto {
+  @IsOptional()
+  id?: string;
+
+  @IsOptional()
+  roleId?: string;
+
   @IsString()
   resource: string;
 
@@ -87,6 +93,12 @@ export class CorePermissionDto {
 
   @IsOptional()
   conditions?: any;
+
+  @IsOptional()
+  createdAt?: any;
+
+  @IsOptional()
+  updatedAt?: any;
 }
 
 export class UpdateCoreRolePermissionsDto {

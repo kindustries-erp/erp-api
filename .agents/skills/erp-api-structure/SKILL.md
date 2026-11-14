@@ -5,6 +5,8 @@ description: Playbook cấu trúc code của erp-api (NestJS) - ngưỡng kích 
 
 # ERP API — Structure & Refactor
 
+Workflow đi kèm (cùng tên): `.agents/workflows/erp-api-structure.md`.
+
 Skill gộp hai playbook: refactor Controller/Service cũ (v1) và kiến trúc module v2. Nạp `erp-api-truth` trước để có ngữ cảnh repo, lane và rule DB.
 
 Mọi thay đổi cấu trúc chỉ làm khi user yêu cầu rõ hoặc task đã được duyệt. Scanner trong skill chỉ báo cáo, không tự sửa code.
@@ -65,7 +67,7 @@ Cấu trúc chuẩn (vd: `src/v2/modules/<module>/`):
 | DTO ra | `dto/*-response.dto.ts` | Không trả entity ra ngoài |
 | Mapper | `helpers/*.mapper.ts` | Hàm thuần, hai chiều, bỏ `undefined` khi map DTO → entity |
 | Đọc | `services/*-query.service.ts` | Chỉ đọc, lọc `isDeleted = false` |
-| Ghi | `services/*-command.service.ts` | create / update / softDelete / hardDelete (có điều kiện, xem `api-structure` Phần B mục "Chính sách xóa") |
+| Ghi | `services/*-command.service.ts` | create / update / softDelete / hardDelete (có điều kiện, xem `erp-api-structure` Phần B mục "Chính sách xóa") |
 | Facade | `<module>.service.ts` | Điều phối, throw `NotFoundException`, luôn trả response DTO |
 | Controller | `controllers/*.controller.ts` | `@RequirePermissions({ resource: ErpResource.X, action: ErpAction.* })` |
 
@@ -96,4 +98,4 @@ Chi tiết về kiểu trường (`fieldSpec`), hợp đồng HTTP, bẫy đã g
 - `references/service-controller-refactor.md`: Pattern A-E, ngưỡng, bất biến, checklist v1.
 - `references/v2-module.md`: quy ước v2, fieldSpec, hợp đồng HTTP, generator, trạng thái migrate.
 - `scripts/scan-oversized-files.ts`: scanner kích thước file và vi phạm Clean DI.
-- Workflow đầy đủ: `.agents/workflows/api-structure.md` và `.agents/workflows/api-structure.md`.
+- Workflow đầy đủ: `.agents/workflows/erp-api-structure.md` và `.agents/workflows/erp-api-structure.md`.

@@ -5,7 +5,7 @@ import { GarageProcurementOrderCommandService } from './procurement-order-comman
 
 function fakeDataSource(count: number) {
   const manager = {
-    findOne: jest.fn(async (_entity: unknown) => {
+    findOne: jest.fn(async (_entity: unknown, _opts?: unknown) => {
       return Object.assign(new GarageProcurementOrder(), {
         id: 'o1',
         status: 'DRAFT',
@@ -33,6 +33,7 @@ describe('Chặn xóa cứng của lớp con garage', () => {
       dataSource,
       {} as never,
       {} as never,
+      {} as never,
     );
 
     await expect(svc.hardDeleteDraft('o1')).rejects.toThrow(ConflictException);
@@ -48,9 +49,34 @@ describe('Chặn xóa cứng của lớp con garage', () => {
       dataSource,
       {} as never,
       {} as never,
+      {} as never,
     );
 
     await svc.hardDeleteDraft('o1');
+    expect(manager.delete).toHaveBeenCalledTimes(2);
+  });
+
+  it('PO garage đã xóa mềm vẫn xóa cứng được (khóa dòng không lọc isDeleted)', async () => {
+    const { dataSource, manager } = fakeDataSource(0);
+    manager.findOne.mockImplementationOnce(async () =>
+      Object.assign(new GarageProcurementOrder(), {
+        id: 'o1',
+        status: 'DRAFT',
+        requestId: null,
+        isDeleted: true,
+      }),
+    );
+    const svc = new GarageProcurementOrderCommandService(
+      dataSource,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    await svc.hardDeleteDraft('o1');
+    expect(manager.findOne.mock.calls[0][1]).toEqual(
+      expect.objectContaining({ where: { id: 'o1' } }),
+    );
     expect(manager.delete).toHaveBeenCalledTimes(2);
   });
 
@@ -58,6 +84,7 @@ describe('Chặn xóa cứng của lớp con garage', () => {
     const { dataSource, manager } = fakeDataSource(1);
     const svc = new GarageProcurementRequestCommandService(
       dataSource,
+      {} as never,
       {} as never,
     );
 

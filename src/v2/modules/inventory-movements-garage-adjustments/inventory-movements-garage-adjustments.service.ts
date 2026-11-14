@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { StockVoucherActor } from '@/v2/core/inventory-movements-core';
 import { StockVoucherResponseDto } from '@/v2/core/inventory-movements-core';
+import {
+  QueryStockVoucherDto,
+  StockVoucherListResponseDto,
+  toVoucherSummaryResponse,
+} from '@/v2/core/inventory-movements-core';
 import { toVoucherResponse } from '@/v2/core/inventory-movements-core';
 import { CreateInventoryMovementsGarageAdjustmentDto } from './dto/create-inventory-movements-garage-adjustment.dto';
 import { UpdateInventoryMovementsGarageAdjustmentDto } from './dto/update-inventory-movements-garage-adjustment.dto';
@@ -15,13 +20,11 @@ export class InventoryMovementsGarageAdjustmentsService {
     private readonly command: InventoryMovementsGarageAdjustmentCommandService,
   ) {}
 
-  list(params: {
-    page?: number;
-    pageSize?: number;
-    search?: string;
-    status?: string;
-  }) {
-    return this.query.findAll(params);
+  async list(
+    params: QueryStockVoucherDto,
+  ): Promise<StockVoucherListResponseDto> {
+    const { items, pagination } = await this.query.findAll(params);
+    return { items: items.map(toVoucherSummaryResponse), pagination };
   }
 
   nextVoucherNo(voucherDate?: string) {

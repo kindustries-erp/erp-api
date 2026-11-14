@@ -35,9 +35,13 @@ describe('ErpBusinessPartnerOptionsService', () => {
       pageSize: 20,
     });
 
-    expect(result.total).toBe(45);
-    expect(result.totalPages).toBe(3);
-    expect(result.page).toBe(2);
+    expect(result.pagination).toMatchObject({
+      total: 45,
+      totalPages: 3,
+      page: 2,
+      next: 3,
+      previous: 1,
+    });
     expect(result.items[0]).toEqual({
       partnerId: 'p1',
       code: 'KH-001',
@@ -71,10 +75,14 @@ describe('ErpBusinessPartnerOptionsService', () => {
       service.listOptions({ direction: 'OUT', page: 1, pageSize: 20 }),
     ).resolves.toEqual({
       items: [],
-      total: 0,
-      page: 1,
-      pageSize: 20,
-      totalPages: 0,
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 1,
+        next: null,
+        previous: null,
+      },
     });
   });
 });

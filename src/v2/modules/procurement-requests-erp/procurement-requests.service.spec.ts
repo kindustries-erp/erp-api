@@ -20,6 +20,7 @@ describe('ErpProcurementRequestsService (facade)', () => {
           remarks: null,
           submittedBy: null,
           approvedBy: 'boss',
+          approvedAt: new Date('2026-11-08T01:00:00Z'),
           rejectedBy: null,
           rejectReason: null,
           cancelReason: null,
@@ -48,6 +49,6 @@ describe('ErpProcurementRequestsService (facade)', () => {
       undefined,
     );
     expect(out.status).toBe('APPROVED');
-    expect(out.approvedBy).toBe('boss');
+    expect(out.approval.approve?.by).toBe('boss');
   });
 });

@@ -1,21 +1,26 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
+import { GarageProcurementOrder } from '@/v2/modules/procurement-orders-garage/entities/procurement-order.entity';
+import { findReverseBlockedReason } from '@/v2/modules/procurement-flow-garage/helpers/garage-receipt-flow.helper';
 import { GarageGoodsReceipt } from '../entities/garage-goods-receipt.entity';
 import { QueryGarageGoodsReceiptDto } from '../dto/query-garage-goods-receipt.dto';
 import { applyMultiKeywordMultiFieldFilter } from '@/common/utils/query-builder.util';
 import {
   applyDateBounds,
   applyTableFilters,
+  applyListSummaries,
   applyTableSort,
-  computeTableSummaries,
   findTableColumnOptions,
   parseFilterRecord,
+  parseSummaryKeys,
   resolveTableColumn,
+  SummaryMetric,
   TableColumnMap,
   TableDateRange,
   TableFilterPayload,
   TableOperatorFilter,
+  emptyOptionsPage,
   TableOptionsPage,
 } from '@/common/utils/table-query';
 
@@ -37,6 +42,15 @@ const TABLE_COLUMNS: TableColumnMap = {
   paymentStatus: { sql: 'e.paymentStatus', type: 'status' },
   payment_status: { sql: 'e.paymentStatus', type: 'status' },
   remarks: { sql: 'e.remarks', type: 'text' },
+  // Lọc phiếu theo đơn mua nguồn (lịch sử nhập kho của đơn); ép TEXT để so khớp và kiểm tra trống an toàn với uuid
+  garageProcurementOrderId: {
+    sql: 'CAST(e.garageProcurementOrderId AS TEXT)',
+    type: 'status',
+  },
+  garage_procurement_order_id: {
+    sql: 'CAST(e.garageProcurementOrderId AS TEXT)',
+    type: 'status',
+  },
 };
 
 /** Cột số được cộng vào `summaries` (tổng toàn bộ dòng khớp bộ lọc). */
@@ -52,12 +66,18 @@ const SEARCH_COLUMNS: string[] = [
   'e.remarks',
 ];
 
+/** Thông tin đơn mua hiển thị cùng phiếu nhập (số đơn, tổng tiền đơn). */
+export interface GarageReceiptOrderSummary {
+  orderNo: string;
+  totalAmount: number;
+}
+
 export interface GarageGoodsReceiptPageResult {
   items: GarageGoodsReceipt[];
   total: number;
   page: number;
   pageSize: number;
-  summaries: Record<string, number>;
+  summaries: Record<string, SummaryMetric | null>;
 }
 
 /** Đọc dữ liệu: lọc, sắp xếp, phân trang, gợi ý giá trị cột và tổng. Chỉ đọc các dòng chưa xóa mềm. */
@@ -67,6 +87,28 @@ export class GarageGoodsReceiptQueryService {
     @InjectRepository(GarageGoodsReceipt)
     private readonly repo: Repository<GarageGoodsReceipt>,
   ) {}
+
+  /** Số đơn và tổng tiền của các đơn mua được phiếu nhập tham chiếu (một truy vấn cho cả trang). */
+  async findOrderSummaries(
+    orderIds: string[],
+  ): Promise<Map<string, GarageReceiptOrderSummary>> {
+    const ids = [...new Set(orderIds.filter(Boolean))];
+    const result = new Map<string, GarageReceiptOrderSummary>();
+    if (ids.length === 0) return result;
+    const orders = await this.repo.manager
+      .getRepository(GarageProcurementOrder)
+      .find({
+        where: { id: In(ids) },
+        select: { id: true, orderNo: true, totalAmount: true },
+      });
+    for (const o of orders) {
+      result.set(o.id, {
+        orderNo: o.orderNo,
+        totalAmount: Number(o.totalAmount || 0),
+      });
+    }
+    return result;
+  }
 
   async findAll(
     query: QueryGarageGoodsReceiptDto,
@@ -93,13 +135,22 @@ export class GarageGoodsReceiptQueryService {
       query.date_to,
       'legacy',
     );
-    applyTableSort(qb, query.sort, TABLE_COLUMNS, {
-      sql: 'e.createdAt',
-      direction: 'DESC',
-    });
+    applyTableSort(
+      qb,
+      query.sort,
+      TABLE_COLUMNS,
+      { sql: 'e.createdAt', direction: 'DESC' },
+      'e.id',
+    );
 
-    // Tổng tính trên toàn bộ dòng khớp, nên phải gọi trước khi phân trang
-    const summaries = await computeTableSummaries(qb, SUMMARY_COLUMNS);
+    // Tổng theo summary_keys trên toàn bộ dòng khớp, nên phải gọi trước khi phân trang
+    const summaries = await applyListSummaries(qb, {
+      columns: SUMMARY_COLUMNS,
+      keys: parseSummaryKeys(query.summary_keys),
+      page,
+      pageSize,
+      tieBreaker: 'e.id',
+    });
 
     const [items, total] = await qb
       .skip((page - 1) * pageSize)
@@ -117,7 +168,7 @@ export class GarageGoodsReceiptQueryService {
     filters: unknown,
   ): Promise<TableOptionsPage> {
     const def = resolveTableColumn(TABLE_COLUMNS, column);
-    if (!def) return { items: [], total: 0, next: null };
+    if (!def) return emptyOptionsPage(page, pageSize);
 
     const qb = this.baseQuery();
     applyTableFilters(
@@ -128,6 +179,18 @@ export class GarageGoodsReceiptQueryService {
       column,
     );
     return findTableColumnOptions(qb, def, search, page, pageSize);
+  }
+
+  /** Lý do không hoàn nhập được phiếu đã ghi sổ; null khi hàng chưa dùng hoặc phiếu chưa POSTED. */
+  async findReverseBlockedReason(
+    entity: GarageGoodsReceipt,
+  ): Promise<string | null> {
+    if (entity.status !== 'POSTED') return null;
+    return findReverseBlockedReason(
+      this.repo.manager,
+      entity,
+      entity.lines ?? [],
+    );
   }
 
   findById(id: string): Promise<GarageGoodsReceipt | null> {

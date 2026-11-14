@@ -11,7 +11,16 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
+import {
+  QueryStockVoucherDto,
+  StockVoucherListResponseDto,
+} from '@/v2/core/inventory-movements-core';
 import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
 import { RequirePermissions } from '@/auth/decorators/require-permissions.decorator';
@@ -31,7 +40,7 @@ function actorOf(req: RequestWithUser): { id: string; roles: string[] } {
 @ApiTags('inventory-movements-garage-adjustments')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
-@Controller('inventory-movements-garage-adjustments')
+@Controller('api/v2/inventory-movements-garage-adjustments')
 export class InventoryMovementsGarageAdjustmentController {
   constructor(
     private readonly service: InventoryMovementsGarageAdjustmentsService,
@@ -42,19 +51,10 @@ export class InventoryMovementsGarageAdjustmentController {
     action: ErpAction.READ,
   })
   @ApiOperation({ summary: 'Danh sách phiếu điều chỉnh kho Garage' })
+  @ApiOkResponse({ type: StockVoucherListResponseDto })
   @Get()
-  list(
-    @Query('page') page?: string,
-    @Query('pageSize') pageSize?: string,
-    @Query('search') search?: string,
-    @Query('status') status?: string,
-  ) {
-    return this.service.list({
-      page: Number(page) || 1,
-      pageSize: Number(pageSize) || 20,
-      search,
-      status,
-    });
+  list(@Query() query: QueryStockVoucherDto) {
+    return this.service.list(query);
   }
 
   // Đường dẫn tĩnh đặt trước `:id` để không bị hiểu nhầm là UUID.

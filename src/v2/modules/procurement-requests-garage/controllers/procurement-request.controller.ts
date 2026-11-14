@@ -1,3 +1,4 @@
+import { ColumnOptionsResponseDto } from '@/common/dto/column-options-response.dto';
 import {
   Body,
   Controller,
@@ -11,7 +12,13 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
+import { PurchaseRequestListResponseDto } from '@/v2/core/procurement-requests-core/dto/procurement-request-list-response.dto';
 import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
 import { RequirePermissions } from '@/auth/decorators/require-permissions.decorator';
@@ -19,9 +26,11 @@ import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
 import { SubmitApprovalDto } from '@/v2/core/approval-core/dto/approval-action.dto';
 
 import {
+  CreateAndSubmitProcurementRequestDto,
   CreateProcurementRequestDto,
   ListProcurementRequestsDto,
   ReplaceRequestLinesDto,
+  UpdateAndSubmitProcurementRequestDto,
   UpdateProcurementRequestHeaderDto,
   ReasonBodyDto,
 } from '../dto/procurement-request.dto';
@@ -34,7 +43,7 @@ interface RequestWithUser {
 @ApiTags('procurement_requests')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
-@Controller('api/v2/garage-procurement-requests')
+@Controller('api/v2/procurement-requests-garage')
 export class GarageProcurementRequestController {
   constructor(private readonly service: GarageProcurementRequestsService) {}
 
@@ -53,8 +62,21 @@ export class GarageProcurementRequestController {
 
   @RequirePermissions({
     resource: ErpResource.GARAGE_PROCUREMENT_REQUESTS,
+    action: ErpAction.CREATE,
+  })
+  @ApiOperation({
+    summary: 'Nhân bản đề nghị đã từ chối/hủy thành nháp mới',
+  })
+  @Post(':id/clone')
+  clone(@Param('id', ParseUUIDPipe) id: string, @Req() req: RequestWithUser) {
+    return this.service.clone(id, req.user?.sub ?? '');
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_PROCUREMENT_REQUESTS,
     action: ErpAction.READ,
   })
+  @ApiOkResponse({ type: PurchaseRequestListResponseDto })
   @Get()
   list(@Query() dto: ListProcurementRequestsDto) {
     return this.service.list(dto);
@@ -67,6 +89,7 @@ export class GarageProcurementRequestController {
   @ApiOperation({
     summary: 'Gợi ý giá trị của một cột, áp dụng bộ lọc các cột khác',
   })
+  @ApiOkResponse({ type: ColumnOptionsResponseDto })
   @Get('column-options')
   columnOptions(
     @Query('column') column: string,
@@ -74,6 +97,7 @@ export class GarageProcurementRequestController {
     @Query('page') page = '1',
     @Query('pageSize') pageSize = '20',
     @Query('filters') filters?: string,
+    @Query('deleted') deleted?: string,
   ) {
     return this.service.findColumnOptions(
       column,
@@ -81,6 +105,7 @@ export class GarageProcurementRequestController {
       Math.max(1, parseInt(page, 10) || 1),
       Math.max(1, Math.min(200, parseInt(pageSize, 10) || 20)),
       filters,
+      deleted === 'only' ? 'only' : undefined,
     );
   }
 
@@ -159,6 +184,43 @@ export class GarageProcurementRequestController {
   @Delete(':id/permanent')
   hardDelete(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.hardDelete(id);
+  }
+
+  @RequirePermissions(
+    {
+      resource: ErpResource.GARAGE_PROCUREMENT_REQUESTS,
+      action: ErpAction.CREATE,
+    },
+    {
+      resource: ErpResource.GARAGE_PROCUREMENT_REQUESTS,
+      action: ErpAction.UPDATE,
+    },
+  )
+  @ApiOperation({
+    summary: 'Tạo đề nghị và gửi duyệt trong một bước (một transaction)',
+  })
+  @Post('save-and-submit')
+  createAndSubmit(
+    @Body() dto: CreateAndSubmitProcurementRequestDto,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.service.createAndSubmit(dto, req.user?.sub ?? '');
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_PROCUREMENT_REQUESTS,
+    action: ErpAction.UPDATE,
+  })
+  @ApiOperation({
+    summary: 'Cập nhật đề nghị nháp và gửi duyệt trong một bước',
+  })
+  @Patch(':id/save-and-submit')
+  updateAndSubmit(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateAndSubmitProcurementRequestDto,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.service.updateAndSubmit(id, dto, req.user?.sub ?? '');
   }
 
   @RequirePermissions({

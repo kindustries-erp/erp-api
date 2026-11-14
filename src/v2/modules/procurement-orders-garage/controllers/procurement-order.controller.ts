@@ -1,3 +1,4 @@
+import { ColumnOptionsResponseDto } from '@/common/dto/column-options-response.dto';
 import {
   Body,
   Controller,
@@ -11,7 +12,13 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
+import { GarageProcurementOrderListResponseDto } from '../dto/garage-procurement-order-list-response.dto';
 import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
 import { RequirePermissions } from '@/auth/decorators/require-permissions.decorator';
@@ -20,9 +27,11 @@ import { ReasonDto } from '@/v2/core/approval-core/reason.dto';
 import { SubmitApprovalDto } from '@/v2/core/approval-core/dto/approval-action.dto';
 import {
   AcceptServicesDto,
+  CreateAndConfirmProcurementOrderDto,
   CreateProcurementOrderDto,
   ListProcurementOrdersDto,
   ReplaceOrderLinesDto,
+  UpdateAndConfirmProcurementOrderDto,
   UpdateProcurementOrderHeaderDto,
 } from '../dto/procurement-order.dto';
 import { GarageProcurementOrdersService } from '../procurement-orders-garage.service';
@@ -34,7 +43,7 @@ interface RequestWithUser {
 @ApiTags('procurement_orders')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
-@Controller('api/v2/garage-procurement-orders')
+@Controller('api/v2/procurement-orders-garage')
 export class GarageProcurementOrderController {
   constructor(private readonly service: GarageProcurementOrdersService) {}
 
@@ -49,8 +58,19 @@ export class GarageProcurementOrderController {
 
   @RequirePermissions({
     resource: ErpResource.GARAGE_PROCUREMENT_ORDERS,
+    action: ErpAction.CREATE,
+  })
+  @ApiOperation({ summary: 'Nhân bản đơn đã từ chối/hủy thành nháp mới' })
+  @Post(':id/clone')
+  clone(@Param('id', ParseUUIDPipe) id: string, @Req() req: RequestWithUser) {
+    return this.service.clone(id, req.user?.sub ?? '');
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_PROCUREMENT_ORDERS,
     action: ErpAction.READ,
   })
+  @ApiOkResponse({ type: GarageProcurementOrderListResponseDto })
   @Get()
   list(@Query() dto: ListProcurementOrdersDto) {
     return this.service.list(dto);
@@ -73,6 +93,7 @@ export class GarageProcurementOrderController {
   @ApiOperation({
     summary: 'Gợi ý giá trị của một cột, áp dụng bộ lọc các cột khác',
   })
+  @ApiOkResponse({ type: ColumnOptionsResponseDto })
   @Get('column-options')
   columnOptions(
     @Query('column') column: string,
@@ -80,6 +101,7 @@ export class GarageProcurementOrderController {
     @Query('page') page = '1',
     @Query('pageSize') pageSize = '20',
     @Query('filters') filters?: string,
+    @Query('deleted') deleted?: string,
   ) {
     return this.service.findColumnOptions(
       column,
@@ -87,6 +109,7 @@ export class GarageProcurementOrderController {
       Math.max(1, parseInt(page, 10) || 1),
       Math.max(1, Math.min(200, parseInt(pageSize, 10) || 20)),
       filters,
+      deleted === 'only' ? 'only' : undefined,
     );
   }
 
@@ -159,6 +182,44 @@ export class GarageProcurementOrderController {
   @Get(':id/approval-events')
   approvalEvents(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.approvalEvents(id);
+  }
+
+  @RequirePermissions(
+    {
+      resource: ErpResource.GARAGE_PROCUREMENT_ORDERS,
+      action: ErpAction.CREATE,
+    },
+    {
+      resource: ErpResource.GARAGE_PROCUREMENT_ORDERS,
+      action: ErpAction.UPDATE,
+    },
+  )
+  @ApiOperation({
+    summary:
+      'Tạo đơn mua và gửi duyệt/ghi nhận trong một bước (một transaction)',
+  })
+  @Post('save-and-confirm')
+  createAndConfirm(
+    @Body() dto: CreateAndConfirmProcurementOrderDto,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.service.createAndConfirm(dto, req.user?.sub ?? '');
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_PROCUREMENT_ORDERS,
+    action: ErpAction.UPDATE,
+  })
+  @ApiOperation({
+    summary: 'Cập nhật đơn nháp và gửi duyệt/ghi nhận trong một bước',
+  })
+  @Patch(':id/save-and-confirm')
+  updateAndConfirm(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateAndConfirmProcurementOrderDto,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.service.updateAndConfirm(id, dto, req.user?.sub ?? '');
   }
 
   @RequirePermissions({

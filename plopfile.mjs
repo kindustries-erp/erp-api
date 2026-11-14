@@ -7,7 +7,7 @@ import {
   voucherWiringPlan,
 } from './plop-helpers/apiVoucherData.mjs';
 import { enumEntryExists, insertAtMarker } from './plop-helpers/apiV2Wiring.mjs';
-import { API_CORE_STYLES, buildApiCoreData } from './plop-helpers/apiCoreData.mjs';
+import { API_CORE_STYLES, ORCHESTRATOR_STYLE, buildApiCoreData } from './plop-helpers/apiCoreData.mjs';
 import { coreFileMap } from './plop-helpers/apiCoreFiles.mjs';
 import { manifestJson } from './plop-helpers/apiCoreManifest.mjs';
 import {
@@ -45,7 +45,8 @@ export default function (plop) {
 
   // 0. GENERATOR: Lõi họ V2 (src/v2/core/<họ>) kèm core.manifest.json
   plop.setGenerator('api-core', {
-    description: 'Tạo khung lõi họ V2 (src/v2/core/<họ>) kèm core.manifest.json, style engine | abstract-services',
+    description:
+      'Tạo khung lõi họ V2 (src/v2/core/<họ>) kèm core.manifest.json, style engine | abstract-services | orchestrator (điều phối nhiều module, không entity)',
     prompts: [
       {
         type: 'input',
@@ -56,7 +57,7 @@ export default function (plop) {
       {
         type: 'input',
         name: 'entityInput',
-        message: 'Entity gốc (PascalCase, vd: CustomerClaim):',
+        message: 'Entity gốc (PascalCase, vd: CustomerClaim; với orchestrator là tên luồng, vd: ProcurementFlow):',
         validate: (value) => (/^[A-Za-z][A-Za-z0-9]*$/.test(value) ? true : 'Dùng PascalCase, vd: CustomerClaim'),
       },
       {
@@ -91,8 +92,11 @@ export default function (plop) {
       {
         type: 'list',
         name: 'coreInput',
-        message: 'Chọn họ lõi có sẵn (src/v2/core/<họ>):',
-        choices: () => listCoreFamilies(plop.getDestBasePath()),
+        message: 'Chọn họ lõi có sẵn (src/v2/core/<họ>; không gồm lõi orchestrator vì không có entity):',
+        choices: () => {
+          const base = plop.getDestBasePath();
+          return listCoreFamilies(base).filter((family) => readCoreManifest(base, family).style !== ORCHESTRATOR_STYLE);
+        },
       },
       {
         type: 'input',
@@ -115,7 +119,7 @@ export default function (plop) {
       {
         type: 'input',
         name: 'tableNameInput',
-        message: 'Tên bảng PostgreSQL (để trống = erp_<module>):',
+        message: 'Tên bảng PostgreSQL (để trống = <module>; bảng thuộc module, không dùng hậu tố _core):',
         default: '',
       },
       {
@@ -197,7 +201,7 @@ export default function (plop) {
       {
         type: 'input',
         name: 'tableNameInput',
-        message: 'Tên bảng PostgreSQL (để trống = erp_<module>):',
+        message: 'Tên bảng PostgreSQL (để trống = <module>; bảng thuộc module, không dùng hậu tố _core):',
         default: '',
       },
       {
@@ -258,8 +262,8 @@ export default function (plop) {
       {
         type: 'input',
         name: 'tableName',
-        message: 'Tên bảng PostgreSQL (snake_case, vd: erp_customer_claims):',
-        default: (answers) => `erp_${answers.moduleName.replace(/-core$/, '').replace(/-/g, '_')}`,
+        message: 'Tên bảng PostgreSQL (snake_case, vd: customer_claims, không prefix erp_):',
+        default: (answers) => answers.moduleName.replace(/-core$/, '').replace(/-/g, '_'),
       },
       {
         type: 'input',
@@ -322,7 +326,7 @@ export default function (plop) {
 
   // 3. GENERATOR: API v2 module (Facade + sub-services + helpers + response DTO + spec co-located)
   plop.setGenerator('api-module-v2', {
-    description: 'Tạo module API v2 theo kiến trúc Facade + sub-services, kèm spec (xem skill api-structure)',
+    description: 'Tạo module API v2 theo kiến trúc Facade + sub-services, kèm spec (xem skill erp-api-structure)',
     prompts: [
       {
         type: 'input',
@@ -345,7 +349,7 @@ export default function (plop) {
       {
         type: 'input',
         name: 'tableNameInput',
-        message: 'Tên bảng PostgreSQL (để trống = erp_<module không -core>):',
+        message: 'Tên bảng PostgreSQL (để trống = <module không -core>, không prefix erp_):',
         default: '',
       },
       {
@@ -415,7 +419,7 @@ export default function (plop) {
       {
         type: 'input',
         name: 'tableNameInput',
-        message: 'Tên bảng PostgreSQL Header (để trống = erp_<module không -core>):',
+        message: 'Tên bảng PostgreSQL Header (để trống = <module không -core>, không prefix erp_):',
         default: '',
       },
       {
@@ -477,7 +481,7 @@ export default function (plop) {
       {
         type: 'input',
         name: 'tableName',
-        message: 'Tên bảng (snake_case, vd: erp_customer_claims):',
+        message: 'Tên bảng (snake_case, vd: customer_claims, không prefix erp_):',
         validate: (value) => (/.+/.test(value) ? true : 'Vui lòng nhập tên bảng'),
       },
     ],
