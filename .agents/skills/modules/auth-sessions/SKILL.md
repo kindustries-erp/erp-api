@@ -34,7 +34,7 @@ Mọi response `{ message, data }`, không bao giờ có `passwordHash`. Login, 
 
 `users_management` là nguồn chính. Thao tác tài khoản của auth đi qua `UsersAuthService` (module `users-management`): khóa hàng `pessimistic_write`, ghi `users_management` rồi mirror sang `core_users` trong CÙNG transaction (chỉ `core_notifications` và `core_refresh_tokens` còn FK trỏ `core_users`; `rbac_user_roles`, `table_preferences`, `notifications_inbox`, `auth_sessions` đã trỏ `users_management`). `lastLoginAt` ghi đúng một chỗ (`recordLogin`).
 
-v1 giữ nguyên hợp đồng nhưng dùng cùng service: `AuthService` (`/api/v1/auth/*`) dùng `UsersAuthService`; `register` ủy quyền `UsersManagementService.create`; `UsersAdminService` (`/api/v1/admin/users`) ủy quyền mọi thao tác ghi sang `UsersManagementService` (đọc vẫn từ bản sao `core_users`).
+v1 giữ nguyên hợp đồng nhưng dùng cùng service: `AuthService` (`/api/v1/auth/*`) dùng `UsersAuthService`; `register` ủy quyền `UsersManagementService.create`; `UsersAdminService` (`/api/v1/admin/users`, đã tắt mặc định) ủy quyền mọi thao tác ghi sang `UsersManagementService` (đọc vẫn từ bản sao `core_users`).
 
 ## 4. Migration
 
@@ -45,6 +45,14 @@ v1 giữ nguyên hợp đồng nhưng dùng cùng service: `AuthService` (`/api/
 
 - Unit: `bunx jest src/v2/modules/auth-sessions src/v2/core/auth-core src/auth src/users-admin src/v2/modules/users-management`.
 - Smoke (API đang chạy, chỉ staging/dev): `bun run test:smoke:auth-sessions` (cần `E2E_ADMIN_EMAIL`, `E2E_ADMIN_PASSWORD`; impersonate chỉ chạy khi admin là `admin@liouni.com`). Dọn `smoke-auth-<tag>-*` bằng SQL.
+
+## 5b. Ngắt V1 auth bằng cờ `ENABLE_V1_AUTH_TOKENS` (mặc định tắt)
+
+- `/api/v1/auth/login`, `/refresh`, `/impersonate` trả 410 trừ khi `ENABLE_V1_AUTH_TOKENS=true`. Lùi: đặt cờ và khởi động lại API. Không đổi DB, không xóa gì.
+- Token V1 tạo trước vẫn đổi được qua `/api/v2/auth-sessions/refresh` (`LegacyRefreshTokenExchange`, giữ đến khi token V1 hết hạn, muộn nhất 2026-12-15).
+- **Checklist deploy**: (1) kiểm log Nginx/Komodo xem còn client ngoài web gọi `/api/v1/auth/login` không; (2) deploy API và web mới **cùng một đợt** (API trước web thì web cũ mất đăng nhập); (3) theo dõi `SELECT max(created_at) FROM core_refresh_tokens` ngừng tăng.
+- Test: smoke `auth-sessions` chạy được cả hai trạng thái cờ (46/46 tắt, 50/50 bật, staging 2026-11-15). Khoảng 12 script smoke/E2E khác còn đăng nhập V1 sẽ nhận 410: đặt `ENABLE_V1_AUTH_TOKENS=true` trong `.env` local khi chạy chúng, hoặc chuyển sang login V2.
+- E2E `users-management` dùng login V2. Bước E2 có thể rớt do lệch thời điểm bắt response (`v2+0`); chạy lại là đạt.
 
 ## 6. Việc còn lại (đợt riêng, theo lệnh)
 

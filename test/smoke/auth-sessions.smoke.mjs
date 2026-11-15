@@ -287,9 +287,13 @@ const v1Login = await raw(`${V1}/auth/login`, 'POST', null, {
   email: emailA,
   password: PW2,
 });
+// Mặc định V1 phát token tắt (410, bật lại bằng ENABLE_V1_AUTH_TOKENS=true): chấp nhận 410 và bỏ qua mục I.
+const v1TokensOff = v1Login.status === 410;
 check(
-  'v1 login vẫn chạy với mật khẩu vừa đổi ở v2 (bản sao core_users)',
-  [200, 201].includes(v1Login.status),
+  v1TokensOff
+    ? 'v1 login đã ngừng (410, ENABLE_V1_AUTH_TOKENS tắt)'
+    : 'v1 login vẫn chạy với mật khẩu vừa đổi ở v2 (bản sao core_users)',
+  v1TokensOff || [200, 201].includes(v1Login.status),
   String(v1Login.status),
 );
 
@@ -325,30 +329,34 @@ await call(U, T, 'POST', `/${idB}/activate`, undefined, [200, 201]);
 await call(U, T, 'POST', `/${idB}/deactivate`, undefined, [200, 201]);
 
 // ---------- I. Đổi token v1 sang v2 một lần ----------
-const v1 = await raw(`${V1}/auth/login`, 'POST', null, {
-  email: emailA,
-  password: PW2,
-});
-const v1Refresh = v1.data?.refreshToken;
-check('có refresh token v1 để đổi', !!v1Refresh);
-const ex = await call(
-  A,
-  null,
-  'POST',
-  '/refresh',
-  { refreshToken: v1Refresh },
-  [200],
-);
-check('token v1 đổi được sang phiên v2', !!ex.data?.data?.refreshToken);
-await call(A, null, 'POST', '/refresh', { refreshToken: v1Refresh }, [401]);
-const v1Again = await raw(`${V1}/auth/refresh`, 'POST', null, {
-  refresh_token: v1Refresh,
-});
-check(
-  'token v1 đã đổi không còn dùng được ở v1',
-  v1Again.status === 401,
-  String(v1Again.status),
-);
+if (v1TokensOff) {
+  check('bỏ qua đổi token v1: v1 login đã ngừng (410)', true);
+} else {
+  const v1 = await raw(`${V1}/auth/login`, 'POST', null, {
+    email: emailA,
+    password: PW2,
+  });
+  const v1Refresh = v1.data?.refreshToken;
+  check('có refresh token v1 để đổi', !!v1Refresh);
+  const ex = await call(
+    A,
+    null,
+    'POST',
+    '/refresh',
+    { refreshToken: v1Refresh },
+    [200],
+  );
+  check('token v1 đổi được sang phiên v2', !!ex.data?.data?.refreshToken);
+  await call(A, null, 'POST', '/refresh', { refreshToken: v1Refresh }, [401]);
+  const v1Again = await raw(`${V1}/auth/refresh`, 'POST', null, {
+    refresh_token: v1Refresh,
+  });
+  check(
+    'token v1 đã đổi không còn dùng được ở v1',
+    v1Again.status === 401,
+    String(v1Again.status),
+  );
+}
 
 // ---------- J. Impersonate ----------
 if (ADMIN_EMAIL === 'admin@liouni.com') {
