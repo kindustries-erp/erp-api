@@ -28,6 +28,8 @@ Khác V1 (có chủ đích):
 - Auth v2 (đăng nhập, phiên, đổi mật khẩu, hồ sơ) xem skill `auth-sessions`; v1 (`/api/v1/auth`, `/api/v1/admin/users`) giữ hợp đồng nhưng ủy quyền sang service v2. `UsersService` v1 `@deprecated`.
 - Cutover (đợt riêng, theo lệnh): chuyển các FK sang `users_management`, rồi xóa mirror và v1.
 
+Web: trang `/erp-users` đã trỏ về V2 (page key `users-management`); trang V1 chỉ còn file cũ. Consumer V1 còn gọi `/api/v1/admin/users`: trang phân quyền V1 (`useCoreRoleUsers`). Audit timeline user dùng entity `users_management` (`/api/v2/audit-logs/users_management/:id/timeline`). Chưa xóa V1.
+
 Múi giờ: DB lưu `timestamptz` (múi giờ DB là UTC), API trả ISO, client hiển thị theo múi giờ của browser hoặc thiết bị.
 
 Kiểm thử: `bunx jest src/v2/modules/users-management src/v2/core/users-core`; smoke trên API đang chạy (không chạy trên production): `bun run test:smoke:users` (cần `E2E_ADMIN_EMAIL`, `E2E_PASSWORD`; tạo dữ liệu test tiền tố `smoke-users-` và mã nhân viên `SMK`, dọn bằng SQL sau khi chạy).
