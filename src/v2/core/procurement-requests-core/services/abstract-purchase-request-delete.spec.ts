@@ -90,6 +90,16 @@ describe('AbstractPurchaseRequestCommandService.softDeleteDraft', () => {
     expect(manager.save).toHaveBeenCalledWith(Header, header);
   });
 
+  it('không kiểm người tạo: quyền xóa do ma trận RBAC (guard) quyết định', async () => {
+    const header = makeHeader();
+    const { manager } = fakeManager(header, [makeLine()]);
+    const svc = new TestCommand(fakeDataSource(manager), events);
+
+    const out = await svc.softDeleteDraft('h1');
+
+    expect(out.isDeleted).toBe(true);
+  });
+
   it('từ chối khi không còn DRAFT và không ghi gì', async () => {
     const header = makeHeader({ status: 'PENDING_APPROVAL' });
     const { manager } = fakeManager(header, [makeLine()]);

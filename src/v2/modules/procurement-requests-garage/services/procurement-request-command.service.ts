@@ -22,6 +22,7 @@ export class GarageProcurementRequestCommandService extends AbstractPurchaseRequ
   protected readonly lineForeignKey = 'requestId' as const;
   protected readonly docType = 'GARAGE_PROCUREMENT_REQUEST';
   protected readonly numberPrefix = 'GDNM';
+  protected readonly restrictApproverToDecision = true;
 
   constructor(
     dataSource: DataSource,

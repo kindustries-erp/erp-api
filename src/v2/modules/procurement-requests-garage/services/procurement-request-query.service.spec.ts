@@ -251,4 +251,28 @@ describe('GarageProcurementRequestQueryService', () => {
       expect.stringContaining('core_users'),
     );
   });
+
+  it('findApprovalSnapshot: trả người duyệt và trạng thái của phiếu chưa xóa', async () => {
+    headersRepo.findOne.mockResolvedValue({
+      id: 'req-1',
+      approverId: 'approver-1',
+      status: 'PENDING_APPROVAL',
+    });
+
+    const snap = await service.findApprovalSnapshot('req-1');
+
+    expect(headersRepo.findOne).toHaveBeenCalledWith({
+      where: { id: 'req-1', isDeleted: false },
+    });
+    expect(snap).toEqual({
+      approverId: 'approver-1',
+      status: 'PENDING_APPROVAL',
+    });
+  });
+
+  it('findApprovalSnapshot: không tìm thấy phiếu thì trả null', async () => {
+    headersRepo.findOne.mockResolvedValue(null);
+
+    await expect(service.findApprovalSnapshot('missing')).resolves.toBeNull();
+  });
 });

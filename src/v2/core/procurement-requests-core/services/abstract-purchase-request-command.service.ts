@@ -1,8 +1,4 @@
-import {
-  ConflictException,
-  ForbiddenException,
-  NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { nextDocumentNo } from '../../../../common/numbering/document-numbering';
 import {
   DataSource,
@@ -19,6 +15,8 @@ import {
   resolveSubmitDecision,
 } from '../../approval-core/approval-gate.helper';
 import {
+  assertApproverOnlyDecides,
+  assertCreatorOnly,
   assertNotSelfApproval,
   requireReason,
   resolveTransition,
@@ -106,6 +104,8 @@ export abstract class AbstractPurchaseRequestCommandService<
   protected abstract readonly docType: string;
   /** Tiền tố số phiếu, ví dụ DNM (thường) hoặc GDNM (Garage). */
   protected abstract readonly numberPrefix: string;
+  /** Bật ở họ Garage: người duyệt được chỉ định chỉ duyệt/từ chối được (xem assertApproverOnlyDecides). */
+  protected readonly restrictApproverToDecision: boolean = false;
 
   constructor(
     protected readonly dataSource: DataSource,
@@ -132,19 +132,14 @@ export abstract class AbstractPurchaseRequestCommandService<
         const from = header.status as PurchaseRequestStatus;
         const mode = await loadApprovalMode(manager, this.docType);
 
-        if (
-          action === 'submit' &&
-          header.createdBy &&
-          header.createdBy !== actor.id
-        ) {
-          throw new ForbiddenException('Chỉ người tạo mới được gửi duyệt');
+        if (action === 'submit') {
+          assertCreatorOnly(actor.id, header.createdBy, 'gửi duyệt');
         }
-        if (
-          action === 'recall' &&
-          header.createdBy &&
-          header.createdBy !== actor.id
-        ) {
-          throw new ForbiddenException('Chỉ người tạo mới được thu hồi');
+        if (action === 'recall') {
+          assertCreatorOnly(actor.id, header.createdBy, 'thu hồi');
+        }
+        if (this.restrictApproverToDecision) {
+          assertApproverOnlyDecides(actor.id, header, action);
         }
         if (PURCHASE_REQUEST_ACTIONS_REQUIRING_APPROVER.includes(action)) {
           assertNotSelfApproval(actor.id, header.createdBy);
