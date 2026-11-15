@@ -27,6 +27,11 @@ export class GlobalAuditInterceptor implements NestInterceptor {
       [context.getHandler(), context.getClass()],
     );
 
+    // Route V1 (/api/v1/*, auth...) do `src/audit-core` ghi vào `erp_audit_logs`, v2 không ghi.
+    if (!isV2Route(url)) {
+      return next.handle();
+    }
+
     // Bỏ qua nếu tính năng Audit Log bị tắt qua cấu hình ENABLE_AUDIT_LOG=false
     if (!this.writer.isEnabled) {
       return next.handle();
@@ -154,4 +159,10 @@ export function resolveAuditModule(url: string): string {
     return parts[versionIndex + 1];
   }
   return parts[0] ?? 'UNKNOWN';
+}
+
+/** Chỉ route `/api/v2/...` được ghi vào `audit_logs`; route V1 do `src/audit-core` xử lý. */
+export function isV2Route(url: string): boolean {
+  const path = (url ?? '').split('?')[0];
+  return /(^|\/)api\/v2(\/|$)/.test(path);
 }

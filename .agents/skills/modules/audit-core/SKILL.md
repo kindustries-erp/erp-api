@@ -189,11 +189,19 @@ src/v2/modules/audit-logs/
 
 **API v2** (chỉ `JwtAuthGuard`): `GET /api/v2/audit-logs` (`{items, pagination}`), `GET /api/v2/audit-logs/column-options` (`{items, pagination}`), `GET /api/v2/audit-logs/:entityType/:entityId/timeline` (`{items}`, cũ đến mới). Route v1 đúng là `/api/v1/audit-logs-core` (các mục 4 phía trên ghi `audit-core` là sai).
 
-**Migration**: `src/migrations/20261115140000-create-audit-logs-v2.ts` tạo `audit_logs` + backfill `INSERT ... SELECT ... ON CONFLICT (id) DO NOTHING` từ `erp_audit_logs`; `down()` chỉ DROP `audit_logs`. Sau mỗi lần deploy API mới ở môi trường khác, chạy lại câu backfill để bù log phát sinh trong cửa sổ cắt chuyển.
+**Tách V1 / V2 (không dùng chung, không import chéo)**
+- V1 (`src/audit-core`, `src/audit-logs`): writer, query, interceptor, scheduler, entity `ErpAuditLog` riêng, bảng `erp_audit_logs`, route `/api/v1/audit-logs-core`. Chỉ ghi route ngoài `/api/v2`.
+- V2 (`src/v2/core/audit-core`, `src/v2/modules/audit-logs`): bảng `audit_logs`, route `/api/v2/audit-logs`. Interceptor V2 chỉ ghi route `/api/v2/*`. Caller V2 (`users-management`, `auth-sessions`) dùng `AuditWriterService` của V2, không dùng `AuditCoreService`.
+- Hai interceptor toàn cục cùng đăng ký ở `app.module.ts`, mỗi bên có `isV2Route` riêng để phân vùng. Hai bên không thấy log của nhau.
+- Guard: `src/audit-core/audit-v1-v2-isolation.spec.ts` quét import (đường dẫn phân giải thật) và fail nếu V1 import audit v2 hoặc V2 import `audit-core`/`audit-logs` của V1.
+
+**Migration**
+- `20261115140000-create-audit-logs-v2.ts`: tạo `audit_logs` + backfill từ `erp_audit_logs` (`ON CONFLICT (id) DO NOTHING`); `down()` chỉ DROP `audit_logs`. Đây là bản chuyển dữ liệu lịch sử một lần sang V2, không còn đồng bộ liên tục.
+- `20261115160000-restore-v1-audit-logs.ts`: copy ngược về `erp_audit_logs` các dòng V1 đã ghi nhầm vào `audit_logs` trong thời gian V1 ủy quyền sang v2 (không có route `/api/v2/` và `entity_type` khác `users_management`). Idempotent, `down()` không xóa dữ liệu.
 
 **Rủi ro và lưu ý**
 - **JWT-only (giữ hành vi cũ)**: ai đăng nhập cũng xem được toàn bộ nhật ký và timeline (có email, IP, snapshot). Chưa có `@RequirePermissions`. Nếu siết RBAC thì phải đổi cả v1 và v2 và báo web.
-- **Retention phụ thuộc `ENABLE_CRON`**: v1 dùng `@Cron` chạy ở mọi môi trường; v2 là `ScheduledJob` nên chỉ chạy khi `ENABLE_CRON=true`. Môi trường không đặt biến này sẽ không xóa log cũ.
+- **Retention phụ thuộc `ENABLE_CRON`**: v1 dùng `@Cron` chạy ở mọi môi trường (dọn `erp_audit_logs`); v2 là `ScheduledJob` nên chỉ chạy khi `ENABLE_CRON=true` (dọn `audit_logs`). Môi trường không đặt biến này sẽ không xóa log V2 cũ.
 - Một request đăng nhập sinh 2 dòng (`LOGIN_*` do auth service + `POST` do interceptor): hành vi từ trước, không phải ghi trùng.
-- Caller cũ (`auth`, `users-admin`, `garage-cashflow`...) vẫn gọi `AuditCoreService.recordAction`, nay đi qua writer v2.
-- Test: `bunx jest src/v2/core/audit-core src/v2/modules/audit-logs src/audit-core --forceExit`.
+- Caller V1 (`auth`, `users-admin`, `garage-cashflow`...) gọi `AuditCoreService.recordAction` và ghi vào `erp_audit_logs`; caller V2 gọi `AuditWriterService` và ghi vào `audit_logs`.
+- Test: `bunx jest src/v2/core/audit-core src/v2/modules/audit-logs src/audit-core src/audit-logs --forceExit`.

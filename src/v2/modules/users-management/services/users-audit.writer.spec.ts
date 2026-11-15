@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import type { AuditCoreService } from '@/audit-core/audit-core.service';
+import type { AuditWriterService } from '@/v2/modules/audit-logs/services/audit-writer.service';
 import type { UserAuditContext } from '../helpers/audit-context';
 import { UsersAuditWriter } from './users-audit.writer';
 
@@ -23,7 +23,7 @@ describe('UsersAuditWriter', () => {
     recordAction = jest.fn().mockResolvedValue(undefined);
     writer = new UsersAuditWriter({
       recordAction,
-    } as unknown as AuditCoreService);
+    } as unknown as AuditWriterService);
   });
 
   it('ghi đúng một dòng audit với module users, entity users_management và ngữ cảnh request', async () => {
