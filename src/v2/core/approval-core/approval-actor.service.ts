@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ErpEmployee } from '../../../employees-core/entities/erp_employee.entity';
-import { CoreUser } from '../../../users/entities/core-user.entity';
+import { UsersManagement } from '../../modules/users-management/entities/users-management.entity';
 
 export interface ApprovalActorInfo {
   /** Họ tên nhân viên liên kết; null nếu user chưa gắn hồ sơ nhân viên. */
@@ -17,8 +17,8 @@ export interface ApprovalActorInfo {
 @Injectable()
 export class ApprovalActorService {
   constructor(
-    @InjectRepository(CoreUser)
-    private readonly users: Repository<CoreUser>,
+    @InjectRepository(UsersManagement)
+    private readonly users: Repository<UsersManagement>,
   ) {}
 
   async resolve(

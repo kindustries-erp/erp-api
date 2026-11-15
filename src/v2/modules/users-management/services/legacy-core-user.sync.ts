@@ -9,8 +9,9 @@ import { UsersManagement } from '../entities/users-management.entity';
  * `users_management`.
  *
  * `users_management` là nguồn chính. `core_users` chỉ còn là bản sao một chiều, ghi trong CÙNG transaction với
- * mọi thay đổi tài khoản, vì `core_user_roles`, `core_user_table_preferences`, `core_notifications`,
- * `notifications_inbox` và `core_refresh_tokens` vẫn có khóa ngoại trỏ `core_users`. Không còn đường ghi nào
+ * mọi thay đổi tài khoản, vì `core_notifications` và `core_refresh_tokens` (v1) vẫn có khóa ngoại trỏ
+ * `core_users` (`rbac_user_roles`, `table_preferences`, `notifications_inbox`, `auth_sessions` đã trỏ
+ * `users_management`). Không còn đường ghi nào
  * khác vào `core_users` (auth v1 và trang admin v1 đều ủy quyền sang service v2).
  */
 export async function syncToLegacyCoreUser(

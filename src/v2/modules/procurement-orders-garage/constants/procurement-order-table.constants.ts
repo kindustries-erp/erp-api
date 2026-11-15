@@ -19,9 +19,9 @@ export const TABLE_COLUMNS: TableColumnMap = {
   fulfillmentStatus: { sql: 'h.fulfillmentStatus', type: 'status' },
   paymentStatus: { sql: 'h.paymentStatus', type: 'status' },
   supplierInvoiceNo: { sql: 'h.supplierInvoiceNo', type: 'text' },
-  /** Người tạo lưu uuid; lọc, sắp xếp và gợi ý đều dùng email từ core_users. */
+  /** Người tạo lưu uuid; lọc, sắp xếp và gợi ý đều dùng email từ users_management. */
   createdBy: {
-    sql: '(SELECT cu.email FROM core_users cu WHERE cu.id = h.createdBy)',
+    sql: '(SELECT cu.email FROM users_management cu WHERE cu.id = h.createdBy)',
     type: 'text',
   },
   createdAt: { sql: 'h.createdAt', type: 'date' },

@@ -248,7 +248,7 @@ describe('GarageProcurementRequestQueryService', () => {
       },
     ]);
     expect(fakeQb.andWhere).toHaveBeenCalledWith(
-      expect.stringContaining('core_users'),
+      expect.stringContaining('users_management'),
     );
   });
 

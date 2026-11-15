@@ -1,6 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { CoreUser } from '../../../users/entities/core-user.entity';
+import { UsersManagement } from '../../modules/users-management/entities/users-management.entity';
 import { ApprovalActorService } from './approval-actor.service';
 
 describe('ApprovalActorService', () => {
@@ -22,7 +22,7 @@ describe('ApprovalActorService', () => {
       providers: [
         ApprovalActorService,
         {
-          provide: getRepositoryToken(CoreUser),
+          provide: getRepositoryToken(UsersManagement),
           useValue: { createQueryBuilder },
         },
       ],

@@ -49,7 +49,7 @@ Module `erp-users` (bao gồm `src/users` và `src/users-admin`) là trung tâm 
   - Hỗ trợ gỡ liên kết an toàn (unlink employee), tự động xóa `userId` trên bảng `erp_employees`.
 - **Cấu hình Người dùng Cá nhân hóa (Preferences)**:
   - Bảng `core_user_preferences`: Lưu theme (`classic`), ngôn ngữ giao diện (`vi`), cấu hình bảng (`table_configs`), và thiết lập UI (`ui_configs`).
-  - Bảng `core_user_table_preferences`: Quản lý cấu hình cột hiển thị, thứ tự sắp xếp và các custom view của bảng dữ liệu theo từng màn hình.
+  - Bảng `table_preferences` (trước đây `core_user_table_preferences`): Quản lý cấu hình cột hiển thị, thứ tự sắp xếp và các custom view của bảng dữ liệu theo từng màn hình.
 - **Tra cứu, Lọc Đa Chiều & Infinite Scroll Column Options**:
   - Tìm kiếm tổng hợp (`search`): Tìm đồng thời trên `user.email`, `emp.fullName` và `emp.employeeCode`.
   - Lọc theo cột (`column_filters`): Hỗ trợ đa giá trị, giá trị rỗng `__BLANK__`, và tìm kiếm toàn bộ kết quả khớp `__ALL_MATCHING__`.
@@ -67,10 +67,10 @@ Module `erp-users` (bao gồm `src/users` và `src/users-admin`) là trung tâm 
 erDiagram
     core_users ||--o| erp_employees : "1-to-1 (employee_id / user_id)"
     core_users ||--o| core_user_preferences : "1-to-1 (user_id)"
-    core_users ||--o{ core_user_roles : "1-to-many (user_id)"
+    users_management ||--o{ rbac_user_roles : "1-to-many (user_id)"
     core_users ||--o{ core_refresh_tokens : "1-to-many (user_id)"
-    core_users ||--o{ core_user_table_preferences : "1-to-many (user_id)"
-    core_users ||--o{ notifications_inbox : "1-to-many (user_id)"
+    users_management ||--o{ table_preferences : "1-to-many (user_id)"
+    users_management ||--o{ notifications_inbox : "1-to-many (user_id)"
 
     core_users {
         uuid id PK
@@ -231,12 +231,12 @@ Toàn bộ các API quản trị người dùng thuộc `UsersAdminController` �
    - Tham chiếu chéo giữa `core_users.employee_id` và `erp_employees.user_id`.
    - Cho phép hiển thị thông tin nhân viên (họ tên, mã NV, phòng ban) kèm theo tài khoản trên giao diện quản trị.
 3. **`rbac-core` (Phân quyền & Vai trò)**:
-   - Bảng `core_user_roles` liên kết nhiều-nhiều giữa `core_users.id` và `core_roles.id`.
+   - Bảng `rbac_user_roles` liên kết nhiều-nhiều giữa `users_management.id` và `core_roles.id`.
    - Khi kiểm tra quyền qua `CoreRbacGuard`, hệ thống nạp các quyền từ những vai trò mà user đang nắm giữ.
 4. **`audit-core` (Kiểm toán Hệ thống)**:
    - Tiếp nhận các sự kiện thay đổi dữ liệu người dùng (`CREATE_USER`, `UPDATE_USER`, `RESET_PASSWORD`, v.v.).
 5. **`table-preferences-core` & `app-config` (Cá nhân hóa Giao diện)**:
-   - Bảng `core_user_table_preferences` và `core_user_preferences` gắn liền với `user_id`, tự động dọn dẹp theo `ON DELETE CASCADE` khi user bị xóa khỏi DB.
+   - Bảng `table_preferences` (FK `users_management`) và `core_user_preferences` gắn liền với `user_id`, tự động dọn dẹp theo `ON DELETE CASCADE` khi user bị xóa khỏi DB.
 6. **`notifications-inbox` (Hộp thư Thông báo)**:
    - Lưu trữ các thông báo gửi trực tiếp đến từng người dùng cụ thể thông qua `notifications_inbox.user_id`.
 

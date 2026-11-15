@@ -32,7 +32,7 @@ Mọi response `{ message, data }`, không bao giờ có `passwordHash`. Login, 
 
 ## 3. Nguồn dữ liệu người dùng
 
-`users_management` là nguồn chính. Thao tác tài khoản của auth đi qua `UsersAuthService` (module `users-management`): khóa hàng `pessimistic_write`, ghi `users_management` rồi mirror sang `core_users` trong CÙNG transaction (FK `core_user_roles`, `core_user_table_preferences`, `core_notifications`, `notifications_inbox`, `core_refresh_tokens` còn trỏ `core_users`). `lastLoginAt` ghi đúng một chỗ (`recordLogin`).
+`users_management` là nguồn chính. Thao tác tài khoản của auth đi qua `UsersAuthService` (module `users-management`): khóa hàng `pessimistic_write`, ghi `users_management` rồi mirror sang `core_users` trong CÙNG transaction (chỉ `core_notifications` và `core_refresh_tokens` còn FK trỏ `core_users`; `rbac_user_roles`, `table_preferences`, `notifications_inbox`, `auth_sessions` đã trỏ `users_management`). `lastLoginAt` ghi đúng một chỗ (`recordLogin`).
 
 v1 giữ nguyên hợp đồng nhưng dùng cùng service: `AuthService` (`/api/v1/auth/*`) dùng `UsersAuthService`; `register` ủy quyền `UsersManagementService.create`; `UsersAdminService` (`/api/v1/admin/users`) ủy quyền mọi thao tác ghi sang `UsersManagementService` (đọc vẫn từ bản sao `core_users`).
 
@@ -48,4 +48,4 @@ v1 giữ nguyên hợp đồng nhưng dùng cùng service: `AuthService` (`/api/
 
 ## 6. Việc còn lại (đợt riêng, theo lệnh)
 
-Chuyển FK sang `users_management` rồi xóa mirror `core_users`, `LegacyRefreshTokenExchange`, `UsersService` v1 và v1 auth.
+Đã chuyển FK sang `users_management` cho `rbac_user_roles`, `table_preferences`, `notifications_inbox` (migration `20261115120000`-`20261115120200`). Còn lại: bỏ v1 (`core_refresh_tokens`, `core_notifications`) rồi xóa mirror `core_users`, `LegacyRefreshTokenExchange`, `UsersService` v1 và v1 auth.
