@@ -389,25 +389,39 @@ const v1Create = await raw(`${V1}/admin/users`, 'POST', T, {
   email: emailC,
   password: PW1,
 });
-record(
-  'POST /api/v1/admin/users (ủy quyền sang v2)',
-  v1Create.status,
-  '200|201',
-  [200, 201].includes(v1Create.status),
-  v1Create.data?.message,
-);
+// Mặc định V1 admin tắt (410, bật lại bằng ENABLE_V1_ADMIN_USERS=true): chỉ kiểm 410 rồi bỏ qua luồng ủy quyền.
+const v1Disabled = v1Create.status === 410;
+if (v1Disabled) {
+  record(
+    'POST /api/v1/admin/users đã ngừng (410)',
+    v1Create.status,
+    '410',
+    true,
+    v1Create.data?.message,
+  );
+} else {
+  record(
+    'POST /api/v1/admin/users (ủy quyền sang v2)',
+    v1Create.status,
+    '200|201',
+    [200, 201].includes(v1Create.status),
+    v1Create.data?.message,
+  );
+}
 const idC = v1Create.data?.data?.id;
 const seenByV2 = idC ? await raw(`${U}/${idC}`, 'GET', T) : { status: 0 };
-check(
-  'user tạo qua v1 admin có ngay ở users_management',
-  seenByV2.status === 200,
-  String(seenByV2.status),
-);
-check(
-  'user tạo qua v1 admin đăng nhập được ở v2',
-  (await login(emailC, PW1)).status === 200,
-);
-if (idC) {
+if (!v1Disabled) {
+  check(
+    'user tạo qua v1 admin có ngay ở users_management',
+    seenByV2.status === 200,
+    String(seenByV2.status),
+  );
+  check(
+    'user tạo qua v1 admin đăng nhập được ở v2',
+    (await login(emailC, PW1)).status === 200,
+  );
+}
+if (idC && !v1Disabled) {
   const lg = (await login(emailC, PW1)).data?.data;
   await raw(`${V1}/admin/users/${idC}/reset-password`, 'POST', T, {
     newPassword: PW2,

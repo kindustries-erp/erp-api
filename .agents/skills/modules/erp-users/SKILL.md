@@ -25,10 +25,10 @@ Khác V1 (có chủ đích):
 - JSON filter sai định dạng trả 400 (V1 bỏ qua im lặng và trả toàn bộ).
 
 **Nguồn chính và bản sao `core_users`** (`services/legacy-core-user.sync.ts`, xóa khi cutover FK): `users_management` là nguồn chính. Mọi thao tác ghi user (users-management, auth v2, auth v1, admin v1, register v1) đi qua `UsersManagementCommandService` hoặc `UsersAuthService`, khóa hàng `pessimistic_write`, rồi mirror một chiều sang `core_users` (cùng `id`) trong CÙNG transaction, vì FK của roles, preferences, notifications, approval, `core_refresh_tokens` còn trỏ `core_users`. Không còn cơ chế kéo từ `core_users` (migration `20261115110100-reconcile-users-management` đối chiếu một lần cuối). `revokeAllUserSessions` thu hồi cả `core_refresh_tokens` và `auth_sessions`.
-- Auth v2 (đăng nhập, phiên, đổi mật khẩu, hồ sơ) xem skill `auth-sessions`; v1 (`/api/v1/auth`, `/api/v1/admin/users`) giữ hợp đồng nhưng ủy quyền sang service v2. `UsersService` v1 `@deprecated`.
+- Auth v2 (đăng nhập, phiên, đổi mật khẩu, hồ sơ) xem skill `auth-sessions`; v1 `/api/v1/auth` giữ hợp đồng, ủy quyền sang service v2. `/api/v1/admin/users` **đã tắt mặc định**: `V1AdminUsersDisabledGuard` (`src/users-admin/guards/`) trả 410 Gone; đặt `ENABLE_V1_ADMIN_USERS=true` để bật lại (code V1 giữ nguyên, khi bật vẫn ủy quyền sang v2). `UsersService` v1 `@deprecated`.
 - Cutover (đợt riêng, theo lệnh): chuyển các FK sang `users_management`, rồi xóa mirror và v1.
 
-Web: trang `/erp-users` đã trỏ về V2 (page key `users-management`); trang V1 chỉ còn file cũ. Consumer V1 còn gọi `/api/v1/admin/users`: trang phân quyền V1 (`useCoreRoleUsers`). Audit timeline user dùng entity `users_management` (`/api/v2/audit-logs/users_management/:id/timeline`). Chưa xóa V1.
+Web: trang `/erp-users` đã trỏ về V2 (page key `users-management`); trang V1 chỉ còn file cũ. Web không còn consumer runtime của `/api/v1/admin/users` (trang phân quyền V1 đã ngắt; guard test `noV1UsersApi.test.ts` bên erp-web). Audit timeline user dùng entity `users_management` (`/api/v2/audit-logs/users_management/:id/timeline`). Chưa xóa V1.
 
 Múi giờ: DB lưu `timestamptz` (múi giờ DB là UTC), API trả ISO, client hiển thị theo múi giờ của browser hoặc thiết bị.
 
