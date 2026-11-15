@@ -1,4 +1,4 @@
-import type { ErpEmployee } from '@/employees-core/entities/erp_employee.entity';
+import type { EmployeeManagement } from '@/v2/core/employees-core/entities/employee-management.entity';
 import type { UsersManagement } from '../../users-management/entities/users-management.entity';
 import type {
   AuthPreferencesDto,
@@ -25,7 +25,7 @@ export function toPreferences(p: AuthPreferencesDto): AuthPreferencesDto {
   };
 }
 
-export function toProfileEmployee(e: ErpEmployee): ProfileEmployeeDto {
+export function toProfileEmployee(e: EmployeeManagement): ProfileEmployeeDto {
   return {
     id: e.id,
     employeeCode: e.employeeCode,

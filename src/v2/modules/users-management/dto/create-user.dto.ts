@@ -36,7 +36,7 @@ export class CreateUserDto {
   password: string;
 
   @ApiPropertyOptional({
-    description: 'Id nhân viên (erp_employees) cần liên kết',
+    description: 'Id nhân viên (employees_management) cần liên kết',
   })
   @IsOptional()
   @IsUUID()

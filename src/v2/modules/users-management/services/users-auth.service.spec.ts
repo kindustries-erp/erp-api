@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import type { DataSource } from 'typeorm';
 import { CoreRefreshToken } from '@/auth/entities/core-refresh-token.entity';
-import { ErpEmployee } from '@/employees-core/entities/erp_employee.entity';
+import { EmployeeManagement } from '@/v2/core/employees-core/entities/employee-management.entity';
 import { CoreUser } from '@/users/entities/core-user.entity';
 import { hashPassword } from '@/v2/core/users-core';
 import { UsersManagement } from '../entities/users-management.entity';
@@ -40,14 +40,14 @@ describe('UsersAuthService', () => {
     };
     employeeRepo = {
       findOne: jest.fn().mockResolvedValue(null),
-      save: jest.fn((v: ErpEmployee) => Promise.resolve(v)),
+      save: jest.fn((v: EmployeeManagement) => Promise.resolve(v)),
     };
     coreUserRepo = { save: jest.fn().mockResolvedValue(undefined) };
     tokenRepo = { update: jest.fn().mockResolvedValue(undefined) };
     query = jest.fn().mockResolvedValue([]);
     const repos = new Map<unknown, unknown>([
       [UsersManagement, userRepo],
-      [ErpEmployee, employeeRepo],
+      [EmployeeManagement, employeeRepo],
       [CoreUser, coreUserRepo],
       [CoreRefreshToken, tokenRepo],
     ]);

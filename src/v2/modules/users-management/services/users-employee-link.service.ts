@@ -1,10 +1,11 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import type { EntityManager, Repository } from 'typeorm';
-import { ErpEmployee } from '@/employees-core/entities/erp_employee.entity';
+import { EmployeeManagement } from '@/v2/core/employees-core/entities/employee-management.entity';
 import { UsersManagement } from '../entities/users-management.entity';
 
 /**
@@ -19,8 +20,8 @@ export class UsersEmployeeLinkService {
     manager: EntityManager,
     user: UsersManagement,
     nextEmployeeId: string | null,
-  ): Promise<ErpEmployee | null> {
-    const repo = manager.getRepository(ErpEmployee);
+  ): Promise<EmployeeManagement | null> {
+    const repo = manager.getRepository(EmployeeManagement);
 
     if (user.employeeId && user.employeeId !== nextEmployeeId) {
       const previous = await this.lock(repo, user.employeeId);
@@ -36,9 +37,17 @@ export class UsersEmployeeLinkService {
     }
 
     const next = await this.lock(repo, nextEmployeeId);
-    if (!next) throw new NotFoundException('Không tìm thấy nhân viên');
+    if (!next || next.isDeleted) {
+      throw new NotFoundException('Không tìm thấy nhân viên');
+    }
     if (next.userId && next.userId !== user.id) {
       throw new ConflictException('Nhân viên này đã liên kết tài khoản khác');
+    }
+    // Liên kết mới chỉ với nhân viên đang làm việc; giữ nguyên liên kết sẵn có khi lưu lại
+    if (next.userId !== user.id && next.status !== 'ACTIVE') {
+      throw new BadRequestException(
+        'Nhân viên đã nghỉ việc, không thể liên kết tài khoản',
+      );
     }
     next.userId = user.id;
     if (!next.email) next.email = user.email;
@@ -48,9 +57,9 @@ export class UsersEmployeeLinkService {
   }
 
   private lock(
-    repo: Repository<ErpEmployee>,
+    repo: Repository<EmployeeManagement>,
     id: string,
-  ): Promise<ErpEmployee | null> {
+  ): Promise<EmployeeManagement | null> {
     return repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
   }
 }

@@ -13,7 +13,7 @@ V1 (`src/users`, `src/users-admin`, mục 1-7 bên dưới) giữ nguyên cho t�
 | :--- | :--- | :--- |
 | Lõi | `src/v2/core/users-core/` | `BaseUserEntity` (kế thừa `CoreSoftDeletableEntity`), `USER_STATUSES`, `normalizeEmail`, `hashPassword`/`verifyPassword` (bcrypt async, salt 10, tương thích hash V1), `parseStrictJsonParam` (JSON sai trả 400). Không có `@Entity`/`@Controller`. |
 | Module | `src/v2/modules/users-management/` | Route `/api/v2/users-management`, quyền `admin_users:manage` (`ErpResource.ADMIN_USERS`, `ErpAction.MANAGE`). |
-| Bảng | `users_management` | Migration `20261115100000-create-users-management` (tạo bảng) và `20261115100100-backfill-users-management` (copy từ `core_users`, giữ `id`). Mọi cột thời gian `timestamptz`; unique `email`; unique `employee_id` khi khác null; FK `employee_id` → `erp_employees(id)` `ON DELETE SET NULL`; CHECK `extra_data` là object; có `is_deleted`, `extra_data`. |
+| Bảng | `users_management` | Migration `20261115100000-create-users-management` (tạo bảng) và `20261115100100-backfill-users-management` (copy từ `core_users`, giữ `id`). Mọi cột thời gian `timestamptz`; unique `email`; unique `employee_id` khi khác null; FK `employee_id` → `employees_management(id)` `ON DELETE SET NULL` (đổi từ `erp_employees` bởi migration `20261115130000`; xem skill `employees-core`); CHECK `extra_data` là object; có `is_deleted`, `extra_data`. |
 
 Endpoint: `GET /` (list `{ items, pagination }`), `GET /column-options`, `GET /:id`, `POST /`, `PATCH /:id`, `POST /:id/activate|deactivate|reset-password|link-employee|unlink-employee`. Response bản ghi `{ message, data }`, không bao giờ có `passwordHash`.
 

@@ -1,11 +1,13 @@
-import type { ErpEmployee } from '@/employees-core/entities/erp_employee.entity';
+import type { EmployeeManagement } from '@/v2/core/employees-core/entities/employee-management.entity';
 import { UsersManagement } from '../entities/users-management.entity';
 import {
   UserEmployeeSummaryDto,
   UserResponseDto,
 } from '../dto/user-response.dto';
 
-function toEmployeeSummary(employee: ErpEmployee): UserEmployeeSummaryDto {
+function toEmployeeSummary(
+  employee: EmployeeManagement,
+): UserEmployeeSummaryDto {
   return {
     id: employee.id,
     fullName: employee.fullName,
@@ -19,7 +21,7 @@ function toEmployeeSummary(employee: ErpEmployee): UserEmployeeSummaryDto {
 /** Entity sang response DTO. Hàm thuần, không gọi DB, không lộ `passwordHash`. */
 export function toUserResponse(
   entity: UsersManagement,
-  employee?: ErpEmployee | null,
+  employee?: EmployeeManagement | null,
 ): UserResponseDto {
   return {
     id: entity.id,

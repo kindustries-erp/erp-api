@@ -1,4 +1,4 @@
-import type { ErpEmployee } from '@/employees-core/entities/erp_employee.entity';
+import type { EmployeeManagement } from '@/v2/core/employees-core/entities/employee-management.entity';
 import { UsersManagement } from '../entities/users-management.entity';
 import { toUserResponse } from './user.mapper';
 
@@ -42,7 +42,7 @@ describe('toUserResponse', () => {
       email: null,
       phone: '090',
       status: 'ACTIVE',
-    } as unknown as ErpEmployee;
+    } as unknown as EmployeeManagement;
     const res = toUserResponse(makeUser({ employeeId: 'e1' }), employee);
     expect(res.employee).toEqual({
       id: 'e1',

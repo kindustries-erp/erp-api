@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import type { Repository } from 'typeorm';
-import type { ErpEmployee } from '@/employees-core/entities/erp_employee.entity';
+import type { EmployeeManagement } from '@/v2/core/employees-core/entities/employee-management.entity';
 import type { UsersManagement } from '../entities/users-management.entity';
 import { UsersManagementQueryService } from './users-management-query.service';
 
@@ -22,7 +22,7 @@ describe('UsersManagementQueryService', () => {
     };
     service = new UsersManagementQueryService(
       repo as unknown as Repository<UsersManagement>,
-      employees as unknown as Repository<ErpEmployee>,
+      employees as unknown as Repository<EmployeeManagement>,
     );
   });
 

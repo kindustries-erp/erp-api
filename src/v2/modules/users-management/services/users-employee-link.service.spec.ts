@@ -1,18 +1,24 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
-import { ErpEmployee } from '@/employees-core/entities/erp_employee.entity';
+import { EmployeeManagement } from '@/v2/core/employees-core/entities/employee-management.entity';
 import { UsersManagement } from '../entities/users-management.entity';
 import { UsersEmployeeLinkService } from './users-employee-link.service';
 
-const emp = (over: Partial<ErpEmployee> = {}): ErpEmployee =>
+const emp = (over: Partial<EmployeeManagement> = {}): EmployeeManagement =>
   ({
     id: 'e1',
     userId: null,
     email: null,
     fullName: 'A',
     employeeCode: 'NV1',
+    status: 'ACTIVE',
+    isDeleted: false,
     ...over,
-  }) as ErpEmployee;
+  }) as EmployeeManagement;
 
 const user = (over: Partial<UsersManagement> = {}): UsersManagement =>
   ({ id: 'u1', email: 'a@b.co', employeeId: null, ...over }) as UsersManagement;
@@ -25,7 +31,7 @@ describe('UsersEmployeeLinkService', () => {
   beforeEach(() => {
     repo = {
       findOne: jest.fn(),
-      save: jest.fn((v: ErpEmployee) => Promise.resolve(v)),
+      save: jest.fn((v: EmployeeManagement) => Promise.resolve(v)),
     };
     manager = {
       getRepository: () => repo,
@@ -94,5 +100,28 @@ describe('UsersEmployeeLinkService', () => {
     expect(result).toBeNull();
     expect(u.employeeId).toBeNull();
     expect(previous.userId).toBeNull();
+  });
+
+  it('nhân viên đã xóa mềm trả 404', async () => {
+    repo.findOne.mockResolvedValue(emp({ isDeleted: true }));
+    await expect(service.apply(manager, user(), 'e1')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(repo.save).not.toHaveBeenCalled();
+  });
+
+  it('nhân viên INACTIVE không được liên kết mới (400)', async () => {
+    repo.findOne.mockResolvedValue(emp({ status: 'INACTIVE' }));
+    await expect(service.apply(manager, user(), 'e1')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(repo.save).not.toHaveBeenCalled();
+  });
+
+  it('lưu lại liên kết sẵn có với nhân viên đã INACTIVE vẫn được', async () => {
+    const employee = emp({ status: 'INACTIVE', userId: 'u1' });
+    repo.findOne.mockResolvedValue(employee);
+    const u = user({ employeeId: 'e1' });
+    await expect(service.apply(manager, u, 'e1')).resolves.toBe(employee);
   });
 });

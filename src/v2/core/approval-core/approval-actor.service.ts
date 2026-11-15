@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ErpEmployee } from '../../../employees-core/entities/erp_employee.entity';
+import { EmployeeManagement } from '../employees-core/entities/employee-management.entity';
 import { UsersManagement } from '../../modules/users-management/entities/users-management.entity';
 
 export interface ApprovalActorInfo {
@@ -34,7 +34,7 @@ export class ApprovalActorService {
       fullName: string | null;
     }> = await this.users
       .createQueryBuilder('u')
-      .leftJoin(ErpEmployee, 'e', 'e.id = u.employee_id')
+      .leftJoin(EmployeeManagement, 'e', 'e.id = u.employee_id')
       .select(['u.id AS id', 'u.email AS email', 'e.full_name AS "fullName"'])
       .where('u.id IN (:...ids)', { ids })
       .getRawMany();

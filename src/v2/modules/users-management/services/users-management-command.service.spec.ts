@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import type { DataSource } from 'typeorm';
 import { CoreRefreshToken } from '@/auth/entities/core-refresh-token.entity';
-import { ErpEmployee } from '@/employees-core/entities/erp_employee.entity';
+import { EmployeeManagement } from '@/v2/core/employees-core/entities/employee-management.entity';
 import { CoreUser } from '@/users/entities/core-user.entity';
 import { verifyPassword } from '@/v2/core/users-core';
 import { UsersManagement } from '../entities/users-management.entity';
@@ -72,7 +72,7 @@ describe('UsersManagementCommandService', () => {
     tokenRepo = { update: jest.fn().mockResolvedValue(undefined) };
     const repos = new Map<unknown, unknown>([
       [UsersManagement, userRepo],
-      [ErpEmployee, employeeRepo],
+      [EmployeeManagement, employeeRepo],
       [CoreUser, coreUserRepo],
       [CoreRefreshToken, tokenRepo],
     ]);

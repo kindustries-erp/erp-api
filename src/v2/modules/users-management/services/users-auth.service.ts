@@ -6,7 +6,7 @@ import {
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import type { EntityManager } from 'typeorm';
-import { ErpEmployee } from '@/employees-core/entities/erp_employee.entity';
+import { EmployeeManagement } from '@/v2/core/employees-core/entities/employee-management.entity';
 import {
   hashPassword,
   normalizeEmail,
@@ -57,10 +57,10 @@ export class UsersAuthService {
       .findOne({ where: { email: normalizeEmail(email), isDeleted: false } });
   }
 
-  getEmployee(employeeId: string | null): Promise<ErpEmployee | null> {
+  getEmployee(employeeId: string | null): Promise<EmployeeManagement | null> {
     if (!employeeId) return Promise.resolve(null);
     return this.dataSource
-      .getRepository(ErpEmployee)
+      .getRepository(EmployeeManagement)
       .findOne({ where: { id: employeeId } });
   }
 
@@ -112,7 +112,10 @@ export class UsersAuthService {
   async updateOwnProfile(
     userId: string,
     input: OwnProfileInput,
-  ): Promise<{ user: UsersManagement; employee: ErpEmployee | null } | null> {
+  ): Promise<{
+    user: UsersManagement;
+    employee: EmployeeManagement | null;
+  } | null> {
     const email = input.email ? normalizeEmail(input.email) : undefined;
     try {
       return await this.dataSource.transaction(async (manager) => {
@@ -172,13 +175,13 @@ export class UsersAuthService {
     user: UsersManagement,
     input: OwnProfileInput,
     email: string | undefined,
-  ): Promise<ErpEmployee | null> {
+  ): Promise<EmployeeManagement | null> {
     const hasFields =
       input.fullName !== undefined ||
       input.phone !== undefined ||
       input.notes !== undefined;
     const employee = user.employeeId
-      ? await manager.getRepository(ErpEmployee).findOne({
+      ? await manager.getRepository(EmployeeManagement).findOne({
           where: { id: user.employeeId },
           lock: { mode: 'pessimistic_write' },
         })
@@ -196,7 +199,7 @@ export class UsersAuthService {
     if (input.phone !== undefined) employee.phone = input.phone?.trim() || null;
     if (input.notes !== undefined) employee.notes = input.notes?.trim() || null;
     if (email) employee.email = email;
-    return manager.getRepository(ErpEmployee).save(employee);
+    return manager.getRepository(EmployeeManagement).save(employee);
   }
 
   private lock(

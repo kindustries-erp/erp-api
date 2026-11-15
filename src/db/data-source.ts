@@ -10,6 +10,7 @@ import { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.ent
 import { CoreUserRole } from '@/v2/core/rbac-core/entities/core-user-role.entity';
 import { ErpEmployee } from '../employees-core/entities/erp_employee.entity';
 import { ErpBusinessPartner } from '@/v2/core/business-partners-core';
+import { EmployeeManagement } from '@/v2/core/employees-core';
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
 import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventory_transaction.entity';
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
@@ -148,6 +149,7 @@ const entities = [
   ErpAiPromptTemplate,
   ErpEmployee,
   ErpBusinessPartner,
+  EmployeeManagement,
   ErpOperatingExpense,
   ErpInventoryItem,
   ErpInventoryTransaction,

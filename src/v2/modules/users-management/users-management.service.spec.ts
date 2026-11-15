@@ -1,5 +1,5 @@
 import { NotFoundException } from '@nestjs/common';
-import type { ErpEmployee } from '@/employees-core/entities/erp_employee.entity';
+import type { EmployeeManagement } from '@/v2/core/employees-core/entities/employee-management.entity';
 import type { UsersManagement } from './entities/users-management.entity';
 import type { UserAuditContext } from './helpers/audit-context';
 import type { UsersManagementCommandService } from './services/users-management-command.service';
@@ -61,7 +61,7 @@ describe('UsersManagementService (facade)', () => {
           'e1',
           { id: 'e1', fullName: 'A', employeeCode: 'NV1', status: 'ACTIVE' },
         ],
-      ]) as unknown as Map<string, ErpEmployee>,
+      ]) as unknown as Map<string, EmployeeManagement>,
     );
 
     const res = await service.findAll({});

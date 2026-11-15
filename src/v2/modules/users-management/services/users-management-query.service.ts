@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
-import { ErpEmployee } from '@/employees-core/entities/erp_employee.entity';
+import { EmployeeManagement } from '@/v2/core/employees-core/entities/employee-management.entity';
 import { applyMultiKeywordMultiFieldFilter } from '@/common/utils/query-builder.util';
 import {
   applyDateBounds,
@@ -56,8 +56,8 @@ export class UsersManagementQueryService {
   constructor(
     @InjectRepository(UsersManagement)
     private readonly repo: Repository<UsersManagement>,
-    @InjectRepository(ErpEmployee)
-    private readonly employees: Repository<ErpEmployee>,
+    @InjectRepository(EmployeeManagement)
+    private readonly employees: Repository<EmployeeManagement>,
   ) {}
 
   async findAll(query: QueryUserDto): Promise<UserPageResult> {
@@ -132,7 +132,7 @@ export class UsersManagementQueryService {
   /** Nhân viên theo danh sách id, trả Map để ghép vào response. */
   async findEmployeeMap(
     ids: (string | null)[],
-  ): Promise<Map<string, ErpEmployee>> {
+  ): Promise<Map<string, EmployeeManagement>> {
     const unique = [...new Set(ids.filter((id): id is string => !!id))];
     if (unique.length === 0) return new Map();
     const rows = await this.employees.find({ where: { id: In(unique) } });
@@ -142,7 +142,7 @@ export class UsersManagementQueryService {
   private baseQuery() {
     return this.repo
       .createQueryBuilder('e')
-      .leftJoin(ErpEmployee, 'emp', 'emp.id = e.employeeId')
+      .leftJoin(EmployeeManagement, 'emp', 'emp.id = e.employeeId')
       .where('e.isDeleted = :isDeleted', { isDeleted: false });
   }
 

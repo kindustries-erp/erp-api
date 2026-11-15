@@ -194,13 +194,13 @@ check('v2 giữ lastLoginAt sau khi sửa', !!after.data?.data?.lastLoginAt);
 check('extraData được merge', after.data?.data?.extraData?.smoke === tag);
 
 // ---------- D. Liên kết nhân viên và đua request ----------
-const emp = await raw(`${V1}/employees`, 'POST', T, {
-  employeeCode: `SMK${tag}`.slice(0, 20),
+const emp = await raw(`${BASE}/api/v2/employees`, 'POST', T, {
+  employeeCode: `SMK${tag}`,
   fullName: `Smoke User ${tag}`,
 });
 const empId = emp.data?.id ?? emp.data?.data?.id;
 record(
-  'POST /api/v1/employees (tạo nhân viên test)',
+  'POST /api/v2/employees (tạo nhân viên test)',
   emp.status,
   '200|201',
   [200, 201].includes(emp.status) && !!empId,
@@ -246,4 +246,4 @@ console.log(
 console.log(
   `Dữ liệu test cần dọn: email LIKE 'smoke-users-${tag}-%', mã nhân viên SMK${tag}`,
 );
-process.exit(failed.length ? 1 : 0);
+process.exitCode = failed.length ? 1 : 0;

@@ -7,7 +7,7 @@ import {
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import type { EntityManager } from 'typeorm';
-import { ErpEmployee } from '@/employees-core/entities/erp_employee.entity';
+import { EmployeeManagement } from '@/v2/core/employees-core/entities/employee-management.entity';
 import {
   assertValidExtraData,
   mergeExtraData,
@@ -215,9 +215,9 @@ export class UsersManagementCommandService {
   private loadEmployee(
     manager: EntityManager,
     employeeId: string | null,
-  ): Promise<ErpEmployee | null> {
+  ): Promise<EmployeeManagement | null> {
     if (!employeeId) return Promise.resolve(null);
-    return manager.getRepository(ErpEmployee).findOne({
+    return manager.getRepository(EmployeeManagement).findOne({
       where: { id: employeeId },
     });
   }

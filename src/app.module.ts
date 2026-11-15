@@ -14,6 +14,7 @@ import { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.ent
 import { CoreUserRole } from '@/v2/core/rbac-core/entities/core-user-role.entity';
 import { EmployeesCoreModule } from './employees-core/employees-core.module';
 import { BusinessPartnersManagementModule } from './v2/modules/business-partners-management/business-partners-management.module';
+import { EmployeesManagementModule } from './v2/modules/employees-management/employees-management.module';
 import { InventoryCoreModule } from './inventory-core/inventory-core.module';
 import { BomCoreModule } from './bom-core/bom-core.module';
 import { ModuleConfigModule } from './module-config/module-config.module';
@@ -152,6 +153,7 @@ import { AuthSessionsModule } from './v2/modules/auth-sessions/auth-sessions.mod
     AuthModule,
     EmployeesCoreModule,
     BusinessPartnersManagementModule,
+    EmployeesManagementModule,
     InventoryCoreModule,
     ErpInvoicesCoreModule,
     ErpAttachmentsCoreModule,

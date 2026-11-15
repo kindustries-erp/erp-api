@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuditCoreModule } from '@/audit-core/audit-core.module';
 import { CoreRefreshToken } from '@/auth/entities/core-refresh-token.entity';
-import { ErpEmployee } from '@/employees-core/entities/erp_employee.entity';
+import { EmployeeManagement } from '@/v2/core/employees-core/entities/employee-management.entity';
 import { CoreUser } from '@/users/entities/core-user.entity';
 import { UsersManagementController } from './controllers/users-management.controller';
 import { UsersManagement } from './entities/users-management.entity';
@@ -17,7 +17,7 @@ import { UsersManagementService } from './users-management.service';
   imports: [
     TypeOrmModule.forFeature([
       UsersManagement,
-      ErpEmployee,
+      EmployeeManagement,
       CoreUser,
       CoreRefreshToken,
     ]),
