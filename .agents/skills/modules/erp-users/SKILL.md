@@ -1,9 +1,39 @@
 ---
 name: erp-users
-description: Module tri thức Quản lý Người dùng & Tài khoản Hệ thống (ERP Users / User Management) trong erp-api (users & users-admin). Chứa toàn bộ database schema (core_users, core_user_preferences), DTOs, API endpoints, logic kiểm tra tính duy nhất email, mã hóa bcrypt, liên kết nhân viên 1-1, server-side column options infinite scroll, nhật ký kiểm toán AuditCore và tích hợp liên module toàn hệ thống.
+description: Module tri thức Quản lý Người dùng & Tài khoản Hệ thống (ERP Users / User Management) trong erp-api (V1: users & users-admin; V2: users-management + users-core, bảng users_management). Chứa toàn bộ database schema (core_users, core_user_preferences), DTOs, API endpoints, logic kiểm tra tính duy nhất email, mã hóa bcrypt, liên kết nhân viên 1-1, server-side column options infinite scroll, nhật ký kiểm toán AuditCore và tích hợp liên module toàn hệ thống.
 ---
 
 # 📦 Module Tri Thức: Quản Lý Người Dùng Hệ Thống (ERP Users) - Backend (`erp-api`)
+
+## 0. Users V2 (`users-management`) — chạy song song V1
+
+V1 (`src/users`, `src/users-admin`, mục 1-7 bên dưới) giữ nguyên cho tới khi V2 ổn và có lệnh xóa. V2 dùng bảng riêng, không dùng chung bảng với V1.
+
+| Thành phần | Vị trí | Ghi chú |
+| :--- | :--- | :--- |
+| Lõi | `src/v2/core/users-core/` | `BaseUserEntity` (kế thừa `CoreSoftDeletableEntity`), `USER_STATUSES`, `normalizeEmail`, `hashPassword`/`verifyPassword` (bcrypt async, salt 10, tương thích hash V1), `parseStrictJsonParam` (JSON sai trả 400). Không có `@Entity`/`@Controller`. |
+| Module | `src/v2/modules/users-management/` | Route `/api/v2/users-management`, quyền `admin_users:manage` (`ErpResource.ADMIN_USERS`, `ErpAction.MANAGE`). |
+| Bảng | `users_management` | Migration `20261115100000-create-users-management` (tạo bảng) và `20261115100100-backfill-users-management` (copy từ `core_users`, giữ `id`). Mọi cột thời gian `timestamptz`; unique `email`; unique `employee_id` khi khác null; FK `employee_id` → `erp_employees(id)` `ON DELETE SET NULL`; CHECK `extra_data` là object; có `is_deleted`, `extra_data`. |
+
+Endpoint: `GET /` (list `{ items, pagination }`), `GET /column-options`, `GET /:id`, `POST /`, `PATCH /:id`, `POST /:id/activate|deactivate|reset-password|link-employee|unlink-employee`. Response bản ghi `{ message, data }`, không bao giờ có `passwordHash`.
+
+Khác V1 (có chủ đích):
+- Mọi thao tác ghi chạy trong MỘT transaction, khóa hàng `pessimistic_write` (tài khoản và nhân viên): hai request đồng thời không liên kết một nhân viên cho hai tài khoản. Vi phạm unique do đua request trả 409.
+- Audit đúng một dòng cho mỗi thao tác (`CREATE_USER`, `UPDATE_USER`, `ACTIVATE_USER`, `DEACTIVATE_USER`, `RESET_PASSWORD`, `LINK_EMPLOYEE`, `UNLINK_EMPLOYEE`), ghi sau commit. Lỗi ghi audit chỉ được log, không trả 500.
+- Email chuẩn hóa chữ thường, kiểm trùng ở cả `users_management` và `core_users`. DTO chặt (`@IsEmail`, `@IsIn` status, `@IsUUID`, `ParseUUIDPipe`, mật khẩu 8-72 ký tự).
+- Admin không tự vô hiệu hóa chính mình. Vô hiệu hóa hoặc reset mật khẩu thu hồi refresh token (`core_refresh_tokens`).
+- JSON filter sai định dạng trả 400 (V1 bỏ qua im lặng và trả toàn bộ).
+
+**Adapter đồng bộ với V1** (`services/legacy-core-user.sync.ts`, xóa khi cutover): auth, RBAC, refresh token, preferences, notifications và approval vẫn trỏ `core_users`, và V1 vẫn ghi thẳng vào đó (đăng nhập ghi `last_login_at`, đổi mật khẩu ghi `password_hash`).
+- V2 ghi sang `core_users` (cùng `id`) trong cùng transaction.
+- Trước mỗi lần đọc hoặc ghi, V2 kéo thay đổi từ `core_users` về (`pullFromLegacyCoreUsers`; hai bảng lệch nghĩa là V1 vừa đổi, `core_users` là nguồn đúng) và khóa hàng `core_users`. Nhờ đó V2 không ghi đè đổi mật khẩu hay mốc đăng nhập của V1, và thấy cả tài khoản V1 tạo sau backfill.
+- Cutover (đợt riêng, theo lệnh): chuyển các FK và auth sang `users_management`, rồi xóa adapter và V1.
+
+Múi giờ: DB lưu `timestamptz` (múi giờ DB là UTC), API trả ISO, client hiển thị theo múi giờ của browser hoặc thiết bị.
+
+Kiểm thử: `bunx jest src/v2/modules/users-management src/v2/core/users-core`; smoke trên API đang chạy (không chạy trên production): `bun run test:smoke:users` (cần `E2E_ADMIN_EMAIL`, `E2E_PASSWORD`; tạo dữ liệu test tiền tố `smoke-users-` và mã nhân viên `SMK`, dọn bằng SQL sau khi chạy).
+
+---
 
 ## 1. Tổng quan Nghiệp vụ
 

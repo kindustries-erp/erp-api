@@ -74,6 +74,7 @@ import { LoansModule } from './v2/modules/loans-tool/loans.module'; // api-v2-mo
 import { ItemsGarageModule } from './v2/modules/items-garage/items-garage.module'; // api-v2-module:items-garage:app-imports
 import { AiHubGatewayModule } from './v2/modules/ai-hub-gateway/ai-hub-gateway.module'; // api-v2-module:ai-hub-gateway:app-imports
 import { AiHubGarageModule } from './v2/modules/ai-hub-garage/ai-hub-garage.module'; // api-v2-module:ai-hub-garage:app-imports
+import { UsersManagementModule } from './v2/modules/users-management/users-management.module'; // api-v2-module:users-management:app-imports
 // plop:api-v2-imports
 
 @Module({
@@ -207,6 +208,7 @@ import { AiHubGarageModule } from './v2/modules/ai-hub-garage/ai-hub-garage.modu
     ItemsGarageModule, // api-v2-module:items-garage:app-modules
     AiHubGatewayModule, // api-v2-module:ai-hub-gateway:app-modules
     AiHubGarageModule, // api-v2-module:ai-hub-garage:app-modules
+    UsersManagementModule, // api-v2-module:users-management:app-modules
     // plop:api-v2-modules
   ],
   controllers: [AppController],
