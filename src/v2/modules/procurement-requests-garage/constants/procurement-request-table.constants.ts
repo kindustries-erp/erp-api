@@ -6,10 +6,10 @@ import {
 } from '@/common/utils/table-query';
 
 const CREATED_BY_EMAIL_SQL =
-  '(SELECT cu.email FROM core_users cu WHERE cu.id = h.createdBy)';
+  '(SELECT cu.email FROM users_management cu WHERE cu.id = h.createdBy)';
 /** Người duyệt hiển thị: người đã duyệt, chưa duyệt thì người được giao. */
 const APPROVER_EMAIL_SQL =
-  '(SELECT cu.email FROM core_users cu WHERE cu.id = COALESCE(h.approvedBy, h.approverId))';
+  '(SELECT cu.email FROM users_management cu WHERE cu.id = COALESCE(h.approvedBy, h.approverId))';
 
 export const TABLE_COLUMNS: TableColumnMap = {
   createdAt: { sql: 'h.createdAt', type: 'date' },

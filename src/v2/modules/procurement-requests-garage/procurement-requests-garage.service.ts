@@ -142,6 +142,11 @@ export class GarageProcurementRequestsService {
         actorId,
       );
     }
+    // Chụp người duyệt và trạng thái trước khi chuyển, vì recall xóa approverId trên phiếu.
+    const snapshot =
+      action === 'recall' || action === 'cancel'
+        ? await this.query.findApprovalSnapshot(id)
+        : null;
     const header = await this.command.transition(
       id,
       action,
@@ -149,7 +154,18 @@ export class GarageProcurementRequestsService {
       reason,
       approverId ?? null,
     );
-    await this.notifier.afterTransition(action, header, actorId, reason);
+    await this.notifier.afterTransition(
+      action,
+      snapshot
+        ? {
+            ...header,
+            previousApproverId: snapshot.approverId,
+            previousStatus: snapshot.status,
+          }
+        : header,
+      actorId,
+      reason,
+    );
     return this.findOne(id);
   }
 

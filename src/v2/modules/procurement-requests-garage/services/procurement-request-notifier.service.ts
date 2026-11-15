@@ -13,6 +13,10 @@ export interface NotifiableRequest {
   status: string;
   createdBy: string | null;
   approverId: string | null;
+  /** Người duyệt trước khi thu hồi (recall xóa approverId trên phiếu). */
+  previousApproverId?: string | null;
+  /** Trạng thái trước khi chuyển (dùng để chỉ báo khi đang chờ duyệt). */
+  previousStatus?: string | null;
 }
 
 interface NotificationPlan {
@@ -24,6 +28,7 @@ interface NotificationPlan {
  * Thông báo cho đề nghị garage sau khi chuyển trạng thái:
  * - gửi duyệt (PENDING_APPROVAL, có người duyệt): báo người duyệt được chỉ định.
  * - duyệt / từ chối: báo người tạo phiếu.
+ * - thu hồi / hủy khi đang chờ duyệt: báo người duyệt (trước đó).
  * Khóa duyệt tắt (tự duyệt) hoặc không có người duyệt thì không gửi.
  */
 @Injectable()
@@ -103,6 +108,49 @@ export class ProcurementRequestNotifierService {
       };
     }
 
+    if (action === 'recall' || action === 'cancel') {
+      return this.planRecallOrCancel(action, header, actorId, reason, ref);
+    }
+
     return null;
+  }
+
+  /** Thu hồi / hủy chỉ báo người duyệt khi phiếu đang chờ duyệt, và không báo chính người thao tác. */
+  private planRecallOrCancel(
+    action: 'recall' | 'cancel',
+    header: NotifiableRequest,
+    actorId: string,
+    reason: string | null,
+    ref: string,
+  ): NotificationPlan | null {
+    if (header.previousStatus !== 'PENDING_APPROVAL') return null;
+    const recipient =
+      action === 'recall'
+        ? header.previousApproverId
+        : (header.approverId ?? header.previousApproverId ?? null);
+    if (!recipient || recipient === actorId) return null;
+
+    const recalled = action === 'recall';
+    return {
+      userId: recipient,
+      payload: {
+        title: recalled
+          ? 'Đề nghị mua đã được thu hồi'
+          : 'Đề nghị mua đã bị hủy',
+        message: recalled
+          ? `${ref} đã được thu hồi`
+          : `${ref} đã bị hủy${reason ? `: ${reason}` : ''}`,
+        type: recalled ? 'INFO' : 'WARNING',
+        extraData: {
+          event: recalled ? 'RECALLED' : 'CANCELLED',
+          requestNo: header.requestNo,
+        },
+        target: {
+          module: PROCUREMENT_REQUEST_GARAGE_TARGET,
+          id: header.id,
+          action: 'VIEW',
+        },
+      },
+    };
   }
 }

@@ -213,4 +213,15 @@ export class GarageProcurementRequestQueryService {
     });
     return { header, lines };
   }
+
+  /** Người duyệt và trạng thái hiện tại, dùng để chốt người nhận thông báo trước khi thu hồi/hủy. */
+  async findApprovalSnapshot(
+    id: string,
+  ): Promise<{ approverId: string | null; status: string } | null> {
+    const header = await this.headers.findOne({
+      where: { id, isDeleted: false },
+    });
+    if (!header) return null;
+    return { approverId: header.approverId, status: header.status };
+  }
 }

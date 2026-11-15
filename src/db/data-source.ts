@@ -10,6 +10,7 @@ import { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.ent
 import { CoreUserRole } from '@/v2/core/rbac-core/entities/core-user-role.entity';
 import { ErpEmployee } from '../employees-core/entities/erp_employee.entity';
 import { ErpBusinessPartner } from '@/v2/core/business-partners-core';
+import { EmployeeManagement } from '@/v2/core/employees-core';
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
 import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventory_transaction.entity';
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
@@ -43,6 +44,7 @@ import { ErpInventoryTrackingCustom } from '../inventory-core/entities/erp_inven
 import { ErpTrackingPolicy } from '../inventory-core/entities/erp_tracking_policy.entity';
 import { ErpBranch } from '../v2/core/branches-core/entities/erp_branch.entity';
 import { ErpAuditLog } from '../audit-core/entities/erp-audit-log.entity';
+import { AuditLog } from '../v2/modules/audit-logs/entities/audit-log.entity';
 import { ErpItemType } from '../inventory-core/entities/erp_item_type.entity';
 import { ErpUom } from '../inventory-core/entities/erp_uom.entity';
 import { ErpVehicle } from '../erp-mfg-core/entities/erp_vehicle.entity';
@@ -119,6 +121,8 @@ import {
 } from '@/v2/modules/loans-tool/entities'; // api-v2-module:loans:entity-imports
 import { GarageItem } from '@/v2/modules/items-garage/entities/garage-item.entity'; // api-v2-module:items-garage:entity-imports
 import { AiHubUsageLog } from '@/v2/modules/ai-hub-gateway/entities/ai-hub-usage-log.entity'; // api-v2-module:ai-hub-gateway:entity-imports
+import { UsersManagement } from '@/v2/modules/users-management/entities/users-management.entity'; // api-v2-module:users-management:entity-imports
+import { AuthSession } from '@/v2/modules/auth-sessions/entities/auth-session.entity'; // api-v2-module:auth-sessions:entity-imports
 // plop:api-v2-entity-imports
 const entities = [
   ApprovalEvent,
@@ -146,6 +150,7 @@ const entities = [
   ErpAiPromptTemplate,
   ErpEmployee,
   ErpBusinessPartner,
+  EmployeeManagement,
   ErpOperatingExpense,
   ErpInventoryItem,
   ErpInventoryTransaction,
@@ -180,6 +185,7 @@ const entities = [
   ErpTrackingPolicy,
   ErpBranch,
   ErpAuditLog,
+  AuditLog,
   ErpItemType,
   ErpUom,
   ErpVehicle,
@@ -236,6 +242,8 @@ const entities = [
   LoanPaymentEntity,
   GarageItem, // api-v2-module:items-garage:entities
   AiHubUsageLog, // api-v2-module:ai-hub-gateway:entities
+  UsersManagement, // api-v2-module:users-management:entities
+  AuthSession, // api-v2-module:auth-sessions:entities
   // plop:api-v2-entities
 ];
 

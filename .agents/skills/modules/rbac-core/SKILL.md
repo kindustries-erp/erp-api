@@ -10,7 +10,7 @@ description: Module tri thức Quản lý Phân quyền, Vai trò & RBAC Core (R
 Module Phân quyền & Vai trò Core (`rbac-core`) là hạt nhân an ninh và ủy quyền (Authorization) của ERP, quản lý toàn bộ cơ chế phân quyền dựa trên vai trò (Role-Based Access Control - RBAC) lưu trữ trực tiếp trên Core DB (PostgreSQL):
 - **Vai trò (Roles - `core_roles`)**: Nhóm các quyền hạn nghiệp vụ cụ thể (vd: Kế toán, Thủ kho, Giám đốc, Nhân viên kinh doanh). Hỗ trợ kích hoạt / ngưng hoạt động (`is_active`).
 - **Phân quyền Tài nguyên (Permissions - `core_permissions`)**: Ánh xạ cặp `(resource, action)` vào từng vai trò, kèm điều kiện tùy chọn `conditions (JSONB)`.
-- **Gán người dùng vào vai trò (User Role Assignments - `core_user_roles`)**: Cho phép một người dùng (CoreUser) sở hữu một hoặc nhiều vai trò trong hệ thống.
+- **Gán người dùng vào vai trò (User Role Assignments - `rbac_user_roles`)**: Cho phép một người dùng (`users_management`) sở hữu một hoặc nhiều vai trò trong hệ thống.
 - **Hệ thống Kiểm tra Quyền Zero-Trust**:
   - `CoreRbacGuard`: Guard toàn cục bảo vệ các Controller NestJS thông qua decorator `@RequirePermissions({ resource, action })`.
   - Hỗ trợ wildcard: `resource = '*'` (Super Admin) hoặc `action = '*'` (toàn quyền trên resource đó).
@@ -24,8 +24,8 @@ Module Phân quyền & Vai trò Core (`rbac-core`) là hạt nhân an ninh và �
 ```mermaid
 erDiagram
     core_roles ||--o{ core_permissions : "has many"
-    core_roles ||--o{ core_user_roles : "assigned to"
-    core_users ||--o{ core_user_roles : "possesses"
+    core_roles ||--o{ rbac_user_roles : "assigned to"
+    users_management ||--o{ rbac_user_roles : "possesses"
 ```
 
 ### 2.1. Bảng `core_roles` (Vai trò)
@@ -53,16 +53,16 @@ erDiagram
 
 > **Ràng buộc duy nhất**: Composite Index `(role_id, resource, action)` là unique để chống trùng lặp quyền.
 
-### 2.3. Bảng `core_user_roles` (Gán người dùng vào vai trò)
+### 2.3. Bảng `rbac_user_roles` (Gán người dùng vào vai trò; trước đây `core_user_roles`, đổi tên bằng migration `20261115120100`)
 
 | Cột | Kiểu | Nullable | Mặc định | Ghi chú |
 | :--- | :--- | :--- | :--- | :--- |
 | `id` | `uuid` | NO | `gen_random_uuid()` | Khóa chính (PK) |
-| `user_id` | `uuid` | NO | — | FK tham chiếu `core_users.id` (ON DELETE CASCADE) |
+| `user_id` | `uuid` | NO | — | FK tham chiếu `users_management.id` (ON DELETE CASCADE) |
 | `role_id` | `uuid` | NO | — | FK tham chiếu `core_roles.id` (ON DELETE CASCADE) |
 | `created_at` | `timestamptz` | NO | `now()` | Thời gian gán |
 
-> **Ràng buộc duy nhất**: Composite Index `(user_id, role_id)` là unique.
+> **Ràng buộc duy nhất**: `UQ_rbac_user_roles_user_role` trên `(user_id, role_id)`. Xóa cứng, không có `is_deleted`. `core_roles` và `core_permissions` vẫn mang tiền tố `core_` (chưa đổi tên).
 
 ---
 
@@ -79,7 +79,7 @@ erp-api/src/v2/core/rbac-core/                       # Lõi họ rbac (@Global)
 ├── entities/
 │   ├── core-role.entity.ts           # Entity bảng core_roles (xóa cứng, không có is_deleted)
 │   ├── core-permission.entity.ts     # Entity bảng core_permissions
-│   └── core-user-role.entity.ts      # Entity bảng core_user_roles
+│   └── core-user-role.entity.ts      # Entity bảng rbac_user_roles
 ├── helpers/
 │   └── permission-match.helper.ts    # checkPermissionMatch: hàm thuần, wildcard * / SUPER_ADMIN / ALL
 ├── services/

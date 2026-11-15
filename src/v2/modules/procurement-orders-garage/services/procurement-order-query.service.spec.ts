@@ -39,7 +39,7 @@ describe('GarageProcurementOrderQueryService', () => {
     );
   });
 
-  it('list lọc createdBy theo email trong core_users, không theo uuid', async () => {
+  it('list lọc createdBy theo email trong users_management, không theo uuid', async () => {
     await service.list({
       page: 1,
       pageSize: 20,
@@ -47,7 +47,7 @@ describe('GarageProcurementOrderQueryService', () => {
     });
 
     expect(qb.andWhere).toHaveBeenCalledWith(
-      expect.stringContaining('core_users'),
+      expect.stringContaining('users_management'),
       expect.any(Object),
     );
   });

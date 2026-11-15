@@ -10,7 +10,7 @@ description: Quy trình E2E/smoke cho erp-api. Gồm jest e2e (`*.e2e-spec.ts`, 
 | Loại | Lệnh | Yêu cầu |
 |---|---|---|
 | Jest e2e (`test/*.e2e-spec.ts`, cấu hình `test/jest-e2e.json`) | `bun run test:e2e` | Boot app qua Nest testing module, cần DB test |
-| Smoke trên API đang chạy (`test/smoke/*.smoke.mjs`) | `bun run test:smoke:clone`, `bun run test:smoke:procurement`, `bun run test:smoke:save-and-act` (orchestration save-and-submit/confirm/post, rollback, hoàn nhập) | API đang chạy ở `E2E_API_URL`, DB đúng, tài khoản test |
+| Smoke trên API đang chạy (`test/smoke/*.smoke.mjs`) | `bun run test:smoke:clone`, `bun run test:smoke:procurement`, `bun run test:smoke:save-and-act` (orchestration save-and-submit/confirm/post, rollback, hoàn nhập), `bun run test:smoke:users` (users-management V2, tiền tố `smoke-users-`), `bun run test:smoke:auth-sessions` (auth V2 `/api/v2/auth-sessions`: login, refresh xoay vòng, dùng lại token thu hồi, đua refresh, đổi mật khẩu/ngưng tài khoản thu hồi phiên, đổi token v1 sang v2, impersonate, v1 admin ghi qua v2; cần `E2E_ADMIN_EMAIL`, `E2E_ADMIN_PASSWORD`, dọn `smoke-auth-<tag>-*` bằng SQL) | API đang chạy ở `E2E_API_URL`, DB đúng, tài khoản test |
 
 Unit test (`bunx jest --forceExit`, hoặc scope hẹp `bunx jest --forceExit procurement`) vẫn là lớp kiểm tra chính trước commit.
 

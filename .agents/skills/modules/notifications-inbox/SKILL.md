@@ -29,7 +29,7 @@ description: Module backend thông báo theo user (v2) tại /api/v2/notificatio
 | Cột | Kiểu | Ghi chú |
 | :--- | :--- | :--- |
 | `id` | uuid | PK |
-| `user_id` | uuid NOT NULL | FK `core_users` ON DELETE CASCADE. Mỗi dòng thuộc đúng một user |
+| `user_id` | uuid NOT NULL | FK `users_management` ON DELETE CASCADE (migration `20261115120000`). Mỗi dòng thuộc đúng một user |
 | `title` / `message` | varchar(255) / text | |
 | `type` | varchar(20), mặc định `INFO` | `INFO`, `WARNING`, `ERROR`, `SUCCESS` |
 | `is_read` / `read_at` | bool / timestamptz null | |

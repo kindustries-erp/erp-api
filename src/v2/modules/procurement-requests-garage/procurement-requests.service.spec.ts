@@ -68,6 +68,49 @@ describe('GarageProcurementRequestsService (facade)', () => {
     );
   });
 
+  it('thu hồi: chụp người duyệt và trạng thái trước khi chuyển, truyền cho notifier', async () => {
+    const snapshot = {
+      findApprovalSnapshot: jest.fn().mockResolvedValue({
+        approverId: 'approver-1',
+        status: 'PENDING_APPROVAL',
+      }),
+      findOne: jest.fn().mockResolvedValue({ header: {}, lines: [] }),
+    };
+    const command = {
+      transition: jest
+        .fn()
+        .mockResolvedValue({ id: 'h1', requestNo: 'GDNM-1', approverId: null }),
+    };
+    const notifier = {
+      afterTransition: jest.fn().mockResolvedValue(undefined),
+    };
+    const svc = new GarageProcurementRequestsService(
+      command as never,
+      snapshot as never,
+      { getUserRoleNames: jest.fn().mockResolvedValue([]) } as never,
+      { resolve: jest.fn().mockResolvedValue(new Map()) } as never,
+      { assertEligible: jest.fn() } as never,
+      notifier as never,
+      {} as never,
+      {} as never,
+    );
+
+    await svc.transition('h1', 'recall', 'creator');
+
+    expect(snapshot.findApprovalSnapshot).toHaveBeenCalledWith('h1');
+    expect(notifier.afterTransition).toHaveBeenCalledWith(
+      'recall',
+      expect.objectContaining({
+        id: 'h1',
+        approverId: null,
+        previousApproverId: 'approver-1',
+        previousStatus: 'PENDING_APPROVAL',
+      }),
+      'creator',
+      undefined,
+    );
+  });
+
   it('không gửi thông báo khi chuyển trạng thái thất bại', async () => {
     const command = {
       transition: jest.fn().mockRejectedValue(new Error('khóa')),
@@ -89,6 +132,27 @@ describe('GarageProcurementRequestsService (facade)', () => {
     ).rejects.toThrow('khóa');
     expect(notifier.afterTransition).not.toHaveBeenCalled();
   });
+  it('xóa mềm: gọi lõi với id, không kiểm người tạo ở tầng facade', async () => {
+    const command = {
+      softDeleteDraft: jest.fn().mockResolvedValue({}),
+    };
+    const svc = new GarageProcurementRequestsService(
+      command as never,
+      {} as never,
+      {} as never,
+      { resolve: jest.fn().mockResolvedValue(new Map()) } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    await expect(svc.softDelete('h1')).resolves.toEqual({
+      id: 'h1',
+    });
+    expect(command.softDeleteDraft).toHaveBeenCalledWith('h1');
+  });
+
   describe('createAndSubmit / updateAndSubmit (orchestrator)', () => {
     const build = (flow: { saveAndSubmit: jest.Mock }) => {
       const notifier = {

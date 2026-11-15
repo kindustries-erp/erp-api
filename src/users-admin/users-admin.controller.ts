@@ -22,11 +22,12 @@ import {
   ResetPasswordAdminDto,
   UpdateUserAdminDto,
 } from './dto/user-admin.dto';
+import { V1AdminUsersDisabledGuard } from './guards/v1-admin-users-disabled.guard';
 import { UsersAdminService } from './users-admin.service';
 
 @ApiTags('admin-users')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, CoreRbacGuard)
+@UseGuards(V1AdminUsersDisabledGuard, JwtAuthGuard, CoreRbacGuard)
 @RequirePermissions({
   resource: ErpResource.ADMIN_USERS,
   action: ErpAction.MANAGE,
