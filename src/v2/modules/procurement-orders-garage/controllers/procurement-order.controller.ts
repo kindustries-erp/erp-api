@@ -1,3 +1,4 @@
+import { ColumnOptionsResponseDto } from '@/common/dto/column-options-response.dto';
 import {
   Body,
   Controller,
@@ -26,9 +27,11 @@ import { ReasonDto } from '@/v2/core/approval-core/reason.dto';
 import { SubmitApprovalDto } from '@/v2/core/approval-core/dto/approval-action.dto';
 import {
   AcceptServicesDto,
+  CreateAndConfirmProcurementOrderDto,
   CreateProcurementOrderDto,
   ListProcurementOrdersDto,
   ReplaceOrderLinesDto,
+  UpdateAndConfirmProcurementOrderDto,
   UpdateProcurementOrderHeaderDto,
 } from '../dto/procurement-order.dto';
 import { GarageProcurementOrdersService } from '../procurement-orders-garage.service';
@@ -51,6 +54,16 @@ export class GarageProcurementOrderController {
   @Post()
   create(@Body() dto: CreateProcurementOrderDto, @Req() req: RequestWithUser) {
     return this.service.create(dto, req.user?.sub ?? '');
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_PROCUREMENT_ORDERS,
+    action: ErpAction.CREATE,
+  })
+  @ApiOperation({ summary: 'Nhân bản đơn đã từ chối/hủy thành nháp mới' })
+  @Post(':id/clone')
+  clone(@Param('id', ParseUUIDPipe) id: string, @Req() req: RequestWithUser) {
+    return this.service.clone(id, req.user?.sub ?? '');
   }
 
   @RequirePermissions({
@@ -80,6 +93,7 @@ export class GarageProcurementOrderController {
   @ApiOperation({
     summary: 'Gợi ý giá trị của một cột, áp dụng bộ lọc các cột khác',
   })
+  @ApiOkResponse({ type: ColumnOptionsResponseDto })
   @Get('column-options')
   columnOptions(
     @Query('column') column: string,
@@ -168,6 +182,44 @@ export class GarageProcurementOrderController {
   @Get(':id/approval-events')
   approvalEvents(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.approvalEvents(id);
+  }
+
+  @RequirePermissions(
+    {
+      resource: ErpResource.GARAGE_PROCUREMENT_ORDERS,
+      action: ErpAction.CREATE,
+    },
+    {
+      resource: ErpResource.GARAGE_PROCUREMENT_ORDERS,
+      action: ErpAction.UPDATE,
+    },
+  )
+  @ApiOperation({
+    summary:
+      'Tạo đơn mua và gửi duyệt/ghi nhận trong một bước (một transaction)',
+  })
+  @Post('save-and-confirm')
+  createAndConfirm(
+    @Body() dto: CreateAndConfirmProcurementOrderDto,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.service.createAndConfirm(dto, req.user?.sub ?? '');
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_PROCUREMENT_ORDERS,
+    action: ErpAction.UPDATE,
+  })
+  @ApiOperation({
+    summary: 'Cập nhật đơn nháp và gửi duyệt/ghi nhận trong một bước',
+  })
+  @Patch(':id/save-and-confirm')
+  updateAndConfirm(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateAndConfirmProcurementOrderDto,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.service.updateAndConfirm(id, dto, req.user?.sub ?? '');
   }
 
   @RequirePermissions({

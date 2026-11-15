@@ -69,6 +69,21 @@ describe('GarageGoodsReceiptQueryService', () => {
     expect(qb.andWhere).toHaveBeenCalledTimes(1);
   });
 
+  it('lọc phiếu theo đơn mua nguồn qua column_filters', async () => {
+    await service.findAll({
+      page: 1,
+      pageSize: 20,
+      column_filters: JSON.stringify({ garageProcurementOrderId: ['po-1'] }),
+    } as QueryGarageGoodsReceiptDto);
+
+    const clauses = qb.andWhere.mock.calls.map((call) => String(call[0]));
+    expect(
+      clauses.some((c) =>
+        c.includes('CAST(e.garageProcurementOrderId AS TEXT) IN'),
+      ),
+    ).toBe(true);
+  });
+
   it('computes summaries for the requested keys, unknown keys as null', async () => {
     qb.getRawOne
       .mockResolvedValueOnce({ totalAmount: 500 })

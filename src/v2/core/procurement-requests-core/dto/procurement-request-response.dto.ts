@@ -18,6 +18,13 @@ export class PurchaseRequestLineResponseDto {
   @ApiProperty({ nullable: true }) notes: string | null;
 }
 
+/** PO đã sinh từ đề nghị này (chỉ điền ở danh sách, bỏ qua PO đã xóa mềm). */
+export class RelatedOrderDto {
+  @ApiProperty() id: string;
+  @ApiProperty() orderNo: string;
+  @ApiProperty() status: string;
+}
+
 export class PurchaseRequestResponseDto {
   @ApiProperty() id: string;
   @ApiProperty({ type: 'object', additionalProperties: true })
@@ -39,6 +46,12 @@ export class PurchaseRequestResponseDto {
   approval: ApprovalSummaryDto;
   @ApiProperty({ type: [PurchaseRequestLineResponseDto] })
   lines: PurchaseRequestLineResponseDto[];
+  @ApiProperty({
+    type: [RelatedOrderDto],
+    required: false,
+    description: 'Chỉ có ở danh sách',
+  })
+  relatedOrders?: RelatedOrderDto[];
 }
 
 /** Một dòng gợi ý khi tạo PO từ PR: phần số lượng còn lại chưa đặt. */

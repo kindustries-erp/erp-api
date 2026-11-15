@@ -76,7 +76,7 @@ describe('InvoicesService', () => {
     );
   });
 
-  it('maps paginated items to response DTOs with totalPages', async () => {
+  it('maps paginated items to response DTOs with pagination', async () => {
     query.findAll.mockResolvedValue({
       items: [row],
       total: 41,
@@ -86,8 +86,12 @@ describe('InvoicesService', () => {
 
     const result = await service.findAll({} as QueryInvoiceDto);
 
-    expect(result.total).toBe(41);
-    expect(result.totalPages).toBe(3);
+    expect(result.pagination).toMatchObject({
+      total: 41,
+      totalPages: 3,
+      next: 2,
+      previous: null,
+    });
     expect(result.items[0]).not.toHaveProperty('isDeleted');
   });
 
@@ -108,8 +112,14 @@ describe('InvoicesService', () => {
   it('delegates column options to the query service', async () => {
     query.findColumnOptions.mockResolvedValue({
       items: [],
-      total: 0,
-      next: null,
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 1,
+        next: null,
+        previous: null,
+      },
     });
 
     await service.findColumnOptions('code', undefined, 1, 20, undefined);

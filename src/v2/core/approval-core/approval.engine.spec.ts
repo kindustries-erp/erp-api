@@ -4,6 +4,8 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import {
+  assertApproverOnlyDecides,
+  assertCreatorOnly,
   assertNotSelfApproval,
   requireReason,
   resolveTransition,
@@ -54,6 +56,65 @@ describe('approval.engine', () => {
   it('assertNotSelfApproval cho phép khi người duyệt khác người tạo hoặc không rõ người tạo', () => {
     expect(() => assertNotSelfApproval('u2', 'u1')).not.toThrow();
     expect(() => assertNotSelfApproval('u2', null)).not.toThrow();
+  });
+
+  it('assertCreatorOnly ném 403 kèm thông báo khi người thao tác không phải người tạo', () => {
+    expect(() => assertCreatorOnly('u2', 'u1', 'hủy')).toThrow(
+      new ForbiddenException('Chỉ người tạo mới được hủy'),
+    );
+  });
+
+  it('assertCreatorOnly cho qua khi người thao tác là người tạo', () => {
+    expect(() => assertCreatorOnly('u1', 'u1', 'hủy')).not.toThrow();
+  });
+
+  it('assertCreatorOnly cho qua khi chứng từ không có người tạo (null)', () => {
+    expect(() => assertCreatorOnly('u2', null, 'xóa')).not.toThrow();
+  });
+
+  it('assertApproverOnlyDecides cho người duyệt chỉ định duyệt và từ chối', () => {
+    const doc = { approverId: 'boss', createdBy: 'staff' };
+    expect(() =>
+      assertApproverOnlyDecides('boss', doc, 'approve'),
+    ).not.toThrow();
+    expect(() =>
+      assertApproverOnlyDecides('boss', doc, 'reject'),
+    ).not.toThrow();
+  });
+
+  it('assertApproverOnlyDecides chặn người duyệt chỉ định làm hành động khác', () => {
+    const doc = { approverId: 'boss', createdBy: 'staff' };
+    for (const action of ['cancel', 'recall', 'issue', 'close', 'submit']) {
+      expect(() => assertApproverOnlyDecides('boss', doc, action)).toThrow(
+        new ForbiddenException(
+          'Người duyệt chỉ được duyệt hoặc từ chối chứng từ của người tạo',
+        ),
+      );
+    }
+  });
+
+  it('assertApproverOnlyDecides không chặn người khác, người tạo, hoặc chứng từ chưa có người duyệt', () => {
+    expect(() =>
+      assertApproverOnlyDecides(
+        'other',
+        { approverId: 'boss', createdBy: 'staff' },
+        'cancel',
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertApproverOnlyDecides(
+        'staff',
+        { approverId: 'staff', createdBy: 'staff' },
+        'cancel',
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertApproverOnlyDecides(
+        'boss',
+        { approverId: null, createdBy: 'staff' },
+        'cancel',
+      ),
+    ).not.toThrow();
   });
 
   it('requireReason chặn lý do rỗng hoặc chỉ có khoảng trắng và trả về bản đã cắt', () => {

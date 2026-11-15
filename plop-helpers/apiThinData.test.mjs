@@ -131,3 +131,22 @@ describe('đọc manifest họ', () => {
     expect(listCoreFamilies(mkdtempSync(join(tmpdir(), 'empty-')))).toEqual([]);
   });
 });
+
+describe('lõi orchestrator và module mỏng', () => {
+  const orchestratorManifest = buildCoreManifest(
+    buildApiCoreData({ familyInput: 'procurement-flow', entityInput: 'ProcurementFlow', styleInput: 'orchestrator' }),
+  );
+
+  it('module mỏng từ chối ghép với lõi orchestrator (không có entity)', () => {
+    expect(() => buildApiThinData(thinAnswers, orchestratorManifest)).toThrow(/orchestrator/);
+  });
+
+  it('đọc được manifest orchestrator chỉ có contract và service', () => {
+    const base = mkdtempSync(join(tmpdir(), 'api-core-orch-'));
+    const dir = join(base, 'src/v2/core/procurement-flow-core');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'core.manifest.json'), JSON.stringify(orchestratorManifest));
+    expect(readCoreManifest(base, 'procurement-flow-core').style).toBe('orchestrator');
+    expect(listCoreFamilies(base)).toEqual(['procurement-flow-core']);
+  });
+});

@@ -19,11 +19,17 @@ description: Lõi v2 nhập / xuất / điều chỉnh kho dùng chung (sổ s�
   - `services/abstract-stock-voucher-command.service.ts`: vòng đời DRAFT → POSTED → CANCELLED. Kiểm trạng thái **trước** khi chạy hook `beforeTransition`.
   - `services/abstract-stock-line-voucher-command.service.ts`: nền chứng từ có dòng (tạo/sửa nháp, xóa mềm, post/cancel gọi engine). Module con khai báo `ledger`, `lineEntity`, `transactionType`, `resolveDirection`.
   - `services/abstract-stock-line-voucher-query.service.ts`: nền đọc (danh sách, chi tiết, số chứng từ theo ngày). Phụ thuộc `goods-receipts-core` (`BaseVoucherEngineService`) để đánh số.
-- **Sổ tồn garage** `src/v2/modules/inventory-movements-garage-ledger/`: cấu hình `INVENTORY_MOVEMENTS_GARAGE_LEDGER` (scope `GARAGE`, `WEIGHTED_AVG`) và 3 entity `garage_stock_balances`, `garage_stock_transactions`, `garage_stock_cost_layers`. Module `InventoryMovementsGarageLedgerModule` chỉ đăng ký 3 entity cho TypeORM (autoLoadEntities), không có provider; ba module garage import nó.
+  - `helpers/stock-voucher-union-sql.helper.ts` (+spec): dựng SQL thuần cho danh sách gộp (`buildUnionSourceSql`, `buildVoucherWhere`, `buildVoucherOrder`, `parseColumnFilters`, `escapeLike`) và whitelist cột (`STOCK_VOUCHER_UNION_*`).
+  - `services/stock-voucher-union-query.service.ts`: class thường (không `@Injectable`), đọc danh sách chứng từ gộp nhiều bảng bằng `UNION ALL`. Nhận `StockVoucherUnionSource[]` do module khai báo (loại, bảng, ánh xạ cột); tên bảng, cột, sort đi qua whitelist/regex, giá trị lọc luôn là tham số. Có `findAll` (kèm summaries `totalAmount` và `extraData.typeCounts`: số phiếu theo loại, bỏ qua bộ lọc loại, đủ mọi loại mặc định 0) và `findColumnOptions`. DTO: `query-stock-voucher-union.dto.ts`, `stock-voucher-union-response.dto.ts`.
+  - `services/stock-ledger-query.service.ts`: class thường, đọc số dư (`listBalances`: tab ALL/IN_STOCK/OUT_OF_STOCK/NEGATIVE, tổng, số mã theo tab) và thẻ kho (`listTransactions`) của một ledger. Phạm vi `ledgerScope` và bảng lấy từ `StockLedgerConfig`, không nhận từ query. DTO: `query-stock-ledger.dto.ts`, `stock-ledger-response.dto.ts`.
+  - `listBalances` trả `{ items, pagination, summaries, extraData: { tabCounts } }`; `summaries` gồm qtyOnHand, inventoryValue, qtyReceived, qtyIssued, qtyAdjusted, mỗi key `{ total, pageSubtotal, cumulative }` (cùng shape với chứng từ).
+  - `helpers/stock-ledger-movement-sums.helper.ts`: nhập/xuất/điều chỉnh cộng dồn toàn thời gian cho `listBalances`. Nhập = SUM(qty_in) và Xuất = SUM(qty_out) với giao dịch thường (không ADJUSTMENT/ADJUSTMENT_CANCEL); Điều chỉnh = SUM(qty_in − qty_out) với ADJUSTMENT/ADJUSTMENT_CANCEL (có dấu). Theo từng mã của trang (`loadMovementSumsByItem`) và tổng theo tập mã khớp tab/tìm kiếm (`loadMovementTotals`). Không sort được theo 3 cột này.
+- **Sổ tồn garage** `src/v2/modules/inventory-movements-garage-ledger/`: cấu hình `INVENTORY_MOVEMENTS_GARAGE_LEDGER` (scope `GARAGE`, `WEIGHTED_AVG`) và 3 entity `garage_stock_balances`, `garage_stock_transactions`, `garage_stock_cost_layers`. Module `InventoryMovementsGarageLedgerModule` đăng ký 3 entity cho TypeORM (autoLoadEntities) và mở API đọc `GET /api/v2/inventory-movements-garage-ledger/balances|transactions` (RBAC `garage_stock_ledger:read`, facade `InventoryMovementsGarageLedgerService`); ba module garage import nó.
 - **Module garage** (mỗi module chỉ chứa entity header, entity dòng, DTO, loại giao dịch, chiều, tiền tố số chứng từ):
   - `src/v2/modules/inventory-movements-garage-receipts/`
   - `src/v2/modules/inventory-movements-garage-issues/`
   - `src/v2/modules/inventory-movements-garage-adjustments/`
+  - `src/v2/modules/inventory-movements-garage-vouchers/`: danh sách chứng từ gộp 4 loại (PURCHASE_RECEIPT từ `goods_receipts_garage`, OTHER_RECEIPT, ISSUE, ADJUSTMENT), chỉ đọc, `GET /api/v2/inventory-movements-garage-vouchers` và `/column-options`, RBAC `garage_stock_vouchers:read`. Cấu hình nguồn ở `config/inventory-movements-garage-vouchers.config.ts`.
 
 ## 2. Quy tắc
 
@@ -31,7 +37,7 @@ description: Lõi v2 nhập / xuất / điều chỉnh kho dùng chung (sổ s�
 - Mọi cộng/trừ tồn chạy trong transaction của chứng từ, sau khi đã khóa header.
 - Phương pháp giá vốn khai báo ở cấu hình ledger (`INVENTORY_MOVEMENTS_GARAGE_LEDGER`: `WEIGHTED_AVG`), không đổi theo request. Đổi phương pháp khi đã có số dư là sai số tồn cũ.
 - Đảo phiếu (`cancel`) không xóa bút toán gốc; chỉ ghi thêm `*_CANCEL`.
-- Bảng mới không có tiền tố `erp_`. Bảng nhập garage (module `goods-receipts-garage`) đã đổi tên sang `goods_receipts_garage`, `goods_receipt_lines_garage`, `inventory_balances_garage` (migration `20261108100000`), vẫn **không** nằm trong sổ này: tồn garage cũ và tồn garage mới là hai nguồn riêng cho tới khi có bước hợp nhất.
+- Bảng mới không có tiền tố `erp_`. Bảng nhập garage (module `goods-receipts-garage`) đã đổi tên sang `goods_receipts_garage`, `goods_receipt_lines_garage`, `inventory_balances_garage` (migration `20261108100000`), đã hợp nhất từ 2026-11-11: phiếu nhập garage ghi thẳng sổ `garage_stock_*` (`documentType GOODS_RECEIPT_GARAGE`) qua `procurement-flow-garage`; `inventory_balances_garage` không còn được ghi.
 - Tên bảng, `docType` (`GARAGE_STOCK_*`) và giá trị resource RBAC (`garage_stock_*`) đã lưu dữ liệu, không đổi theo tên module.
 
 ## 3. Thứ tự đọc khi sửa
@@ -54,3 +60,11 @@ description: Lõi v2 nhập / xuất / điều chỉnh kho dùng chung (sổ s�
 - **Ghi**: tạo mặc định `{}`. Sửa header merge cấp 1 (`null` xóa key). Dòng chứng từ ghi theo payload, không merge.
 - **Giới hạn**: 16 KB, sâu 5 cấp, key ≤ 64 ký tự, cấm `__proto__`/`constructor`/`prototype` (400 qua `RejectUnsafeExtraDataPipe` và service).
 - **Response**: luôn có `extraData` (object).
+
+## Response danh sách (2026-11-12)
+
+- `GET /api/v2/inventory-movements-garage-{adjustments,receipts,issues}` trả `{ items, pagination }` (`StockVoucherListResponseDto`, `PaginationMetaDto`). Không còn key phẳng `total/page/pageSize/totalPages`.
+- `items` là đầu phiếu (`StockVoucherListItemResponseDto`, không có `lines`, không lộ entity), dựng bằng `toVoucherSummaryResponse`. `GET :id` vẫn trả `{ data }` kèm `lines`.
+- Query dùng `QueryStockVoucherDto`: `page` ≥ 1, `pageSize` 1..200, `search` (số chứng từ), `status`. Giá trị sai trả 400.
+- Lõi: `AbstractStockLineVoucherQueryService.findAll` trả `PagedList<H>` qua `toPagedList`.
+- Chưa có `column-options`, `summaries`, `extraData` cho list (thêm khi có màn hình web).

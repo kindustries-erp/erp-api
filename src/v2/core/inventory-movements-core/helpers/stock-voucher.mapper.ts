@@ -1,5 +1,6 @@
 import type {
   StockVoucherLineResponseDto,
+  StockVoucherListItemResponseDto,
   StockVoucherResponseDto,
 } from '../dto/stock-voucher-response.dto';
 import type { BaseCreateStockVoucherLineDto } from '../dto/base-stock-voucher-line.dto';
@@ -64,22 +65,24 @@ export function toLineResponse(
   };
 }
 
-export function toVoucherResponse(
-  header: {
-    id: string;
-    extraData?: Record<string, unknown> | null;
-    voucherNo: string;
-    voucherDate: Date;
-    status: string;
-    branchId?: string | null;
-    partnerName?: string | null;
-    remarks?: string | null;
-    totalAmount?: string | null;
-    createdAt: Date;
-    updatedAt: Date;
-  },
-  lines: BaseStockVoucherLineEntity[],
-): StockVoucherResponseDto {
+type VoucherHeaderLike = {
+  id: string;
+  extraData?: Record<string, unknown> | null;
+  voucherNo: string;
+  voucherDate: Date;
+  status: string;
+  branchId?: string | null;
+  partnerName?: string | null;
+  remarks?: string | null;
+  totalAmount?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+/** Dòng danh sách: chỉ đầu phiếu, không kèm dòng chi tiết. */
+export function toVoucherSummaryResponse(
+  header: VoucherHeaderLike,
+): StockVoucherListItemResponseDto {
   return {
     id: header.id,
     extraData: header.extraData ?? {},
@@ -95,6 +98,15 @@ export function toVoucherResponse(
         : Number(header.totalAmount),
     createdAt: header.createdAt,
     updatedAt: header.updatedAt,
+  };
+}
+
+export function toVoucherResponse(
+  header: VoucherHeaderLike,
+  lines: BaseStockVoucherLineEntity[],
+): StockVoucherResponseDto {
+  return {
+    ...toVoucherSummaryResponse(header),
     lines: lines.map(toLineResponse),
   };
 }

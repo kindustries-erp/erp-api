@@ -38,7 +38,7 @@ interface RequestWithUser {
 @ApiTags('procurement_orders')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
-@Controller('erp-procurement-orders')
+@Controller('api/v2/procurement-orders-erp')
 export class ErpProcurementOrderController {
   constructor(private readonly service: ErpProcurementOrdersService) {}
 

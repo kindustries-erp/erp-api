@@ -1,7 +1,13 @@
 import { toKebab, toPascal, toSnake } from './apiV2Data.mjs';
 
-/** Hai kiểu lõi: `engine` (Engine service, như goods-receipts/invoices) và `abstract-services` (như procurement-orders). */
-export const API_CORE_STYLES = ['engine', 'abstract-services'];
+/** Kiểu lõi điều phối nhiều module: không entity, không bảng, chỉ có port và khung transaction + sự kiện sau commit. */
+export const ORCHESTRATOR_STYLE = 'orchestrator';
+
+/**
+ * Ba kiểu lõi: `engine` (Engine service, như goods-receipts/invoices), `abstract-services`
+ * (họ chứng từ có vòng đời, như procurement-orders) và `orchestrator` (điều phối chuỗi nhiều module, không entity).
+ */
+export const API_CORE_STYLES = ['engine', 'abstract-services', ORCHESTRATOR_STYLE];
 
 const FAMILY_PATTERN = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
 const ENTITY_PATTERN = /^[A-Za-z][A-Za-z0-9]*$/;
@@ -32,10 +38,18 @@ export function buildApiCoreData(answers) {
 
   const familyPascal = toPascal(base);
   const entityKebab = toKebab(entity);
-  const serviceFile =
-    style === 'engine' ? `base-${base}-engine.service` : `abstract-${entityKebab}-command.service`;
-  const serviceClass =
-    style === 'engine' ? `Base${familyPascal}EngineService` : `Abstract${entity}CommandService`;
+  const orchestrator = style === ORCHESTRATOR_STYLE;
+  // Orchestrator: `entity` là tên luồng (vd ProcurementFlow), không sinh entity, DTO hay bảng
+  const serviceFile = orchestrator
+    ? `abstract-${entityKebab}.service`
+    : style === 'engine'
+      ? `base-${base}-engine.service`
+      : `abstract-${entityKebab}-command.service`;
+  const serviceClass = orchestrator
+    ? `Abstract${entity}Service`
+    : style === 'engine'
+      ? `Base${familyPascal}EngineService`
+      : `Abstract${entity}CommandService`;
 
   return {
     family,
@@ -44,10 +58,12 @@ export function buildApiCoreData(answers) {
     entity,
     entityKebab,
     style,
+    orchestrator,
     coreDir: `src/v2/core/${family}`,
-    baseEntity: `Base${entity}Entity`,
-    baseCreateDto: `BaseCreate${entity}Dto`,
-    baseContract: `Base${entity}Contract`,
+    baseEntity: orchestrator ? null : `Base${entity}Entity`,
+    baseCreateDto: orchestrator ? null : `BaseCreate${entity}Dto`,
+    // Orchestrator: hợp đồng là cổng sự kiện (EventPort), không phải hợp đồng entity
+    baseContract: orchestrator ? `${entity}EventPort` : `Base${entity}Contract`,
     serviceClass,
     serviceFile,
     // Lõi chỉ là base để kế thừa: không có module Nest, không provider.
@@ -55,7 +71,7 @@ export function buildApiCoreData(answers) {
     moduleProviders: '',
     moduleClass: null,
     moduleFile: null,
-    serviceTemplateDir: style === 'engine' ? 'core-engine' : 'workflow-common',
+    serviceTemplateDir: orchestrator ? 'core-orchestrator' : style === 'engine' ? 'core-engine' : 'workflow-common',
     // Hằng bảng chuyển trạng thái và tiền tố tên file, ví dụ PROCUREMENT_ORDER_TRANSITIONS
     entityUpperSnake: toSnake(entity).toUpperCase(),
   };

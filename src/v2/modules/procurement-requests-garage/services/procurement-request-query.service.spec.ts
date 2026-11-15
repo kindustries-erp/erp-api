@@ -10,6 +10,7 @@ jest.mock('@/common/utils/table-query', () => {
 describe('GarageProcurementRequestQueryService', () => {
   let service: GarageProcurementRequestQueryService;
   let headersRepo: any;
+  let ordersRepo: any;
   let qb: any;
 
   beforeEach(() => {
@@ -49,10 +50,21 @@ describe('GarageProcurementRequestQueryService', () => {
       findOne: jest.fn(),
     };
 
+    // Subquery PO: chỉ cần getQuery/getParameters để ghép EXISTS
+    const subQb: any = {
+      select: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getQuery: jest.fn().mockReturnValue('SELECT 1 FROM proc_orders_garage o'),
+      getParameters: jest.fn().mockReturnValue({}),
+    };
+    ordersRepo = { createQueryBuilder: jest.fn().mockReturnValue(subQb) };
+
     service = new GarageProcurementRequestQueryService(
       headersRepo,
       {} as any,
       {} as any,
+      ordersRepo,
     );
   });
 
@@ -70,6 +82,20 @@ describe('GarageProcurementRequestQueryService', () => {
     expect(qb.andWhere).toHaveBeenCalledWith(expect.any(Brackets));
     expect(result.total).toBe(1);
     expect(result.rows[0].requestNo).toBe('DNM-2026-001');
+  });
+
+  it('lọc Đơn mua liên quan bằng EXISTS trên PO còn hiệu lực', async () => {
+    await service.list({
+      page: 1,
+      pageSize: 20,
+      column_filters: JSON.stringify({ relatedOrders: ['PO-0001'] }),
+    } as never);
+
+    expect(ordersRepo.createQueryBuilder).toHaveBeenCalledWith('o');
+    expect(qb.andWhere).toHaveBeenCalledWith(
+      'EXISTS (SELECT 1 FROM proc_orders_garage o)',
+      {},
+    );
   });
 
   it('deleted=only chỉ liệt kê đề nghị đã xóa mềm', async () => {
@@ -224,5 +250,29 @@ describe('GarageProcurementRequestQueryService', () => {
     expect(fakeQb.andWhere).toHaveBeenCalledWith(
       expect.stringContaining('core_users'),
     );
+  });
+
+  it('findApprovalSnapshot: trả người duyệt và trạng thái của phiếu chưa xóa', async () => {
+    headersRepo.findOne.mockResolvedValue({
+      id: 'req-1',
+      approverId: 'approver-1',
+      status: 'PENDING_APPROVAL',
+    });
+
+    const snap = await service.findApprovalSnapshot('req-1');
+
+    expect(headersRepo.findOne).toHaveBeenCalledWith({
+      where: { id: 'req-1', isDeleted: false },
+    });
+    expect(snap).toEqual({
+      approverId: 'approver-1',
+      status: 'PENDING_APPROVAL',
+    });
+  });
+
+  it('findApprovalSnapshot: không tìm thấy phiếu thì trả null', async () => {
+    headersRepo.findOne.mockResolvedValue(null);
+
+    await expect(service.findApprovalSnapshot('missing')).resolves.toBeNull();
   });
 });

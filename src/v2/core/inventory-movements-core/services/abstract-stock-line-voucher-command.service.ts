@@ -190,12 +190,24 @@ export abstract class AbstractStockLineVoucherCommandService<
     });
   }
 
+  /**
+   * CUSTOM: chuẩn bị dòng trước khi ghi, trong cùng transaction (ví dụ chuẩn hóa mã hàng theo danh mục).
+   * Không đổi số lượng hay giá. Mặc định trả nguyên dòng.
+   */
+  protected prepareLines(
+    _manager: EntityManager,
+    lines: BaseCreateStockVoucherLineDto[],
+  ): Promise<BaseCreateStockVoucherLineDto[]> {
+    return Promise.resolve(lines);
+  }
+
   /** Thay toàn bộ dòng của phiếu nháp và cập nhật tổng tiền trên header. */
   private async replaceLines(
     manager: EntityManager,
     voucher: H,
-    lines: BaseCreateStockVoucherLineDto[],
+    input: BaseCreateStockVoucherLineDto[],
   ): Promise<void> {
+    const lines = await this.prepareLines(manager, input);
     const repo = manager.getRepository(this.lineEntity);
     await repo.delete({ voucherId: voucher.id } as never);
 

@@ -15,10 +15,14 @@ import { GarageProcurementRequestLine } from './entities/procurement-request-lin
 import { GarageProcurementRequestController } from './controllers/procurement-request.controller';
 import { GarageProcurementRequestsService } from './procurement-requests-garage.service';
 import { GarageProcurementRequestCommandService } from './services/procurement-request-command.service';
+import { GarageProcurementRequestFlowService } from './services/garage-procurement-request-flow.service';
 import { GarageProcurementRequestQueryService } from './services/procurement-request-query.service';
 import { GarageProcurementRequestOrderingService } from './services/garage-procurement-request-ordering.service';
 import { ProcurementRequestNotifierService } from './services/procurement-request-notifier.service';
 import { NotificationsInboxModule } from '@/v2/modules/notifications-inbox/notifications-inbox.module';
+import { GarageProcurementOrder } from '@/v2/modules/procurement-orders-garage/entities/procurement-order.entity';
+import { GarageProcurementRequestOrderRefService } from './services/garage-procurement-request-order-ref.service';
+import { ItemsGarageModule } from '@/v2/modules/items-garage/items-garage.module';
 
 const GarageProcurementRequestApprovalConfigController =
   createApprovalConfigController({
@@ -34,12 +38,14 @@ const GarageProcurementRequestApprovalConfigController =
     TypeOrmModule.forFeature([
       GarageProcurementRequest,
       GarageProcurementRequestLine,
+      GarageProcurementOrder,
       ApprovalEvent,
       ApprovalSetting,
       CoreUser,
     ]),
     RbacCoreModule,
     NotificationsInboxModule,
+    ItemsGarageModule,
   ],
   controllers: [
     GarageProcurementRequestController,
@@ -51,12 +57,15 @@ const GarageProcurementRequestApprovalConfigController =
     ApprovalSettingsService,
     ApproverDirectoryService,
     GarageProcurementRequestCommandService,
+    GarageProcurementRequestFlowService,
     GarageProcurementRequestQueryService,
     GarageProcurementRequestsService,
     GarageProcurementRequestOrderingService,
     ProcurementRequestNotifierService,
+    GarageProcurementRequestOrderRefService,
   ],
   exports: [
+    GarageProcurementRequestCommandService,
     GarageProcurementRequestQueryService,
     GarageProcurementRequestOrderingService,
   ],

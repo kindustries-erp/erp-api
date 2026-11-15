@@ -1,3 +1,4 @@
+import { buildPagination } from '@/common/utils/paginated-result';
 import type { NotificationInbox } from '../entities/notification-inbox.entity';
 import type { PaginationMetaDto } from '@/common/dto/pagination-meta.dto';
 import type { NotificationResponseDto } from '../dto/notification-response.dto';
@@ -39,16 +40,11 @@ export function toNotificationResponse(
   };
 }
 
-/** `totalPages` tối thiểu là 1, khớp chuẩn `pagination` của v2. */
+/** Khối `pagination` chuẩn v2 (dùng chung lõi `buildPagination`). */
 export function toPaginationMeta(
   page: number,
   pageSize: number,
   total: number,
 ): PaginationMetaDto {
-  return {
-    page,
-    pageSize,
-    total,
-    totalPages: Math.max(1, Math.ceil(total / pageSize)),
-  };
+  return buildPagination(page, pageSize, total);
 }

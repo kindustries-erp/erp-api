@@ -55,7 +55,7 @@ Các chức năng cốt lõi:
 
 ---
 
-## 3. Cấu trúc Source Code Backend (Chuẩn /api-structure)
+## 3. Cấu trúc Source Code Backend (Chuẩn /erp-api-structure)
 
 ```text
 src/vinfast-parts/

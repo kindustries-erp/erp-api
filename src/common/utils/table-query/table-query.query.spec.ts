@@ -89,8 +89,14 @@ describe('findTableColumnOptions', () => {
         { label: 'Công ty A', value: 'Công ty A' },
         { label: 'Công ty B', value: 'Công ty B' },
       ],
-      total: 41,
-      next: 2,
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 41,
+        totalPages: 3,
+        next: 2,
+        previous: null,
+      },
     });
     expect(qb.andWhere).toHaveBeenCalledWith(
       "bp.name IS NOT NULL AND bp.name != ''",
@@ -111,7 +117,8 @@ describe('findTableColumnOptions', () => {
       20,
     );
 
-    expect(result.next).toBeNull();
+    expect(result.pagination.next).toBeNull();
+    expect(result.pagination.previous).toBeNull();
   });
 });
 

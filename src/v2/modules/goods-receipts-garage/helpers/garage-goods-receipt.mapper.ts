@@ -28,6 +28,7 @@ export function toGarageGoodsReceiptLineResponse(
 /** Chuyển entity sang response DTO. Hàm thuần, không gọi DB. */
 export function toGarageGoodsReceiptResponse(
   entity: GarageGoodsReceipt,
+  order?: { orderNo: string; totalAmount: number },
 ): GarageGoodsReceiptResponseDto {
   return {
     id: entity.id,
@@ -43,6 +44,8 @@ export function toGarageGoodsReceiptResponse(
     status: entity.status,
     paymentStatus: entity.paymentStatus,
     garageProcurementOrderId: entity.garageProcurementOrderId ?? undefined,
+    garageProcurementOrderNo: order?.orderNo,
+    orderTotalAmount: order?.totalAmount,
     remarks: entity.remarks ?? undefined,
     lines: entity.lines?.map(toGarageGoodsReceiptLineResponse),
     createdAt: entity.createdAt,

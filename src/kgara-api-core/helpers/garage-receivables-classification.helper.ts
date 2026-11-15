@@ -1,5 +1,5 @@
 /**
- * Pure Engine Helper trích xuất theo chuẩn /api-structure
+ * Pure Engine Helper trích xuất theo chuẩn /erp-api-structure
  * Tính toán 4 nhóm phân loại nghiệp vụ & chi phí (TrendItem) từ danh sách cases
  */
 export interface CaseClassificationTotals {

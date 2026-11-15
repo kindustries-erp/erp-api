@@ -13,8 +13,14 @@ const makeFacade = () => {
     })),
     getColumnOptions: jest.fn<(...args: any[]) => Promise<any>>(async () => ({
       items: [],
-      total: 0,
-      next: null,
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 1,
+        next: null,
+        previous: null,
+      },
     })),
     getRoleById: jest.fn<(...args: any[]) => Promise<any>>(async () => ({
       id: 'r1',

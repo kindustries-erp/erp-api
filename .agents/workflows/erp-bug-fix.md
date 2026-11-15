@@ -6,6 +6,8 @@ description: Quy trình sửa lỗi có kiểm chứng cho erp-api (đánh giá 
 
 Dùng khi user báo lỗi hoặc yêu cầu sửa bug trong `erp-api`. Khác `/erp-review` (chỉ hỏi đáp, không sửa) và `/erp-plan` (tính năng, refactor): workflow này đi từ tái hiện lỗi tới kết luận có bằng chứng. Phần plan, `OK` và theo dõi Plane vẫn theo `/erp-plan`.
 
+Nạp trước: `erp-api-truth` và `erp-api-structure`. Rule cấu trúc cần tuân thủ được lấy từ `/erp-local-changes-audit` (bảng rule api), không chép lại ở đây.
+
 ---
 
 ## 🛡️ Nguyên Tắc
@@ -31,20 +33,27 @@ Dùng khi user báo lỗi hoặc yêu cầu sửa bug trong `erp-api`. Khác `/e
 
 1. Trình bày: nguyên nhân gốc, cách sửa tối thiểu, file sẽ đổi, test sẽ thêm, rủi ro hồi quy.
 2. Tiêu chí chấp nhận dạng `AC-n` (ít nhất: lỗi không còn tái hiện, không hỏng hành vi lân cận).
+3. **Tuân thủ cấu trúc**: liệt kê file sẽ chạm tới và kích thước hiện tại. Nếu fix làm Controller vượt 300 dòng, Service vượt 500, Helper/engine vượt 800, plan phải có task tách (Facade + sub-services) trước. Constructor giữ Clean DI (không overload, không union type). Không đổi route, query, status hoặc DTO response khi chưa có yêu cầu.
 3. **DỪNG**: chờ user trả lời `OK` hoặc `Confirm`. Sau `OK`, hỏi về Plane theo mục "Sau `OK`" của `/erp-plan`. Nếu lỗi nhỏ và user đã yêu cầu sửa thẳng, vẫn phải nêu nguyên nhân và cách sửa trong một đoạn ngắn trước khi sửa.
 
 ### 🔹 BƯỚC 3: Fix và Test
 
 1. **Đỏ trước**: viết hoặc cập nhật `.spec.ts` tái hiện đúng lỗi (Auto-TDD), chạy thấy đỏ.
-2. Sửa tối thiểu theo kế hoạch đã duyệt. Giữ chuẩn của repo (giới hạn 180 dòng, i18n, token màu, DTO có class).
+2. Sửa tối thiểu theo kế hoạch đã duyệt. Giữ chuẩn của repo, theo đúng bảng rule của `/erp-local-changes-audit` api: ngưỡng kích thước file, Clean DI, Facade giữ contract, Controller không trả Entity (chỉ DTO đã map), spec co-located cho logic mới, route và response v2 đúng chuẩn, script độc lập không đường dẫn tuyệt đối. Không chạy `vitest` trong `erp-api`.
 3. **Xanh sau**: chạy scoped verification: `bunx jest <spec>` hoặc `bunx jest --findRelatedTests <file>`, và `bunx tsc --noEmit`. **Cấm `vitest` trong `erp-api`**. Không chạy full test hay full build ở bước này.
 4. Cập nhật `.agents/skills/modules/<module>/SKILL.md` nếu đổi DTO, API, schema hoặc business rule (Knowledge-Sync Guard).
 
 ### 🔹 BƯỚC 4: Verdict (kết luận có bằng chứng)
 
+**Cổng audit trước kết luận** (chỉ đọc, theo `/erp-local-changes-audit`):
+1. Quét kích thước: `bun .agents/skills/erp-api-structure/scripts/scan-oversized-files.ts --strict`, chỉ lấy dòng liên quan đến file đã đổi.
+2. Đối chiếu Clean DI, Facade, Controller không trả Entity, spec co-located, route/response v2 trên file đã đổi.
+
+Nếu có FAIL trong cổng này, verdict tối đa là `partial`, kèm danh sách FAIL và plan sửa theo `/erp-plan`. Không tự sửa phần FAIL ngoài phạm vi lỗi.
+
 | Kết luận | Điều kiện |
 | :--- | :--- |
-| `verified` | Đã tái hiện lỗi trước khi sửa; test tái hiện từ đỏ sang xanh (hoặc có cách kiểm chứng thay thế đã nêu); scoped verification pass; không thấy hồi quy ở hành vi lân cận. |
+| `verified` | Đã tái hiện lỗi trước khi sửa; test tái hiện từ đỏ sang xanh (hoặc có cách kiểm chứng thay thế đã nêu); scoped verification pass; cổng audit không có FAIL; không thấy hồi quy ở hành vi lân cận. |
 | `partial` | Triệu chứng hết nhưng chưa xác định nguyên nhân gốc, hoặc còn bước kiểm chưa chạy được, hoặc chỉ sửa một phần các tình huống. Nêu rõ phần còn lại. |
 | `failed` | Lỗi vẫn tái hiện, hoặc cách sửa gây hồi quy. Không giữ thay đổi sai; nêu những gì đã loại trừ. |
 

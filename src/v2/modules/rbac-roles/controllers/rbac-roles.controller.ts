@@ -1,3 +1,6 @@
+import { ApiOkResponse } from '@nestjs/swagger';
+import { ColumnOptionsResponseDto } from '@/common/dto/column-options-response.dto';
+import { RoleListResponseDto } from '../dto/rbac-response.dto';
 import {
   Controller,
   Get,
@@ -24,10 +27,10 @@ import {
   UpdateCoreRoleUsersDto,
 } from '../dto/rbac-core.dto';
 
-/** Route giữ nguyên như v1: /api/v1/rbac-core/... (UI không đổi). */
+/** Route chuẩn v2: /api/v2/rbac-roles/.... */
 @ApiTags('RBAC Core')
 @ApiBearerAuth()
-@Controller('rbac-core')
+@Controller('api/v2/rbac-roles')
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
 export class RbacRolesController {
   constructor(private readonly rbacRolesService: RbacRolesService) {}
@@ -37,7 +40,8 @@ export class RbacRolesController {
     resource: ErpResource.ADMIN_USERS,
     action: ErpAction.MANAGE,
   })
-  @Get('roles/column-options')
+  @ApiOkResponse({ type: ColumnOptionsResponseDto })
+  @Get('column-options')
   async getRolesColumnOptions(
     @Query('column') column: string,
     @Query('search') search?: string,
@@ -58,7 +62,18 @@ export class RbacRolesController {
     resource: ErpResource.ADMIN_USERS,
     action: ErpAction.MANAGE,
   })
-  @Get('roles')
+  @Get('collections')
+  async getAvailableResources() {
+    const resources = await this.rbacRolesService.getAvailableResources();
+    return { resources };
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.ADMIN_USERS,
+    action: ErpAction.MANAGE,
+  })
+  @ApiOkResponse({ type: RoleListResponseDto })
+  @Get()
   async getRoles(@Query() query: ListCoreRolesDto) {
     return this.rbacRolesService.getRolesPaginated(query);
   }
@@ -67,7 +82,7 @@ export class RbacRolesController {
     resource: ErpResource.ADMIN_USERS,
     action: ErpAction.MANAGE,
   })
-  @Post('roles')
+  @Post()
   async createRole(@Body() dto: CreateCoreRoleDto) {
     return this.rbacRolesService.createRole(dto);
   }
@@ -76,7 +91,7 @@ export class RbacRolesController {
     resource: ErpResource.ADMIN_USERS,
     action: ErpAction.MANAGE,
   })
-  @Get('roles/:id')
+  @Get(':id')
   async getRole(@Param('id', ParseUUIDPipe) id: string) {
     return this.rbacRolesService.getRoleById(id);
   }
@@ -85,7 +100,7 @@ export class RbacRolesController {
     resource: ErpResource.ADMIN_USERS,
     action: ErpAction.MANAGE,
   })
-  @Patch('roles/:id')
+  @Patch(':id')
   async updateRole(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateCoreRoleDto,
@@ -97,7 +112,7 @@ export class RbacRolesController {
     resource: ErpResource.ADMIN_USERS,
     action: ErpAction.MANAGE,
   })
-  @Delete('roles/:id')
+  @Delete(':id')
   async deleteRole(@Param('id', ParseUUIDPipe) id: string) {
     return this.rbacRolesService.deleteRole(id);
   }
@@ -106,7 +121,7 @@ export class RbacRolesController {
     resource: ErpResource.ADMIN_USERS,
     action: ErpAction.MANAGE,
   })
-  @Get('roles/:roleId/permissions')
+  @Get(':roleId/permissions')
   async getRolePermissions(@Param('roleId', ParseUUIDPipe) roleId: string) {
     const permissions = await this.rbacRolesService.getRolePermissions(roleId);
     return { permissions };
@@ -116,7 +131,7 @@ export class RbacRolesController {
     resource: ErpResource.ADMIN_USERS,
     action: ErpAction.MANAGE,
   })
-  @Patch('roles/:roleId/permissions')
+  @Patch(':roleId/permissions')
   async updateRolePermissions(
     @Param('roleId', ParseUUIDPipe) roleId: string,
     @Body() dto: UpdateCoreRolePermissionsDto,
@@ -128,7 +143,7 @@ export class RbacRolesController {
     resource: ErpResource.ADMIN_USERS,
     action: ErpAction.MANAGE,
   })
-  @Get('roles/:roleId/users')
+  @Get(':roleId/users')
   async getRoleUsers(@Param('roleId', ParseUUIDPipe) roleId: string) {
     const users = await this.rbacRolesService.getRoleUsers(roleId);
     return { users };
@@ -138,21 +153,11 @@ export class RbacRolesController {
     resource: ErpResource.ADMIN_USERS,
     action: ErpAction.MANAGE,
   })
-  @Patch('roles/:roleId/users')
+  @Patch(':roleId/users')
   async updateRoleUsers(
     @Param('roleId', ParseUUIDPipe) roleId: string,
     @Body() dto: UpdateCoreRoleUsersDto,
   ) {
     return this.rbacRolesService.updateRoleUsers(roleId, dto);
-  }
-
-  @RequirePermissions({
-    resource: ErpResource.ADMIN_USERS,
-    action: ErpAction.MANAGE,
-  })
-  @Get('collections')
-  async getAvailableResources() {
-    const resources = await this.rbacRolesService.getAvailableResources();
-    return { resources };
   }
 }

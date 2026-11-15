@@ -61,4 +61,8 @@ export abstract class BasePurchaseRequestEntity extends BaseApprovalFields {
 
   @Column({ type: 'text', name: 'close_reason', nullable: true })
   closeReason: string | null;
+
+  /** Phiếu gốc khi chứng từ này được nhân bản từ phiếu đã từ chối/hủy. */
+  @Column({ type: 'uuid', name: 'cloned_from_id', nullable: true })
+  clonedFromId: string | null;
 }

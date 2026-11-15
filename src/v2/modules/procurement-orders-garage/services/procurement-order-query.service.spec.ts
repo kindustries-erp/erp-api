@@ -104,8 +104,14 @@ describe('GarageProcurementOrderQueryService', () => {
         { label: 'Công ty A', value: 'Công ty A' },
         { label: 'Công ty B', value: 'Công ty B' },
       ],
-      total: 2,
-      next: null,
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 2,
+        totalPages: 1,
+        next: null,
+        previous: null,
+      },
     });
   });
 
@@ -119,6 +125,16 @@ describe('GarageProcurementOrderQueryService', () => {
     );
 
     expect(headersRepo.createQueryBuilder).not.toHaveBeenCalled();
-    expect(result).toEqual({ items: [], total: 0, next: null });
+    expect(result).toEqual({
+      items: [],
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 1,
+        next: null,
+        previous: null,
+      },
+    });
   });
 });

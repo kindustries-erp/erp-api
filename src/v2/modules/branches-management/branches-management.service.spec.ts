@@ -35,7 +35,17 @@ describe('BranchesManagementService', () => {
       totalPages: 3,
     };
     core.findAll.mockResolvedValue(page);
-    expect(await service.findAll({})).toEqual(page);
+    expect(await service.findAll({})).toEqual({
+      items: page.items,
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 41,
+        totalPages: 3,
+        next: 2,
+        previous: null,
+      },
+    });
   });
 
   it('keeps creation and update messages, including null on a missing row', async () => {

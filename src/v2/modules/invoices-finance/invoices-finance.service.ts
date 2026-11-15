@@ -14,6 +14,7 @@ import { INVOICE_MESSAGES } from './invoice-messages';
 import { InvoiceCommandService } from './services/finance-invoice-command.service';
 import { InvoiceQueryService } from './services/finance-invoice-query.service';
 import { R2Service } from '@/r2/r2.service';
+import { toPaginatedResult } from '@/common/utils/paginated-result';
 
 /** Facade của module: điều phối query/command và luôn trả response DTO, không lộ entity. */
 @Injectable()
@@ -28,14 +29,13 @@ export class FinanceInvoicesService {
 
   async findAll(dto: QueryInvoiceDto) {
     const page = await this.query.findAll(dto);
-    return {
-      items: page.items.map((item) => toInvoiceListItem(item)),
-      total: page.total,
-      page: page.page,
-      pageSize: page.pageSize,
-      totalPages: Math.ceil(page.total / page.pageSize),
-      summaries: page.summaries,
-    };
+    return toPaginatedResult(
+      page.items.map((item) => toInvoiceListItem(item)),
+      page.page,
+      page.pageSize,
+      page.total,
+      page.summaries,
+    );
   }
 
   findColumnOptions(

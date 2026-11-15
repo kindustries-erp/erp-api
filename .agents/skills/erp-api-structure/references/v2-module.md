@@ -1,7 +1,7 @@
 
 # Kỹ Năng API v2 Refactor (`erp-api`)
 
-Workflow đầy đủ: [`../../../workflows/api-structure.md`](../../../workflows/api-structure.md). Skill này là checklist và quy ước để thực thi workflow.
+Workflow đầy đủ: [`../../../workflows/erp-api-structure.md`](../../../workflows/erp-api-structure.md). Skill này là checklist và quy ước để thực thi workflow.
 
 ## 0. Vị trí
 
@@ -16,7 +16,8 @@ Kiến trúc API V2 được tổ chức phân cấp tương tự Web V2 (`erp-w
 
 - **Lõi** `src/v2/core/<họ>-core/`: tên luôn kết thúc `-core`. Generator `api-core` nhận tên có hoặc không có `-core` và tự thêm hậu tố. Tên class (`Base<Entity>...`; `<Họ>CoreModule` chỉ còn ở họ cũ) và tên file service giữ theo phần gốc, không nhân đôi `-core`.
 - **Module** `src/v2/modules/<gốc>-<biến thể>/`: biến thể đặt ở hậu tố, ví dụ `procurement-orders-garage`, `procurement-orders-erp`, `invoices-finance`. Không dùng tiền tố `erp-`, `garage-`, `finance-`. `rbac` là tên miền (quản trị quyền), không phải tiền tố biến thể, nên module quản trị role là `rbac-roles`. Module không có biến thể (`business-partners-management`, `purchase-orders`) giữ nguyên.
-- **Hợp đồng không đổi khi đổi tên thư mục**: route (`@Controller`), `permissionPattern` và `ErpResource`, tên bảng (`@Entity`), tên class và symbol trong barrel. Khi triển khai module đã có, truyền tường minh `tableNameInput`, `routePathInput`, `permissionResourceInput` cho generator; không để generator suy ra từ tên thư mục.
+- **Route = `api/v2/<tên thư mục module>`**: `@Controller('api/v2/<tên-module>')` là một chuỗi duy nhất, không alias `api/v1`, không đoạn thừa trùng tên module (ví dụ `rbac-roles` dùng `/api/v2/rbac-roles/:id`, không phải `/api/v2/rbac-roles/roles/:id`). Đổi tên thư mục thì đổi route cùng đợt, web (V1 và V2), smoke và E2E sửa theo. Route tĩnh (`column-options`, `collections`, `next-code`) khai báo trước `:id`.
+- **Hợp đồng không đổi khi đổi tên thư mục**: `permissionPattern` và `ErpResource`, tên bảng (`@Entity`), tên class và symbol trong barrel. Khi triển khai module đã có, truyền tường minh `tableNameInput`, `routePathInput`, `permissionResourceInput` cho generator; không để generator suy ra từ tên thư mục.
 - **Tên bảng (bảng tạo mới)** theo mục 0b. Không đổi tên bảng đang có.
 - Generator `api-voucher-v2` vẫn chuẩn hóa tên module thành `<gốc>-core`. Module đổi tên theo quy ước trên không đi qua generator này; khi tạo module mới theo quy ước suffix, đặt tên theo `<gốc>-<biến thể>` và kiểm tra lại `moduleName`/`moduleBase` sinh ra.
 
@@ -38,7 +39,7 @@ Kiến trúc API V2 được tổ chức phân cấp tương tự Web V2 (`erp-w
 | DTO ra | `dto/*-response.dto.ts` | Không trả entity ra ngoài module |
 | Mapper | `helpers/*.mapper.ts` | Hàm thuần. Hai chiều: entity→response, DTO→entity (bỏ `undefined`) |
 | Đọc | `services/*-query.service.ts` | Chỉ đọc, lọc `isDeleted = false` |
-| Ghi | `services/*-command.service.ts` | create / update / softDelete / hardDelete (có điều kiện, xem `api-structure` Phần B mục "Chính sách xóa") |
+| Ghi | `services/*-command.service.ts` | create / update / softDelete / hardDelete (có điều kiện, xem `erp-api-structure` Phần B mục "Chính sách xóa") |
 | Facade | `<module>.service.ts` | Điều phối, `NotFoundException`, luôn trả response DTO |
 | Controller | `controllers/*.controller.ts` | `@RequirePermissions({ resource: ErpResource.X, action: ErpAction.READ\|CREATE\|UPDATE\|DELETE\|PURGE })`; xóa cứng dùng `PURGE` và route `:id/permanent` |
 
@@ -82,7 +83,7 @@ Lõi `src/v2/core/base-core` (barrel `@/v2/core/base-core`) là chuỗi entity n
 
 | Endpoint | Response |
 | :--- | :--- |
-| `GET /` (list) | `{ items, pagination: { page, pageSize, total, totalPages }, summaries }` (chuẩn mới, xem bullet dưới) |
+| `GET /` (list) | `{ items, pagination: { page, pageSize, total, totalPages, next, previous }, summaries?, extraData? }` (xem bullet dưới) |
 | `GET /:id` | `{ message, data: ResponseDto }` |
 | `POST /` | `{ message, data: ResponseDto }` |
 | `PATCH /:id` | `{ message, data: ResponseDto }` |
@@ -93,8 +94,8 @@ Lõi `src/v2/core/base-core` (barrel `@/v2/core/base-core`) là chuỗi entity n
 - **`summaries` theo key (chuẩn mới, bắt buộc cho list có cột số)**: web gửi `summary_keys=key1,key2` (tối đa 10 key, CSV). Với mỗi key hợp lệ, API trả `{ total, pageSubtotal, cumulative }`: `total` = tổng toàn bộ dòng khớp bộ lọc, `pageSubtotal` = tổng trang hiện tại, `cumulative` = tổng từ dòng 1 đến hết trang hiện tại. Key ngoài whitelist hoặc rỗng trả `null` (không lỗi 400). Không có `summary_keys` thì `summaries = {}`.
 - **Helper dùng chung duy nhất**: `applyListSummaries(qb, { columns, keys, page, pageSize, tieBreaker })` trong `src/common/utils/table-query/table-query.summary.ts`. Module KHÔNG tự viết SUM/subtotal. Whitelist cột là `SUMMARY_COLUMNS` của module (chỉ cột số, không lấy từ input người dùng). Query list phải `applyTableSort(..., tieBreaker)` với tie-breaker là id để subtotal khớp đúng các dòng hiển thị.
 - **DTO**: response dùng `@ApiProperty(SUMMARIES_SWAGGER_SCHEMA)` và kiểu `Record<string, SummaryMetricDto | null>` (`src/common/dto/summary-metric.dto.ts`). Query DTO nhận `summary_keys` (`IsOptional`, `IsString`).
-- **Phân trang trong object `pagination`** (chuẩn mới, đã áp dụng cho procurement garage và erp): dựng bằng `toPaginatedResult(items, page, pageSize, total, summaries)` (`src/common/utils/paginated-result.ts`), `totalPages = max(1, ceil(total / pageSize))`. DTO list dùng `PaginationMetaDto` (`src/common/dto/pagination-meta.dto.ts`). Gọi `computeTableSummaries` trước `.skip().take()`.
-- **Nợ kỹ thuật**: các module v2 khác (branches, rbac-roles, tồn kho) còn trả `{ items, total, page, pageSize, totalPages }` phẳng. Chuyển sang `pagination` là việc riêng, phải đi cùng web (breaking change). Goods-receipts garage, invoices và business-partners đã dùng `applyListSummaries` nhưng vẫn trả envelope phẳng.
+- **Phân trang trong object `pagination`** (chuẩn cho mọi list và column-options v2): dựng bằng `toPaginatedResult(items, page, pageSize, total, summaries, extraData?)` hoặc `toPagedList(items, page, pageSize, total, extraData?)` (`src/common/utils/paginated-result.ts`), `totalPages = max(1, ceil(total / pageSize))`, `next`/`previous` là số trang hoặc `null`. Không trả key phẳng `total`/`page`/`pageSize`/`totalPages` ở gốc. DTO list dùng `PaginationMetaDto` (`src/common/dto/pagination-meta.dto.ts`); column-options trả `{ items, pagination }` (`ColumnOptionsResponseDto`, dựng bằng `findTableColumnOptions` hoặc `emptyOptionsPage`).
+- **`extraData` của list (tùy chọn)**: dữ liệu phụ của cả danh sách, không thuộc từng dòng (ví dụ `unreadCount` của thông báo), đặt trong `extraData: { ... }` ở gốc response, khai báo thành DTO riêng có `@ApiProperty`. Không thêm key phẳng mới ở gốc; list không có dữ liệu phụ thì không có key `extraData` (không trả `{}`). Khác với `extraData` của từng dòng ở mục 1b. Web đọc `res.extraData.<key>`. Gọi `computeTableSummaries` trước `.skip().take()`.
 - **`DTO query`** kế thừa `TableQueryDto` (`src/common/dto/table-query.dto.ts`), gồm `column_filters`, `column_search`, `column_operators`, `date_ranges`, `date_from`, `date_to`, `sort`, `search`.
 - **Route tĩnh** (`column-options`, và `next-code` khi module cần) đặt trước `:id`, nếu không `ParseUUIDPipe` trả 400.
 
@@ -129,7 +130,8 @@ Generator không ghi đè file đã có (`plop add` lỗi). Trình tự đã dù
 
 - [ ] `bunx prettier --write "src/v2/<module>-core/**/*.ts"`
 - [ ] Nếu module có cột số: khai báo `SUMMARY_COLUMNS`, gọi `applyListSummaries` (không tự viết SUM), có tie-breaker id trong sort và `summaries` có trong response list. Test: `bunx jest src/common/utils/table-query/table-query.summary.spec.ts` và spec của service.
-- [ ] Route không trùng controller khác (`grep -rn "@Controller('<route>')" src`)
+- [ ] Route là `api/v2/<tên thư mục module>`, chuỗi đơn, không trùng controller khác (`grep -rn "@Controller('api/v2/<tên-module>')" src`); route tĩnh trước `:id`
+- [ ] List có dữ liệu phụ chung thì trả trong `extraData` (DTO riêng, `@ApiProperty`), không thêm key phẳng ở gốc
 - [ ] `ErpResource` có entry mới (luôn được thêm bởi generator). Xác nhận seed quyền ở `rbac-core` không cần bước tay khác.
 - [ ] `wire` đã nối đúng `app.module.ts` và `data-source.ts` (nếu chọn `true`). Nếu chọn `false`, phải nối tay.
 - [ ] Nghiệp vụ thêm vào command/query service, kèm spec
@@ -186,18 +188,18 @@ Các file trong `plop-helpers/` là hàm thuần: `apiV2Fields`, `apiV2Data`, `a
 
 | Module V1 | Module V2 (`src/v2/`) | Trạng thái |
 | :--- | :--- | :--- |
-| `notifications-core` (v2, mới) | Lõi base `src/v2/core/notifications-core/` (`BaseNotificationEntity`, abstract query/command service, types) & module `src/v2/modules/notifications-inbox/` (entity `NotificationInbox` bảng `notifications_inbox`, controller `/api/v2/notifications`, publisher, job `notifications-purge`). Bảng đổi từ `notifications_core` bằng migration `20261109150000`. | Đã v2 theo quy tắc base-trong-core, cụ thể-trong-module. |
+| `notifications-core` (v2, mới) | Lõi base `src/v2/core/notifications-core/` (`BaseNotificationEntity`, abstract query/command service, types) & module `src/v2/modules/notifications-inbox/` (entity `NotificationInbox` bảng `notifications_inbox`, controller `/api/v2/notifications-inbox`, publisher, job `notifications-purge`). Bảng đổi từ `notifications_core` bằng migration `20261109150000`. | Đã v2 theo quy tắc base-trong-core, cụ thể-trong-module. |
 | `business-partners-core` `[LEGACY-CORE]` | Lõi `src/v2/core/business-partners-core/` (entity `ErpBusinessPartner`, services, contracts, `core.manifest.json`) & module `src/v2/modules/business-partners-management/` (route `/api/v2/business-partners`, alias v1 `business-partners`) | Đã v2 chuẩn hóa 2 tầng Core & Module. Controller và route giữ nguyên 100%, UI không đổi. |
-| `branches-core` `[LEGACY-CORE]` | Lõi `src/v2/core/branches-core/` (một entity `ErpBranch`, query/command, facade) & module `src/v2/modules/branches-management/` (controller/response mapper, route vẫn `/api/v1/branches`). | Đã chuyển cấu trúc v2, giữ nguyên DB/API/UI. Ngoại lệ legacy: JWT-only, body không siết validator, `DELETE /:id` xóa cứng, không có `is_deleted`; xem module skill `branches-core`. Manifest đánh dấu `legacy-compatible`, không dùng làm base cho `api-thin-module`. |
+| `branches-core` `[LEGACY-CORE]` | Lõi `src/v2/core/branches-core/` (một entity `ErpBranch`, query/command, facade) & module `src/v2/modules/branches-management/` (controller/response mapper, route vẫn `/api/v2/branches`). | Đã chuyển cấu trúc v2, giữ nguyên DB/API/UI. Ngoại lệ legacy: JWT-only, body không siết validator, `DELETE /:id` xóa cứng, không có `is_deleted`; xem module skill `branches-core`. Manifest đánh dấu `legacy-compatible`, không dùng làm base cho `api-thin-module`. |
 | `erp-invoices-core` (lõi: list/get/create/update/bulk/soft-delete) | `src/v2/core/invoices-core/` (Core Foundation) & `src/v2/modules/invoices-finance/` (route `/api/v2/invoices`, chạy song song) | Đang migrate. Tách Core (Abstract entities, Engine tính toán dùng chung, DTOs) và Business Module `finance-invoices` (kế thừa Core, Controller V2, Query/Command). Entity `FinanceInvoice`, `FinanceInvoiceItem` trỏ cùng bảng `erp_invoices` / `erp_invoice_items`, không migration. |
 | `purchase-orders-core` (v2, đã gỡ) | Không còn module/lõi v2 `purchase-orders`. Đã kiểm tra: không có caller nào (erp-web, erp-api, test, scripts) gọi `/api/v2/purchase-orders`. Khôi phục từ commit `5b1ec29` nếu cần. PO dùng v1: `src/purchase-orders-core/`, route `/api/v1/purchase-orders`. | Đã gỡ cùng đợt đổi tên. |
-| `rbac-core` `[LEGACY-CORE]` (kiểm quyền dùng chung + quản trị role) | Lõi `src/v2/core/rbac-core/` (entity `CoreRole`/`CorePermission`/`CoreUserRole`, `RbacCoreService` 5 method kiểm quyền, `enums/` xuất qua `@/v2/core/rbac-core`, `@Global`); module `src/v2/modules/rbac-roles/` (route vẫn `/api/v1/rbac-core`, chung UI). Đã xóa sạch `src/rbac-core`. | Đã v2, giữ nguyên hợp đồng v1. Khác biệt có chủ đích: `GET roles/:roleId/users` chỉ trả `{id, email}`; id/roleId sai UUID trả 400 (trước đây 500). Xóa role vẫn là xóa cứng (bảng `core_roles` không có `isDeleted`). |
+| `rbac-core` `[LEGACY-CORE]` (kiểm quyền dùng chung + quản trị role) | Lõi `src/v2/core/rbac-core/` (entity `CoreRole`/`CorePermission`/`CoreUserRole`, `RbacCoreService` 5 method kiểm quyền, `enums/` xuất qua `@/v2/core/rbac-core`, `@Global`); module `src/v2/modules/rbac-roles/` (route vẫn `/api/v2/rbac-roles`, chung UI). Đã xóa sạch `src/rbac-core`. | Đã v2, giữ nguyên hợp đồng v1. Khác biệt có chủ đích: `GET roles/:roleId/users` chỉ trả `{id, email}`; id/roleId sai UUID trả 400 (trước đây 500). Xóa role vẫn là xóa cứng (bảng `core_roles` không có `isDeleted`). |
 
 Họ còn đánh dấu `[LEGACY-CORE]` và chưa có dòng riêng ở bảng này: `table-preferences-core`, `approval-core`, `admin-dashboard-core`. Chuyển từng họ khi có lệnh; mỗi lần chuyển xong thì gỡ khỏi `LEGACY_CORE_ALLOWLIST` và cập nhật bảng này.
 
 Khi làm module v2 mới không có lõi dùng chung và có bảng mới, dùng `api-module-v2`. Ví dụ PO v2 từng dựng tay theo cấu trúc này đã được gỡ; khôi phục từ commit `5b1ec29` nếu cần tham khảo.
 
-Route v2: `GLOBAL_PREFIX_EXCLUDE` cho phép controller `api/v2/...` không mang prefix `api/v1`. Plop sinh `@Controller('<routePath>')` có prefix `api/v1`, nên module v2 mới cần đổi tay path sang `api/v2/...` và cập nhật `global-prefix.config.ts` nếu cần.
+Route v2: `GLOBAL_PREFIX_EXCLUDE` cho phép controller `api/v2/...` không mang prefix `api/v1`. Plop sinh `@Controller('<routePath>')` có prefix `api/v1`, nên module v2 mới truyền `routePath` dạng `api/v2/<tên-module>` (chuỗi đơn, không alias) và cập nhật `global-prefix.config.ts` nếu cần.
 
 Knowledge-Sync: mỗi lần migrate xong, thêm/đổi dòng ở bảng này và cập nhật `.agents/skills/modules/<module>/SKILL.md` của module đó.
 

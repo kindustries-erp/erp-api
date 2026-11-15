@@ -43,7 +43,7 @@ describe('buildApiCoreData', () => {
 
   it('từ chối style lạ', () => {
     expect(() => buildApiCoreData({ ...engineAnswers, styleInput: 'facade' })).toThrow(/Style/);
-    expect(API_CORE_STYLES).toEqual(['engine', 'abstract-services']);
+    expect(API_CORE_STYLES).toEqual(['engine', 'abstract-services', 'orchestrator']);
   });
 });
 
@@ -124,5 +124,51 @@ describe('quy ước hậu tố -core của họ lõi', () => {
     const dirs = readdirSync(coreRoot, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
     expect(dirs.length).toBeGreaterThan(0);
     expect(dirs.filter((d) => !d.endsWith('-core'))).toEqual([]);
+  });
+});
+
+const orchestratorAnswers = { familyInput: 'procurement-flow', entityInput: 'ProcurementFlow', styleInput: 'orchestrator' };
+
+describe('kiểu orchestrator (điều phối nhiều module, không entity)', () => {
+  it('đặt tên service và file theo tên luồng, không sinh entity hay DTO', () => {
+    const data = buildApiCoreData(orchestratorAnswers);
+    expect(data.coreDir).toBe('src/v2/core/procurement-flow-core');
+    expect(data.orchestrator).toBe(true);
+    expect(data.serviceClass).toBe('AbstractProcurementFlowService');
+    expect(data.serviceFile).toBe('abstract-procurement-flow.service');
+    expect(data.serviceTemplateDir).toBe('core-orchestrator');
+    expect(data.baseContract).toBe('ProcurementFlowEventPort');
+    expect(data.baseEntity).toBeNull();
+    expect(data.baseCreateDto).toBeNull();
+  });
+
+  it('chỉ sinh 5 file: contract, barrel, manifest, service, spec; không entity, DTO', () => {
+    const files = coreFileMap(buildApiCoreData(orchestratorAnswers));
+    expect(files.map((f) => f.path)).toEqual([
+      'src/v2/core/procurement-flow-core/contracts/procurement-flow-core.contract.ts',
+      'src/v2/core/procurement-flow-core/index.ts',
+      'src/v2/core/procurement-flow-core/core.manifest.json',
+      'src/v2/core/procurement-flow-core/services/abstract-procurement-flow.service.ts',
+      'src/v2/core/procurement-flow-core/services/abstract-procurement-flow.service.spec.ts',
+    ]);
+    const templates = files.map((f) => f.template);
+    expect(templates).toContain('core-orchestrator/service.ts.hbs');
+    expect(templates.some((t) => t.includes('entity') || t.includes('create-dto'))).toBe(false);
+  });
+
+  it('manifest khai báo style orchestrator, chỉ có contract và service, chỉ cần thư mục services', () => {
+    const manifest = buildCoreManifest(buildApiCoreData(orchestratorAnswers));
+    expect(manifest.style).toBe('orchestrator');
+    expect(manifest.baseClasses).toEqual({
+      contract: 'ProcurementFlowEventPort',
+      service: 'AbstractProcurementFlowService',
+    });
+    expect(manifest.requiredModuleFiles).toEqual(['services']);
+    expect(manifest.module).toBeNull();
+  });
+
+  it('các kiểu còn lại không đổi: vẫn có entity và createDto trong manifest', () => {
+    const manifest = buildCoreManifest(buildApiCoreData(engineAnswers));
+    expect(Object.keys(manifest.baseClasses)).toEqual(['entity', 'createDto', 'contract', 'service']);
   });
 });

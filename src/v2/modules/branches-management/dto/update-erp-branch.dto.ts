@@ -8,7 +8,7 @@ import {
 } from 'class-validator';
 import { ExtraDataField } from '@/v2/core/base-core/dto/extra-data.decorator';
 
-// Body của PATCH /api/v1/branches/:id: mọi field tùy chọn, nhưng nếu có mặt thì phải hợp lệ
+// Body của PATCH /api/v2/branches/:id: mọi field tùy chọn, nhưng nếu có mặt thì phải hợp lệ
 // (null cũng bị từ chối, vì legacy sẽ lỗi NOT NULL ở DB).
 export class UpdateErpBranchDto {
   @ApiPropertyOptional({ maxLength: 100 })

@@ -61,4 +61,4 @@ Lệnh: `bunx jest src/v2/modules/scheduler-jobs src/v2/modules/notifications-in
 
 ## 7. Liên kết
 - Plan: `/home/lio/.claude/plans/anh-mu-n-t-o-api-v2-notification-glistening-reddy.md`
-- Quy tắc cấu trúc: `.agents/workflows/api-structure.md` Phần B.
+- Quy tắc cấu trúc: `.agents/workflows/erp-api-structure.md` Phần B.

@@ -1,4 +1,4 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsArray,
@@ -16,10 +16,12 @@ export class CreateGarageGoodsReceiptDto extends BaseCreateGoodsReceiptDto {
   @IsIn(['UNPAID', 'PARTIALLY_PAID', 'PAID'])
   paymentStatus?: string;
 
-  @ApiPropertyOptional({ description: 'Đơn mua garage nguồn (nếu có)' })
-  @IsOptional()
+  @ApiProperty({
+    description:
+      'Đơn mua garage nguồn (bắt buộc khi tạo). NCC, chi nhánh lấy theo đơn; tổng tiền tính từ dòng nhận',
+  })
   @IsUUID()
-  garageProcurementOrderId?: string;
+  garageProcurementOrderId: string;
 
   @ApiPropertyOptional({ type: () => [CreateGarageGoodsReceiptLineDto] })
   @IsOptional()

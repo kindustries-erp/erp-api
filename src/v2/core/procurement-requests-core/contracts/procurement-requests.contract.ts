@@ -15,6 +15,7 @@ export const PURCHASE_REQUEST_STATUS = {
   DRAFT: 'DRAFT',
   PENDING_APPROVAL: 'PENDING_APPROVAL',
   APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
   CLOSED: 'CLOSED',
   CANCELLED: 'CANCELLED',
 } as const;
@@ -46,7 +47,7 @@ export const PURCHASE_REQUEST_TRANSITIONS: Record<
   submit: { from: ['DRAFT'], to: 'PENDING_APPROVAL' },
   recall: { from: ['PENDING_APPROVAL'], to: 'DRAFT' },
   approve: { from: ['PENDING_APPROVAL'], to: 'APPROVED' },
-  reject: { from: ['PENDING_APPROVAL'], to: 'DRAFT' },
+  reject: { from: ['PENDING_APPROVAL'], to: 'REJECTED' },
   cancel: { from: ['PENDING_APPROVAL', 'APPROVED'], to: 'CANCELLED' },
   close: { from: ['APPROVED'], to: 'CLOSED' },
 };

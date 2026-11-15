@@ -42,7 +42,7 @@ function makeLine(over: Partial<Line> = {}): Line {
   });
 }
 
-function setup(header: Header, lines: Line[]) {
+function setup(header: Header, lines: Line[], restrictApprover = false) {
   const manager = {
     findOne: jest.fn().mockResolvedValue(header),
     find: jest.fn().mockResolvedValue(lines),
@@ -69,6 +69,7 @@ function setup(header: Header, lines: Line[]) {
     protected readonly lineForeignKey = 'orderId' as never;
     protected readonly docType = 'PROCUREMENT_ORDER';
     protected readonly numberPrefix = 'DMH';
+    protected readonly restrictApproverToDecision = restrictApprover;
   }
   return {
     svc: new TestCommand(dataSource, events, link),
@@ -202,12 +203,44 @@ describe('AbstractProcurementOrderCommandService', () => {
     await svc.transition(
       'o1',
       'cancel',
-      { id: 'boss', roles: [] },
+      { id: 'creator', roles: [] },
       'nhà cung cấp hết hàng',
     );
     expect(link.release).toHaveBeenCalledWith(expect.anything(), 'pr1', [
       { requestLineId: 'rl1', qty: 5 },
     ]);
+  });
+
+  it('cờ tắt (họ thường): hủy không kiểm người tạo', async () => {
+    const { svc, link } = setup(
+      makeHeader({ status: 'APPROVED', requestId: 'pr1' }),
+      [makeLine({ qtyOrdered: '5', requestLineId: 'rl1' })],
+    );
+    const out = await svc.transition(
+      'o1',
+      'cancel',
+      { id: 'boss', roles: [] },
+      'x',
+    );
+    expect(out.status).toBe('CANCELLED');
+    expect(link.release).toHaveBeenCalled();
+  });
+
+  it('cờ bật (Garage): người duyệt được chỉ định bị 403 khi hủy và không trả số lượng', async () => {
+    const { svc, link, events } = setup(
+      makeHeader({ status: 'APPROVED', requestId: 'pr1', approverId: 'boss' }),
+      [makeLine({ qtyOrdered: '5', requestLineId: 'rl1' })],
+      true,
+    );
+    await expect(
+      svc.transition('o1', 'cancel', { id: 'boss', roles: [] }, 'x'),
+    ).rejects.toThrow(
+      new ForbiddenException(
+        'Người duyệt chỉ được duyệt hoặc từ chối chứng từ của người tạo',
+      ),
+    );
+    expect(link.release).not.toHaveBeenCalled();
+    expect(events.record).not.toHaveBeenCalled();
   });
 
   it('không hủy được khi đã nhận hàng', async () => {
@@ -216,7 +249,7 @@ describe('AbstractProcurementOrderCommandService', () => {
       [makeLine({ qtyFulfilled: '2' })],
     );
     await expect(
-      svc.transition('o1', 'cancel', { id: 'boss', roles: [] }, 'x'),
+      svc.transition('o1', 'cancel', { id: 'creator', roles: [] }, 'x'),
     ).rejects.toThrow(ConflictException);
     expect(link.release).not.toHaveBeenCalled();
   });

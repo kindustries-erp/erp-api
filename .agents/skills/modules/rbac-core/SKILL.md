@@ -87,7 +87,7 @@ erp-api/src/v2/core/rbac-core/                       # Lõi họ rbac (@Global)
 ├── rbac-core.module.ts               # RbacCoreModule (@Global), export RbacCoreService
 └── core.manifest.json, index.ts      # index.ts export toàn bộ enums, entities, helper, service, module
 
-erp-api/src/v2/modules/rbac-roles/              # Module quản trị role (API /api/v1/rbac-core)
+erp-api/src/v2/modules/rbac-roles/              # Module quản trị role (API /api/v2/rbac-roles)
 ├── controllers/rbac-roles.controller.ts        # 10 route, RBAC ADMIN_USERS/MANAGE, ParseUUIDPipe cho id/roleId
 ├── rbac-roles.service.ts                       # Facade: delegate sang 4 sub-service, trả response DTO
 ├── services/
@@ -144,20 +144,20 @@ Tất cả các endpoint dưới đây đều được bảo vệ bởi `JwtAuth
 - Tham số `:id` và `:roleId` phải là UUID. Giá trị khác UUID trả `400` (`ParseUUIDPipe`), không đi xuống DB. Trước đây trả `500`.
 - `GET /roles/:roleId/users` chỉ trả `{ users: [{ id, email }] }`. Không lộ `password_hash`.
 - Response không trả entity TypeORM. Mọi response đi qua mapper/DTO trong `rbac-roles`.
-- Route và response khác của v1 giữ nguyên, nên `erp-web` không cần đổi (vẫn gọi `/api/v1/rbac-core/...`).
+- Route chuẩn là `/api/v2/rbac-roles/...` (đã bỏ `/api/v1/rbac-core`); web V1 và V2 đều gọi URL này.
 
 | Phương thức | Endpoint | Mô tả |
 | :--- | :--- | :--- |
-| `GET` | `/api/v1/rbac-core/roles` | Lấy danh sách vai trò có phân trang, tìm kiếm, lọc theo cột và ngày |
-| `GET` | `/api/v1/rbac-core/roles/column-options` | Lấy danh sách options lọc động cho cột trên bảng |
-| `POST` | `/api/v1/rbac-core/roles` | Tạo mới vai trò (`name`, `description`) |
-| `PATCH` | `/api/v1/rbac-core/roles/:id` | Cập nhật tên, mô tả, trạng thái hoạt động của vai trò |
-| `DELETE` | `/api/v1/rbac-core/roles/:id` | Xóa vai trò (tự động xóa cascade permissions và gán người dùng) |
-| `GET` | `/api/v1/rbac-core/roles/:roleId/permissions` | Lấy danh sách quyền chi tiết của vai trò |
-| `PATCH` | `/api/v1/rbac-core/roles/:roleId/permissions` | Lưu ma trận quyền của vai trò (`permissions: [{ resource, action, conditions }]`) |
-| `GET` | `/api/v1/rbac-core/roles/:roleId/users` | Lấy danh sách người dùng được gán vào vai trò |
-| `PATCH` | `/api/v1/rbac-core/roles/:roleId/users` | Cập nhật danh sách người dùng gán vào vai trò (`userIds: string[]`) |
-| `GET` | `/api/v1/rbac-core/collections` | Lấy danh sách toàn bộ tài nguyên (resources) khả dụng trong hệ thống; resource có action bổ sung trả kèm `actions` (hiện: `approve`, `reject` cho 4 resource procurement). |
+| `GET` | `/api/v2/rbac-roles` | Lấy danh sách vai trò có phân trang, tìm kiếm, lọc theo cột và ngày |
+| `GET` | `/api/v2/rbac-roles/column-options` | Lấy danh sách options lọc động cho cột trên bảng |
+| `POST` | `/api/v2/rbac-roles` | Tạo mới vai trò (`name`, `description`) |
+| `PATCH` | `/api/v2/rbac-roles/:id` | Cập nhật tên, mô tả, trạng thái hoạt động của vai trò |
+| `DELETE` | `/api/v2/rbac-roles/:id` | Xóa vai trò (tự động xóa cascade permissions và gán người dùng) |
+| `GET` | `/api/v2/rbac-roles/:roleId/permissions` | Lấy danh sách quyền chi tiết của vai trò |
+| `PATCH` | `/api/v2/rbac-roles/:roleId/permissions` | Lưu ma trận quyền của vai trò (`permissions: [{ resource, action, conditions }]`) |
+| `GET` | `/api/v2/rbac-roles/:roleId/users` | Lấy danh sách người dùng được gán vào vai trò |
+| `PATCH` | `/api/v2/rbac-roles/:roleId/users` | Cập nhật danh sách người dùng gán vào vai trò (`userIds: string[]`) |
+| `GET` | `/api/v2/rbac-roles/collections` | Lấy danh sách toàn bộ tài nguyên (resources) khả dụng trong hệ thống; resource có action bổ sung trả kèm `actions` (hiện: `approve`, `reject` cho 4 resource procurement). |
 
 > **Lưu ý ngữ nghĩa lưu quyền:** `PATCH .../permissions` thay toàn bộ quyền của vai trò (xóa rồi ghi lại). Client phải gửi đủ mọi dòng cần giữ, kể cả action UI không hiển thị (ví dụ `purge`, `manage`, `conditions`). Web V2 đã làm việc này từ bản sửa phân quyền Duyệt/Từ chối.
 
@@ -230,3 +230,10 @@ Các tài nguyên được gom thành 9 nhóm nghiệp vụ chính:
   cd erp/erp-web
   bun run check:ci
   ```
+
+## Hợp đồng phân trang chuẩn v2 (pagination)
+
+- List trả `{ items, pagination, summaries? }`; `pagination` = `{ page, pageSize, total, totalPages, next, previous }` (`next`/`previous` là số trang hoặc `null`). Không còn key phẳng `total`/`page`/`totalPages` ở cấp gốc.
+- Column-options trả `{ items: { label, value }[], pagination }`. Dựng bằng `findTableColumnOptions` hoặc `emptyOptionsPage` (`src/common/utils/table-query`).
+- Builder: `buildPagination` / `toPagedList` / `toPaginatedResult` (`src/common/utils/paginated-result.ts`). DTO Swagger: `PaginationMetaDto`, `ColumnOptionsResponseDto`.
+- Web phải đọc `res.pagination.*`. Xem web `src/v2/shared/utils/v2FetchOptionsAdapter.ts`.

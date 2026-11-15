@@ -1,3 +1,6 @@
+import { ApiOkResponse } from '@nestjs/swagger';
+import { ColumnOptionsResponseDto } from '@/common/dto/column-options-response.dto';
+import { ErpBusinessPartnerListResponseDto } from '@/v2/core/business-partners-core/dto/erp-business-partner-list-response.dto';
 import {
   Body,
   Controller,
@@ -31,7 +34,7 @@ import { BusinessPartnersManagementService } from '../business-partners-manageme
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
 // `api/v2/...` là route chính. `business-partners` (nhận prefix `api/v1`) giữ cho web V1 đang gọi.
-@Controller(['api/v2/business-partners', 'business-partners'])
+@Controller('api/v2/business-partners')
 export class ErpBusinessPartnerController {
   constructor(private readonly service: BusinessPartnersManagementService) {}
 
@@ -42,6 +45,7 @@ export class ErpBusinessPartnerController {
   @ApiOperation({
     summary: 'Danh sách ErpBusinessPartner (phân trang, tìm kiếm)',
   })
+  @ApiOkResponse({ type: ErpBusinessPartnerListResponseDto })
   @Get()
   findAll(@Query() query: QueryErpBusinessPartnerDto) {
     return this.service.findAll(query);
@@ -55,6 +59,7 @@ export class ErpBusinessPartnerController {
   @ApiOperation({
     summary: 'Gợi ý giá trị của một cột, áp dụng bộ lọc các cột khác',
   })
+  @ApiOkResponse({ type: ColumnOptionsResponseDto })
   @Get('column-options')
   columnOptions(
     @Query('column') column: string,

@@ -34,6 +34,14 @@ export class NotificationResponseDto {
   target: { module: string; id: string; action: string | null } | null;
 }
 
+/** Dữ liệu phụ của danh sách thông báo (`extraData`). */
+export class NotificationListExtraDataDto {
+  @ApiProperty({
+    description: 'Số thông báo chưa đọc của user (không phụ thuộc bộ lọc)',
+  })
+  unreadCount: number;
+}
+
 export class NotificationListResponseDto {
   @ApiProperty({ type: [NotificationResponseDto] })
   items: NotificationResponseDto[];
@@ -41,10 +49,8 @@ export class NotificationListResponseDto {
   @ApiProperty({ type: PaginationMetaDto })
   pagination: PaginationMetaDto;
 
-  @ApiProperty({
-    description: 'Số thông báo chưa đọc của user (không phụ thuộc bộ lọc)',
-  })
-  unreadCount: number;
+  @ApiProperty({ type: NotificationListExtraDataDto })
+  extraData: NotificationListExtraDataDto;
 }
 
 export class NotificationActionResponseDto<T> {

@@ -18,6 +18,7 @@ import {
   TableDateRange,
   TableFilterPayload,
   TableOperatorFilter,
+  emptyOptionsPage,
   TableOptionsPage,
   TABLE_BLANK_VALUE,
 } from '@/common/utils/table-query';
@@ -133,7 +134,7 @@ export class FinanceInvoiceQueryService {
     filters: unknown,
   ): Promise<TableOptionsPage> {
     const def = resolveTableColumn(INVOICE_TABLE_COLUMNS, column);
-    if (!def) return { items: [], total: 0, next: null };
+    if (!def) return emptyOptionsPage(page, pageSize);
 
     const qb = this.baseQuery();
     applyTableFilters(

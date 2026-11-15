@@ -1,11 +1,13 @@
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildApiV2Data } from './apiV2Data.mjs';
-import { API_CORE_STYLES } from './apiCoreData.mjs';
+import { API_CORE_STYLES, ORCHESTRATOR_STYLE } from './apiCoreData.mjs';
 
 // `module`/`moduleFile` không bắt buộc: lõi base mới không có module Nest.
 const MANIFEST_FIELDS = ['family', 'style', 'barrel'];
 const MANIFEST_CLASSES = ['entity', 'createDto', 'contract', 'service'];
+// Lõi orchestrator không có entity và DTO
+const ORCHESTRATOR_CLASSES = ['contract', 'service'];
 
 /** Đọc `core.manifest.json` của các họ trong `src/v2/core/` (chỉ họ có manifest hợp lệ). */
 export function listCoreFamilies(baseDir) {
@@ -37,7 +39,8 @@ export function readCoreManifest(baseDir, family) {
   for (const key of MANIFEST_FIELDS) {
     if (!manifest[key]) throw new Error(`Manifest của họ "${family}" thiếu trường "${key}"`);
   }
-  for (const key of MANIFEST_CLASSES) {
+  const classKeys = manifest.style === ORCHESTRATOR_STYLE ? ORCHESTRATOR_CLASSES : MANIFEST_CLASSES;
+  for (const key of classKeys) {
     if (!manifest.baseClasses?.[key]) throw new Error(`Manifest của họ "${family}" thiếu baseClasses.${key}`);
   }
   if (!API_CORE_STYLES.includes(manifest.style)) {
@@ -73,6 +76,11 @@ export function coreFieldNames(baseDir, family) {
  * `coreFields`: tên trường lõi đã có (từ `coreFieldNames`); trùng tên thì ném lỗi trước khi ghi file.
  */
 export function buildApiThinData(answers, manifest, coreFields = []) {
+  if (manifest.style === ORCHESTRATOR_STYLE) {
+    throw new Error(
+      `Họ "${manifest.family}" là lõi orchestrator (không có entity). Module mỏng cần họ engine hoặc abstract-services.`,
+    );
+  }
   const v2 = buildApiV2Data(answers);
 
   const clash = v2.customFields.map((field) => field.name).filter((name) => coreFields.includes(name));

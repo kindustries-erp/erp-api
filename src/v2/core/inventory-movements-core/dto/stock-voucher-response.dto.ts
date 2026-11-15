@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { PaginationMetaDto } from '@/common/dto/pagination-meta.dto';
 
 export class StockVoucherLineResponseDto {
   @ApiProperty() id: string;
@@ -17,8 +18,8 @@ export class StockVoucherLineResponseDto {
   @ApiPropertyOptional({ nullable: true, type: String }) notes: string | null;
 }
 
-/** Chứng từ kho trả về cho client: chỉ dữ liệu, không trả entity. */
-export class StockVoucherResponseDto {
+/** Dòng danh sách chứng từ kho: đầu phiếu, không có dòng chi tiết. */
+export class StockVoucherListItemResponseDto {
   @ApiProperty() id: string;
   @ApiProperty({ type: 'object', additionalProperties: true })
   extraData: Record<string, unknown>;
@@ -37,6 +38,17 @@ export class StockVoucherResponseDto {
     | null;
   @ApiProperty() createdAt: Date;
   @ApiProperty() updatedAt: Date;
+}
+
+/** Chứng từ kho trả về cho client: chỉ dữ liệu, không trả entity. */
+export class StockVoucherResponseDto extends StockVoucherListItemResponseDto {
   @ApiProperty({ type: [StockVoucherLineResponseDto] })
   lines: StockVoucherLineResponseDto[];
+}
+
+export class StockVoucherListResponseDto {
+  @ApiProperty({ type: [StockVoucherListItemResponseDto] })
+  items: StockVoucherListItemResponseDto[];
+  @ApiProperty({ type: PaginationMetaDto })
+  pagination: PaginationMetaDto;
 }

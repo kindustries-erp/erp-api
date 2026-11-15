@@ -1,4 +1,5 @@
 import { applyMultiKeywordFilter } from '../query-builder.util';
+import { buildPagination, PaginationMeta } from '../paginated-result';
 import { ObjectLiteral, SelectQueryBuilder } from 'typeorm';
 import {
   resolveTableColumn,
@@ -56,11 +57,20 @@ export interface TableOptionItem {
   value: string;
 }
 
+/** Response gợi ý giá trị cột chuẩn v2: `items` và `pagination` (có next/previous). */
 export interface TableOptionsPage {
   items: TableOptionItem[];
-  total: number;
-  next: number | null;
+  pagination: PaginationMeta;
 }
+
+/** Trang gợi ý rỗng (cột không hợp lệ hoặc không có dòng). */
+export const emptyOptionsPage = (
+  page = 1,
+  pageSize = 20,
+): TableOptionsPage => ({
+  items: [],
+  pagination: buildPagination(page, pageSize, 0),
+});
 
 /**
  * Danh sách giá trị gợi ý (distinct) của một cột, phân trang.
@@ -87,6 +97,7 @@ export const findTableColumnOptions = async <T extends ObjectLiteral>(
     .select(`COUNT(DISTINCT ${expression})`, 'total')
     .getRawOne<{ total: string | number }>();
   const total = Number(countRow?.total ?? 0);
+  const pagination = buildPagination(page, pageSize, total);
 
   const rows = await base
     .clone()
@@ -101,7 +112,7 @@ export const findTableColumnOptions = async <T extends ObjectLiteral>(
     label: String(row.value),
     value: String(row.value),
   }));
-  return { items, total, next: page * pageSize < total ? page + 1 : null };
+  return { items, pagination };
 };
 
 export interface TableSummaryColumn {

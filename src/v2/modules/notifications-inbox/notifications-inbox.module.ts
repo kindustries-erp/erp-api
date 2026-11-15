@@ -9,7 +9,7 @@ import { NotificationInboxQueryService } from './services/notification-inbox-que
 import { NotificationsPublisherService } from './services/notifications-publisher.service';
 
 /**
- * Module thông báo v2 (theo user, không RBAC): HTTP `/api/v2/notifications`,
+ * Module thông báo v2 (theo user, không RBAC): HTTP `/api/v2/notifications-inbox`,
  * publisher cho module khác và job xóa cứng. Bảng `notifications_inbox`.
  */
 @Module({

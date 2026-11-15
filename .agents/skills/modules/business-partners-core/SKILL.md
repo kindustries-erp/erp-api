@@ -7,12 +7,12 @@ description: Module tri thức Đối tác (Khách hàng & Nhà cung cấp) phí
 
 ## 1. Phạm vi
 
-- Route chính: `/api/v2/business-partners`; alias `/api/v1/business-partners` giữ cho web V1 (một `@Controller` hai path, spec `erp-business-partner.routes.spec.ts`). Quyền: `ErpResource.BUSINESS_PARTNERS` (`business_partners`) với READ, CREATE, UPDATE, DELETE.
+- Route chính: `/api/v2/business-partners`; đã bỏ alias `/api/v1/business-partners` (web V1 và V2 cùng gọi `/api/v2`, spec `erp-business-partner.routes.spec.ts`). Quyền: `ErpResource.BUSINESS_PARTNERS` (`business_partners`) với READ, CREATE, UPDATE, DELETE.
 - Phân loại bằng `partnerType`: `CUSTOMER` (khách hàng) hoặc `VENDOR` (nhà cung cấp). Loại khác được chấp nhận và sinh mã tiền tố `DT-`.
 - Xóa là xóa mềm (`isDeleted`). Không có audit log, không có khóa bi quan (không có số dư).
 - Web tiêu thụ: V1 `src/modules/business-partners-core`, `src/modules/partners`, PO drawers; V2 `src/v2/modules/business-partners-customers` và `business-partners-suppliers` (xem skill `business-partners` của erp-web).
 
-## 2. Cấu trúc (Theo chuẩn `/api-structure` V2 Core & Modules)
+## 2. Cấu trúc (Theo chuẩn `/erp-api-structure` V2 Core & Modules)
 
 ```text
 src/v2/
@@ -114,7 +114,7 @@ bun .agents/skills/erp-api-structure/scripts/scan-oversized-files.ts --strict --
 
 ## 8. Liên quan
 
-- Skill tổng: `api-structure` (hợp đồng, bẫy, quy trình chuyển module cũ).
+- Skill tổng: `erp-api-structure` (hợp đồng, bẫy, quy trình chuyển module cũ).
 - Web: `erp-web/.agents/skills/modules/business-partners/SKILL.md`.
 
 ## extraData (JSON tùy biến, 2026-11-08)
@@ -124,3 +124,10 @@ bun .agents/skills/erp-api-structure/scripts/scan-oversized-files.ts --strict --
 - **Ghi**: tạo mặc định `{}`. Sửa header merge cấp 1 (`null` xóa key). Dòng chứng từ ghi theo payload, không merge.
 - **Giới hạn**: 16 KB, sâu 5 cấp, key ≤ 64 ký tự, cấm `__proto__`/`constructor`/`prototype` (400 qua `RejectUnsafeExtraDataPipe` và service).
 - **Response**: luôn có `extraData` (object).
+
+## Hợp đồng phân trang chuẩn v2 (pagination)
+
+- List trả `{ items, pagination, summaries? }`; `pagination` = `{ page, pageSize, total, totalPages, next, previous }` (`next`/`previous` là số trang hoặc `null`). Không còn key phẳng `total`/`page`/`totalPages` ở cấp gốc.
+- Column-options trả `{ items: { label, value }[], pagination }`. Dựng bằng `findTableColumnOptions` hoặc `emptyOptionsPage` (`src/common/utils/table-query`).
+- Builder: `buildPagination` / `toPagedList` / `toPaginatedResult` (`src/common/utils/paginated-result.ts`). DTO Swagger: `PaginationMetaDto`, `ColumnOptionsResponseDto`.
+- Web phải đọc `res.pagination.*`. Xem web `src/v2/shared/utils/v2FetchOptionsAdapter.ts`.

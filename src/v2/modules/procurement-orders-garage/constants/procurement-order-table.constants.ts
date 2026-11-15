@@ -25,6 +25,11 @@ export const TABLE_COLUMNS: TableColumnMap = {
     type: 'text',
   },
   createdAt: { sql: 'h.createdAt', type: 'date' },
+  /** Đề nghị mua nguồn (quan hệ 1-1 theo requestId): lọc và gợi ý theo số đề nghị. */
+  requestNo: {
+    sql: '(SELECT r.request_no FROM proc_requests_garage r WHERE r.id = h.requestId)',
+    type: 'text',
+  },
 };
 
 /** Cột áp dụng từ khóa tìm kiếm (giữ đúng hành vi cũ: số đơn và tên NCC). */

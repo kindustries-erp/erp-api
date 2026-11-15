@@ -1,3 +1,4 @@
+import { PagedList, toPagedList } from '@/common/utils/paginated-result';
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
@@ -21,13 +22,9 @@ export interface BusinessPartnerOptionItem {
 export class ErpBusinessPartnerOptionsService {
   constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
 
-  async listOptions(dto: QueryErpBusinessPartnerOptionsDto): Promise<{
-    items: BusinessPartnerOptionItem[];
-    total: number;
-    page: number;
-    pageSize: number;
-    totalPages: number;
-  }> {
+  async listOptions(
+    dto: QueryErpBusinessPartnerOptionsDto,
+  ): Promise<PagedList<BusinessPartnerOptionItem>> {
     const page = dto.page ?? 1;
     const pageSize = dto.pageSize ?? 20;
     const search = dto.search?.trim();
@@ -71,12 +68,11 @@ export class ErpBusinessPartnerOptionsService {
       );
 
     const total = rows.length > 0 ? Number(rows[0].total) : 0;
-    return {
-      items: rows.map(({ total: _total, ...item }) => item),
-      total,
+    return toPagedList(
+      rows.map(({ total: _total, ...item }) => item),
       page,
       pageSize,
-      totalPages: Math.ceil(total / pageSize),
-    };
+      total,
+    );
   }
 }

@@ -8,7 +8,7 @@ import {
 } from 'class-validator';
 import { ExtraDataField } from '@/v2/core/base-core/dto/extra-data.decorator';
 
-// Body của POST /api/v1/branches. Không dùng trực tiếp làm @Body() vì
+// Body của POST /api/v2/branches. Không dùng trực tiếp làm @Body() vì
 // ValidationPipe toàn cục có forbidNonWhitelisted; xem ParseBranchBodyPipe.
 export class CreateErpBranchDto {
   @ApiProperty({ maxLength: 100 })

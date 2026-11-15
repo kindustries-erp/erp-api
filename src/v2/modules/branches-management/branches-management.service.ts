@@ -1,3 +1,4 @@
+import { toPagedList } from '@/common/utils/paginated-result';
 import { Injectable } from '@nestjs/common';
 import { PaginationDto } from '@/common/dto/pagination.dto';
 import { BranchesCoreService } from '@/v2/core/branches-core';
@@ -13,13 +14,12 @@ export class BranchesManagementService {
 
   async findAll(query: PaginationDto) {
     const page = await this.core.findAll(query);
-    return {
-      items: page.items.map((item) => toErpBranchResponse(item)),
-      total: page.total,
-      page: page.page,
-      pageSize: page.pageSize,
-      totalPages: page.totalPages,
-    };
+    return toPagedList(
+      page.items.map((item) => toErpBranchResponse(item)),
+      page.page,
+      page.pageSize,
+      page.total,
+    );
   }
 
   async create(body: CreateErpBranchInput) {

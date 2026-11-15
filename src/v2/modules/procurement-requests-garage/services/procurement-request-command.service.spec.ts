@@ -18,6 +18,7 @@ function makeService(currentBranch: string | null, orderCount: number) {
   const svc = new GarageProcurementRequestCommandService(
     dataSource as never,
     {} as never,
+    { resolveLines: jest.fn() } as never,
   );
   return { svc };
 }
@@ -46,13 +47,21 @@ describe('GarageProcurementRequestCommandService.updateHeader - đổi chi nhán
   it('cho phép đổi chi nhánh khi chưa có đơn mua', async () => {
     const { svc } = makeService('b1', 0);
     await svc.updateHeader('r1', { branchId: 'b2' });
-    expect(parentUpdate).toHaveBeenCalledWith('r1', { branchId: 'b2' });
+    expect(parentUpdate).toHaveBeenCalledWith(
+      'r1',
+      { branchId: 'b2' },
+      undefined,
+    );
   });
 
   it('cho phép bỏ trống chi nhánh khi chưa có đơn mua', async () => {
     const { svc } = makeService('b1', 0);
     await svc.updateHeader('r1', { branchId: null });
-    expect(parentUpdate).toHaveBeenCalledWith('r1', { branchId: null });
+    expect(parentUpdate).toHaveBeenCalledWith(
+      'r1',
+      { branchId: null },
+      undefined,
+    );
   });
 
   it('không chặn khi chi nhánh không đổi dù đã có đơn mua', async () => {
@@ -64,6 +73,40 @@ describe('GarageProcurementRequestCommandService.updateHeader - đổi chi nhán
   it('không kiểm tra đơn mua khi patch không có branchId', async () => {
     const { svc } = makeService('b1', 5);
     await svc.updateHeader('r1', { remarks: 'ghi chú' });
-    expect(parentUpdate).toHaveBeenCalledWith('r1', { remarks: 'ghi chú' });
+    expect(parentUpdate).toHaveBeenCalledWith(
+      'r1',
+      { remarks: 'ghi chú' },
+      undefined,
+    );
+  });
+
+  it('truyền manager của orchestrator xuống lõi để cùng transaction', async () => {
+    const { svc } = makeService('b1', 0);
+    const manager = { getRepository: jest.fn() } as never;
+    await svc.updateHeader('r1', { remarks: 'x' }, manager);
+    expect(parentUpdate).toHaveBeenCalledWith('r1', { remarks: 'x' }, manager);
+  });
+});
+
+describe('GarageProcurementRequestCommandService.prepareLines - chuẩn hóa mã hàng', () => {
+  it('đưa dòng qua resolver danh mục (cho tạo mã) trong transaction đang chạy', async () => {
+    const resolved = [{ itemCode: 'PT-000001' }];
+    const resolver = { resolveLines: jest.fn().mockResolvedValue(resolved) };
+    const svc = new GarageProcurementRequestCommandService(
+      {} as never,
+      {} as never,
+      resolver as never,
+    );
+    const manager = {} as never;
+    const lines = [{ itemName: 'Lọc dầu' }] as never;
+
+    const result = await (
+      svc as unknown as {
+        prepareLines(m: unknown, l: unknown): Promise<unknown>;
+      }
+    ).prepareLines(manager, lines);
+
+    expect(resolver.resolveLines).toHaveBeenCalledWith(manager, lines);
+    expect(result).toBe(resolved);
   });
 });

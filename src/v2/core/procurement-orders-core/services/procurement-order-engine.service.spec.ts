@@ -53,6 +53,25 @@ describe('procurement-order engine', () => {
     ).not.toThrow();
   });
 
+  it('Garage: NCC gõ tự do đủ điều kiện gửi duyệt khi không bắt buộc supplierId', () => {
+    const lines = [{ unitPrice: '10' }];
+    expect(() =>
+      assertReadyToSubmit(null, lines, {
+        supplierName: 'Gara ABC',
+        requireSupplierId: false,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertReadyToSubmit(null, lines, {
+        supplierName: '   ',
+        requireSupplierId: false,
+      }),
+    ).toThrow(BadRequestException);
+    expect(() =>
+      assertReadyToSubmit(null, lines, { supplierName: 'Gara ABC' }),
+    ).toThrow(BadRequestException);
+  });
+
   it('không hủy được khi đã nhận hàng hoặc nghiệm thu', () => {
     expect(() => assertCanCancel([{ qtyOrdered: 5, qtyFulfilled: 1 }])).toThrow(
       ConflictException,
