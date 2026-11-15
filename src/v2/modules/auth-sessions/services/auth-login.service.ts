@@ -2,7 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { AppConfigService } from '@/app-config/app-config.service';
-import { AuditCoreService } from '@/audit-core/audit-core.service';
+import { AuditWriterService } from '@/v2/modules/audit-logs/services/audit-writer.service';
 import {
   parseExpiresInSeconds,
   TOKEN_TYPE_BEARER,
@@ -30,7 +30,7 @@ export class AuthLoginService {
     private readonly sessions: SessionTokenService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
-    private readonly audit: AuditCoreService,
+    private readonly audit: AuditWriterService,
     private readonly appConfig: AppConfigService,
     private readonly legacyExchange: LegacyRefreshTokenExchange,
   ) {}

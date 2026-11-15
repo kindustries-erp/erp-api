@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppConfigModule } from '@/app-config/app-config.module';
-import { AuditCoreModule } from '@/audit-core/audit-core.module';
+import { AuditLogsV2Module } from '@/v2/modules/audit-logs/audit-logs-v2.module';
 import { AuthModule } from '@/auth/auth.module';
 import { CoreRefreshToken } from '@/auth/entities/core-refresh-token.entity';
 import { RbacCoreModule } from '@/v2/core/rbac-core';
@@ -26,7 +26,7 @@ import { LegacyRefreshTokenExchange } from './services/legacy-refresh-token.exch
     TypeOrmModule.forFeature([AuthSession, CoreRefreshToken]),
     AuthModule,
     UsersManagementModule,
-    AuditCoreModule,
+    AuditLogsV2Module,
     RbacCoreModule,
     AppConfigModule,
   ],

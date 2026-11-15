@@ -1,6 +1,6 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { AppConfigService } from '@/app-config/app-config.service';
-import { AuditCoreService } from '@/audit-core/audit-core.service';
+import { AuditWriterService } from '@/v2/modules/audit-logs/services/audit-writer.service';
 import { RbacCoreService } from '@/v2/core/rbac-core';
 import { UsersAuthService } from '../../users-management/services/users-auth.service';
 import type { UpdateProfileDto } from '../dto/update-profile.dto';
@@ -26,7 +26,7 @@ export class AuthProfileService {
     private readonly users: UsersAuthService,
     private readonly rbac: RbacCoreService,
     private readonly appConfig: AppConfigService,
-    private readonly audit: AuditCoreService,
+    private readonly audit: AuditWriterService,
   ) {}
 
   async profile(userId: string): Promise<ProfileDto> {

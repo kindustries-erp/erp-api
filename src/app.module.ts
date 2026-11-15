@@ -35,7 +35,8 @@ import { AuditCoreModule } from './audit-core/audit-core.module';
 import { UsersAdminModule } from './users-admin/users-admin.module';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AuditLogsV2Module } from './v2/modules/audit-logs/audit-logs-v2.module';
-import { GlobalAuditInterceptor } from './v2/modules/audit-logs/interceptors/global-audit.interceptor';
+import { GlobalAuditInterceptor as GlobalAuditInterceptorV1 } from './audit-core/interceptors/global-audit.interceptor';
+import { GlobalAuditInterceptor as GlobalAuditInterceptorV2 } from './v2/modules/audit-logs/interceptors/global-audit.interceptor';
 import { RbacCoreModule } from '@/v2/core/rbac-core';
 import { RbacRolesModule } from './v2/modules/rbac-roles/rbac-roles.module';
 import { BasicMastersCoreModule } from './basic-masters-core/basic-masters-core.module';
@@ -220,9 +221,14 @@ import { AuthSessionsModule } from './v2/modules/auth-sessions/auth-sessions.mod
   controllers: [AppController],
   providers: [
     AppService,
+    // V1 ghi route ngoài /api/v2 vào `erp_audit_logs`; V2 chỉ ghi /api/v2 vào `audit_logs`.
     {
       provide: APP_INTERCEPTOR,
-      useClass: GlobalAuditInterceptor,
+      useClass: GlobalAuditInterceptorV1,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: GlobalAuditInterceptorV2,
     },
   ],
 })

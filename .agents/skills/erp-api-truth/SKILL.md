@@ -88,7 +88,7 @@ Tài liệu chi tiết của từng module nằm tại `.agents/skills/modules/<
 - **Thông báo (v2, theo user, không RBAC)**: `notifications-inbox` (`/api/v2/notifications-inbox`, bảng `notifications_inbox`; job xóa cứng định kỳ; base dùng chung ở lõi `notifications-core`)
 - **AI Hub v2**: `ai-hub-v2` (lõi `src/v2/core/ai-hub-core`; module `ai-hub-gateway` gọi 9router theo tier từ `NINE_ROUTER_TIER_MODELS`, `items-core` (lõi) + `items-garage` (module) là danh mục mã hàng garage dùng chung qua cổng `ItemCatalogPort`, `ai-hub-garage` đọc hóa đơn tạo đề nghị mua nháp; không import `ai-hub-core` v1)
 - **Lịch chạy nền (v2)**: `scheduler-jobs` (tự tìm job kế thừa `ScheduledJob` từ lõi `scheduler-core`, cổng `ENABLE_CRON` duy nhất). Cron mới là class kế thừa `ScheduledJob` trong module
-- **Hệ thống, cấu hình, phân quyền, nhật ký**: `admin-dashboard-core`, `ai-hub-core`, `app-config`, `audit-core` (v2: lõi `src/v2/core/audit-core`, module `src/v2/modules/audit-logs`, route `/api/v2/audit-logs`, bảng `audit_logs`; v1 ủy quyền), `erp-users` (V1 `users-admin` và V2 `users-management`, xem mục 0 của skill; auth v2 xem `auth-sessions`), `module-config`, `rbac-core`, `system-operations-core`
+- **Hệ thống, cấu hình, phân quyền, nhật ký**: `admin-dashboard-core`, `ai-hub-core`, `app-config`, `audit-core` (v2: lõi `src/v2/core/audit-core`, module `src/v2/modules/audit-logs`, route `/api/v2/audit-logs`, bảng `audit_logs`; v1 `src/audit-core` độc lập, bảng `erp_audit_logs`, không import chéo với v2), `erp-users` (V1 `users-admin` và V2 `users-management`, xem mục 0 của skill; auth v2 xem `auth-sessions`), `module-config`, `rbac-core`, `system-operations-core`
 
 Khi cần quét mới hoặc cập nhật tài liệu module: skill `scan-module-knowledge`.
 

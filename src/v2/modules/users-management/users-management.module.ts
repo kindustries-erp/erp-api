@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { AuditCoreModule } from '@/audit-core/audit-core.module';
+import { AuditLogsV2Module } from '@/v2/modules/audit-logs/audit-logs-v2.module';
 import { CoreRefreshToken } from '@/auth/entities/core-refresh-token.entity';
 import { EmployeeManagement } from '@/v2/core/employees-core/entities/employee-management.entity';
 import { CoreUser } from '@/users/entities/core-user.entity';
@@ -21,7 +21,7 @@ import { UsersManagementService } from './users-management.service';
       CoreUser,
       CoreRefreshToken,
     ]),
-    AuditCoreModule,
+    AuditLogsV2Module,
   ],
   controllers: [UsersManagementController],
   providers: [

@@ -43,6 +43,7 @@ import { ErpInventoryTrackingLot } from '../inventory-core/entities/erp_inventor
 import { ErpInventoryTrackingCustom } from '../inventory-core/entities/erp_inventory_tracking_custom.entity';
 import { ErpTrackingPolicy } from '../inventory-core/entities/erp_tracking_policy.entity';
 import { ErpBranch } from '../v2/core/branches-core/entities/erp_branch.entity';
+import { ErpAuditLog } from '../audit-core/entities/erp-audit-log.entity';
 import { AuditLog } from '../v2/modules/audit-logs/entities/audit-log.entity';
 import { ErpItemType } from '../inventory-core/entities/erp_item_type.entity';
 import { ErpUom } from '../inventory-core/entities/erp_uom.entity';
@@ -183,6 +184,7 @@ const entities = [
   ErpInventoryTrackingCustom,
   ErpTrackingPolicy,
   ErpBranch,
+  ErpAuditLog,
   AuditLog,
   ErpItemType,
   ErpUom,

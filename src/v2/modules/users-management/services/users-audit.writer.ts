@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { AuditCoreService } from '@/audit-core/audit-core.service';
+import { AuditWriterService } from '@/v2/modules/audit-logs/services/audit-writer.service';
 import type { UserAuditContext } from '../helpers/audit-context';
 
 export type UserAuditAction =
@@ -24,7 +24,7 @@ export interface UserAuditInput {
 export class UsersAuditWriter {
   private readonly logger = new Logger(UsersAuditWriter.name);
 
-  constructor(private readonly auditCore: AuditCoreService) {}
+  constructor(private readonly auditWriter: AuditWriterService) {}
 
   /**
    * Audit ghi SAU khi transaction đã commit. Thao tác đã thành công nên lỗi ghi audit chỉ được log lớn,
@@ -42,7 +42,7 @@ export class UsersAuditWriter {
   }
 
   private record(ctx: UserAuditContext, input: UserAuditInput): Promise<void> {
-    return this.auditCore.recordAction({
+    return this.auditWriter.recordAction({
       actorUserId: ctx.actorUserId,
       actorEmail: ctx.actorEmail,
       actionType: input.actionType,

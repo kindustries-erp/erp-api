@@ -1,2 +1,89 @@
-/** Giữ tên cũ cho V1; định nghĩa nằm ở module v2 `audit-logs`. */
-export { QueryAuditLogDto as AuditLogCoreQueryDto } from '@/v2/modules/audit-logs/dto/query-audit-log.dto';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+
+export class AuditLogCoreQueryDto {
+  @ApiPropertyOptional()
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  page?: number = 1;
+
+  @ApiPropertyOptional()
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  pageSize?: number = 20;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  module?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  actionType?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  entityType?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  entityId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  actorUserId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  dateFrom?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  dateTo?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  sorts?: string | string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  column_filters?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  column_search?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  date_from?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  date_to?: string;
+}
