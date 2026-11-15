@@ -44,6 +44,7 @@
     "test:smoke:recall-cancel": "node test/smoke/recall-cancel-notify.smoke.mjs",
     "test:smoke:save-and-act": "node test/smoke/save-and-act.smoke.mjs",
     "test:smoke:users": "node test/smoke/users-management.smoke.mjs",
+    "test:smoke:auth-sessions": "node test/smoke/auth-sessions.smoke.mjs",
     "docker:build": "docker compose -f /opt/stacks/liouni-erp-api/docker-compose.yml build",
     "docker:up": "docker compose -f /opt/stacks/liouni-erp-api/docker-compose.yml up -d",
     "docker:deploy": "bun run docker:build; bun run docker:up",

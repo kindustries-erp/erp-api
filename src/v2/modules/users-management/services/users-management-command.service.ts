@@ -25,9 +25,7 @@ import { UsersManagement } from '../entities/users-management.entity';
 import type { UserAuditContext } from '../helpers/audit-context';
 import { toUserResponse } from '../helpers/user.mapper';
 import {
-  legacyEmailExists,
-  pullFromLegacyCoreUsers,
-  revokeLegacyRefreshTokens,
+  revokeAllUserSessions,
   syncToLegacyCoreUser,
 } from './legacy-core-user.sync';
 import { UsersAuditWriter, UserAuditAction } from './users-audit.writer';
@@ -61,10 +59,7 @@ export class UsersManagementCommandService {
       this.dataSource.transaction(async (manager) => {
         const repo = manager.getRepository(UsersManagement);
         // Unique index tính cả dòng đã xóa mềm, nên kiểm trùng không lọc isDeleted
-        if (
-          (await repo.exists({ where: { email } })) ||
-          (await legacyEmailExists(manager, email))
-        ) {
+        if (await repo.exists({ where: { email } })) {
           throw new ConflictException('Email đã tồn tại');
         }
         const user = await repo.save(
@@ -145,7 +140,7 @@ export class UsersManagementCommandService {
       async (manager, user) => {
         user.passwordHash = passwordHash;
         user.passwordChangedAt = new Date();
-        await revokeLegacyRefreshTokens(manager, user.id);
+        await revokeAllUserSessions(manager, user.id);
       },
       'Admin reset password',
     );
@@ -164,7 +159,7 @@ export class UsersManagementCommandService {
             'Không thể tự vô hiệu hóa tài khoản của chính mình',
           );
         }
-        await revokeLegacyRefreshTokens(manager, user.id);
+        await revokeAllUserSessions(manager, user.id);
       }
       user.status = dto.status;
     }
@@ -187,8 +182,6 @@ export class UsersManagementCommandService {
     const { before, after } = await this.run(() =>
       this.dataSource.transaction(async (manager) => {
         const repo = manager.getRepository(UsersManagement);
-        // v1 có thể vừa đổi core_users (mật khẩu, đăng nhập, trạng thái): kéo về trước khi đọc và ghi
-        await pullFromLegacyCoreUsers(manager, id);
         const user = await repo.findOne({
           where: { id, isDeleted: false },
           lock: { mode: 'pessimistic_write' },

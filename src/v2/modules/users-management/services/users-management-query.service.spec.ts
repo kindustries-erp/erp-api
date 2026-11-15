@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import type { DataSource, Repository } from 'typeorm';
+import type { Repository } from 'typeorm';
 import type { ErpEmployee } from '@/employees-core/entities/erp_employee.entity';
 import type { UsersManagement } from '../entities/users-management.entity';
 import { UsersManagementQueryService } from './users-management-query.service';
@@ -7,7 +7,6 @@ import { UsersManagementQueryService } from './users-management-query.service';
 describe('UsersManagementQueryService', () => {
   let employees: { find: jest.Mock };
   let repo: { createQueryBuilder: jest.Mock; findOne: jest.Mock };
-  let managerQuery: jest.Mock;
   let qb: Record<string, jest.Mock>;
   let service: UsersManagementQueryService;
 
@@ -21,11 +20,9 @@ describe('UsersManagementQueryService', () => {
       createQueryBuilder: jest.fn(() => qb),
       findOne: jest.fn(),
     };
-    managerQuery = jest.fn().mockResolvedValue([]);
     service = new UsersManagementQueryService(
       repo as unknown as Repository<UsersManagement>,
       employees as unknown as Repository<ErpEmployee>,
-      { manager: { query: managerQuery } } as unknown as DataSource,
     );
   });
 
@@ -66,14 +63,9 @@ describe('UsersManagementQueryService', () => {
     expect(repo.createQueryBuilder).not.toHaveBeenCalled();
   });
 
-  it('JSON sai trả 400 trước khi chạm DB (không kéo dữ liệu từ core_users)', async () => {
+  it('JSON sai trả 400 trước khi chạm DB', async () => {
     await expect(service.findAll({ column_filters: '{bad' })).rejects.toThrow();
-    expect(managerQuery).not.toHaveBeenCalled();
-  });
-
-  it('findById kéo thay đổi của v1 về cho đúng tài khoản trước khi đọc', async () => {
-    await service.findById('u1');
-    expect(managerQuery.mock.calls[0][1]).toEqual(['u1']);
+    expect(qb.andWhere).not.toHaveBeenCalled();
   });
 
   it('findById chỉ đọc dòng chưa xóa mềm', async () => {

@@ -120,6 +120,7 @@ import {
 import { GarageItem } from '@/v2/modules/items-garage/entities/garage-item.entity'; // api-v2-module:items-garage:entity-imports
 import { AiHubUsageLog } from '@/v2/modules/ai-hub-gateway/entities/ai-hub-usage-log.entity'; // api-v2-module:ai-hub-gateway:entity-imports
 import { UsersManagement } from '@/v2/modules/users-management/entities/users-management.entity'; // api-v2-module:users-management:entity-imports
+import { AuthSession } from '@/v2/modules/auth-sessions/entities/auth-session.entity'; // api-v2-module:auth-sessions:entity-imports
 // plop:api-v2-entity-imports
 const entities = [
   ApprovalEvent,
@@ -238,6 +239,7 @@ const entities = [
   GarageItem, // api-v2-module:items-garage:entities
   AiHubUsageLog, // api-v2-module:ai-hub-gateway:entities
   UsersManagement, // api-v2-module:users-management:entities
+  AuthSession, // api-v2-module:auth-sessions:entities
   // plop:api-v2-entities
 ];
 

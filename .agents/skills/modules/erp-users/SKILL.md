@@ -20,14 +20,13 @@ Endpoint: `GET /` (list `{ items, pagination }`), `GET /column-options`, `GET /:
 Khác V1 (có chủ đích):
 - Mọi thao tác ghi chạy trong MỘT transaction, khóa hàng `pessimistic_write` (tài khoản và nhân viên): hai request đồng thời không liên kết một nhân viên cho hai tài khoản. Vi phạm unique do đua request trả 409.
 - Audit đúng một dòng cho mỗi thao tác (`CREATE_USER`, `UPDATE_USER`, `ACTIVATE_USER`, `DEACTIVATE_USER`, `RESET_PASSWORD`, `LINK_EMPLOYEE`, `UNLINK_EMPLOYEE`), ghi sau commit. Lỗi ghi audit chỉ được log, không trả 500.
-- Email chuẩn hóa chữ thường, kiểm trùng ở cả `users_management` và `core_users`. DTO chặt (`@IsEmail`, `@IsIn` status, `@IsUUID`, `ParseUUIDPipe`, mật khẩu 8-72 ký tự).
-- Admin không tự vô hiệu hóa chính mình. Vô hiệu hóa hoặc reset mật khẩu thu hồi refresh token (`core_refresh_tokens`).
+- Email chuẩn hóa chữ thường, kiểm trùng trên `users_management` (nguồn chính). DTO chặt (`@IsEmail`, `@IsIn` status, `@IsUUID`, `ParseUUIDPipe`, mật khẩu 8-72 ký tự).
+- Admin không tự vô hiệu hóa chính mình. Vô hiệu hóa hoặc reset mật khẩu thu hồi mọi phiên (`core_refresh_tokens` và `auth_sessions`).
 - JSON filter sai định dạng trả 400 (V1 bỏ qua im lặng và trả toàn bộ).
 
-**Adapter đồng bộ với V1** (`services/legacy-core-user.sync.ts`, xóa khi cutover): auth, RBAC, refresh token, preferences, notifications và approval vẫn trỏ `core_users`, và V1 vẫn ghi thẳng vào đó (đăng nhập ghi `last_login_at`, đổi mật khẩu ghi `password_hash`).
-- V2 ghi sang `core_users` (cùng `id`) trong cùng transaction.
-- Trước mỗi lần đọc hoặc ghi, V2 kéo thay đổi từ `core_users` về (`pullFromLegacyCoreUsers`; hai bảng lệch nghĩa là V1 vừa đổi, `core_users` là nguồn đúng) và khóa hàng `core_users`. Nhờ đó V2 không ghi đè đổi mật khẩu hay mốc đăng nhập của V1, và thấy cả tài khoản V1 tạo sau backfill.
-- Cutover (đợt riêng, theo lệnh): chuyển các FK và auth sang `users_management`, rồi xóa adapter và V1.
+**Nguồn chính và bản sao `core_users`** (`services/legacy-core-user.sync.ts`, xóa khi cutover FK): `users_management` là nguồn chính. Mọi thao tác ghi user (users-management, auth v2, auth v1, admin v1, register v1) đi qua `UsersManagementCommandService` hoặc `UsersAuthService`, khóa hàng `pessimistic_write`, rồi mirror một chiều sang `core_users` (cùng `id`) trong CÙNG transaction, vì FK của roles, preferences, notifications, approval, `core_refresh_tokens` còn trỏ `core_users`. Không còn cơ chế kéo từ `core_users` (migration `20261115110100-reconcile-users-management` đối chiếu một lần cuối). `revokeAllUserSessions` thu hồi cả `core_refresh_tokens` và `auth_sessions`.
+- Auth v2 (đăng nhập, phiên, đổi mật khẩu, hồ sơ) xem skill `auth-sessions`; v1 (`/api/v1/auth`, `/api/v1/admin/users`) giữ hợp đồng nhưng ủy quyền sang service v2. `UsersService` v1 `@deprecated`.
+- Cutover (đợt riêng, theo lệnh): chuyển các FK sang `users_management`, rồi xóa mirror và v1.
 
 Múi giờ: DB lưu `timestamptz` (múi giờ DB là UTC), API trả ISO, client hiển thị theo múi giờ của browser hoặc thiết bị.
 

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Repository } from 'typeorm';
+import { InjectRepository } from '@nestjs/typeorm';
+import { In, Repository } from 'typeorm';
 import { ErpEmployee } from '@/employees-core/entities/erp_employee.entity';
 import { applyMultiKeywordMultiFieldFilter } from '@/common/utils/query-builder.util';
 import {
@@ -23,7 +23,6 @@ import { parseStrictJsonParam } from '@/v2/core/users-core';
 import { ColumnOptionsQueryDto } from '../dto/column-options-query.dto';
 import { QueryUserDto } from '../dto/query-user.dto';
 import { UsersManagement } from '../entities/users-management.entity';
-import { pullFromLegacyCoreUsers } from './legacy-core-user.sync';
 
 /** Cột lọc, sắp xếp (whitelist, không nhận biểu thức từ client). `emp` là nhân viên liên kết. */
 const TABLE_COLUMNS: TableColumnMap = {
@@ -59,7 +58,6 @@ export class UsersManagementQueryService {
     private readonly repo: Repository<UsersManagement>,
     @InjectRepository(ErpEmployee)
     private readonly employees: Repository<ErpEmployee>,
-    @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
 
   async findAll(query: QueryUserDto): Promise<UserPageResult> {
@@ -67,7 +65,6 @@ export class UsersManagementQueryService {
     const pageSize = Math.max(1, Math.min(200, Number(query.pageSize) || 20));
     const qb = this.baseQuery();
     this.readFilters(query); // JSON sai trả 400 trước khi chạm DB
-    await pullFromLegacyCoreUsers(this.dataSource.manager);
 
     if (query.status) {
       qb.andWhere('e.status = :status', { status: query.status });
@@ -123,14 +120,12 @@ export class UsersManagementQueryService {
     const payload = this.toPayload(
       parseStrictJsonParam(query.filters, 'filters'),
     );
-    await pullFromLegacyCoreUsers(this.dataSource.manager);
     const qb = this.baseQuery();
     applyTableFilters(qb, payload, TABLE_COLUMNS, 'col_opt', query.column);
     return findTableColumnOptions(qb, def, query.search, page, pageSize);
   }
 
   async findById(id: string): Promise<UsersManagement | null> {
-    await pullFromLegacyCoreUsers(this.dataSource.manager, id);
     return this.repo.findOne({ where: { id, isDeleted: false } });
   }
 

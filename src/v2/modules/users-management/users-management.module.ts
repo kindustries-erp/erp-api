@@ -9,6 +9,7 @@ import { UsersManagement } from './entities/users-management.entity';
 import { UsersManagementCommandService } from './services/users-management-command.service';
 import { UsersManagementQueryService } from './services/users-management-query.service';
 import { UsersAuditWriter } from './services/users-audit.writer';
+import { UsersAuthService } from './services/users-auth.service';
 import { UsersEmployeeLinkService } from './services/users-employee-link.service';
 import { UsersManagementService } from './users-management.service';
 
@@ -29,7 +30,8 @@ import { UsersManagementService } from './users-management.service';
     UsersManagementCommandService,
     UsersEmployeeLinkService,
     UsersAuditWriter,
+    UsersAuthService,
   ],
-  exports: [UsersManagementService],
+  exports: [UsersManagementService, UsersAuthService],
 })
 export class UsersManagementModule {}

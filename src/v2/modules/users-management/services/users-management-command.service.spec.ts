@@ -113,18 +113,6 @@ describe('UsersManagementCommandService', () => {
       expect(audit.write.mock.calls[0][1].actionType).toBe('CREATE_USER');
     });
 
-    it('email đã có ở core_users (v1 tạo) trả 409 dù chưa có trong users_management', async () => {
-      managerQuery.mockImplementation((sql: string) =>
-        Promise.resolve(
-          sql.includes('FROM "core_users" WHERE lower') ? [{}] : [],
-        ),
-      );
-      await expect(
-        service.create({ email: 'A@b.co', password: 'Secret#1234' }, ctx()),
-      ).rejects.toBeInstanceOf(ConflictException);
-      expect(userRepo.save).not.toHaveBeenCalled();
-    });
-
     it('email đã tồn tại trả 409 và không ghi audit', async () => {
       userRepo.exists.mockResolvedValue(true);
       await expect(
@@ -150,23 +138,25 @@ describe('UsersManagementCommandService', () => {
     });
   });
 
-  describe('đồng bộ với v1', () => {
-    it('kéo thay đổi của core_users về và khóa hàng core_users trước khi đọc tài khoản', async () => {
+  describe('nguồn chính là users_management', () => {
+    it('không đọc hay khóa core_users trước khi đọc tài khoản; chỉ ghi bản sao sau khi lưu', async () => {
       const order: string[] = [];
-      managerQuery.mockImplementation((sql: string) => {
-        order.push(sql.includes('FOR UPDATE') ? 'lock-core' : 'pull');
+      managerQuery.mockImplementation(() => {
+        order.push('raw-query');
         return Promise.resolve([]);
       });
       userRepo.findOne.mockImplementation(() => {
         order.push('read-user');
         return Promise.resolve(makeUser());
       });
+      coreUserRepo.save.mockImplementation(() => {
+        order.push('mirror-core');
+        return Promise.resolve(undefined);
+      });
 
       await service.activate('u1', ctx());
 
-      expect(order.slice(0, 2)).toEqual(['lock-core', 'pull']);
-      expect(order.indexOf('read-user')).toBeGreaterThan(order.indexOf('pull'));
-      expect(managerQuery.mock.calls[0][1]).toEqual(['u1']);
+      expect(order).toEqual(['read-user', 'mirror-core']);
     });
   });
 
@@ -181,6 +171,11 @@ describe('UsersManagementCommandService', () => {
       });
       expect(res.status).toBe('INACTIVE');
       expect(tokenRepo.update).toHaveBeenCalledTimes(1);
+      expect(
+        managerQuery.mock.calls.some(([sql]) =>
+          String(sql).includes('auth_sessions'),
+        ),
+      ).toBe(true);
       expect(coreUserRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'u1', status: 'INACTIVE' }),
       );
