@@ -2,9 +2,12 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
+  MaxLength,
   Min,
   MinLength,
 } from 'class-validator';
@@ -15,26 +18,28 @@ export class CreateUserAdminDto {
 
   @IsString()
   @MinLength(8)
+  @MaxLength(72)
   password: string;
 
   @IsOptional()
-  @IsString()
+  @IsUUID()
   employeeId?: string;
 }
 
 export class UpdateUserAdminDto {
   @IsOptional()
-  @IsString()
+  @IsIn(['ACTIVE', 'INACTIVE'])
   status?: string;
 
   @IsOptional()
-  @IsString()
+  @IsUUID()
   employeeId?: string | null;
 }
 
 export class ResetPasswordAdminDto {
   @IsString()
   @MinLength(8)
+  @MaxLength(72)
   newPassword: string;
 }
 
@@ -44,6 +49,7 @@ export class ChangePasswordSelfDto {
 
   @IsString()
   @MinLength(8)
+  @MaxLength(72)
   newPassword: string;
 }
 

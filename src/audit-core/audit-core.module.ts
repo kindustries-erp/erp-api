@@ -1,14 +1,16 @@
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { AuditLogsV2Module } from '@/v2/modules/audit-logs/audit-logs-v2.module';
 import { AuditCoreController } from './audit-core.controller';
 import { AuditCoreService } from './audit-core.service';
-import { AuditRetentionScheduler } from './schedulers/audit-retention.scheduler';
-import { ErpAuditLog } from './entities/erp-audit-log.entity';
 
+/**
+ * Module V1 (tương thích): giữ `AuditCoreService` và route `/api/v1/audit-logs-core`,
+ * ủy quyền sang `AuditLogsV2Module`.
+ */
 @Module({
-  imports: [TypeOrmModule.forFeature([ErpAuditLog])],
+  imports: [AuditLogsV2Module],
   controllers: [AuditCoreController],
-  providers: [AuditCoreService, AuditRetentionScheduler],
-  exports: [AuditCoreService, AuditRetentionScheduler],
+  providers: [AuditCoreService],
+  exports: [AuditCoreService],
 })
 export class AuditCoreModule {}

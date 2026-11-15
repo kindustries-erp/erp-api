@@ -68,6 +68,10 @@ class TestCommand extends AbstractPurchaseRequestCommandService<Header, Line> {
   protected readonly numberPrefix = 'DNM';
 }
 
+class RestrictedCommand extends TestCommand {
+  protected readonly restrictApproverToDecision = true;
+}
+
 class TestOrdering extends AbstractPurchaseRequestOrderingService<
   Header,
   Line
@@ -190,8 +194,64 @@ describe('AbstractPurchaseRequestCommandService.transition', () => {
       events,
     );
     await expect(
-      svc.transition('h1', 'cancel', { id: 'boss', roles: [] }, 'hủy'),
+      svc.transition('h1', 'cancel', { id: 'creator', roles: [] }, 'hủy'),
     ).rejects.toThrow(ConflictException);
+  });
+
+  it('cờ tắt (họ thường): hủy không kiểm người tạo', async () => {
+    for (const actorId of ['approver', 'other-user']) {
+      const header = makeHeader({ status: 'APPROVED' });
+      const { manager } = fakeManager(header, [makeLine({})]);
+      const svc = new TestCommand(fakeDataSource(manager), events);
+      const out = await svc.transition(
+        'h1',
+        'cancel',
+        { id: actorId, roles: ['MGR'] },
+        'lý do',
+      );
+      expect(out.status).toBe('CANCELLED');
+    }
+  });
+
+  it('cờ bật (Garage): người duyệt được chỉ định bị 403 khi hủy, không ghi gì', async () => {
+    const header = makeHeader({ status: 'APPROVED', approverId: 'approver' });
+    const { manager } = fakeManager(header, [makeLine({})]);
+    const svc = new RestrictedCommand(fakeDataSource(manager), events);
+    await expect(
+      svc.transition(
+        'h1',
+        'cancel',
+        { id: 'approver', roles: ['MGR'] },
+        'lý do',
+      ),
+    ).rejects.toThrow('Người duyệt chỉ được duyệt hoặc từ chối');
+    expect(manager.save).not.toHaveBeenCalled();
+  });
+
+  it('cờ bật: người không phải người duyệt vẫn hủy theo ma trận quyền', async () => {
+    const header = makeHeader({ status: 'APPROVED', approverId: 'approver' });
+    const { manager } = fakeManager(header, [makeLine({})]);
+    const svc = new RestrictedCommand(fakeDataSource(manager), events);
+    const out = await svc.transition(
+      'h1',
+      'cancel',
+      { id: 'other-user', roles: ['MGR'] },
+      'lý do',
+    );
+    expect(out.status).toBe('CANCELLED');
+  });
+
+  it('người tạo hủy được phiếu đã duyệt chưa đặt hàng', async () => {
+    const header = makeHeader({ status: 'APPROVED' });
+    const { manager } = fakeManager(header, [makeLine({ qtyOrdered: '0' })]);
+    const svc = new TestCommand(fakeDataSource(manager), events);
+    const out = await svc.transition(
+      'h1',
+      'cancel',
+      { id: 'creator', roles: [] },
+      'đổi kế hoạch',
+    );
+    expect(out.status).toBe('CANCELLED');
   });
 
   it('không tìm thấy hoặc đã xóa mềm thì không xử lý', async () => {

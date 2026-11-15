@@ -1,8 +1,4 @@
-import {
-  ConflictException,
-  ForbiddenException,
-  NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import {
   DataSource,
   DeepPartial,
@@ -18,6 +14,8 @@ import {
   resolveSubmitDecision,
 } from '../../approval-core/approval-gate.helper';
 import {
+  assertApproverOnlyDecides,
+  assertCreatorOnly,
   assertNotSelfApproval,
   requireReason,
   resolveTransition,
@@ -107,6 +105,8 @@ export abstract class AbstractProcurementOrderCommandService<
   protected abstract readonly numberPrefix: string;
   /** Gửi duyệt bắt buộc NCC có supplierId. Garage đặt false để chấp nhận NCC gõ tự do. */
   protected readonly requireSupplierId: boolean = true;
+  /** Bật ở họ Garage: người duyệt được chỉ định chỉ duyệt/từ chối được (xem assertApproverOnlyDecides). */
+  protected readonly restrictApproverToDecision: boolean = false;
 
   constructor(
     protected readonly dataSource: DataSource,
@@ -135,12 +135,11 @@ export abstract class AbstractProcurementOrderCommandService<
         const lines = await this.loadLines(manager, id);
         const mode = await loadApprovalMode(manager, this.docType);
 
-        if (
-          action === 'recall' &&
-          header.createdBy &&
-          header.createdBy !== actor.id
-        ) {
-          throw new ForbiddenException('Chỉ người tạo mới được thu hồi');
+        if (action === 'recall') {
+          assertCreatorOnly(actor.id, header.createdBy, 'thu hồi');
+        }
+        if (this.restrictApproverToDecision) {
+          assertApproverOnlyDecides(actor.id, header, action);
         }
         if (PROCUREMENT_ORDER_ACTIONS_REQUIRING_APPROVER.includes(action)) {
           assertNotSelfApproval(actor.id, header.createdBy);

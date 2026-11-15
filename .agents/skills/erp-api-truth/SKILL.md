@@ -82,11 +82,13 @@ Tài liệu chi tiết của từng module nằm tại `.agents/skills/modules/<
 - **Garage**: `garage-cases`, `garage-customers`, `garage-dashboard`, `garage-cashflow`, `garage-bank-reconciliation`, `garage-invoice-reconciliation`, `garage-goods-receipts`, `garage-opex`, `operating-expenses`
 - **Phụ tùng VinFast**: `vinfast-parts-stock`, `vinfast-parts-dashboard`
 - **Đối tác**: `business-partners-core` (lõi `src/v2/core/business-partners-core`, module `src/v2/modules/business-partners-management`)
+- **Nhân viên (v2)**: `employees-core` (lõi `src/v2/core/employees-core`, module `src/v2/modules/employees-management`, route `/api/v2/employees`, bảng `employees_management`; V1 `erp_employees` đóng băng)
 - **Chi nhánh**: `branches-core` (lõi `src/v2/core/branches-core`, module `src/v2/modules/branches-management`; entity consumers import canonical v2, route `/api/v2/branches`)
+- **Xác thực v2**: `auth-sessions` (lõi `src/v2/core/auth-core`, module `src/v2/modules/auth-sessions`, route `/api/v2/auth-sessions`, bảng `auth_sessions`; người dùng từ `users_management`; v1 `/api/v1/auth` chạy song song, dùng chung JWT)
 - **Thông báo (v2, theo user, không RBAC)**: `notifications-inbox` (`/api/v2/notifications-inbox`, bảng `notifications_inbox`; job xóa cứng định kỳ; base dùng chung ở lõi `notifications-core`)
 - **AI Hub v2**: `ai-hub-v2` (lõi `src/v2/core/ai-hub-core`; module `ai-hub-gateway` gọi 9router theo tier từ `NINE_ROUTER_TIER_MODELS`, `items-core` (lõi) + `items-garage` (module) là danh mục mã hàng garage dùng chung qua cổng `ItemCatalogPort`, `ai-hub-garage` đọc hóa đơn tạo đề nghị mua nháp; không import `ai-hub-core` v1)
 - **Lịch chạy nền (v2)**: `scheduler-jobs` (tự tìm job kế thừa `ScheduledJob` từ lõi `scheduler-core`, cổng `ENABLE_CRON` duy nhất). Cron mới là class kế thừa `ScheduledJob` trong module
-- **Hệ thống, cấu hình, phân quyền, nhật ký**: `admin-dashboard-core`, `ai-hub-core`, `app-config`, `audit-core`, `module-config`, `rbac-core`, `system-operations-core`
+- **Hệ thống, cấu hình, phân quyền, nhật ký**: `admin-dashboard-core`, `ai-hub-core`, `app-config`, `audit-core` (v2: lõi `src/v2/core/audit-core`, module `src/v2/modules/audit-logs`, route `/api/v2/audit-logs`, bảng `audit_logs`; v1 ủy quyền), `erp-users` (V1 `users-admin` và V2 `users-management`, xem mục 0 của skill; auth v2 xem `auth-sessions`), `module-config`, `rbac-core`, `system-operations-core`
 
 Khi cần quét mới hoặc cập nhật tài liệu module: skill `scan-module-knowledge`.
 

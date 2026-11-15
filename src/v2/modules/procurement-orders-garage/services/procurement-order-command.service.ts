@@ -25,6 +25,7 @@ export class GarageProcurementOrderCommandService extends AbstractProcurementOrd
   protected readonly numberPrefix = 'GDMH';
   /** Garage: NCC có thể gõ tự do (không bắt buộc danh mục) khi gửi duyệt. */
   protected readonly requireSupplierId = false;
+  protected readonly restrictApproverToDecision = true;
 
   constructor(
     dataSource: DataSource,

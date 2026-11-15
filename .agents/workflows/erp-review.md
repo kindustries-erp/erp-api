@@ -4,52 +4,45 @@ description: Quy trình kiểm tra, review code, phân tích kiến trúc Backen
 
 # 🔍 ERP API Review & Technical Q&A Workflow (`/erp-review`) - Backend
 
-Workflow chuẩn khi người dùng muốn kiểm tra, review mã nguồn, phân tích lỗi hoặc hỏi đáp kỹ thuật liên quan đến **`erp-api`** (NestJS, PostgreSQL, TypeORM) mà **CHƯA MUỐN LÊN PLAN & CHƯA SỬA CODE**.
+Workflow khi người dùng muốn kiểm tra, review mã nguồn, phân tích lỗi hoặc hỏi đáp kỹ thuật liên quan đến **`erp-api`** (NestJS, PostgreSQL, TypeORM) mà **CHƯA MUỐN LÊN PLAN & CHƯA SỬA CODE**.
+
+Nạp trước: `erp-api-truth`, `erp-api-structure`, và `.agents/skills/modules/<module>/SKILL.md` của module đang hỏi (nếu có). Rule đối chiếu lấy từ `/erp-local-changes-audit` (bảng rule api), không chép lại ở đây.
 
 ---
 
-## 🎯 Khi Nào Kích Hoạt Workflow Này
+## 🎯 Khi Nào Kích Hoạt
 
-1. User hỏi về logic nghiệp vụ, tính toán chi phí, khấu hao, tồn kho hoặc luồng xử lý trong backend.
-2. User muốn review một file DTO, Service, Controller, Entity hoặc Migration.
-3. User muốn kiểm tra nguyên nhân bug/lỗi (tại sao API trả về 500, tại sao dữ liệu bị duplicate, lỗi typeorm query).
-4. Thảo luận thiết kế API v2 hoặc refactoring Service trước khi bắt tay vào làm.
+1. Hỏi về logic nghiệp vụ, tính toán, khấu hao, tồn kho hoặc luồng xử lý trong backend.
+2. Review một DTO, Service, Controller, Entity hoặc Migration.
+3. Tìm nguyên nhân lỗi (API trả 500, dữ liệu trùng, lỗi TypeORM query).
+4. Thảo luận thiết kế API v2 hoặc refactor Service trước khi làm.
 
----
-
-## 🛡️ 4 Nguyên Tắc Cốt Lõi (Core Principles)
-
-```mermaid
-graph LR
-    A["1. Read-Only 100%"] --> B["2. Zero Premature Plan"]
-    B --> C["3. Trích Dẫn Mã Nguồn"]
-    C --> D["4. Phương Án & Trade-offs"]
-```
-
-1. **🔒 Read-Only 100%**:
-   - Sử dụng các công cụ đọc mã nguồn (`view_file`, `grep_search`, `find_by_name`).
-   - **TUYỆT ĐỐI KHÔNG** sửa file, không chạy test suite ghi dữ liệu, không chạy migration (`bun run migration:run`), không commit/push.
-2. **🛑 Zero Premature Plan**:
-   - **KHÔNG TỰ Ý** tạo `implementation_plan.md`, `walkthrough.md` hay danh sách task chi tiết (`X.Y.Z`).
-   - Trả lời thẳng vào câu hỏi hoặc vấn đề được nêu ra.
-   - Chỉ chuyển sang lập kế hoạch khi người dùng yêu cầu rõ ràng (ví dụ: *"OK, lên plan đi"* hoặc gõ `/erp-plan`).
-3. **📌 Dẫn Chứng Trực Tiếp Từ Mã Nguồn (Evidence-First)**:
-   - Luôn trích dẫn chính xác file và dòng code (ví dụ `[src/modules/...#L40-L60]`).
-   - Kiểm tra `DATABASE_URL` trong `.env` và schema PostgreSQL thực tế khi cần làm rõ quan hệ bảng.
-4. **💡 Phân Tích Kỹ Thuật & Đề Xuất Giải Pháp**:
-   - Nêu rõ nguyên nhân gốc rễ (Root Cause).
-   - Đưa ra giải pháp kèm ưu / nhược điểm (Phương án A vs Phương án B) và khuyến nghị phương án tối ưu.
+Phân biệt với workflow khác: `/erp-local-changes-audit` kiểm diff local và lập plan nếu FAIL; `/erp-bug-fix` sửa lỗi có kiểm chứng; `/erp-plan` lập kế hoạch tính năng.
 
 ---
 
-## 📋 Checklist Đánh Giá Backend API
+## 🛡️ 4 Nguyên Tắc Cốt Lõi
 
-- [ ] **Data Flow**: Controller chỉ làm nhiệm vụ parse/validate request và gọi Service. Business logic nằm trọn trong Service.
-- [ ] **Validation DTO**: Đầy đủ `class-validator` decorators; không nhận param lỏng lẻo.
-- [ ] **Concurrency & Lock**: Các tác vụ tài chính, tồn kho, công nợ có bọc trong QueryRunner với `setLock("pessimistic_write")` không?
-- [ ] **RBAC Guard**: Đã gắn `@RequirePermissions(...)` với constants chuẩn; kiểm tra tenant/partner isolation.
-- [ ] **Database Indexes**: Kiểm tra composite indexes cho các query filter/sorting phức tạp.
-- [ ] **Error Handling**: Sử dụng exception chuẩn của NestJS (`BadRequestException`, `NotFoundException`, `ConflictException`), không nuốt lỗi (swallow errors).
+1. **Read-Only 100%**: chỉ đọc mã. Không sửa file, không chạy test ghi dữ liệu, không chạy `migration:run`, không commit/push. Không chạy `vitest` trong `erp-api` (repo dùng jest).
+2. **Zero Premature Plan**: không tạo plan, task `X.Y.Z` hay tài liệu triển khai. Chỉ chuyển sang plan khi user yêu cầu rõ (ví dụ "OK, lên plan đi" hoặc gõ `/erp-plan`).
+3. **Evidence-First**: mọi nhận định trích `file#dòng`. Khi cần làm rõ quan hệ bảng hoặc cột, kiểm tra schema thật qua `erp-gate-0-precheck` (xác nhận `SELECT current_database();` trước). Không đoán tên field.
+4. **Chuẩn cấu trúc**: đối chiếu theo bảng rule của audit api, không tự đặt tiêu chí mới.
+
+---
+
+## 📋 Checklist Đánh Giá
+
+Với file hoặc module được hỏi, áp dụng đầy đủ bảng rule của `/erp-local-changes-audit` api. Mỗi rule ghi PASS, FAIL hoặc "chưa kiểm", kèm `file#dòng`. Điểm chính:
+
+- **Kích thước**: Controller 300 (cảnh báo), Service 500, Helper/engine 800. Có thể chạy `bun .agents/skills/erp-api-structure/scripts/scan-oversized-files.ts` (chỉ đọc) và lọc theo file được hỏi.
+- **Cấu trúc**: Controller chỉ parse/validate và gọi Service; Controller không trả Entity (chỉ DTO đã map); Clean DI không overload và không union type; Facade giữ nguyên contract (`erp-api-structure`).
+- **Route và response v2**: `@Controller('api/v2/<module>')`, không alias v1; list trả `{ items, pagination, summaries?, extraData? }`.
+- **Validation DTO**: đủ `class-validator`; không nhận param lỏng.
+- **Concurrency**: tiền, tồn kho, công nợ bọc trong QueryRunner với `setLock("pessimistic_write")`.
+- **RBAC và bảo mật**: `@RequirePermissions(...)` với hằng số chuẩn; kiểm tra cách ly tenant và đối tác. Endpoint, auth, DTO, upload, SQL: đối chiếu `erp-api-truth/references/security-baseline.md`.
+- **Xóa**: soft delete với `isDeleted`; chỉ ngoại lệ đã ghi trong `erp-api-structure` mục "Chính sách xóa".
+- **Lỗi**: dùng exception chuẩn NestJS, không nuốt lỗi.
+- **Spec**: logic mới có `.spec.ts` cạnh file (integration spec cho luồng nhiều bước).
 
 ---
 
@@ -57,15 +50,16 @@ graph LR
 
 ```markdown
 ### 1. Phân tích hiện trạng / Trả lời
-[Giải thích ngắn gọn, đi thẳng vào trọng tâm câu hỏi của User]
+[Nhận định hoặc giải đáp ngắn gọn, đi thẳng vào câu hỏi]
 
 ### 2. Dẫn chứng mã nguồn (Evidence)
-- File `[erp/erp-api/src/...#L...]`: [Đoạn logic thực tế]
-- Điểm bất thường / Rủi ro (nếu có): [Mô tả chi tiết]
+- File `[erp/erp-api/src/...#L...]`: [đoạn logic thực tế]
+- Rule audit (nếu có review): PASS/FAIL/chưa kiểm, kèm `file#dòng`
+- Rủi ro (nếu có): [race condition, thiếu index, thiếu validation, lệch contract...]
 
-### 3. Đề xuất phương án xử lý
-- **Phương án 1 (Khuyến nghị)**: [Mô tả + Ưu điểm]
-- **Phương án 2 (Thay thế)**: [Mô tả + Hạn chế]
+### 3. Đề xuất phương án
+- **Phương án 1 (Khuyến nghị)**: [mô tả + ưu điểm]
+- **Phương án 2 (Thay thế)**: [mô tả + hạn chế]
 
 ---
 *(Chờ phản hồi từ User trước khi chuyển sang lập Plan triển khai)*

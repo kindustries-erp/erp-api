@@ -1,6 +1,4 @@
 import {
-  BadRequestException,
-  ConflictException,
   Injectable,
   OnModuleInit,
   UnauthorizedException,
@@ -10,26 +8,27 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { randomBytes, createHash } from 'crypto';
-import { UsersService } from '../users/users.service';
 import { AuditCoreService } from '../audit-core/audit-core.service';
 import { ChangePasswordSelfDto } from '../users-admin/dto/user-admin.dto';
 import { RbacCoreService } from '@/v2/core/rbac-core';
+import {
+  generateRefreshToken,
+  hashToken,
+  parseExpiresInSeconds,
+  REFRESH_TOKEN_LIFETIME_SECONDS,
+} from '@/v2/core/auth-core';
+import { CreateUserDto } from '@/v2/modules/users-management/dto/create-user.dto';
+import { UsersAuthService } from '@/v2/modules/users-management/services/users-auth.service';
+import { UsersManagementService } from '@/v2/modules/users-management/users-management.service';
 import { CoreRefreshToken } from './entities/core-refresh-token.entity';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { AppConfigService } from '../app-config/app-config.service';
 
-// Refresh token lifetime: 30 days in seconds
-const REFRESH_TOKEN_LIFETIME_SECONDS = 30 * 24 * 60 * 60;
-
-function hashToken(raw: string): string {
-  return createHash('sha256').update(raw).digest('hex');
-}
-
 @Injectable()
 export class AuthService implements OnModuleInit {
   constructor(
-    private readonly usersService: UsersService,
+    private readonly usersService: UsersAuthService,
+    private readonly usersManagement: UsersManagementService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly auditCoreService: AuditCoreService,
@@ -50,10 +49,7 @@ export class AuthService implements OnModuleInit {
     }
 
     try {
-      await this.usersService.createSeedUserIfMissing(
-        seedAdminEmail,
-        seedAdminPassword,
-      );
+      await this.usersService.ensureSeedUser(seedAdminEmail, seedAdminPassword);
     } catch {
       // Skip bootstrap failure here; DB may not be configured yet.
     }
@@ -65,7 +61,7 @@ export class AuthService implements OnModuleInit {
     userId: string,
     meta: { userAgent?: string; ipAddress?: string } = {},
   ): Promise<string> {
-    const raw = randomBytes(48).toString('hex');
+    const raw = generateRefreshToken();
     const tokenHash = hashToken(raw);
     const expiresAt = new Date(
       Date.now() + REFRESH_TOKEN_LIFETIME_SECONDS * 1000,
@@ -142,12 +138,12 @@ export class AuthService implements OnModuleInit {
     meta: { userAgent?: string; ipAddress?: string } = {},
   ) {
     const normalizedEmail = email.toLowerCase().trim();
-    const user = await this.usersService.findByEmail(normalizedEmail);
+    const { user, valid } = await this.usersService.authenticate(
+      normalizedEmail,
+      password,
+    );
 
-    if (
-      !user ||
-      !this.usersService.verifyPassword(password, user.passwordHash)
-    ) {
+    if (!user || !valid) {
       await this.auditCoreService.recordAction({
         actorEmail: normalizedEmail,
         actionType: 'LOGIN_FAIL',
@@ -177,8 +173,7 @@ export class AuthService implements OnModuleInit {
       );
     }
 
-    user.lastLoginAt = new Date();
-    await this.usersService.updateLastLogin(user.id);
+    await this.usersService.recordLogin(user.id);
 
     const accessToken = await this.jwtService.signAsync({
       sub: user.id,
@@ -200,7 +195,7 @@ export class AuthService implements OnModuleInit {
     });
 
     const jwtExpiresIn = this.configService.get<string>('JWT_EXPIRES_IN', '8h');
-    const expiresInSeconds = this.parseExpiresIn(jwtExpiresIn);
+    const expiresInSeconds = parseExpiresInSeconds(jwtExpiresIn);
 
     const preferences = await this.appConfigService.getUserPreferences(user.id);
 
@@ -258,7 +253,7 @@ export class AuthService implements OnModuleInit {
     });
 
     const jwtExpiresIn = this.configService.get<string>('JWT_EXPIRES_IN', '8h');
-    const expiresInSeconds = this.parseExpiresIn(jwtExpiresIn);
+    const expiresInSeconds = parseExpiresInSeconds(jwtExpiresIn);
 
     return {
       access_token: newAccessToken,
@@ -272,89 +267,49 @@ export class AuthService implements OnModuleInit {
     return { message: 'Đăng xuất thành công' };
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
-
-  private parseExpiresIn(expiresIn: string): number {
-    // Parse '8h', '30d', '3600' (seconds) etc.
-    const match = /^(\d+)(s|m|h|d)?$/.exec(expiresIn);
-    if (!match) return 8 * 3600;
-    const value = parseInt(match[1], 10);
-    const unit = match[2] ?? 's';
-    const multipliers: Record<string, number> = {
-      s: 1,
-      m: 60,
-      h: 3600,
-      d: 86400,
-    };
-    return value * (multipliers[unit] ?? 1);
-  }
-
-  // ── Existing flows (preserved) ────────────────────────────────────────────
-
   async registerLocalUser(input: {
     email: string;
     password: string;
     employeeId?: string;
   }) {
-    return this.usersService.registerLocalUser(input);
+    const ctx = {
+      actorUserId: null,
+      actorEmail: null,
+      route: '/api/v1/auth/register',
+      httpMethod: 'POST',
+      uiScreen: null,
+      uiAction: null,
+      ipAddress: null,
+      userAgent: null,
+      requestId: null,
+    };
+    const { data } = await this.usersManagement.create(
+      Object.assign(new CreateUserDto(), input),
+      ctx,
+    );
+    return {
+      message: 'Tạo user local thành công',
+      data: {
+        id: data.id,
+        email: data.email,
+        status: data.status,
+        employeeId: data.employeeId,
+        legacyDirectusUserId: data.legacyDirectusUserId,
+      },
+    };
   }
 
   async updateProfile(userId: string, dto: UpdateProfileDto) {
-    const user = await this.usersService.findById(userId);
-    if (!user) {
+    const result = await this.usersService.updateOwnProfile(userId, {
+      email: dto.email,
+      fullName: dto.full_name,
+      phone: dto.phone,
+      notes: dto.notes,
+    });
+    if (!result) {
       throw new UnauthorizedException('Token không hợp lệ');
     }
-
-    const normalizedEmail = dto.email?.toLowerCase().trim();
-    if (normalizedEmail && normalizedEmail !== user.email) {
-      const existing = await this.usersService.findByEmail(normalizedEmail);
-      if (existing && existing.id !== user.id) {
-        throw new ConflictException('Email đã tồn tại');
-      }
-      user.email = normalizedEmail;
-    }
-
-    const employee = await this.usersService.getEmployeeSnapshot(
-      user.employeeId,
-    );
-    const hasEmployeeFieldUpdate =
-      dto.full_name !== undefined ||
-      dto.phone !== undefined ||
-      dto.notes !== undefined;
-
-    if (!employee && hasEmployeeFieldUpdate) {
-      throw new BadRequestException(
-        'Tài khoản chưa liên kết hồ sơ nhân viên, chưa thể cập nhật họ tên/số điện thoại/ghi chú.',
-      );
-    }
-
-    if (employee) {
-      if (dto.full_name !== undefined) {
-        const fullName = dto.full_name?.trim() ?? '';
-        if (fullName) {
-          employee.fullName = fullName;
-        }
-      }
-
-      if (dto.phone !== undefined) {
-        const phone = dto.phone?.trim() ?? '';
-        employee.phone = phone || null;
-      }
-
-      if (dto.notes !== undefined) {
-        const notes = dto.notes?.trim() ?? '';
-        employee.notes = notes || null;
-      }
-
-      if (normalizedEmail) {
-        employee.email = normalizedEmail;
-      }
-
-      await this.usersService.saveEmployee(employee);
-    }
-
-    await this.usersService.save(user as any);
-
+    const { user, employee } = result;
     return {
       message: 'Cập nhật hồ sơ thành công',
       data: {
@@ -378,11 +333,16 @@ export class AuthService implements OnModuleInit {
       originalUrl?: string;
     },
   ) {
-    const user = await this.usersService.findById(userId);
-    if (!user) {
+    const result = await this.usersService.changeOwnPassword(
+      userId,
+      dto.oldPassword,
+      dto.newPassword,
+    );
+    if (result.status === 'NOT_FOUND') {
       throw new UnauthorizedException('Token không hợp lệ');
     }
-    if (!this.usersService.verifyPassword(dto.oldPassword, user.passwordHash)) {
+    const user = result.user;
+    if (result.status === 'WRONG_PASSWORD') {
       await this.auditCoreService.recordAction({
         actorUserId: user.id,
         actorEmail: user.email,
@@ -401,13 +361,6 @@ export class AuthService implements OnModuleInit {
       });
       throw new UnauthorizedException('Mật khẩu cũ không đúng');
     }
-
-    user.passwordHash = this.usersService.hashPassword(dto.newPassword);
-    user.passwordChangedAt = new Date();
-    await this.usersService.save(user as any);
-
-    // Revoke all refresh tokens after password change
-    await this.revokeAllUserTokens(user.id);
 
     await this.auditCoreService.recordAction({
       actorUserId: user.id,
@@ -460,7 +413,7 @@ export class AuthService implements OnModuleInit {
     const refreshToken = await this.createRefreshToken(targetUser.id, meta);
 
     const jwtExpiresIn = this.configService.get<string>('JWT_EXPIRES_IN', '8h');
-    const expiresInSeconds = this.parseExpiresIn(jwtExpiresIn);
+    const expiresInSeconds = parseExpiresInSeconds(jwtExpiresIn);
 
     await this.auditCoreService.recordAction({
       actorUserId: adminUser.id,
@@ -505,9 +458,7 @@ export class AuthService implements OnModuleInit {
       throw new UnauthorizedException('Token không hợp lệ');
     }
 
-    const employee = await this.usersService.getEmployeeSnapshot(
-      user.employeeId,
-    );
+    const employee = await this.usersService.getEmployee(user.employeeId);
 
     const permissions = await this.rbacCoreService.getUserPermissions(user.id);
     const preferences = await this.appConfigService.getUserPreferences(user.id);

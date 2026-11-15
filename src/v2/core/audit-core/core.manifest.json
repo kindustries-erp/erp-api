@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "layer": "api",
+  "family": "audit-core",
+  "entity": "BaseAuditLogEntity",
+  "style": "v2-core",
+  "barrel": "src/v2/core/audit-core/index.ts",
+  "module": null,
+  "moduleFile": null,
+  "baseClasses": {
+    "entity": "BaseAuditLogEntity",
+    "createDto": null,
+    "contract": null,
+    "service": "AbstractAuditWriterService"
+  },
+  "serviceFile": "services/abstract-audit-writer.service.ts",
+  "permissionPattern": null,
+  "requiredModuleFiles": []
+}

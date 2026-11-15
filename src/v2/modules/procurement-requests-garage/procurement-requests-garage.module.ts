@@ -8,7 +8,7 @@ import { ApprovalSetting } from '@/v2/core/approval-core/entities/approval-setti
 import { ApprovalSettingsService } from '@/v2/core/approval-core/approval-settings.service';
 import { ApproverDirectoryService } from '@/v2/core/approval-core/approver-directory.service';
 import { createApprovalConfigController } from '@/v2/core/approval-core/approval-config.controller';
-import { CoreUser } from '@/users/entities/core-user.entity';
+import { UsersManagement } from '@/v2/modules/users-management/entities/users-management.entity';
 import { ErpResource } from '@/v2/core/rbac-core';
 import { GarageProcurementRequest } from './entities/procurement-request.entity';
 import { GarageProcurementRequestLine } from './entities/procurement-request-line.entity';
@@ -41,7 +41,7 @@ const GarageProcurementRequestApprovalConfigController =
       GarageProcurementOrder,
       ApprovalEvent,
       ApprovalSetting,
-      CoreUser,
+      UsersManagement,
     ]),
     RbacCoreModule,
     NotificationsInboxModule,

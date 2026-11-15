@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "layer": "api",
+  "family": "employees-core",
+  "entity": "EmployeeManagement",
+  "style": "legacy-compatible",
+  "barrel": "src/v2/core/employees-core/index.ts",
+  "module": "EmployeesCoreModule",
+  "moduleFile": "employees-core.module.ts",
+  "baseClasses": {
+    "entity": "EmployeeManagement",
+    "createDto": "CreateEmployeeManagementDto",
+    "contract": null,
+    "service": "EmployeesCoreService"
+  },
+  "serviceFile": "services/employees-core.service.ts",
+  "permissionPattern": "employees",
+  "requiredModuleFiles": ["dto", "entities", "services"]
+}

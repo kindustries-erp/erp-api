@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
-import { CoreUser } from '../../../users/entities/core-user.entity';
+import { UsersManagement } from '../../modules/users-management/entities/users-management.entity';
 import { ErpAction } from '../rbac-core/enums';
 import { RbacCoreService } from '../rbac-core/services/rbac-core.service';
 
@@ -18,8 +18,8 @@ export interface ApproverOption {
 export class ApproverDirectoryService {
   constructor(
     private readonly rbac: RbacCoreService,
-    @InjectRepository(CoreUser)
-    private readonly users: Repository<CoreUser>,
+    @InjectRepository(UsersManagement)
+    private readonly users: Repository<UsersManagement>,
   ) {}
 
   async listApprovers(

@@ -6,7 +6,6 @@ import {
 
 const CREATOR = 'creator-1';
 const APPROVER = 'approver-1';
-const OTHER = 'other-1';
 
 function header(over: Partial<NotifiableRequest> = {}): NotifiableRequest {
   return {
@@ -102,9 +101,100 @@ describe('ProcurementRequestNotifierService', () => {
     expect(publisher.createForUser).not.toHaveBeenCalled();
   });
 
-  it('hành động khác (thu hồi, hủy, đóng) không gửi thông báo', async () => {
-    await service.afterTransition('recall', header(), CREATOR);
-    await service.afterTransition('cancel', header(), OTHER, 'hủy');
+  it('hành động khác (đóng) không gửi thông báo', async () => {
+    await service.afterTransition('close', header(), CREATOR);
+
+    expect(publisher.createForUser).not.toHaveBeenCalled();
+  });
+
+  it('thu hồi khi đang chờ duyệt: báo người duyệt trước đó, INFO, RECALLED, VIEW', async () => {
+    await service.afterTransition(
+      'recall',
+      header({
+        approverId: null,
+        previousApproverId: APPROVER,
+        previousStatus: 'PENDING_APPROVAL',
+      }),
+      CREATOR,
+    );
+
+    const [userId, payload] = publisher.createForUser.mock.calls[0];
+    expect(userId).toBe(APPROVER);
+    expect(payload.type).toBe('INFO');
+    expect(payload.title).toBe('Đề nghị mua đã được thu hồi');
+    expect(payload.extraData).toEqual({
+      event: 'RECALLED',
+      requestNo: 'GDNM-0001',
+    });
+    expect(payload.target.action).toBe('VIEW');
+  });
+
+  it('hủy khi đang chờ duyệt: báo người duyệt kèm lý do, WARNING, CANCELLED, VIEW', async () => {
+    await service.afterTransition(
+      'cancel',
+      header({ previousStatus: 'PENDING_APPROVAL' }),
+      CREATOR,
+      'Hủy do thay đổi kế hoạch',
+    );
+
+    const [userId, payload] = publisher.createForUser.mock.calls[0];
+    expect(userId).toBe(APPROVER);
+    expect(payload.type).toBe('WARNING');
+    expect(payload.message).toContain('Hủy do thay đổi kế hoạch');
+    expect(payload.extraData.event).toBe('CANCELLED');
+    expect(payload.target.action).toBe('VIEW');
+  });
+
+  it('hủy không lý do: thông báo không có phần lý do', async () => {
+    await service.afterTransition(
+      'cancel',
+      header({ previousStatus: 'PENDING_APPROVAL' }),
+      CREATOR,
+    );
+
+    const [, payload] = publisher.createForUser.mock.calls[0];
+    expect(payload.message).toBe('GDNM-0001 - Mua lốp đã bị hủy');
+  });
+
+  it('thu hồi / hủy do chính người duyệt thao tác: không tự báo cho mình', async () => {
+    await service.afterTransition(
+      'cancel',
+      header({ previousStatus: 'PENDING_APPROVAL' }),
+      APPROVER,
+    );
+    await service.afterTransition(
+      'recall',
+      header({
+        approverId: null,
+        previousApproverId: APPROVER,
+        previousStatus: 'PENDING_APPROVAL',
+      }),
+      APPROVER,
+    );
+
+    expect(publisher.createForUser).not.toHaveBeenCalled();
+  });
+
+  it('thu hồi / hủy khi không có người duyệt hoặc không còn chờ duyệt: không gửi', async () => {
+    await service.afterTransition(
+      'recall',
+      header({
+        approverId: null,
+        previousApproverId: null,
+        previousStatus: 'PENDING_APPROVAL',
+      }),
+      CREATOR,
+    );
+    await service.afterTransition(
+      'cancel',
+      header({ approverId: null, previousApproverId: null }),
+      CREATOR,
+    );
+    await service.afterTransition(
+      'cancel',
+      header({ previousStatus: 'APPROVED' }),
+      CREATOR,
+    );
 
     expect(publisher.createForUser).not.toHaveBeenCalled();
   });

@@ -26,7 +26,7 @@ describe('TablePreferenceCommandService', () => {
     } as any);
 
     expect(insertQb.orUpdate).toHaveBeenCalledWith(
-      ['updated_at', 'columns'],
+      ['updated_at', 'is_deleted', 'columns'],
       ['user_id', 'table_id'],
     );
     expect(insertQb.values).toHaveBeenCalledWith(
@@ -43,7 +43,7 @@ describe('TablePreferenceCommandService', () => {
     await service.upsert('u-1', 't-1', {} as any);
 
     expect(insertQb.orUpdate).toHaveBeenCalledWith(
-      ['updated_at'],
+      ['updated_at', 'is_deleted'],
       ['user_id', 'table_id'],
     );
   });
@@ -56,7 +56,7 @@ describe('TablePreferenceCommandService', () => {
     const values = insertQb.values.mock.calls[0][0];
     expect(values.views).toEqual({ activeKey: 'all' });
     expect(insertQb.orUpdate).toHaveBeenCalledWith(
-      ['updated_at', 'views'],
+      ['updated_at', 'is_deleted', 'views'],
       ['user_id', 'table_id'],
     );
   });

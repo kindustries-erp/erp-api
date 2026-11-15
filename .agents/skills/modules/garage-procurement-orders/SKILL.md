@@ -144,6 +144,11 @@ Quyền resource: `garage_procurement_orders`. Seed từ `garage_purchase_orders
 - Quan hệ 1-1 (mỗi PO tối đa một đề nghị). Đơn lập trực tiếp có `requestNo` rỗng, nên lọc "trống" bắt được chúng.
 - Spec: `services/procurement-order-query.service.spec.ts`.
 
+## 16. Cập nhật 2026-11-15: ma trận quyền cho hủy và xóa; người duyệt chỉ duyệt/từ chối
+- Hủy (`cancel`) và xóa mềm nháp (`DELETE /api/v2/procurement-orders-garage/:id`) không kiểm người tạo. Quyền theo ma trận RBAC (hủy `UPDATE`, xóa `DELETE`). `PURGE` (`:id/permanent`) không đổi.
+- Người duyệt được chỉ định (`approverId`, khác người tạo) chỉ approve/reject; approve, reject, issue, cancel, close khác → 403 qua `assertApproverOnlyDecides`. Bật ở Garage bằng `restrictApproverToDecision = true` (`services/procurement-order-command.service.ts`); lõi `procurement-orders-core` mặc định tắt.
+- Thu hồi (`recall`) vẫn chỉ người tạo (`assertCreatorOnly`).
+
 ## Hợp đồng phân trang chuẩn v2 (pagination)
 
 - List trả `{ items, pagination, summaries? }`; `pagination` = `{ page, pageSize, total, totalPages, next, previous }` (`next`/`previous` là số trang hoặc `null`). Không còn key phẳng `total`/`page`/`totalPages` ở cấp gốc.

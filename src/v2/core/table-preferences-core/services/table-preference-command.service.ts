@@ -25,12 +25,17 @@ export class TablePreferenceCommandService {
     tableId: string,
     patch: TablePreferencePatch,
   ): Promise<CoreUserTablePreference> {
-    const overwrite: string[] = ['updated_at'];
-    const values: Partial<CoreUserTablePreference> = {
+    // Ghi đè is_deleted=false để dòng đã xóa mềm được dùng lại thay vì bị giữ nguyên trạng thái xóa
+    const overwrite: string[] = ['updated_at', 'is_deleted'];
+    const values: Pick<
+      CoreUserTablePreference,
+      'userId' | 'tableId' | 'columns' | 'views' | 'isDeleted'
+    > = {
       userId,
       tableId,
       columns: {},
       views: {},
+      isDeleted: false,
     };
 
     if (patch.columns !== undefined) {

@@ -46,6 +46,44 @@ export function assertNotSelfApproval(
   }
 }
 
+/**
+ * Chỉ người tạo chứng từ mới được thực hiện hành động (gửi duyệt, thu hồi,
+ * hủy, xóa). Chứng từ cũ không có người tạo (null) thì không chặn.
+ */
+export function assertCreatorOnly(
+  actorId: string,
+  createdBy: string | null,
+  verb: string,
+): void {
+  if (createdBy && createdBy !== actorId) {
+    throw new ForbiddenException(`Chỉ người tạo mới được ${verb}`);
+  }
+}
+
+/** Hành động mà người duyệt được chỉ định trên phiếu của người khác được phép làm. */
+export const APPROVER_ALLOWED_ACTIONS: readonly string[] = [
+  'approve',
+  'reject',
+];
+
+/**
+ * Người duyệt được chỉ định (không phải người tạo) chỉ được duyệt hoặc từ chối.
+ * Người không phải người duyệt chỉ định không bị chặn ở đây (theo ma trận quyền).
+ */
+export function assertApproverOnlyDecides(
+  actorId: string,
+  doc: { approverId: string | null; createdBy: string | null },
+  action: string,
+): void {
+  const isApprover = Boolean(doc.approverId) && doc.approverId === actorId;
+  const isCreator = Boolean(doc.createdBy) && doc.createdBy === actorId;
+  if (isApprover && !isCreator && !APPROVER_ALLOWED_ACTIONS.includes(action)) {
+    throw new ForbiddenException(
+      'Người duyệt chỉ được duyệt hoặc từ chối chứng từ của người tạo',
+    );
+  }
+}
+
 /** Từ chối, hủy, đóng thiếu đều bắt buộc có lý do không rỗng. */
 export function requireReason(reason: string | null | undefined): string {
   const trimmed = (reason ?? '').trim();

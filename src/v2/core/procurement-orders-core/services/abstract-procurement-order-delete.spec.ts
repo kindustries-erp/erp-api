@@ -173,4 +173,16 @@ describe('AbstractProcurementOrderCommandService.softDeleteDraft (sau tách hàm
     expect(link.release).toHaveBeenCalledTimes(1);
     expect(deleted).toHaveLength(0);
   });
+
+  it('không kiểm người tạo: quyền xóa do ma trận RBAC (guard) quyết định', async () => {
+    const link = makeLink();
+    const { manager } = fakeManager(makeHeader({ requestId: 'r1' }), [
+      makeLine(),
+    ]);
+    const svc = new TestOrderCommand(fakeDataSource(manager), events, link);
+
+    const out = await svc.softDeleteDraft('o1');
+
+    expect(out.isDeleted).toBe(true);
+  });
 });

@@ -14,6 +14,7 @@ import { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.ent
 import { CoreUserRole } from '@/v2/core/rbac-core/entities/core-user-role.entity';
 import { EmployeesCoreModule } from './employees-core/employees-core.module';
 import { BusinessPartnersManagementModule } from './v2/modules/business-partners-management/business-partners-management.module';
+import { EmployeesManagementModule } from './v2/modules/employees-management/employees-management.module';
 import { InventoryCoreModule } from './inventory-core/inventory-core.module';
 import { BomCoreModule } from './bom-core/bom-core.module';
 import { ModuleConfigModule } from './module-config/module-config.module';
@@ -33,7 +34,8 @@ import { ErpMfgCoreModule } from './erp-mfg-core/erp-mfg-core.module';
 import { AuditCoreModule } from './audit-core/audit-core.module';
 import { UsersAdminModule } from './users-admin/users-admin.module';
 import { APP_INTERCEPTOR } from '@nestjs/core';
-import { GlobalAuditInterceptor } from './audit-core/interceptors/global-audit.interceptor';
+import { AuditLogsV2Module } from './v2/modules/audit-logs/audit-logs-v2.module';
+import { GlobalAuditInterceptor } from './v2/modules/audit-logs/interceptors/global-audit.interceptor';
 import { RbacCoreModule } from '@/v2/core/rbac-core';
 import { RbacRolesModule } from './v2/modules/rbac-roles/rbac-roles.module';
 import { BasicMastersCoreModule } from './basic-masters-core/basic-masters-core.module';
@@ -74,6 +76,8 @@ import { LoansModule } from './v2/modules/loans-tool/loans.module'; // api-v2-mo
 import { ItemsGarageModule } from './v2/modules/items-garage/items-garage.module'; // api-v2-module:items-garage:app-imports
 import { AiHubGatewayModule } from './v2/modules/ai-hub-gateway/ai-hub-gateway.module'; // api-v2-module:ai-hub-gateway:app-imports
 import { AiHubGarageModule } from './v2/modules/ai-hub-garage/ai-hub-garage.module'; // api-v2-module:ai-hub-garage:app-imports
+import { UsersManagementModule } from './v2/modules/users-management/users-management.module'; // api-v2-module:users-management:app-imports
+import { AuthSessionsModule } from './v2/modules/auth-sessions/auth-sessions.module'; // api-v2-module:auth-sessions:app-imports
 // plop:api-v2-imports
 
 @Module({
@@ -150,6 +154,7 @@ import { AiHubGarageModule } from './v2/modules/ai-hub-garage/ai-hub-garage.modu
     AuthModule,
     EmployeesCoreModule,
     BusinessPartnersManagementModule,
+    EmployeesManagementModule,
     InventoryCoreModule,
     ErpInvoicesCoreModule,
     ErpAttachmentsCoreModule,
@@ -170,6 +175,7 @@ import { AiHubGarageModule } from './v2/modules/ai-hub-garage/ai-hub-garage.modu
     InventoryStockCoreModule,
     ErpMfgCoreModule,
     AuditCoreModule,
+    AuditLogsV2Module,
     UsersAdminModule,
     RbacCoreModule,
     RbacRolesModule,
@@ -207,6 +213,8 @@ import { AiHubGarageModule } from './v2/modules/ai-hub-garage/ai-hub-garage.modu
     ItemsGarageModule, // api-v2-module:items-garage:app-modules
     AiHubGatewayModule, // api-v2-module:ai-hub-gateway:app-modules
     AiHubGarageModule, // api-v2-module:ai-hub-garage:app-modules
+    UsersManagementModule, // api-v2-module:users-management:app-modules
+    AuthSessionsModule, // api-v2-module:auth-sessions:app-modules
     // plop:api-v2-modules
   ],
   controllers: [AppController],

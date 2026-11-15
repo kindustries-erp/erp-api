@@ -4,7 +4,7 @@ import { RbacCoreModule } from '@/v2/core/rbac-core';
 import { ApprovalEvent } from '@/v2/core/approval-core/entities/approval-event.entity';
 import { ApprovalEventService } from '@/v2/core/approval-core/approval-event.service';
 import { ApprovalActorService } from '@/v2/core/approval-core/approval-actor.service';
-import { CoreUser } from '@/users/entities/core-user.entity';
+import { UsersManagement } from '@/v2/modules/users-management/entities/users-management.entity';
 import { ErpProcurementRequestsModule } from '@/v2/modules/procurement-requests-erp/procurement-requests-erp.module';
 import { ProcurementOrder } from './entities/procurement-order.entity';
 import { ProcurementOrderLine } from './entities/procurement-order-line.entity';
@@ -27,7 +27,7 @@ import {
       ProcurementOrderLine,
       ProcurementOrderAcceptance,
       ApprovalEvent,
-      CoreUser,
+      UsersManagement,
     ]),
     RbacCoreModule,
     ErpProcurementRequestsModule,

@@ -147,6 +147,19 @@ Quyền resource: `garage_procurement_requests`. Seed từ `garage_purchase_orde
 - Gợi ý lấy số PO còn hiệu lực (`isDeleted = false`) thuộc các đề nghị khớp bộ lọc cột khác (cascading), qua `findTableColumnOptions` trên bảng PO (`o.orderNo`).
 - Spec: `services/procurement-request-query.service.spec.ts` (EXISTS khi lọc).
 
+## 16. Cập nhật 2026-11-14: thông báo thu hồi và hủy
+
+- Thu hồi (`recall`) và hủy (`cancel`) chỉ báo người duyệt khi phiếu đang `PENDING_APPROVAL` (đang chờ duyệt). Người duyệt nhận thông báo: thu hồi → `INFO`, `extraData.event = RECALLED`, tiêu đề "Đề nghị mua đã được thu hồi"; hủy → `WARNING`, `extraData.event = CANCELLED`, nội dung kèm lý do nếu có. Target `VIEW`.
+- Chụp người duyệt và trạng thái trước khi chuyển: facade gọi `GarageProcurementRequestQueryService.findApprovalSnapshot(id)` (chỉ với `recall`/`cancel`) vì `recall` xóa `approver_id`. Snapshot truyền xuống notifier dưới dạng `previousApproverId` và `previousStatus`. Lõi `abstract-purchase-request-command` không đổi.
+- Không gửi khi: người thao tác trùng người duyệt, không có người duyệt, hoặc phiếu không ở `PENDING_APPROVAL` (ví dụ hủy từ APPROVED).
+- Test: unit `procurement-request-notifier.service.spec.ts`, `procurement-requests.service.spec.ts`, `procurement-request-query.service.spec.ts`. Smoke: `bun run test:smoke:recall-cancel` (submit → recall → submit → cancel, kiểm inbox người duyệt; TOTAL 17, FAILED 0 trên staging).
+
+## 17. Cập nhật 2026-11-15: ma trận quyền cho hủy và xóa; người duyệt chỉ duyệt/từ chối
+- Hủy (`cancel`) và xóa mềm nháp (`DELETE`) không kiểm người tạo ở lõi. Quyền do guard RBAC theo ma trận: hủy cần `UPDATE`, xóa cần `DELETE`. Route, DTO, `PURGE` (`:id/permanent`) không đổi.
+- Người duyệt được chỉ định (`approverId`, khác người tạo) chỉ được approve/reject. Lõi `assertApproverOnlyDecides` (`core/approval-core/approval.engine.ts`) chặn các hành động khác với 403 "Người duyệt chỉ được duyệt hoặc từ chối chứng từ của người tạo". Bật ở Garage bằng `restrictApproverToDecision = true` trong `procurement-request-command.service.ts`; lõi mặc định tắt, ERP thường giữ hành vi cũ.
+- Gửi duyệt và thu hồi vẫn chỉ người tạo (`assertCreatorOnly`), áp cho mọi họ (`/api/v2/procurement-requests-erp` cũng vậy).
+- Tài khoản không có `DELETE` trên staging nhận 403 từ guard (`Bạn không có quyền thực hiện thao tác này`), đây là cấu hình quyền có sẵn.
+- Smoke `test/smoke/procurement.smoke.mjs`: người duyệt hủy → 403; người duyệt xóa nháp của người tạo → 200 (có `DELETE`). Kết quả 2026-11-15: TOTAL 47, FAILED 0.
 ## Hợp đồng phân trang chuẩn v2 (pagination)
 
 - List trả `{ items, pagination, summaries? }`; `pagination` = `{ page, pageSize, total, totalPages, next, previous }` (`next`/`previous` là số trang hoặc `null`). Không còn key phẳng `total`/`page`/`totalPages` ở cấp gốc.

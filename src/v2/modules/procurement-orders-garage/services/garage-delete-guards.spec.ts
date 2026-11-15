@@ -26,6 +26,35 @@ function fakeDataSource(count: number) {
   };
 }
 
+describe('Lớp con garage bật kiểm người duyệt (restrictApproverToDecision)', () => {
+  it('PO garage bật cờ; xóa mềm nháp không kiểm người tạo (ma trận RBAC quyết định)', async () => {
+    const { dataSource, manager } = fakeDataSource(0);
+    manager.findOne.mockResolvedValueOnce(
+      Object.assign(new GarageProcurementOrder(), {
+        id: 'o1',
+        status: 'DRAFT',
+        requestId: null,
+        isDeleted: false,
+        createdBy: 'creator',
+      }),
+    );
+    const svc = new GarageProcurementOrderCommandService(
+      dataSource,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    expect(
+      (svc as unknown as { restrictApproverToDecision: boolean })
+        .restrictApproverToDecision,
+    ).toBe(true);
+    await expect(svc.softDeleteDraft('o1')).resolves.toMatchObject({
+      isDeleted: true,
+    });
+  });
+});
+
 describe('Chặn xóa cứng của lớp con garage', () => {
   it('PO garage còn phiếu nhập tham chiếu thì chặn', async () => {
     const { dataSource, manager } = fakeDataSource(2);

@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ApprovalActorService } from '@/v2/core/approval-core/approval-actor.service';
-import { CoreUser } from '@/users/entities/core-user.entity';
+import { UsersManagement } from '@/v2/modules/users-management/entities/users-management.entity';
 import { GarageProcurementRequestsModule } from './procurement-requests-garage/procurement-requests-garage.module';
 import { GarageProcurementOrdersModule } from './procurement-orders-garage/procurement-orders-garage.module';
 import { ErpProcurementRequestsModule } from './procurement-requests-erp/procurement-requests-erp.module';
@@ -31,14 +31,14 @@ const MODULES: Array<[string, object]> = [
 
 describe('Đăng ký ApprovalActorService trong module procurement', () => {
   it.each(MODULES)(
-    '%s: có CoreUser repository trực tiếp trong forFeature (nơi ApprovalActorService inject)',
+    '%s: có UsersManagement repository trực tiếp trong forFeature (nơi ApprovalActorService inject)',
     (_name, mod) => {
       const providers = (Reflect.getMetadata('providers', mod) ??
         []) as unknown[];
       expect(providers).toContain(ApprovalActorService);
-      expect(ownRepositoryTokens(mod).has(getRepositoryToken(CoreUser))).toBe(
-        true,
-      );
+      expect(
+        ownRepositoryTokens(mod).has(getRepositoryToken(UsersManagement)),
+      ).toBe(true);
     },
   );
 });

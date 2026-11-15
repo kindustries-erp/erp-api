@@ -195,10 +195,21 @@ const pr3Res = await call(tao, 'POST', '/procurement-requests-garage', {
 const pr3Id = pr3Res.data?.id;
 await call(tao, 'POST', `/procurement-requests-garage/${pr3Id}/submit`, { approverId: duyet.user.id }, [200, 201]);
 await call(duyet, 'POST', `/procurement-requests-garage/${pr3Id}/approve`, {}, [200, 201]);
-await call(duyet, 'POST', `/procurement-requests-garage/${pr3Id}/cancel`, {}, [400]);
-await call(duyet, 'POST', `/procurement-requests-garage/${pr3Id}/cancel`, { reason: 'Smoke cancel' }, [200, 201]);
+// Người duyệt được chỉ định chỉ duyệt/từ chối: hủy bị 403 (kiểm trước khi xét lý do)
+await call(duyet, 'POST', `/procurement-requests-garage/${pr3Id}/cancel`, { reason: 'Smoke cancel' }, [403]);
+await call(tao, 'POST', `/procurement-requests-garage/${pr3Id}/cancel`, {}, [400]);
+await call(tao, 'POST', `/procurement-requests-garage/${pr3Id}/cancel`, { reason: 'Smoke cancel' }, [200, 201]);
 const pr3 = (await call(tao, 'GET', `/procurement-requests-garage/${pr3Id}`, undefined, [200])).data;
 console.log('PR3 after cancel:', pr3?.status);
+
+// 10b. Xóa mềm nháp theo ma trận quyền: không kiểm người tạo (duyệt có DELETE xóa được nháp của tao).
+const pr4Res = await call(tao, 'POST', '/procurement-requests-garage', {
+  requestDate: today,
+  title: `SMOKE PR DELETE ${Date.now()}`,
+  lines: [{ lineType: 'GOODS', itemName: 'Smoke delete', qtyRequested: 1, estUnitPrice: 10 }],
+}, [201]);
+const pr4Id = pr4Res.data?.id;
+await call(duyet, 'DELETE', `/procurement-requests-garage/${pr4Id}`, undefined, [200, 201]);
 
 // 11. Danh sách
 await call(tao, 'GET', '/procurement-requests-garage?page=1', undefined, [200]);
