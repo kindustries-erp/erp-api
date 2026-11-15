@@ -34,7 +34,8 @@ import { ErpMfgCoreModule } from './erp-mfg-core/erp-mfg-core.module';
 import { AuditCoreModule } from './audit-core/audit-core.module';
 import { UsersAdminModule } from './users-admin/users-admin.module';
 import { APP_INTERCEPTOR } from '@nestjs/core';
-import { GlobalAuditInterceptor } from './audit-core/interceptors/global-audit.interceptor';
+import { AuditLogsV2Module } from './v2/modules/audit-logs/audit-logs-v2.module';
+import { GlobalAuditInterceptor } from './v2/modules/audit-logs/interceptors/global-audit.interceptor';
 import { RbacCoreModule } from '@/v2/core/rbac-core';
 import { RbacRolesModule } from './v2/modules/rbac-roles/rbac-roles.module';
 import { BasicMastersCoreModule } from './basic-masters-core/basic-masters-core.module';
@@ -174,6 +175,7 @@ import { AuthSessionsModule } from './v2/modules/auth-sessions/auth-sessions.mod
     InventoryStockCoreModule,
     ErpMfgCoreModule,
     AuditCoreModule,
+    AuditLogsV2Module,
     UsersAdminModule,
     RbacCoreModule,
     RbacRolesModule,

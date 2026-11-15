@@ -1,13 +1,6 @@
-import { SetMetadata } from '@nestjs/common';
-
-export const AUDIT_LOG_META_KEY = 'auditLogMeta';
-
-export interface AuditLogOptions {
-  module?: string;
-  actionType?: string;
-  entityType?: string;
-  skip?: boolean;
-}
-
-export const AuditLog = (options: AuditLogOptions) =>
-  SetMetadata(AUDIT_LOG_META_KEY, options);
+/** Giữ đường dẫn cũ cho V1; định nghĩa nằm ở lõi v2 `audit-core`. */
+export {
+  AUDIT_LOG_META_KEY,
+  AuditLog,
+  type AuditLogOptions,
+} from '@/v2/core/audit-core';

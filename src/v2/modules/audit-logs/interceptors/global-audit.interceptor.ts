@@ -7,16 +7,13 @@ import {
 import { Reflector } from '@nestjs/core';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
-import { AuditCoreService } from '../audit-core.service';
-import {
-  AUDIT_LOG_META_KEY,
-  AuditLogOptions,
-} from '../decorators/audit-log.decorator';
+import { AUDIT_LOG_META_KEY, AuditLogOptions } from '@/v2/core/audit-core';
+import { AuditWriterService } from '../services/audit-writer.service';
 
 @Injectable()
 export class GlobalAuditInterceptor implements NestInterceptor {
   constructor(
-    private readonly auditCoreService: AuditCoreService,
+    private readonly writer: AuditWriterService,
     private readonly reflector: Reflector,
   ) {}
 
@@ -31,7 +28,7 @@ export class GlobalAuditInterceptor implements NestInterceptor {
     );
 
     // Bỏ qua nếu tính năng Audit Log bị tắt qua cấu hình ENABLE_AUDIT_LOG=false
-    if (!this.auditCoreService.isEnabled) {
+    if (!this.writer.isEnabled) {
       return next.handle();
     }
 
@@ -123,7 +120,7 @@ export class GlobalAuditInterceptor implements NestInterceptor {
     try {
       const user = req.user;
 
-      this.auditCoreService.recordAction({
+      void this.writer.recordAction({
         actorUserId: user?.sub || null,
         actorEmail: user?.email || null,
         actionType,

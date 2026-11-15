@@ -1,21 +1,10 @@
-import {
-  Column,
-  CreateDateColumn,
-  Entity,
-  Index,
-  PrimaryGeneratedColumn,
-} from 'typeorm';
+import { Column, CreateDateColumn, PrimaryGeneratedColumn } from 'typeorm';
 
-@Entity({ name: 'erp_audit_logs' })
-@Index('IDX_erp_audit_logs_entity_created', [
-  'entityType',
-  'entityId',
-  'createdAt',
-])
-@Index('IDX_erp_audit_logs_created_at', ['createdAt'])
-@Index('IDX_erp_audit_logs_actor_created', ['actorUserId', 'createdAt'])
-@Index('IDX_erp_audit_logs_module_action', ['module', 'actionType'])
-export class ErpAuditLog {
+/**
+ * Entity nền của nhật ký kiểm toán (abstract, không `@Entity`, không bảng).
+ * Module cụ thể kế thừa và khai báo `@Entity` kèm index (xem `audit-logs`).
+ */
+export abstract class BaseAuditLogEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
