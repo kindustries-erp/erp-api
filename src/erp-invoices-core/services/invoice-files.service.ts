@@ -2,9 +2,13 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+
+import { FileOwnerType } from '@/v2/core/storage-core';
+import { LegacyFileRegistrarService } from '@/v2/modules/file-attachments/services/legacy-file-registrar.service';
 
 import { ErpInvoice } from '../entities/erp_invoice.entity';
 import { ErpInvoiceAttachment } from '../entities/erp_invoice_attachment.entity';
@@ -28,7 +32,28 @@ export class InvoiceFilesService {
     private readonly r2: R2Service,
     private readonly attachmentsService: ErpAttachmentsCoreService,
     private readonly bulkDownload: InvoiceBulkDownloadService,
+    @Optional()
+    private readonly fileRegistrar?: LegacyFileRegistrarService,
   ) {}
+
+  /** Phản chiếu một `erp_attachments` đã liên kết với hóa đơn sang V2 (lỗi chỉ log). */
+  private async mirrorAttachment(
+    invoiceId: string,
+    attachment: ErpInvoiceAttachment['attachment'],
+    userId?: string | null,
+  ): Promise<void> {
+    await this.fileRegistrar?.register({
+      ownerType: FileOwnerType.INVOICE,
+      ownerId: invoiceId,
+      fileKey: attachment.fileKey,
+      fileName: attachment.fileName,
+      fileSize: Number(attachment.fileSize ?? 0),
+      mimeType: attachment.mimeType,
+      category: String(attachment.documentType ?? ''),
+      legacySource: `erp_attachments:${attachment.id}`,
+      userId,
+    });
+  }
 
   // ---------------------------------------------------------------------------
   // Pre-signed URLs
@@ -79,6 +104,11 @@ export class InvoiceFilesService {
     } else {
       await this.repository.update(invoiceId, { xmlFileKey: key } as any);
     }
+    await this.fileRegistrar?.registerInvoiceFile({
+      invoiceId,
+      fileKey: key,
+      column: fileType === 'pdf' ? 'pdf_file_key' : 'xml_file_key',
+    });
 
     return { url, key, expiresAt };
   }
@@ -109,6 +139,7 @@ export class InvoiceFilesService {
         attachmentId: attachment.id,
       });
       await this.linkRepository.save(link);
+      await this.mirrorAttachment(invoiceId, attachment, userId);
 
       return attachment;
     });
@@ -126,11 +157,26 @@ export class InvoiceFilesService {
     }
     const link = this.linkRepository.create({ invoiceId, attachmentId });
     await this.linkRepository.save(link);
+    const linked = await this.linkRepository.findOne({
+      where: { invoiceId, attachmentId },
+    });
+    if (linked?.attachment)
+      await this.mirrorAttachment(invoiceId, linked.attachment);
     return { success: true, message: 'Linked successfully' };
   }
 
   async unlinkAttachment(invoiceId: string, attachmentId: string) {
+    const link = await this.linkRepository.findOne({
+      where: { invoiceId, attachmentId },
+    });
     await this.linkRepository.delete({ invoiceId, attachmentId });
+    if (link?.attachment?.fileKey) {
+      await this.fileRegistrar?.unregister(
+        FileOwnerType.INVOICE,
+        invoiceId,
+        link.attachment.fileKey,
+      );
+    }
     return { success: true, message: 'Unlinked successfully' };
   }
 
@@ -187,6 +233,11 @@ export class InvoiceFilesService {
 
     await this.r2.deleteObject(fileKey).catch(() => {});
     await this.repository.save(invoice);
+    await this.fileRegistrar?.unregister(
+      FileOwnerType.INVOICE,
+      invoiceId,
+      fileKey,
+    );
     return { success: true };
   }
 

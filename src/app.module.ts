@@ -27,6 +27,7 @@ import { ProductionCoreModule } from './production-core/production-core.module';
 import { BranchesManagementModule } from './v2/modules/branches-management/branches-management.module';
 import { TablePreferencesModule } from './v2/modules/table-preferences/table-preferences.module';
 import { NotificationsInboxModule } from './v2/modules/notifications-inbox/notifications-inbox.module';
+import { FileAttachmentsModule } from './v2/modules/file-attachments/file-attachments.module';
 import { SchedulerJobsModule } from './v2/modules/scheduler-jobs/scheduler-jobs.module';
 import { SalesServiceOrdersCoreModule } from './sales-service-orders-core/sales-service-orders-core.module';
 import { InventoryStockCoreModule } from './inventory-stock-core/inventory-stock-core.module';
@@ -172,6 +173,7 @@ import { AuthSessionsModule } from './v2/modules/auth-sessions/auth-sessions.mod
     TablePreferencesModule,
     SchedulerJobsModule,
     NotificationsInboxModule, // api-v2-module:notifications-inbox:module
+    FileAttachmentsModule, // api-v2-module:file-attachments:module
     SalesServiceOrdersCoreModule,
     InventoryStockCoreModule,
     ErpMfgCoreModule,
