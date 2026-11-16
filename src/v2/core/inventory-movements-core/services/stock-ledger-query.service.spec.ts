@@ -25,6 +25,7 @@ function chain(
     'groupBy',
     'skip',
     'take',
+    'leftJoin',
   ]) {
     qb[m] = jest.fn(() => qb);
   }
@@ -259,10 +260,32 @@ describe('StockLedgerQueryService', () => {
     expect(res.pagination.total).toBe(2);
   });
 
+  it('finds numeric column options with numeric order and normalized values', async () => {
+    const countQb = chain('b', { raw: { count: 3 } });
+    const dataQb = chain('b', {
+      rows: [{ num_val: '0.000' }, { num_val: '5.000' }, { num_val: '10' }],
+    });
+    const { svc } = build([countQb, dataQb]);
+
+    const res = await svc.findBalanceColumnOptions({
+      column: 'qtyReceived',
+      page: 1,
+      pageSize: 20,
+    });
+
+    expect(dataQb.orderBy).toHaveBeenCalledWith('num_val', 'ASC');
+    expect(res.items).toEqual([
+      { label: '0', value: '0' },
+      { label: '5', value: '5' },
+      { label: '10', value: '10' },
+    ]);
+    expect(res.pagination.total).toBe(3);
+  });
+
   it('returns empty page for unsupported column options without throwing', async () => {
     const { svc } = build([]);
     const res = await svc.findBalanceColumnOptions({
-      column: 'qtyReceived',
+      column: 'nonExistentColumn',
       page: 1,
       pageSize: 20,
     });

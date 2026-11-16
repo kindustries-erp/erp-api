@@ -26,7 +26,6 @@ const isNotBlankCondition = (def: TableColumnDef): string =>
 /** Biểu thức so khớp giá trị chọn trong bộ lọc, đã đổi về đúng kiểu so sánh. */
 const selectionExpression = (def: TableColumnDef): string => {
   if (def.type === 'date') return `TO_CHAR(${def.sql}, 'YYYY-MM-DD')`;
-  if (def.type === 'number') return `CAST(${def.sql} AS TEXT)`;
   return def.sql;
 };
 

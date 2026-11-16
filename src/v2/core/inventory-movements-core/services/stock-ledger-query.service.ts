@@ -37,6 +37,9 @@ const SORTABLE: Record<string, string> = {
   avgCost: 'b.avgCost',
   inventoryValue: 'b.inventoryValue',
   updatedAt: 'b.updatedAt',
+  qtyReceived: 'COALESCE(m.qty_received, 0)',
+  qtyIssued: 'COALESCE(m.qty_issued, 0)',
+  qtyAdjusted: 'COALESCE(m.qty_adjusted, 0)',
 };
 const TAB_CONDITION: Record<StockTab, string | null> = {
   ALL: null,
@@ -53,6 +56,9 @@ export const BALANCE_TABLE_COLUMNS: TableColumnMap = {
   qtyOnHand: { sql: 'b.qtyOnHand', type: 'number' },
   inventoryValue: { sql: 'b.inventoryValue', type: 'number' },
   avgCost: { sql: 'b.avgCost', type: 'number' },
+  qtyReceived: { sql: 'COALESCE(m.qty_received, 0)', type: 'number' },
+  qtyIssued: { sql: 'COALESCE(m.qty_issued, 0)', type: 'number' },
+  qtyAdjusted: { sql: 'COALESCE(m.qty_adjusted, 0)', type: 'number' },
 };
 
 export const BALANCE_FILTERABLE: Record<string, string> = Object.fromEntries(
@@ -282,19 +288,38 @@ export class StockLedgerQueryService {
       filterPayload,
       column,
     );
-    dataQb
-      .select(`DISTINCT CAST(${def.sql} AS TEXT)`, 'value')
-      .andWhere(`${def.sql} IS NOT NULL`);
+    dataQb.andWhere(`${def.sql} IS NOT NULL`);
     if (term) {
       dataQb.andWhere(`${searchExpr} ILIKE :search`, {
         search: `%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`,
       });
     }
-    const rows = await dataQb
+
+    if (def.type === 'number') {
+      dataQb
+        .select(`DISTINCT ${def.sql}`, 'num_val')
+        .orderBy('num_val', 'ASC')
+        .skip((page - 1) * pageSize)
+        .take(pageSize);
+      const rows = await dataQb.getRawMany<{ num_val: string | number }>();
+      return {
+        items: rows.map((r) => {
+          const num = Number(r.num_val);
+          return {
+            label: String(num),
+            value: String(num),
+          };
+        }),
+        pagination: buildPagination(page, pageSize, total),
+      };
+    }
+
+    dataQb
+      .select(`DISTINCT CAST(${def.sql} AS TEXT)`, 'value')
       .orderBy('value', 'ASC')
       .skip((page - 1) * pageSize)
-      .take(pageSize)
-      .getRawMany<{ value: string }>();
+      .take(pageSize);
+    const rows = await dataQb.getRawMany<{ value: string }>();
 
     return {
       items: rows.map((r) => ({
@@ -303,6 +328,32 @@ export class StockLedgerQueryService {
       })),
       pagination: buildPagination(page, pageSize, total),
     };
+  }
+
+  private getTransactionTableName(): string {
+    try {
+      return (
+        this.dataSource.getMetadata(this.config.tables.transaction).tableName ||
+        'garage_stock_transactions'
+      );
+    } catch {
+      return 'garage_stock_transactions';
+    }
+  }
+
+  private movementSubquery(): string {
+    const txTable = this.getTransactionTableName();
+    const adjustmentTypes = `('ADJUSTMENT', 'ADJUSTMENT_CANCEL')`;
+    return `(
+      SELECT 
+        t.item_code,
+        COALESCE(SUM(CASE WHEN t.transaction_type NOT IN ${adjustmentTypes} THEN t.qty_in ELSE 0 END), 0) AS qty_received,
+        COALESCE(SUM(CASE WHEN t.transaction_type NOT IN ${adjustmentTypes} THEN t.qty_out ELSE 0 END), 0) AS qty_issued,
+        COALESCE(SUM(CASE WHEN t.transaction_type IN ${adjustmentTypes} THEN t.qty_in - t.qty_out ELSE 0 END), 0) AS qty_adjusted
+      FROM ${txTable} t
+      WHERE t.ledger_scope = '${this.config.ledgerScope}'
+      GROUP BY t.item_code
+    )`;
   }
 
   private balanceBase(
@@ -314,6 +365,7 @@ export class StockLedgerQueryService {
     const qb = this.dataSource
       .getRepository(this.config.tables.balance)
       .createQueryBuilder('b')
+      .leftJoin(this.movementSubquery(), 'm', 'm.item_code = b.itemCode')
       .where('b.ledgerScope = :scope', { scope: this.config.ledgerScope });
     const term = search?.trim();
     if (term) {

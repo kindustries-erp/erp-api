@@ -201,10 +201,9 @@ describe('applyTableFilters', () => {
       'p',
     );
 
-    expect(qb.andWhere).toHaveBeenCalledWith(
-      'CAST(bp.amount AS TEXT) IN (:...p_select_0)',
-      { p_select_0: [10, 20] },
-    );
+    expect(qb.andWhere).toHaveBeenCalledWith('bp.amount IN (:...p_select_0)', {
+      p_select_0: [10, 20],
+    });
   });
 
   it('combines blank and selected values in one OR group', () => {
