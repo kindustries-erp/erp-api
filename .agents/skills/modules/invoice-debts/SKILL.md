@@ -206,3 +206,9 @@ bun run build
 - **Sau commit**: gán chi nhánh cho hóa đơn chưa có chi nhánh khi giao dịch có đúng một chi nhánh (`InvoiceBranchService.assign`, `onlyIfUnassigned`), làm mới bút toán sao kê (lỗi chỉ ghi log).
 - **Web**: drawer V2 `DebtNetOffDrawer` (`src/v2/modules/invoice-debts/drawers/`), mở từ nút "Cấn trừ" ở tab "Khoản chưa phân bổ" trong drawer công nợ đối tác (v1).
 - **Spec**: `invoice-debts-net-off.service.spec.ts` (16 case).
+
+## Job nền xuất Excel trên lõi V2 `export-jobs-core`
+- Mặc định (cờ `EXPORT_JOBS_V2` bật) InvoiceDebtsExportBackgroundService chạy trên module `export-jobs-invoice-debts` (lõi `src/v2/core/export-jobs-core`, `AbstractExportJobService` + `ExportJobRunner`). Tắt cờ (`false/0/off/no`) và restart thì quay về cơ chế cũ nằm dưới nhánh delegation trong service nền.
+- V2 chỉ quản lý job, tiến độ, tải file; producer, tên file và fingerprint do service cũ truyền vào nên **nội dung xlsx và tên file không đổi**. URL, quyền, SSE, bộ field `ExportProgressEvent` giữ nguyên.
+- Khác biệt chủ ý: chuỗi thông báo thống nhất theo runner, job FAILED bị dọn sau TTL, `reused` thống nhất theo runner.
+- Spec bảo toàn file: `invoice-debts-export-background.v2.spec.ts`.

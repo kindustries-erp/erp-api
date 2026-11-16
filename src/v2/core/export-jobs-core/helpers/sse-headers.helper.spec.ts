@@ -1,4 +1,4 @@
-import { applySseHeaders, SSE_PING_INTERVAL_MS } from './sse-headers.helper';
+import { applySseHeaders, SSE_PING_INTERVAL_MS } from './export-sse.helper';
 
 describe('applySseHeaders', () => {
   it('disables proxy buffering and flushes the stream headers', () => {

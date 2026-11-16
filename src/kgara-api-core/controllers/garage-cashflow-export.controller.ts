@@ -22,7 +22,7 @@ import { GarageExportJobsService } from '../services/garage-export-jobs.service'
 import {
   exportProgressStream,
   sendReadyExportFile,
-} from './garage-export.helper';
+} from '@/v2/core/export-jobs-core';
 
 /** Xuất Excel nền sổ thu chi garage (vouchers): job, lịch sử, tải file, SSE. */
 @ApiTags('greenway_cashflow_export')

@@ -1,11 +1,12 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 
 import {
-  ExportJobRunner,
-  ExportProgressEvent,
   normalizeJsonString,
   stableStringify,
-} from './export-job-runner';
+} from '../helpers/export-fingerprint.helper';
+import type { ExportProgressEvent } from '../types/export-job.types';
+
+import { ExportJobRunner } from './export-job-runner';
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 

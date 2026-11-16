@@ -39,6 +39,7 @@ import { VinfastPartsModule } from '../vinfast-parts/vinfast-parts.module';
 
 import { InvoiceDebtsService } from './services/invoice-debts.service';
 import { InvoiceDebtsExportBackgroundService } from './services/invoice-debts-export-background.service';
+import { ExportJobsInvoiceDebtsModule } from '@/v2/modules/export-jobs-invoice-debts';
 import { InvoiceDebtsController } from './controllers/invoice-debts.controller';
 import { InvoiceDebtsQueryService } from './services/sub-services/invoice-debts-query.service';
 import { InvoiceDebtsDetailService } from './services/sub-services/invoice-debts-detail.service';
@@ -83,6 +84,7 @@ import { XmlDownloadLinkAdapter } from './services/adapters/xml-download-link.ad
 
 @Module({
   imports: [
+    ExportJobsInvoiceDebtsModule,
     TypeOrmModule.forFeature([
       ErpInvoice,
       ErpEInvoiceSync,
