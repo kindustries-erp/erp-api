@@ -1,7 +1,16 @@
 import { DataSource, SelectQueryBuilder } from 'typeorm';
 import { buildPagination } from '@/common/utils/paginated-result';
+import { applyTableFilters } from '@/common/utils/table-query/table-query.filters';
+import {
+  parseFilterRecord,
+  parseListFilterPayload,
+  resolveTableColumn,
+  type TableColumnMap,
+  type TableFilterPayload,
+} from '@/common/utils/table-query/table-query.parse';
 import type { StockLedgerConfig } from '../contracts/inventory-movements-core.contract';
 import type {
+  QueryStockBalanceColumnOptionsDto,
   QueryStockBalanceDto,
   QueryStockTransactionDto,
   StockTab,
@@ -36,6 +45,36 @@ const TAB_CONDITION: Record<StockTab, string | null> = {
   NEGATIVE: 'b.qtyOnHand < 0',
 };
 
+export const BALANCE_TABLE_COLUMNS: TableColumnMap = {
+  itemCode: { sql: 'b.itemCode', type: 'text' },
+  itemName: { sql: 'b.itemName', type: 'text' },
+  unit: { sql: 'b.unit', type: 'text' },
+  branchId: { sql: 'b.branchId', type: 'text' },
+  qtyOnHand: { sql: 'b.qtyOnHand', type: 'number' },
+  inventoryValue: { sql: 'b.inventoryValue', type: 'number' },
+  avgCost: { sql: 'b.avgCost', type: 'number' },
+};
+
+export const BALANCE_FILTERABLE: Record<string, string> = Object.fromEntries(
+  Object.entries(BALANCE_TABLE_COLUMNS).map(([k, v]) => [k, v.sql]),
+);
+
+function toFilterPayload(raw: unknown): TableFilterPayload {
+  const parsed = parseFilterRecord<
+    TableFilterPayload & Record<string, unknown>
+  >(raw);
+  if (!parsed) return {};
+  const hasEnvelope = [
+    'columnFilters',
+    'columnSearch',
+    'columnOperators',
+    'dateRanges',
+  ].some((key) => key in parsed);
+  return hasEnvelope
+    ? parsed
+    : { columnFilters: parsed as Record<string, string[]> };
+}
+
 /**
  * Đọc số dư và thẻ kho của một ledger. Chỉ đọc. Phạm vi ledger lấy từ cấu hình của module,
  * bảng lấy qua entity trong cấu hình nên lõi không biết tên bảng hay tên họ.
@@ -49,7 +88,12 @@ export class StockLedgerQueryService {
   async listBalances(query: QueryStockBalanceDto) {
     const page = Math.max(1, query.page ?? 1);
     const pageSize = Math.min(200, Math.max(1, query.pageSize ?? 20));
-    const base = (tab?: StockTab) => this.balanceBase(query.search, tab);
+    const filterPayload = parseListFilterPayload({
+      column_filters: query.column_filters,
+      column_operators: query.column_operators,
+    });
+    const base = (tab?: StockTab) =>
+      this.balanceBase(query.search, tab, filterPayload);
 
     const qb = base(query.stockTab);
     const orders = (query.sort ?? '')
@@ -195,9 +239,77 @@ export class StockLedgerQueryService {
     return { items: paged, pagination: buildPagination(page, pageSize, total) };
   }
 
+  async findBalanceColumnOptions(query: QueryStockBalanceColumnOptionsDto) {
+    const column = query.column ?? '';
+    const def = resolveTableColumn(BALANCE_TABLE_COLUMNS, column);
+    const page = Math.max(1, query.page ?? 1);
+    const pageSize = Math.min(200, Math.max(1, query.pageSize ?? 20));
+
+    // Nếu cột không hỗ trợ gợi ý (ví dụ các cột tính toán động qtyReceived, qtyIssued, qtyAdjusted):
+    // Trả trang rỗng theo chuẩn V2 thay vì ném 400
+    if (!def) {
+      return {
+        items: [],
+        pagination: buildPagination(page, pageSize, 0),
+      };
+    }
+
+    const filterPayload = toFilterPayload(query.filters);
+    const countQb = this.balanceBase(
+      undefined,
+      undefined,
+      filterPayload,
+      column,
+    );
+    countQb.andWhere(`${def.sql} IS NOT NULL`);
+    const term = query.search?.trim();
+    const searchExpr =
+      def.type === 'number' ? `CAST(${def.sql} AS TEXT)` : def.sql;
+
+    if (term) {
+      countQb.andWhere(`${searchExpr} ILIKE :search`, {
+        search: `%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`,
+      });
+    }
+    const countRes = await countQb
+      .select(`COUNT(DISTINCT ${def.sql})::int`, 'count')
+      .getRawOne<{ count: number }>();
+    const total = Number(countRes?.count ?? 0);
+
+    const dataQb = this.balanceBase(
+      undefined,
+      undefined,
+      filterPayload,
+      column,
+    );
+    dataQb
+      .select(`DISTINCT CAST(${def.sql} AS TEXT)`, 'value')
+      .andWhere(`${def.sql} IS NOT NULL`);
+    if (term) {
+      dataQb.andWhere(`${searchExpr} ILIKE :search`, {
+        search: `%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`,
+      });
+    }
+    const rows = await dataQb
+      .orderBy('value', 'ASC')
+      .skip((page - 1) * pageSize)
+      .take(pageSize)
+      .getRawMany<{ value: string }>();
+
+    return {
+      items: rows.map((r) => ({
+        label: String(r.value),
+        value: String(r.value),
+      })),
+      pagination: buildPagination(page, pageSize, total),
+    };
+  }
+
   private balanceBase(
     search?: string,
     tab?: StockTab,
+    filterPayload?: TableFilterPayload,
+    excludeColumn?: string,
   ): SelectQueryBuilder<any> {
     const qb = this.dataSource
       .getRepository(this.config.tables.balance)
@@ -211,6 +323,16 @@ export class StockLedgerQueryService {
     }
     const cond = TAB_CONDITION[tab ?? 'ALL'];
     if (cond) qb.andWhere(cond);
+
+    if (filterPayload) {
+      applyTableFilters(
+        qb,
+        filterPayload,
+        BALANCE_TABLE_COLUMNS,
+        'bf',
+        excludeColumn,
+      );
+    }
     return qb;
   }
 }

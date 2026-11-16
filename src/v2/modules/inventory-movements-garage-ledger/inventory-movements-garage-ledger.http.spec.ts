@@ -40,6 +40,7 @@ describe('inventory-movements-garage-ledger (read API)', () => {
       extraData: { tabCounts: { ALL: 1, IN_STOCK: 1 } },
     })),
     listTransactions: jest.fn(async () => ({ items: [] })),
+    columnOptions: jest.fn(async () => ({ items: [], pagination: {} })),
   };
   let app: INestApplication;
   const base = '/api/v2/inventory-movements-garage-ledger';
@@ -88,5 +89,19 @@ describe('inventory-movements-garage-ledger (read API)', () => {
     app = await boot(false, facade);
     await request(app.getHttpServer()).get(`${base}/balances`).expect(403);
     await request(app.getHttpServer()).get(`${base}/transactions`).expect(403);
+    await request(app.getHttpServer())
+      .get(`${base}/column-options`)
+      .expect(403);
+  });
+
+  it('column-options: calls facade and transforms query', async () => {
+    app = await boot(true, facade);
+    await request(app.getHttpServer())
+      .get(`${base}/column-options`)
+      .query({ column: 'unit', search: 'Cá' })
+      .expect(200);
+    expect(facade.columnOptions).toHaveBeenCalledWith(
+      expect.objectContaining({ column: 'unit', search: 'Cá' }),
+    );
   });
 });

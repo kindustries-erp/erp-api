@@ -15,6 +15,7 @@ describe('stock-ledger-transaction-calc.helper', () => {
       qtyIn: '10',
       qtyOut: '0',
       unitCost: '100',
+      createdAt: new Date('2026-01-01T08:00:00Z'),
     },
     {
       id: 'tx2',
@@ -46,6 +47,7 @@ describe('stock-ledger-transaction-calc.helper', () => {
     expect(res[0].balanceQty).toBe(10);
     expect(res[0].balanceValue).toBe(1000);
     expect(res[0].totalAmount).toBe(1000);
+    expect(res[0].createdAt).toEqual(new Date('2026-01-01T08:00:00Z'));
 
     // Row 2: Nhập 10 @ 200 -> Tồn 20, Tiền tồn 3000
     expect(res[1].balanceQty).toBe(20);

@@ -206,4 +206,67 @@ describe('StockLedgerQueryService', () => {
     expect(res.items[1].id).toBe('tx1');
     expect(res.items[1].balanceQty).toBe(10);
   });
+
+  it('filters balances by column_filters and column_operators correctly', async () => {
+    const list = chain('b', { many: [], total: 0 });
+    const codes = chain('b', { rows: [] });
+    const sums = chain('b', { raw: {} });
+    const tabs = [0, 1, 2, 3].map(() => chain('b', {}));
+    const { svc } = build([list, codes, sums, ...tabs]);
+
+    await svc.listBalances({
+      column_filters: JSON.stringify({ unit: ['Cái'], itemCode: ['ITEM-01'] }),
+      column_operators: JSON.stringify({
+        qtyOnHand: { operator: 'gt', value: '0' },
+      }),
+    });
+
+    expect(list.andWhere).toHaveBeenCalledWith(
+      expect.stringContaining('b.unit IN (:...bf_select_'),
+      expect.objectContaining({ bf_select_0: ['Cái'] }),
+    );
+    expect(list.andWhere).toHaveBeenCalledWith(
+      expect.stringContaining('b.itemCode IN (:...bf_select_'),
+      expect.objectContaining({ bf_select_1: ['ITEM-01'] }),
+    );
+    expect(list.andWhere).toHaveBeenCalledWith('b.qtyOnHand > :bf_operator_0', {
+      bf_operator_0: 0,
+    });
+  });
+
+  it('finds balance column options with search and pagination', async () => {
+    const countQb = chain('b', { raw: { count: 2 } });
+    const dataQb = chain('b', {
+      rows: [{ value: 'Cái' }, { value: 'Bộ' }],
+    });
+    const { svc } = build([countQb, dataQb]);
+
+    const res = await svc.findBalanceColumnOptions({
+      column: 'unit',
+      search: 'Cá',
+      page: 1,
+      pageSize: 20,
+    });
+
+    expect(countQb.andWhere).toHaveBeenCalledWith('b.unit IS NOT NULL');
+    expect(countQb.andWhere).toHaveBeenCalledWith('b.unit ILIKE :search', {
+      search: '%Cá%',
+    });
+    expect(res.items).toEqual([
+      { label: 'Cái', value: 'Cái' },
+      { label: 'Bộ', value: 'Bộ' },
+    ]);
+    expect(res.pagination.total).toBe(2);
+  });
+
+  it('returns empty page for unsupported column options without throwing', async () => {
+    const { svc } = build([]);
+    const res = await svc.findBalanceColumnOptions({
+      column: 'qtyReceived',
+      page: 1,
+      pageSize: 20,
+    });
+    expect(res.items).toEqual([]);
+    expect(res.pagination.total).toBe(0);
+  });
 });

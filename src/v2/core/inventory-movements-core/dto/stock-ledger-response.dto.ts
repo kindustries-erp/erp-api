@@ -66,6 +66,8 @@ export class StockTransactionItemDto {
   balanceQty?: number;
   @ApiPropertyOptional({ description: 'Giá trị tồn lũy kế sau dòng này' })
   balanceValue?: number;
+  @ApiPropertyOptional({ description: 'Thời điểm tạo giao dịch' })
+  createdAt?: Date;
 }
 
 export class StockTransactionListResponseDto {

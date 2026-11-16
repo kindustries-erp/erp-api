@@ -11,6 +11,7 @@ export interface RawStockTransactionRow {
   qtyIn: string | number;
   qtyOut: string | number;
   unitCost: string | number;
+  createdAt?: Date;
 }
 
 interface FifoLayer {
@@ -70,6 +71,7 @@ function calculateWeightedAvg(
       totalAmount,
       balanceQty: runningQty,
       balanceValue: runningValue,
+      createdAt: r.createdAt,
     };
   });
 }
@@ -130,6 +132,7 @@ function calculateFifo(
       totalAmount,
       balanceQty: runningQty,
       balanceValue,
+      createdAt: r.createdAt,
     };
   });
 }
