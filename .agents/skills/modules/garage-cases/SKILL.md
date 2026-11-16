@@ -5,6 +5,8 @@ description: Module tri thức Quản lý Vụ việc Dịch vụ Garage & Sửa
 
 # 📦 Module Tri Thức: Quản Lý Vụ Việc Dịch Vụ & Lợi Nhuận Gộp Garage (Garage Cases & Gross Profit) - Backend (`erp-api`)
 
+> Bản đọc v2 (2026-11): `cases-garage` (cases, services, gross-profit-report) và `debts-garage` (công nợ) chạy song song V1; xem `modules/cases-garage`, `modules/debts-garage`, `modules/debts-core`.
+
 ## 1. Tổng quan Nghiệp vụ
 
 Phân hệ Quản lý Vụ việc Garage (`kgara-api-core`) chịu trách nhiệm tiếp nhận, lưu trữ, xử lý và đồng bộ toàn bộ dữ liệu hoạt động sửa chữa, bảo dưỡng xe và phân tích lợi nhuận tại xưởng dịch vụ từ hệ thống KGara (Greenway).

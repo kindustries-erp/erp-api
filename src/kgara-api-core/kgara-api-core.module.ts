@@ -226,6 +226,7 @@ import { GarageOpexExportController } from './controllers/garage-opex-export.con
     KgaraSuppliersService,
     KgaraCustomerCasesDetailService,
     KgaraCustomersDebtQueryService,
+    GarageDebtsExportService,
   ],
 })
 export class KgaraApiCoreModule {}

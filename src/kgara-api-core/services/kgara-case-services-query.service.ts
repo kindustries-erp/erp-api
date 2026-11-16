@@ -57,7 +57,12 @@ export class KgaraCaseServicesQueryService {
         'c',
         'c.hd_phieu_dich_vu_id = srv.hd_phieu_dich_vu_id',
       )
-      .leftJoin(KgaraBranch, 'b', 'b.external_id = c.branch_external_id')
+      // Chi nhánh có một dòng cho mỗi account_key (MAIN, OJ): join đủ hai cột để không nhân đôi hạng mục.
+      .leftJoin(
+        KgaraBranch,
+        'b',
+        'b.external_id = c.branch_external_id AND b.account_key = c.account_key',
+      )
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('srv.deleted_at IS NULL');
 

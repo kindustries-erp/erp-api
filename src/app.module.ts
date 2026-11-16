@@ -78,6 +78,8 @@ import { LoansModule } from './v2/modules/loans-tool/loans.module'; // api-v2-mo
 import { ItemsGarageModule } from './v2/modules/items-garage/items-garage.module'; // api-v2-module:items-garage:app-imports
 import { AiHubGatewayModule } from './v2/modules/ai-hub-gateway/ai-hub-gateway.module'; // api-v2-module:ai-hub-gateway:app-imports
 import { AiHubGarageModule } from './v2/modules/ai-hub-garage/ai-hub-garage.module'; // api-v2-module:ai-hub-garage:app-imports
+import { DebtsGarageModule } from './v2/modules/debts-garage/debts-garage.module'; // api-v2-module:debts-garage:app-imports
+import { CasesGarageModule } from './v2/modules/cases-garage/cases-garage.module'; // api-v2-module:cases-garage:app-imports
 import { UsersManagementModule } from './v2/modules/users-management/users-management.module'; // api-v2-module:users-management:app-imports
 import { AuthSessionsModule } from './v2/modules/auth-sessions/auth-sessions.module'; // api-v2-module:auth-sessions:app-imports
 // plop:api-v2-imports
@@ -216,6 +218,8 @@ import { AuthSessionsModule } from './v2/modules/auth-sessions/auth-sessions.mod
     ItemsGarageModule, // api-v2-module:items-garage:app-modules
     AiHubGatewayModule, // api-v2-module:ai-hub-gateway:app-modules
     AiHubGarageModule, // api-v2-module:ai-hub-garage:app-modules
+    DebtsGarageModule, // api-v2-module:debts-garage:app-modules
+    CasesGarageModule, // api-v2-module:cases-garage:app-modules
     UsersManagementModule, // api-v2-module:users-management:app-modules
     AuthSessionsModule, // api-v2-module:auth-sessions:app-modules
     // plop:api-v2-modules
