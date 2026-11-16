@@ -1,5 +1,5 @@
 import { NotFoundException } from '@nestjs/common';
-import { FileOwnerRegistry } from '@/v2/core/storage-core';
+import { FileOwnerRegistry } from '@/v2/core/file-attachments-core';
 import { InvoiceFileOwnerPolicy } from './invoice-file-owner.policy';
 
 describe('InvoiceFileOwnerPolicy', () => {

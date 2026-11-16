@@ -14,7 +14,7 @@ import {
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
-/** Query của trang quản lý toàn hệ thống (`GET api/v2/file-attachments`). */
+/** Query của trang quản lý toàn hệ thống (`GET api/v2/file-attachments-management`). */
 export class QueryFileAttachmentDto {
   @ApiPropertyOptional({ default: 1, minimum: 1 })
   @IsOptional()

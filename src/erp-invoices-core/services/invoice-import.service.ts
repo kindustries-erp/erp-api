@@ -30,7 +30,7 @@ import {
   extractStandardItemCode,
   isVinfastCandidateSeller,
 } from '../helpers/vinfast-part-code.helper';
-import { LegacyFileRegistrarService } from '@/v2/modules/file-attachments/services/legacy-file-registrar.service';
+import { LegacyFileRegistrarService } from '@/v2/modules/file-attachments-management/services/legacy-file-registrar.service';
 
 // ---------------------------------------------------------------------------
 // Result types

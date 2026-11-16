@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
-import type { FileKeyReferenceSource } from '@/v2/core/storage-core';
+import type { FileKeyReferenceSource } from '@/v2/core/file-attachments-core';
 
 async function countRows(
   ds: DataSource,

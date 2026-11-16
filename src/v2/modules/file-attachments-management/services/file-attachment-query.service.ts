@@ -13,7 +13,7 @@ import {
   type TableColumnMap,
   type TableOptionsPage,
 } from '@/common/utils/table-query';
-import type { FileOwnerType } from '@/v2/core/storage-core';
+import type { FileOwnerType } from '@/v2/core/file-attachments-core';
 import { FileAttachment } from '../entities/file-attachment.entity';
 import type { QueryFileAttachmentDto } from '../dto/query-file-attachment.dto';
 

@@ -5,7 +5,7 @@ import {
   type FileOwnerType,
   type StoragePolicy,
   type StoragePolicyProvider,
-} from '@/v2/core/storage-core';
+} from '@/v2/core/file-attachments-core';
 
 /** Giới hạn mặc định cố định trong code. Đổi sang cấu hình được = thay provider này. */
 export const DEFAULT_STORAGE_POLICY: StoragePolicy = {

@@ -6,12 +6,12 @@ import {
   FILE_KEY_REFERENCE_SOURCES,
   FileOwnerRegistry,
   STORAGE_POLICY_PROVIDER,
-} from '@/v2/core/storage-core';
+} from '@/v2/core/file-attachments-core';
 import { AuditWriterService } from '@/v2/modules/audit-logs/services/audit-writer.service';
 import { FileAttachmentSettings } from './entities/file-attachment-settings.entity';
 import { FileAttachment } from './entities/file-attachment.entity';
-import { FileAttachmentsModule } from './file-attachments.module';
-import { FileAttachmentsService } from './file-attachments.service';
+import { FileAttachmentsModule } from './file-attachments-management.module';
+import { FileAttachmentsService } from './file-attachments-management.service';
 import { FileAttachmentPurgeJob } from './jobs/file-attachment-purge.job';
 import { CodeStoragePolicyProvider } from './services/code-storage-policy.provider';
 import { FileKeyReferenceChecker } from './services/file-key-reference.checker';

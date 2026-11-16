@@ -6,7 +6,7 @@ import { RBAC_PERMISSIONS_KEY } from '@/auth/decorators/require-permissions.deco
 import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { PurgeFileAttachmentsBodyDto } from '../dto/purge-file-attachments.dto';
 import { UpdateFileAttachmentSettingsDto } from '../dto/update-file-attachment-settings.dto';
-import { FileAttachmentsService } from '../file-attachments.service';
+import { FileAttachmentsService } from '../file-attachments-management.service';
 import { FileAttachmentsController } from './file-attachments.controller';
 
 const permissionsOf = (method: keyof FileAttachmentsController) =>

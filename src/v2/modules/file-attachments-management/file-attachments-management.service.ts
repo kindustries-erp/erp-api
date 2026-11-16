@@ -1,4 +1,12 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import {
+  BadGatewayException,
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import AdmZip from 'adm-zip';
 import { toPagedList } from '@/common/utils/paginated-result';
 import {
   FileOwnerRegistry,
@@ -6,7 +14,7 @@ import {
   type FileCategory,
   type FileOwnerType,
   type StoragePolicyProvider,
-} from '@/v2/core/storage-core';
+} from '@/v2/core/file-attachments-core';
 import { Inject } from '@nestjs/common';
 import type { FileAttachmentResponseDto } from './dto/file-attachment-response.dto';
 import type { QueryFileAttachmentDto } from './dto/query-file-attachment.dto';
@@ -21,9 +29,25 @@ import { FileAttachmentQueryService } from './services/file-attachment-query.ser
 import { FileAttachmentSettingsService } from './services/file-attachment-settings.service';
 import { FileStorageGateway } from './services/file-storage.gateway';
 
+const ZIP_MAX_FILES = 100;
+const ZIP_MAX_BYTES = 200 * 1024 * 1024;
+
+/** Tên file trong zip không trùng: `a.pdf`, `a_1.pdf`, `a_2.pdf`... */
+function uniqueZipName(name: string, used: Set<string>): string {
+  const match = name.match(/^(.*?)(\.[^.]+)?$/);
+  const base = match?.[1] || name;
+  const ext = match?.[2] ?? '';
+  let candidate = name;
+  for (let i = 1; used.has(candidate); i++) candidate = `${base}_${i}${ext}`;
+  used.add(candidate);
+  return candidate;
+}
+
 /** Facade của module: controller (theo owner và quản lý) chỉ gọi lớp này. */
 @Injectable()
 export class FileAttachmentsService {
+  private readonly logger = new Logger(FileAttachmentsService.name);
+
   constructor(
     private readonly command: FileAttachmentCommandService,
     private readonly query: FileAttachmentQueryService,
@@ -82,6 +106,41 @@ export class FileAttachmentsService {
         inline,
       ),
     };
+  }
+
+  /** Gói tất cả file chưa xóa của owner thành một zip (tên trùng được đánh số). */
+  async zipForOwner(ownerType: FileOwnerType, ownerId: string) {
+    await this.owners.get(ownerType).assertExists(ownerId);
+    const rows = await this.query.listByOwner(ownerType, ownerId);
+    if (rows.length === 0) {
+      throw new NotFoundException('Không có tài liệu nào để tải');
+    }
+    if (rows.length > ZIP_MAX_FILES) {
+      throw new BadRequestException(`Tối đa ${ZIP_MAX_FILES} file mỗi lần tải`);
+    }
+    const total = rows.reduce((sum, r) => sum + Number(r.fileSize || 0), 0);
+    if (total > ZIP_MAX_BYTES) {
+      throw new BadRequestException('Tổng dung lượng vượt giới hạn tải zip');
+    }
+    const zip = new AdmZip();
+    const used = new Set<string>();
+    let added = 0;
+    for (const row of rows) {
+      try {
+        const buffer = await this.gateway.downloadBuffer(row.fileKey);
+        zip.addFile(uniqueZipName(row.fileName, used), buffer);
+        added++;
+      } catch (error) {
+        // Một file thiếu trên kho (dữ liệu cũ) không làm hỏng cả gói, giống hành vi V1.
+        this.logger.warn(`Bỏ qua file ${row.id} khi tạo zip: ${String(error)}`);
+      }
+    }
+    if (added === 0) {
+      throw new BadGatewayException(
+        'Không đọc được tài liệu nào từ kho lưu trữ',
+      );
+    }
+    return zip.toBuffer();
   }
 
   async deleteForOwner(

@@ -82,7 +82,14 @@ describe('InvoiceQueryService', () => {
     const entity = { id: 'inv-1' } as Invoice;
     qb.getRawAndEntities.mockResolvedValue({
       entities: [entity],
-      raw: [{ e_id: 'inv-1', netOffAmount: '150', remainingAmount: '50' }],
+      raw: [
+        {
+          e_id: 'inv-1',
+          netOffAmount: '150',
+          remainingAmount: '50',
+          attachmentCount: '3',
+        },
+      ],
     });
 
     const result = await service.findAll({} as QueryInvoiceDto);
@@ -91,6 +98,7 @@ describe('InvoiceQueryService', () => {
       id: 'inv-1',
       netOffAmount: 150,
       remainingAmount: 50,
+      attachmentCount: 3,
     });
   });
 

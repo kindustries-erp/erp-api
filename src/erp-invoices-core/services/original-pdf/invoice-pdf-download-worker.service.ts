@@ -10,7 +10,7 @@ import { ProviderAdapterRegistry } from '../adapters/provider-adapter.registry';
 import { InvoiceProviderDetectorService } from './invoice-provider-detector.service';
 import { readXmlFromBuffer } from './invoice-xml-reader.helper';
 import { R2Service } from '../../../r2/r2.service';
-import { LegacyFileRegistrarService } from '@/v2/modules/file-attachments/services/legacy-file-registrar.service';
+import { LegacyFileRegistrarService } from '@/v2/modules/file-attachments-management/services/legacy-file-registrar.service';
 
 @Injectable()
 export class InvoicePdfDownloadWorkerService {

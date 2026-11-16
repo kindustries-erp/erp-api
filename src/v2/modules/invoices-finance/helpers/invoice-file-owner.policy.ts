@@ -6,7 +6,7 @@ import {
   FileOwnerRegistry,
   FileOwnerType,
   type FileOwnerPolicyPort,
-} from '@/v2/core/storage-core';
+} from '@/v2/core/file-attachments-core';
 import { FinanceInvoice } from '../entities/finance-invoice.entity';
 
 /**

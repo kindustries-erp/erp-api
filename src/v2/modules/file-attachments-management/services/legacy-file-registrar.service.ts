@@ -6,7 +6,7 @@ import {
   FileOrigin,
   FileOwnerType,
   sanitizeFileName,
-} from '@/v2/core/storage-core';
+} from '@/v2/core/file-attachments-core';
 import { FileAttachment } from '../entities/file-attachment.entity';
 
 /** Cờ tắt đăng ký tự động (rollback nhanh): đặt `false` thì V1 chạy như cũ, không ghi V2. */

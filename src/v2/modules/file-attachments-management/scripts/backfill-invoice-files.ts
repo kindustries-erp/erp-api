@@ -10,8 +10,8 @@
  * Ghi DB cần --apply VÀ --confirm=<tên DB> (bắt buộc ở mọi môi trường, không chỉ production).
  *
  * Chạy (trong thư mục erp-api):
- *   bun src/v2/modules/file-attachments/scripts/backfill-invoice-files.ts .env
- *   bun src/v2/modules/file-attachments/scripts/backfill-invoice-files.ts .env --apply --confirm=<tên DB>
+ *   bun src/v2/modules/file-attachments-management/scripts/backfill-invoice-files.ts .env
+ *   bun src/v2/modules/file-attachments-management/scripts/backfill-invoice-files.ts .env --apply --confirm=<tên DB>
  */
 import {
   describeScriptEnv,

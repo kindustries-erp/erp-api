@@ -1,7 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsBoolean, IsIn, IsOptional } from 'class-validator';
-import { FileCategory } from '@/v2/core/storage-core';
+import { FileCategory } from '@/v2/core/file-attachments-core';
 
 export class UploadInvoiceAttachmentBodyDto {
   @ApiPropertyOptional({

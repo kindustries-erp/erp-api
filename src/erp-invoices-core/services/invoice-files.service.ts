@@ -7,8 +7,8 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { FileOwnerType } from '@/v2/core/storage-core';
-import { LegacyFileRegistrarService } from '@/v2/modules/file-attachments/services/legacy-file-registrar.service';
+import { FileOwnerType } from '@/v2/core/file-attachments-core';
+import { LegacyFileRegistrarService } from '@/v2/modules/file-attachments-management/services/legacy-file-registrar.service';
 
 import { ErpInvoice } from '../entities/erp_invoice.entity';
 import { ErpInvoiceAttachment } from '../entities/erp_invoice_attachment.entity';

@@ -17,7 +17,7 @@ import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
 import { RequirePermissions } from '@/auth/decorators/require-permissions.decorator';
 import { parseFilterRecord } from '@/common/utils/table-query';
 import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
-import { FileAttachmentsService } from '../file-attachments.service';
+import { FileAttachmentsService } from '../file-attachments-management.service';
 import { QueryFileAttachmentDto } from '../dto/query-file-attachment.dto';
 import { PurgeFileAttachmentsBodyDto } from '../dto/purge-file-attachments.dto';
 import { UpdateFileAttachmentSettingsDto } from '../dto/update-file-attachment-settings.dto';
@@ -57,7 +57,7 @@ const PURGE = { resource: ErpResource.ATTACHMENTS, action: ErpAction.PURGE };
 @ApiTags('file-attachments')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
-@Controller('api/v2/file-attachments')
+@Controller('api/v2/file-attachments-management')
 export class FileAttachmentsController {
   constructor(private readonly files: FileAttachmentsService) {}
 

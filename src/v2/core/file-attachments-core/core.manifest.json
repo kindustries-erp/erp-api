@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "layer": "api",
-  "family": "storage-core",
+  "family": "file-attachments-core",
   "entity": "BaseFileAttachmentEntity",
   "style": "v2-core",
-  "barrel": "src/v2/core/storage-core/index.ts",
+  "barrel": "src/v2/core/file-attachments-core/index.ts",
   "module": null,
   "moduleFile": null,
   "baseClasses": {

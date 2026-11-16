@@ -5,12 +5,12 @@ import {
   FILE_KEY_REFERENCE_SOURCES,
   FileOwnerRegistry,
   STORAGE_POLICY_PROVIDER,
-} from '@/v2/core/storage-core';
+} from '@/v2/core/file-attachments-core';
 import { AuditLogsV2Module } from '@/v2/modules/audit-logs/audit-logs-v2.module';
 import { FileAttachmentsController } from './controllers/file-attachments.controller';
 import { FileAttachmentSettings } from './entities/file-attachment-settings.entity';
 import { FileAttachment } from './entities/file-attachment.entity';
-import { FileAttachmentsService } from './file-attachments.service';
+import { FileAttachmentsService } from './file-attachments-management.service';
 import { FileAttachmentPurgeJob } from './jobs/file-attachment-purge.job';
 import { CodeStoragePolicyProvider } from './services/code-storage-policy.provider';
 import { FileAttachmentCommandService } from './services/file-attachment-command.service';

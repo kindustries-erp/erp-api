@@ -19,7 +19,7 @@ import {
   type FileOwnerType,
   type StoragePolicy,
   type StoragePolicyProvider,
-} from '@/v2/core/storage-core';
+} from '@/v2/core/file-attachments-core';
 import { FileAttachment } from '../entities/file-attachment.entity';
 import { FileStorageGateway } from './file-storage.gateway';
 

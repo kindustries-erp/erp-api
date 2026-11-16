@@ -1,13 +1,13 @@
 ---
 name: file-attachments
-description: Module backend file đính kèm dùng chung (v2) tại /api/v2/file-attachments và /api/v2/invoices/:id/attachments, bảng file_attachments + file_attachment_settings, lưu trên R2. Lõi storage-core chỉ có base. Đọc khi thêm owner mới (Garage PR), sửa upload/xóa/purge hoặc backfill hóa đơn.
+description: Module backend file đính kèm dùng chung (v2) tại /api/v2/file-attachments-management và /api/v2/invoices/:id/attachments, bảng file_attachments + file_attachment_settings, lưu trên R2. Lõi file-attachments-core chỉ có base. Đọc khi thêm owner mới (Garage PR), sửa upload/xóa/purge hoặc backfill hóa đơn.
 ---
 
 # 📎 Module Backend Tri Thức: File Attachments (`file-attachments`)
 
 ## 1. Tổng quan & phân tầng
-- **Lõi** `src/v2/core/storage-core/` (chỉ base, không `@Entity`/`@Controller`/bảng): `BaseFileAttachmentEntity`, `FileOwnerType` (`INVOICE`), `FileCategory` (`HOA_DON`, `BANG_KE`, `HOP_DONG`, `KHAC`), `FileOrigin` (`V2`, `LEGACY`), hợp đồng `StoragePolicyProvider` (token `STORAGE_POLICY_PROVIDER`, `STORAGE_HARD_LIMITS` 20MB/10 file), `FileOwnerPolicyPort`, `FileKeyReferenceSource` (token `FILE_KEY_REFERENCE_SOURCES`), `FileOwnerRegistry`, helper `sanitizeFileName` và `buildStorageKey` (`files/{owner}/{yyyy}/{mm}/{uuid}_{safeName}`).
-- **Module** `src/v2/modules/file-attachments/`: entity `FileAttachment` (`file_attachments`) và `FileAttachmentSettings` (`file_attachment_settings`, một dòng id=1), `FileStorageGateway` (bọc `R2Service`), command/query/settings/purge service, `FileKeyReferenceChecker`, facade `FileAttachmentsService`, job `FileAttachmentPurgeJob`, controller quản lý, script backfill.
+- **Lõi** `src/v2/core/file-attachments-core/` (chỉ base, không `@Entity`/`@Controller`/bảng): `BaseFileAttachmentEntity`, `FileOwnerType` (`INVOICE`), `FileCategory` (`HOA_DON`, `BANG_KE`, `HOP_DONG`, `KHAC`), `FileOrigin` (`V2`, `LEGACY`), hợp đồng `StoragePolicyProvider` (token `STORAGE_POLICY_PROVIDER`, `STORAGE_HARD_LIMITS` 20MB/10 file), `FileOwnerPolicyPort`, `FileKeyReferenceSource` (token `FILE_KEY_REFERENCE_SOURCES`), `FileOwnerRegistry`, helper `sanitizeFileName` và `buildStorageKey` (`files/{owner}/{yyyy}/{mm}/{uuid}_{safeName}`).
+- **Module** `src/v2/modules/file-attachments-management/`: entity `FileAttachment` (`file_attachments`) và `FileAttachmentSettings` (`file_attachment_settings`, một dòng id=1), `FileStorageGateway` (bọc `R2Service`), command/query/settings/purge service, `FileKeyReferenceChecker`, facade `FileAttachmentsService`, job `FileAttachmentPurgeJob`, controller quản lý, script backfill.
 - **Owner Hóa đơn** nằm trong `src/v2/modules/invoices-finance/`: `invoice-file-owner.policy.ts` (đăng ký INVOICE khi khởi tạo, không khóa theo trạng thái) và `invoice-attachments.controller.ts` (controller mỏng).
 
 ## 2. Hợp đồng HTTP
@@ -17,7 +17,7 @@ Theo owner (RBAC `invoices`: READ/UPDATE), prefix `api/v2/invoices/:id/attachmen
 - `GET /:attachmentId/download-url?inline=` → `{ data: { url, expiresIn } }` (pre-signed 300s)
 - `DELETE /:attachmentId` → xóa mềm. `attachmentId` phải khớp owner, sai trả 404 (chặn IDOR).
 
-Quản lý toàn hệ thống (RBAC `attachments`), prefix `api/v2/file-attachments`:
+Quản lý toàn hệ thống (RBAC `attachments`), prefix `api/v2/file-attachments-management`:
 - `GET /` (`deleted=only`, filter bảng chuẩn `column_filters` …), `GET /column-options` (nhận `filters` dạng envelope JSON hoặc `{col:[values]}`, và `deleted`), `GET /:id`, `GET /:id/download-url`
 - `DELETE /:id` (DELETE, xóa mềm), `DELETE /:id/permanent` và `POST /purge` body `{ ids }` tối đa 100 (**PURGE**), `GET/PATCH /settings` (READ/UPDATE).
 - Mọi query param phải khai báo trong DTO hoặc `@Query('name')` vì `ValidationPipe` bật `forbidNonWhitelisted`.

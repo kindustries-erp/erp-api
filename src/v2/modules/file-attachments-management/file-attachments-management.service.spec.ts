@@ -1,9 +1,15 @@
-import { ConflictException } from '@nestjs/common';
+import AdmZip from 'adm-zip';
+import {
+  BadGatewayException,
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   FileOwnerRegistry,
   type FileOwnerPolicyPort,
-} from '@/v2/core/storage-core';
-import { FileAttachmentsService } from './file-attachments.service';
+} from '@/v2/core/file-attachments-core';
+import { FileAttachmentsService } from './file-attachments-management.service';
 
 const row = {
   id: 'a1',
@@ -45,6 +51,7 @@ function setup() {
   const purge = { purge: jest.fn() };
   const settings = { get: jest.fn(), update: jest.fn(), toResponse: jest.fn() };
   const gateway = {
+    downloadBuffer: jest.fn().mockResolvedValue(Buffer.from('x')),
     presignDownload: jest
       .fn()
       .mockResolvedValue({ url: 'https://s', expiresIn: 300 }),
@@ -65,6 +72,48 @@ function setup() {
 }
 
 describe('FileAttachmentsService (facade)', () => {
+  it('zipForOwner gói file chưa xóa của owner, tên trùng được đánh số', async () => {
+    const { service, owner, query, gateway } = setup();
+    query.listByOwner.mockResolvedValue([row, { ...row, id: 'a2' }]);
+    const zip = new AdmZip(await service.zipForOwner('INVOICE', 'inv-1'));
+    expect(owner.assertExists).toHaveBeenCalledWith('inv-1');
+    expect(gateway.downloadBuffer).toHaveBeenCalledTimes(2);
+    expect(
+      zip
+        .getEntries()
+        .map((e) => e.entryName)
+        .sort(),
+    ).toEqual(['a.pdf', 'a_1.pdf']);
+  });
+
+  it('zipForOwner bỏ qua file lỗi, 502 khi không đọc được file nào', async () => {
+    const { service, query, gateway } = setup();
+    query.listByOwner.mockResolvedValue([row, { ...row, id: 'a2' }]);
+    gateway.downloadBuffer
+      .mockRejectedValueOnce(new Error('NoSuchKey'))
+      .mockResolvedValueOnce(Buffer.from('x'));
+    const zip = new AdmZip(await service.zipForOwner('INVOICE', 'inv-1'));
+    expect(zip.getEntries()).toHaveLength(1);
+    gateway.downloadBuffer.mockRejectedValue(new Error('NoSuchKey'));
+    await expect(service.zipForOwner('INVOICE', 'inv-1')).rejects.toThrow(
+      BadGatewayException,
+    );
+  });
+
+  it('zipForOwner: 404 khi không có file, 400 khi vượt giới hạn', async () => {
+    const { service, query } = setup();
+    query.listByOwner.mockResolvedValue([]);
+    await expect(service.zipForOwner('INVOICE', 'inv-1')).rejects.toThrow(
+      NotFoundException,
+    );
+    query.listByOwner.mockResolvedValue([
+      { ...row, fileSize: String(300 * 1024 * 1024) },
+    ]);
+    await expect(service.zipForOwner('INVOICE', 'inv-1')).rejects.toThrow(
+      BadRequestException,
+    );
+  });
+
   it('listForOwner kiểm owner, trả items không lộ fileKey kèm policy và nhóm cho phép', async () => {
     const { service, owner, policies } = setup();
     const out = await service.listForOwner('INVOICE', 'inv-1');

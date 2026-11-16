@@ -1,5 +1,5 @@
 import { NotFoundException } from '@nestjs/common';
-import { FileOwnerType } from '@/v2/core/storage-core';
+import { FileOwnerType } from '@/v2/core/file-attachments-core';
 import { FileAttachmentQueryService } from './file-attachment-query.service';
 
 function fakeQb(result: [unknown[], number] = [[], 0]) {

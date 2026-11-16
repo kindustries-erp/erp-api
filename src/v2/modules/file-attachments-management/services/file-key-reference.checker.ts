@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import {
   FILE_KEY_REFERENCE_SOURCES,
   type FileKeyReferenceSource,
-} from '@/v2/core/storage-core';
+} from '@/v2/core/file-attachments-core';
 
 export interface KeyReferenceReport {
   total: number;

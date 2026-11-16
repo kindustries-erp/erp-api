@@ -50,6 +50,14 @@ export class FileStorageGateway {
     }
   }
 
+  async downloadBuffer(key: string): Promise<Buffer> {
+    try {
+      return await this.r2.downloadBuffer(key);
+    } catch (error) {
+      throw this.toHttpError('download', key, error);
+    }
+  }
+
   async delete(key: string): Promise<void> {
     try {
       await this.r2.deleteObject(key);

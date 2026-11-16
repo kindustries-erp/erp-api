@@ -3,7 +3,7 @@ import {
   FileOwnerRegistry,
   FileOwnerType,
   type FileOwnerPolicyPort,
-} from '@/v2/core/storage-core';
+} from '@/v2/core/file-attachments-core';
 import { CodeStoragePolicyProvider } from './code-storage-policy.provider';
 import { FileAttachmentCommandService } from './file-attachment-command.service';
 

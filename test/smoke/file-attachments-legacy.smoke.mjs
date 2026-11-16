@@ -57,10 +57,10 @@ try {
   const un = await call('DELETE', `/api/v1/erp-invoices/${inv.id}/attachments/${attachment.id}`);
   check('C1 V1 gỡ liên kết thành công', un.status < 300, un.status);
   check('C2 V2 không còn hiện file sau khi V1 gỡ', !(await v2List()).some((i) => i.fileName === NAME));
-  const del = await call('GET', `/api/v2/file-attachments?deleted=only&search=${encodeURIComponent(NAME)}`);
+  const del = await call('GET', `/api/v2/file-attachments-management?deleted=only&search=${encodeURIComponent(NAME)}`);
   check('C3 dòng V2 là xóa mềm (còn ở bộ lọc Đã xóa)', del.data.items.some((i) => i.fileName === NAME));
   for (const i of del.data.items.filter((x) => x.fileName === NAME)) {
-    await call('DELETE', `/api/v2/file-attachments/${i.id}/permanent`);
+    await call('DELETE', `/api/v2/file-attachments-management/${i.id}/permanent`);
   }
 } finally {
   if (attachment?.id) await call('DELETE', `/api/v1/erp-attachments/${attachment.id}`);

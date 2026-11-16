@@ -1,4 +1,4 @@
-// Smoke API file đính kèm V2 (`/api/v2/invoices/:id/attachments`, `/api/v2/file-attachments`) trên API đang chạy.
+// Smoke API file đính kèm V2 (`/api/v2/invoices/:id/attachments`, `/api/v2/file-attachments-management`) trên API đang chạy.
 // Biến môi trường (xem erp-api/.agents/skills/erp-e2e-api-smoke/SKILL.md):
 //   E2E_API_URL    (mặc định suy từ PORT trong erp-api/.env)
 //   E2E_EMAIL      (BẮT BUỘC, tài khoản admin: dùng SEED_ADMIN_EMAIL trong .env)
@@ -83,9 +83,9 @@ async function main() {
   );
   if (!token) return;
 
-  const unauth = await api(null, 'GET', '/file-attachments');
+  const unauth = await api(null, 'GET', '/file-attachments-management');
   record(
-    'GET /file-attachments (không token)',
+    'GET /file-attachments-management (không token)',
     unauth.status,
     '401',
     unauth.status === 401,
@@ -131,6 +131,19 @@ async function main() {
     got && (await got.arrayBuffer()).byteLength === 64,
   );
 
+  const zipRes = await fetch(`${V2}${base}/zip`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  check(
+    'zip owner trả application/zip có nội dung',
+    zipRes.status === 200 &&
+      (zipRes.headers.get('content-type') ?? '').includes('zip') &&
+      (await zipRes.arrayBuffer()).byteLength > 0,
+    zipRes.status,
+  );
+  const zipNoAuth = await fetch(`${V2}${base}/zip`);
+  check('zip không token bị 401', zipNoAuth.status === 401, zipNoAuth.status);
+
   await step('upload sai đuôi (.exe)', token, 'POST', base, [400], {
     form: pdfForm('x.exe'),
   });
@@ -175,7 +188,7 @@ async function main() {
     'purge file chưa xóa mềm',
     token,
     'POST',
-    '/file-attachments/purge',
+    '/file-attachments-management/purge',
     [200, 201],
     {
       json: { ids: [att?.id] },
@@ -189,14 +202,14 @@ async function main() {
     'purge DELETE :id/permanent chưa xóa mềm',
     token,
     'DELETE',
-    `/file-attachments/${att?.id}/permanent`,
+    `/file-attachments-management/${att?.id}/permanent`,
     [409],
   );
   await step(
     'purge body sai',
     token,
     'POST',
-    '/file-attachments/purge',
+    '/file-attachments-management/purge',
     [400],
     { json: { ids: ['x'] } },
   );
@@ -218,7 +231,7 @@ async function main() {
     'quản lý deleted=only',
     token,
     'GET',
-    '/file-attachments?deleted=only&pageSize=200',
+    '/file-attachments-management?deleted=only&pageSize=200',
     [200],
   );
   check(
@@ -229,7 +242,7 @@ async function main() {
     'quản lý mặc định',
     token,
     'GET',
-    '/file-attachments?pageSize=200',
+    '/file-attachments-management?pageSize=200',
     [200],
   );
   check(
@@ -240,7 +253,7 @@ async function main() {
     'column-options',
     token,
     'GET',
-    '/file-attachments/column-options?column=category&deleted=only',
+    '/file-attachments-management/column-options?column=category&deleted=only',
     [200],
   );
 
@@ -248,7 +261,7 @@ async function main() {
     'xóa vĩnh viễn',
     token,
     'DELETE',
-    `/file-attachments/${att?.id}/permanent`,
+    `/file-attachments-management/${att?.id}/permanent`,
     [200],
   );
   check(
@@ -266,7 +279,7 @@ async function main() {
     'chi tiết sau xóa cứng',
     token,
     'GET',
-    `/file-attachments/${att?.id}`,
+    `/file-attachments-management/${att?.id}`,
     [404],
   );
   created.length = 0;
@@ -276,7 +289,7 @@ async function main() {
     'settings',
     token,
     'GET',
-    '/file-attachments/settings',
+    '/file-attachments-management/settings',
     [200],
   );
   const original = s0.data?.data;
@@ -288,7 +301,7 @@ async function main() {
     'settings retentionDays=0',
     token,
     'PATCH',
-    '/file-attachments/settings',
+    '/file-attachments-management/settings',
     [400],
     { json: { retentionDays: 0 } },
   );
@@ -296,7 +309,7 @@ async function main() {
     'settings retentionDays=99999',
     token,
     'PATCH',
-    '/file-attachments/settings',
+    '/file-attachments-management/settings',
     [400],
     { json: { retentionDays: 99999 } },
   );
@@ -304,7 +317,7 @@ async function main() {
     'settings field lạ',
     token,
     'PATCH',
-    '/file-attachments/settings',
+    '/file-attachments-management/settings',
     [400],
     { json: { hack: 1 } },
   );
@@ -312,7 +325,7 @@ async function main() {
     'settings đổi hợp lệ',
     token,
     'PATCH',
-    '/file-attachments/settings',
+    '/file-attachments-management/settings',
     [200],
     {
       json: { autoPurgeEnabled: !original.autoPurgeEnabled, retentionDays: 45 },
@@ -323,7 +336,7 @@ async function main() {
     'settings khôi phục',
     token,
     'PATCH',
-    '/file-attachments/settings',
+    '/file-attachments-management/settings',
     [200],
     {
       json: {
@@ -342,8 +355,8 @@ async function cleanup() {
   const token = login.data?.data?.accessToken;
   if (!token) return;
   for (const id of created) {
-    await api(token, 'DELETE', `/file-attachments/${id}`);
-    await api(token, 'DELETE', `/file-attachments/${id}/permanent`);
+    await api(token, 'DELETE', `/file-attachments-management/${id}`);
+    await api(token, 'DELETE', `/file-attachments-management/${id}/permanent`);
   }
 }
 

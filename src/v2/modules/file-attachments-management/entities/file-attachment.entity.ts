@@ -1,5 +1,5 @@
 import { Entity, Index } from 'typeorm';
-import { BaseFileAttachmentEntity } from '@/v2/core/storage-core';
+import { BaseFileAttachmentEntity } from '@/v2/core/file-attachments-core';
 
 /**
  * File đính kèm đa owner (bảng `file_attachments`). Nguồn sự thật duy nhất cho file

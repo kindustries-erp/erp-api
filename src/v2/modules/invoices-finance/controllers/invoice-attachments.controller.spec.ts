@@ -4,7 +4,7 @@ import { validate } from 'class-validator';
 import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
 import { RBAC_PERMISSIONS_KEY } from '@/auth/decorators/require-permissions.decorator';
 import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
-import { FileAttachmentsService } from '@/v2/modules/file-attachments';
+import { FileAttachmentsService } from '@/v2/modules/file-attachments-management';
 import { UploadInvoiceAttachmentBodyDto } from '../dto/invoice-attachment.dto';
 import { InvoiceAttachmentsController } from './invoice-attachments.controller';
 
@@ -20,6 +20,7 @@ describe('InvoiceAttachmentsController', () => {
     uploadForOwner: jest.fn(),
     downloadUrlForOwner: jest.fn(),
     deleteForOwner: jest.fn(),
+    zipForOwner: jest.fn(),
   };
   const controller = new InvoiceAttachmentsController(
     files as unknown as FileAttachmentsService,
@@ -45,12 +46,26 @@ describe('InvoiceAttachmentsController', () => {
     expect(permissionsOf('downloadUrl')).toEqual([
       { resource: 'invoices', action: 'read' },
     ]);
+    expect(permissionsOf('zip')).toEqual([
+      { resource: 'invoices', action: 'read' },
+    ]);
     expect(permissionsOf('upload')).toEqual([
       { resource: 'invoices', action: 'update' },
     ]);
     expect(permissionsOf('remove')).toEqual([
       { resource: 'invoices', action: 'update' },
     ]);
+  });
+
+  it('zip trả buffer với header application/zip, khóa theo hóa đơn', async () => {
+    files.zipForOwner.mockResolvedValue(Buffer.from('zz'));
+    const res = { set: jest.fn(), send: jest.fn() };
+    await controller.zip('inv-1', res as never);
+    expect(files.zipForOwner).toHaveBeenCalledWith('INVOICE', 'inv-1');
+    expect(res.set).toHaveBeenCalledWith(
+      expect.objectContaining({ 'Content-Type': 'application/zip' }),
+    );
+    expect(res.send).toHaveBeenCalledWith(Buffer.from('zz'));
   });
 
   it('route khai báo theo hóa đơn', () => {

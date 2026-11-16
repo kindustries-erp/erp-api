@@ -10,7 +10,7 @@ import {
 import { ErpAttachment } from './entities/erp_attachment.entity';
 import { R2Service } from '../r2/r2.service';
 import * as crypto from 'crypto';
-import { LegacyFileRegistrarService } from '@/v2/modules/file-attachments/services/legacy-file-registrar.service';
+import { LegacyFileRegistrarService } from '@/v2/modules/file-attachments-management/services/legacy-file-registrar.service';
 
 @Injectable()
 export class ErpAttachmentsCoreService {

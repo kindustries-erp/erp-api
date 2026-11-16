@@ -9,10 +9,12 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
@@ -29,11 +31,11 @@ import {
   FileOwnerType,
   STORAGE_HARD_LIMITS,
   extensionOf,
-} from '@/v2/core/storage-core';
+} from '@/v2/core/file-attachments-core';
 import {
   DEFAULT_STORAGE_POLICY,
   FileAttachmentsService,
-} from '@/v2/modules/file-attachments';
+} from '@/v2/modules/file-attachments-management';
 import {
   InvoiceAttachmentDownloadQueryDto,
   UploadInvoiceAttachmentBodyDto,
@@ -106,6 +108,25 @@ export class InvoiceAttachmentsController {
       category: body.category ?? FileCategory.HOA_DON,
       userId: req.user?.sub ?? null,
     });
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.INVOICES,
+    action: ErpAction.READ,
+  })
+  @ApiOperation({ summary: 'Tải tất cả tài liệu của hóa đơn (zip)' })
+  @Get('zip')
+  async zip(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const buffer = await this.files.zipForOwner(FileOwnerType.INVOICE, id);
+    res.set({
+      'Content-Type': 'application/zip',
+      'Content-Disposition': `attachment; filename="invoice_${id}.zip"`,
+      'Content-Length': buffer.length,
+    });
+    res.send(buffer);
   }
 
   @RequirePermissions({

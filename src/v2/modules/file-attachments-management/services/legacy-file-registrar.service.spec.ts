@@ -1,4 +1,4 @@
-import { FileOwnerType } from '@/v2/core/storage-core';
+import { FileOwnerType } from '@/v2/core/file-attachments-core';
 import {
   LEGACY_REGISTRAR_ENV,
   LegacyFileRegistrarService,
