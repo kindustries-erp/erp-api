@@ -37,6 +37,7 @@ function chain(
     result.many ?? [],
     result.total ?? 0,
   ]);
+  qb.getMany = jest.fn(async () => result.many ?? []);
   qb.getRawOne = jest.fn(async () => result.raw);
   qb.getRawMany = jest.fn(async () => result.rows ?? []);
   qb.getCount = jest.fn(async () => result.count ?? 0);
@@ -160,16 +161,49 @@ describe('StockLedgerQueryService', () => {
     expect(txCalls).toHaveLength(0);
   });
 
-  it('lists transactions by item within the configured scope', async () => {
-    const qb = chain('t', { many: [], total: 0 });
+  it('lists transactions by item within the configured scope with running balance', async () => {
+    const rawRows = [
+      {
+        id: 'tx1',
+        transactionDate: new Date('2026-01-01'),
+        transactionType: 'RECEIPT',
+        documentType: 'PURCHASE_RECEIPT',
+        documentId: 'd1',
+        qtyIn: '10',
+        qtyOut: '0',
+        unitCost: '100',
+      },
+      {
+        id: 'tx2',
+        transactionDate: new Date('2026-01-02'),
+        transactionType: 'ISSUE',
+        documentType: 'ISSUE',
+        documentId: 'd2',
+        qtyIn: '0',
+        qtyOut: '4',
+        unitCost: '100',
+      },
+    ];
+    const qb = chain('t', { many: rawRows, total: 2 });
     const { svc } = build([qb]);
-    await svc.listTransactions({ itemCode: 'A', dateFrom: '2026-01-01' });
+    const res = await svc.listTransactions({
+      itemCode: 'A',
+      costingMethod: 'WEIGHTED_AVG',
+    });
+
     expect(qb.where).toHaveBeenCalledWith('t.ledgerScope = :scope', {
       scope: 'GARAGE',
     });
     expect(qb.andWhere).toHaveBeenCalledWith('t.itemCode = :itemCode', {
       itemCode: 'A',
     });
-    expect(qb.orderBy).toHaveBeenCalledWith('t.transactionDate', 'DESC');
+    expect(qb.orderBy).toHaveBeenCalledWith('t.transactionDate', 'ASC');
+
+    // Kết quả phân trang đảo ngược (mới nhất tx2 lên đầu)
+    expect(res.items).toHaveLength(2);
+    expect(res.items[0].id).toBe('tx2');
+    expect(res.items[0].balanceQty).toBe(6);
+    expect(res.items[1].id).toBe('tx1');
+    expect(res.items[1].balanceQty).toBe(10);
   });
 });

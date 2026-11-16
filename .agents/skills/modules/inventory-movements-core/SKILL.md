@@ -61,7 +61,13 @@ description: Lõi v2 nhập / xuất / điều chỉnh kho dùng chung (sổ s�
 - **Giới hạn**: 16 KB, sâu 5 cấp, key ≤ 64 ký tự, cấm `__proto__`/`constructor`/`prototype` (400 qua `RejectUnsafeExtraDataPipe` và service).
 - **Response**: luôn có `extraData` (object).
 
-## Response danh sách (2026-11-12)
+## Thẻ kho & Số dư lũy kế (2026-11-16)
+
+- `GET /api/v2/inventory-movements-garage-ledger/transactions`:
+  - `QueryStockLedgerTransactionsDto`: nới lỏng `pageSize` tới 1000 thông qua `PagedQuery` chuẩn để cho phép client tải lịch sử giao dịch lớn khi render thẻ kho.
+  - `StockLedgerTransactionCalcHelper` (`calculateStockLedgerTransactions`): helper chuyên trách tính toán số dư tồn lũy kế (`balanceQty`, `balanceAmount`, `unitCost`) theo trình tự thời gian giao dịch, hỗ trợ cả FIFO và Bình quân gia quyền.
+  - Phía Web (`StockLedgerDrawer`): phân rã lô giá theo FIFO và Bình quân di động bằng pure client engine `calculateStockLedger`, không phụ thuộc tham số `costingMethod` trên query API để đảm bảo tương thích ngược với mọi môi trường backend.
+
 
 - `GET /api/v2/inventory-movements-garage-{adjustments,receipts,issues}` trả `{ items, pagination }` (`StockVoucherListResponseDto`, `PaginationMetaDto`). Không còn key phẳng `total/page/pageSize/totalPages`.
 - `items` là đầu phiếu (`StockVoucherListItemResponseDto`, không có `lines`, không lộ entity), dựng bằng `toVoucherSummaryResponse`. `GET :id` vẫn trả `{ data }` kèm `lines`.

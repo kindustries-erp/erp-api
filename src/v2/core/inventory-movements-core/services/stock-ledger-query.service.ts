@@ -15,6 +15,10 @@ import {
   loadMovementSumsByItem,
   loadMovementTotals,
 } from '../helpers/stock-ledger-movement-sums.helper';
+import {
+  calculateRunningStockTransactions,
+  resolveDocumentNumbers,
+} from '../helpers/stock-ledger-transaction-calc.helper';
 
 const TIME_ZONE = 'Asia/Ho_Chi_Minh';
 const SORTABLE: Record<string, string> = {
@@ -144,34 +148,51 @@ export class StockLedgerQueryService {
 
   async listTransactions(query: QueryStockTransactionDto) {
     const page = Math.max(1, query.page ?? 1);
-    const pageSize = Math.min(200, Math.max(1, query.pageSize ?? 20));
-    const qb = this.dataSource
+    const pageSize = Math.min(500, Math.max(1, query.pageSize ?? 20));
+
+    // Lấy toàn bộ giao dịch theo thứ tự thời gian tăng dần để tính running balance & FIFO
+    const allRows = await this.dataSource
       .getRepository(this.config.tables.transaction)
       .createQueryBuilder('t')
       .where('t.ledgerScope = :scope', { scope: this.config.ledgerScope })
-      .andWhere('t.itemCode = :itemCode', { itemCode: query.itemCode });
-    const day = `(t.transactionDate AT TIME ZONE '${TIME_ZONE}')::date`;
-    if (query.dateFrom)
-      qb.andWhere(`${day} >= :from::date`, { from: query.dateFrom });
-    if (query.dateTo) qb.andWhere(`${day} <= :to::date`, { to: query.dateTo });
-    const [rows, total] = await qb
-      .orderBy('t.transactionDate', 'DESC')
-      .addOrderBy('t.createdAt', 'DESC')
+      .andWhere('t.itemCode = :itemCode', { itemCode: query.itemCode })
+      .orderBy('t.transactionDate', 'ASC')
+      .addOrderBy('t.createdAt', 'ASC')
       .addOrderBy('t.id', 'ASC')
-      .skip((page - 1) * pageSize)
-      .take(pageSize)
-      .getManyAndCount();
-    const items: StockTransactionItemDto[] = rows.map((r) => ({
-      id: r.id,
-      transactionDate: r.transactionDate,
-      transactionType: r.transactionType,
-      documentType: r.documentType,
-      documentId: r.documentId,
-      qtyIn: toNumber(r.qtyIn),
-      qtyOut: toNumber(r.qtyOut),
-      unitCost: toNumber(r.unitCost),
-    }));
-    return { items, pagination: buildPagination(page, pageSize, total) };
+      .getMany();
+
+    const calculated = calculateRunningStockTransactions(
+      allRows as any,
+      query.costingMethod ?? 'WEIGHTED_AVG',
+    );
+
+    let filtered = calculated;
+    if (query.dateFrom || query.dateTo) {
+      filtered = filtered.filter((r) => {
+        const d = (
+          r.transactionDate instanceof Date
+            ? r.transactionDate
+            : new Date(r.transactionDate)
+        )
+          .toISOString()
+          .split('T')[0];
+        if (query.dateFrom && d < query.dateFrom) return false;
+        if (query.dateTo && d > query.dateTo) return false;
+        return true;
+      });
+    }
+
+    const total = filtered.length;
+    const sorted = [...filtered].reverse();
+    const paged = sorted.slice((page - 1) * pageSize, page * pageSize);
+
+    const docMap = await resolveDocumentNumbers(this.dataSource, paged);
+    for (const item of paged) {
+      const docNo = docMap.get(`${item.documentType}:${item.documentId}`);
+      if (docNo) item.documentNo = docNo;
+    }
+
+    return { items: paged, pagination: buildPagination(page, pageSize, total) };
   }
 
   private balanceBase(

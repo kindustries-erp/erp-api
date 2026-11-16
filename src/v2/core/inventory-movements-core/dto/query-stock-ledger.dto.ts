@@ -27,12 +27,12 @@ class PagedQuery {
   @Min(1)
   page?: number;
 
-  @ApiPropertyOptional({ default: 20, minimum: 1, maximum: 200 })
+  @ApiPropertyOptional({ default: 20, minimum: 1, maximum: 1000 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(200)
+  @Max(1000)
   pageSize?: number;
 }
 
@@ -69,4 +69,13 @@ export class QueryStockTransactionDto extends PagedQuery {
   @IsOptional()
   @Matches(DATE_ONLY, { message: 'dateTo phải có dạng YYYY-MM-DD' })
   dateTo?: string;
+
+  @ApiPropertyOptional({
+    enum: ['WEIGHTED_AVG', 'FIFO'],
+    default: 'WEIGHTED_AVG',
+    description: 'Phương pháp giá vốn: WEIGHTED_AVG hoặc FIFO',
+  })
+  @IsOptional()
+  @IsIn(['WEIGHTED_AVG', 'FIFO'])
+  costingMethod?: 'WEIGHTED_AVG' | 'FIFO';
 }
