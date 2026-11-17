@@ -440,6 +440,7 @@ Cơ chế dùng chung `ExportJobRunner` (`src/common/export-jobs/export-job-runn
      - Mục tiêu thu (`targetRevenue`): **Tổng tiền thanh toán có thuế** (`tienCoThue` / `TongTienThanhToan`), **tuyệt đối không fallback sang doanh thu chưa thuế** (`doanhThu`).
      - Đã thu thực tế (ERP): `totalCollected = directReceiptOnSystem + directReceiptOffSystem`.
      - Còn phải thu (`tienConPhaiThanhToan`): `Math.max(0, targetRevenue - totalCollected)`.
+     - **Chiết khấu**: `targetRevenue` phải là số **ròng sau chiết khấu** (`TongTienThanhToan`, = `TienCoThue − TienChietKhau`). Dòng danh sách Kgara không có field chiết khấu nên không được dùng gross của dòng danh sách; dùng `resolveStoredNetPayable` (`src/kgara-api-core/utils/kgara-parser.util.ts`) để lấy số ròng đã lưu (`tien_co_thue`). Đã sửa ở `sync-case.service.ts`, `garage-cashflow-transaction.service.ts`, list query v1 và mapper v2. Phiếu có chiết khấu: dự thu `DT-GARA` tự sinh phải bằng số còn phải thu mới; về 0 thì xóa. Backfill dữ liệu cũ: `scripts/backfill-discount-case-receivables.ts`.
   2. **Chiều Phải Chi (Tổng chi phí vụ việc / Nhà cung cấp)**:
      - Mục tiêu chi: Tổng chi phí vụ việc (`ChiPhi` từ `kgara_gross_profit` hoặc `kgara_cases`).
      - Đã thanh toán (ERP): `totalPaid = directPaymentOnSystem + directPaymentOffSystem`.

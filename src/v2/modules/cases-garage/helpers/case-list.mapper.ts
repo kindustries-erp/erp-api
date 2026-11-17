@@ -1,5 +1,5 @@
 import { toMoney } from '@/v2/core/debts-core';
-import { extractNetPayableAmount } from '@/kgara-api-core/utils/kgara-parser.util';
+import { resolveStoredNetPayable } from '@/kgara-api-core/utils/kgara-parser.util';
 import type { KgaraCase } from '@/kgara-api-core/entities/kgara_case.entity';
 import type { CaseListItem } from '../dto/case-list.types';
 
@@ -61,7 +61,7 @@ export function toCaseListItem(
   const doanhThu = numOrNull(item.doanhThu ?? gp?.doanhThu);
   const chiPhi = numOrNull(item.chiPhi ?? gp?.chiPhi);
   const loiNhuan = numOrNull(item.loiNhuan ?? gp?.loiNhuan);
-  const netPayable = toMoney(extractNetPayableAmount(item));
+  const netPayable = toMoney(resolveStoredNetPayable(item));
   const paid = settlement ? settlement.receipts : toMoney(item.tienDaThanhToan);
   const raw = item.rawData as Raw;
   const insurance = insuranceReceivable(raw);

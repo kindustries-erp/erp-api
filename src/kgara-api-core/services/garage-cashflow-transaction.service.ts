@@ -17,7 +17,7 @@ import {
   KgaraCashflowVoucherResponseDto,
   toKgaraCashflowVoucherResponse,
 } from '../dto/garage-cashflow.dto';
-import { extractNetPayableAmount } from '../utils/kgara-parser.util';
+import { resolveStoredNetPayable } from '../utils/kgara-parser.util';
 import {
   isDebtOffsetPayment,
   isPaymentLocked,
@@ -477,7 +477,8 @@ export class GarageCashflowTransactionService {
     const settlements = await queryRunner.manager.find(KgaraCaseSettlement, {
       where: { caseId },
     });
-    const netPayable = extractNetPayableAmount(kCase);
+    // Số ròng (sau chiết khấu): ưu tiên raw có field chiết khấu, nếu không dùng tienCoThue đã lưu (đã ròng).
+    const netPayable = resolveStoredNetPayable(kCase);
 
     if (settlements.length > 0) {
       const totalReceipts = settlements

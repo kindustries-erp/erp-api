@@ -51,6 +51,25 @@ describe('insuranceReceivable / customerReceivable', () => {
 });
 
 describe('toCaseListItem', () => {
+  it('chiết khấu: còn phải thu = net đã lưu − RECEIPT (raw thiếu field chiết khấu)', () => {
+    const item = toCaseListItem(
+      {
+        ...base,
+        tienCoThue: '5309550',
+        tienDaThanhToan: '0',
+        rawData: { TienCoThue: 5855800 },
+      } as unknown as KgaraCase,
+      { receipts: 4769550, payments: 0 } as never,
+      undefined,
+      null,
+    );
+    expect(item).toMatchObject({
+      tienCoThue: 5309550,
+      tienDaThanhToan: 4769550,
+      tienConPhaiThanhToan: 540000,
+    });
+  });
+
   it('không có settlement thì dùng số đã thu trên vụ việc; còn lại kẹp ở 0', () => {
     const item = toCaseListItem(base, undefined, undefined, null);
     expect(item).toMatchObject({
