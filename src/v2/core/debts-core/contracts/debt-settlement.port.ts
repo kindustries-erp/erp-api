@@ -14,6 +14,13 @@ export interface ApplyDebtAllocationCommand {
   amount: number;
   idempotencyKey: string;
   actorId?: string | null;
+  /** Phiếu thu chi sinh ra phân bổ (nếu có). */
+  voucherId?: string | null;
+  /** Bên trả: KH hoặc BH. Mặc định KH. */
+  payerType?: string;
+  transDate?: string | null;
+  /** Cho phép phân bổ vượt số dư (thu dư). Mặc định từ chối bằng 409. */
+  allowOverpay?: boolean;
 }
 
 export interface ReverseDebtAllocationCommand {

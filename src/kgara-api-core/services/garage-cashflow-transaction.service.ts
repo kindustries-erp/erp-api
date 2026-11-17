@@ -5,6 +5,7 @@ import {
   Optional,
   Logger,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, QueryRunner } from 'typeorm';
 import { KgaraCashflowVoucher } from '../entities/kgara_cashflow_voucher.entity';
@@ -29,6 +30,7 @@ import {
   syncOpexFromVoucher,
 } from '../helpers/garage-cashflow-opex-sync.helper';
 import { GarageHubService } from '../hub/garage-hub.service';
+import { notifyLedgerProjector } from '../hub/ledger-projector.port';
 import { resolveCaseReceiptPayer } from '../helpers/kgara-case-receipt-payer.helper';
 import type { ReceiptPayerType } from '../helpers/kgara-receipt-payer-resolver.helper';
 
@@ -48,6 +50,8 @@ export class GarageCashflowTransactionService {
     private readonly auditCoreService?: AuditCoreService,
     @Optional()
     private readonly garageHub?: GarageHubService,
+    @Optional()
+    private readonly moduleRef?: ModuleRef,
   ) {}
 
   async createVoucher(
@@ -162,6 +166,9 @@ export class GarageCashflowTransactionService {
 
       await queryRunner.commitTransaction();
       await this.syncReceiptForecast([dto.caseId]);
+      await notifyLedgerProjector(this.moduleRef, this.logger, (p) =>
+        p.projectVoucher(savedVoucher.id),
+      );
 
       if (this.auditCoreService) {
         this.auditCoreService.recordAction({
@@ -393,6 +400,11 @@ export class GarageCashflowTransactionService {
 
       await queryRunner.commitTransaction();
       await this.syncReceiptForecast([oldCaseId, newCaseId]);
+      await notifyLedgerProjector(this.moduleRef, this.logger, async (p) => {
+        await p.projectVoucher(updatedVoucher.id);
+        if (oldCaseId && oldCaseId !== newCaseId)
+          await p.projectCase(oldCaseId);
+      });
 
       if (this.auditCoreService) {
         this.auditCoreService.recordAction({
@@ -468,6 +480,9 @@ export class GarageCashflowTransactionService {
 
       await queryRunner.commitTransaction();
       await this.syncReceiptForecast([relatedCaseId]);
+      await notifyLedgerProjector(this.moduleRef, this.logger, (p) =>
+        p.removeVoucher(id, existingVoucher.caseId ?? relatedCaseId),
+      );
 
       if (this.auditCoreService) {
         this.auditCoreService.recordAction({

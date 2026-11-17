@@ -23,8 +23,14 @@ Vị trí: `src/v2/modules/debts-garage`. Quyền `GARAGE_DEBTS:READ`. Chi nhán
 - Index: migration `1794832200000-GarageDebtsV2Indexes` (3 index).
 
 ## 3. Chưa làm
-Drill-down `customers/:customerCode/cases`, `suppliers/:supplierId/cases`. Ghi settlement vẫn ở V1 tới plan orchestration.
+Drill-down `customers/:customerCode/cases`, `suppliers/:supplierId/cases`. Ghi settlement mới đi qua `debts-flow-garage`; V1 vẫn ghi song song và được chiếu sang v2.
 
-## 4. Sổ công nợ (entity, chưa có service ghi)
+## 4. Sổ công nợ (Phase 2, 2026-11-17)
+- Service: `GarageDebtOriginService`, `GarageDebtSettlementService` (điểm duy nhất đổi số dư), `GarageDebtLedgerProjector.projectCase(manager, caseId)` (dựng nợ gốc từ vụ việc; bảo hiểm tách INSURER + CUSTOMER; mã `BH_CHUA_XAC_DINH` / `NCC_CHUA_XAC_DINH` khi chưa rõ bên), `DebtLedgerQueryService`, `DebtPartyService`.
+- Route mới `api/v2/debts-garage/ledger`: `GET ledger`, `GET ledger/:debtId/allocations`, `PATCH ledger/:debtId/party`.
+- Cờ `DEBTS_GARAGE_LEDGER_READ=true` bật nhánh đọc từ sổ cho `customers`/`suppliers`; mặc định tắt (hành vi cũ). Chỉ bật sau backfill (Phase 3).
+- Ghi (phiếu, phân bổ) ở module `debts-flow-garage`.
+
+### Entity (cũ)
 - Entity `DebtGarage` (`debts_garage`) và `DebtAllocationGarage` (`debt_allocations_garage`) ở `entities/`, kế thừa entity base của `debts-core`. Migration `1794900000000-GarageCashflowDebtsV2Tables` đã chạy trên staging 2026-11-17 (bảng rỗng, chưa backfill; production chưa).
 - Lớp đọc hiện tại vẫn tính từ `kgara_*`; chưa có cờ `DEBTS_GARAGE_LEDGER_READ`. Chi tiết: skill `debts-core`.

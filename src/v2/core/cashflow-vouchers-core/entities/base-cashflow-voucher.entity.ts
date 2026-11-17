@@ -5,12 +5,14 @@ import { CoreSoftDeletableEntity } from '../../base-core/entities/core-soft-dele
 export type CashflowVoucherType = 'RECEIPT' | 'PAYMENT';
 
 /**
- * Trạng thái phiếu: dự thu/dự chi chưa phát sinh tiền (EXPECTED, PENDING), đã thu chi (PAID), hủy (CANCELLED).
+ * Trạng thái phiếu: dự thu/dự chi chưa phát sinh tiền (EXPECTED, PENDING), đã duyệt (APPROVED, có ở V1),
+ * đã thu chi (PAID), hủy (CANCELLED).
  * Hủy là trạng thái, không xóa cứng (xem chính sách xóa mềm).
  */
 export type CashflowVoucherStatus =
   | 'EXPECTED'
   | 'PENDING'
+  | 'APPROVED'
   | 'PAID'
   | 'CANCELLED';
 

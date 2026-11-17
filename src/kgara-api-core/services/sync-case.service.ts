@@ -1,4 +1,5 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { KgaraBranch } from '../entities/kgara_branch.entity';
@@ -14,6 +15,7 @@ import { SyncDeletionService } from './sync-deletion.service';
 import { SyncGrossProfitService } from './sync-gross-profit.service';
 import { GarageCaseForecastService } from './garage-case-forecast.service';
 import { GarageHubService } from '../hub/garage-hub.service';
+import { notifyLedgerProjector } from '../hub/ledger-projector.port';
 import { resolveCompletionDate } from '../helpers/kgara-completion-date.helper';
 import {
   buildGuidMap,
@@ -60,7 +62,17 @@ export class SyncCaseService {
     private readonly caseForecaster?: GarageCaseForecastService,
     @Optional()
     private readonly garageHub?: GarageHubService,
+    @Optional()
+    private readonly moduleRef?: ModuleRef,
   ) {}
+
+  /** Chiếu vụ việc vừa đồng bộ sang sổ nợ v2 (lỗi chỉ log). */
+  private projectCaseToLedger(caseId?: string): Promise<void> {
+    if (!caseId) return Promise.resolve();
+    return notifyLedgerProjector(this.moduleRef, this.logger, (p) =>
+      p.projectCase(caseId),
+    );
+  }
 
   async syncBranches(
     accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
@@ -406,6 +418,7 @@ export class SyncCaseService {
           }
 
           await this.caseRepo.save(gwCase);
+          await this.projectCaseToLedger(gwCase.id);
 
           if (this.garageHub && gwCase.id) {
             await this.garageHub.handleCaseTransition({
@@ -832,6 +845,7 @@ export class SyncCaseService {
       }
 
       await this.caseRepo.save(gwCase);
+      await this.projectCaseToLedger(gwCase.id);
 
       if (this.garageHub && gwCase.id) {
         await this.garageHub.handleCaseTransition({
