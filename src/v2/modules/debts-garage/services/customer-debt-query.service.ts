@@ -14,6 +14,11 @@ import {
   GARAGE_DEBT_BASELINE_DATE,
 } from '../helpers/garage-debt-sql.helper';
 
+import {
+  buildCustomerLedgerQuery,
+  isLedgerReadEnabled,
+} from '../helpers/ledger-read.helper';
+
 export interface CustomerDebtListQuery extends DebtListQuery {
   branchId: string;
   /** Ngày hoàn thành từ (YYYY-MM-DD); không sớm hơn mốc theo dõi. */
@@ -88,6 +93,16 @@ export class CustomerDebtQueryService extends AbstractDebtQueryService<
       from && from > GARAGE_DEBT_BASELINE_DATE
         ? from
         : GARAGE_DEBT_BASELINE_DATE;
+
+    if (isLedgerReadEnabled()) {
+      const ledger = buildCustomerLedgerQuery(this.dataSource, {
+        branchId,
+        from: effectiveFrom,
+        to,
+      });
+      if (scope === 'outstanding') ledger.where('g.con_phai_thu > 0');
+      return ledger;
+    }
 
     const outer = this.dataSource.createQueryBuilder().from((sub) => {
       sub

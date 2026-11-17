@@ -96,6 +96,9 @@ import {
 import { GarageGoodsReceipt } from '@/v2/modules/goods-receipts-garage/entities/garage-goods-receipt.entity'; // api-v2-module:goods-receipts-garage:entity-imports
 import { GarageGoodsReceiptLine } from '@/v2/modules/goods-receipts-garage/entities/garage-goods-receipt-line.entity';
 import { GarageInventoryBalance } from '@/v2/modules/goods-receipts-garage/entities/garage-inventory-balance.entity';
+import { DebtGarage } from '@/v2/modules/debts-garage/entities/debt-garage.entity';
+import { DebtAllocationGarage } from '@/v2/modules/debts-garage/entities/debt-allocation-garage.entity';
+import { CashflowVoucherGarage } from '@/v2/modules/cashflow-vouchers-garage/entities/cashflow-voucher-garage.entity';
 import { ApprovalEvent } from '@/v2/core/approval-core/entities/approval-event.entity';
 import { ApprovalSetting } from '@/v2/core/approval-core/entities/approval-setting.entity';
 import { ProcurementRequest } from '@/v2/modules/procurement-requests-erp/entities/procurement-request.entity';
@@ -232,6 +235,9 @@ const entities = [
   FinanceInvoiceItem,
   GarageGoodsReceipt, // api-v2-module:goods-receipts-garage:entities
   GarageGoodsReceiptLine,
+  DebtGarage,
+  DebtAllocationGarage,
+  CashflowVoucherGarage,
   GarageInventoryBalance,
   InventoryMovementsGarageReceiptLine,
   InventoryMovementsGarageIssueLine,

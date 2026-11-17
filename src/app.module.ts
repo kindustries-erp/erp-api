@@ -79,6 +79,8 @@ import { ItemsGarageModule } from './v2/modules/items-garage/items-garage.module
 import { AiHubGatewayModule } from './v2/modules/ai-hub-gateway/ai-hub-gateway.module'; // api-v2-module:ai-hub-gateway:app-imports
 import { AiHubGarageModule } from './v2/modules/ai-hub-garage/ai-hub-garage.module'; // api-v2-module:ai-hub-garage:app-imports
 import { DebtsGarageModule } from './v2/modules/debts-garage/debts-garage.module'; // api-v2-module:debts-garage:app-imports
+import { CashflowVouchersGarageModule } from './v2/modules/cashflow-vouchers-garage/cashflow-vouchers-garage.module'; // api-v2-module:cashflow-vouchers-garage:app-imports
+import { DebtsFlowGarageModule } from './v2/modules/debts-flow-garage/debts-flow-garage.module'; // api-v2-module:debts-flow-garage:app-imports
 import { CasesGarageModule } from './v2/modules/cases-garage/cases-garage.module'; // api-v2-module:cases-garage:app-imports
 import { UsersManagementModule } from './v2/modules/users-management/users-management.module'; // api-v2-module:users-management:app-imports
 import { AuthSessionsModule } from './v2/modules/auth-sessions/auth-sessions.module'; // api-v2-module:auth-sessions:app-imports
@@ -219,6 +221,8 @@ import { AuthSessionsModule } from './v2/modules/auth-sessions/auth-sessions.mod
     AiHubGatewayModule, // api-v2-module:ai-hub-gateway:app-modules
     AiHubGarageModule, // api-v2-module:ai-hub-garage:app-modules
     DebtsGarageModule, // api-v2-module:debts-garage:app-modules
+    CashflowVouchersGarageModule, // api-v2-module:cashflow-vouchers-garage:app-modules
+    DebtsFlowGarageModule, // api-v2-module:debts-flow-garage:app-modules
     CasesGarageModule, // api-v2-module:cases-garage:app-modules
     UsersManagementModule, // api-v2-module:users-management:app-modules
     AuthSessionsModule, // api-v2-module:auth-sessions:app-modules

@@ -390,3 +390,8 @@ Nguồn quy tắc: `helpers/garage-cashflow-payment-rules.ts` (có spec). Áp d�
 - **Đồng bộ Dự thu khi thu một phần**: sau khi tạo, sửa hoặc xóa phiếu gắn phiếu dịch vụ, `GarageCashflowTransactionService` gọi `GarageHubService.handleCaseReceiptChanged(caseId)` (sau commit, lỗi chỉ log). Nếu case đang Hoàn tất, phiếu Dự thu được đặt bằng `max(0, tien_con_phai_thanh_toan)` của case: thu 8tr trên dự thu 10tr thì còn 2tr; về 0 thì phiếu chuyển `CANCELLED`.
 - **Phiếu tự sinh đã Đã thu/Đã duyệt không còn chặn sinh Dự thu**: `GarageCaseForecastService` chỉ cập nhật phiếu `EXPECTED`/`CANCELLED` mới nhất; phần còn lại tạo phiếu mới.
 - Lưu ý: nếu người dùng tự sửa số tiền phiếu Dự thu mà vẫn để trạng thái Dự thu, lần đồng bộ kế tiếp sẽ đặt lại theo còn phải thu.
+
+## Thu chi v2 song song (2026-11-17)
+- Ghi mới ở v2: `cashflow-vouchers-garage` (đọc) + `debts-flow-garage` (ghi, một transaction phiếu + phân bổ). V2 mirror sang `kgara_cashflow_vouchers`/`kgara_case_settlements` cùng UUID để V1 đọc đúng.
+- V1 → v2: sau commit, `GarageCashflowTransactionService`, `KgaraCaseFinancialController` (3 endpoint settlement) và `SyncCaseService` gọi cổng `GARAGE_LEDGER_PROJECTOR` (ModuleRef lười, `@Optional()`, lỗi chỉ log).
+- Quy tắc trừ nợ giữ như V1 (`shouldHaveSettlement`): thu trừ nợ trừ EXPECTED/CANCELLED; chi chỉ khi PAID và không thuộc opex/hoa hồng. Chi tiết: skill `debts-flow-garage`.

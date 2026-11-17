@@ -16,6 +16,7 @@ interface HarnessState {
 function buildHarness(
   state: HarnessState = {},
   garageHub?: Record<string, jest.Mock>,
+  moduleRef?: unknown,
 ) {
   const created: Array<{ entity: unknown; data: any }> = [];
   const manager: any = {
@@ -61,6 +62,7 @@ function buildHarness(
     dataSource,
     undefined,
     garageHub as any,
+    moduleRef as any,
   );
   const createdOf = (entity: unknown) =>
     created.filter((c) => c.entity === entity).map((c) => c.data);
@@ -92,6 +94,55 @@ describe('GarageCashflowTransactionService - đồng bộ dự thu sau khi lưu 
       handleCaseReceiptChanged: jest.fn().mockRejectedValue(new Error('boom')),
     };
     const h = buildHarness({}, hub);
+    await expect(
+      h.service.createVoucher({ ...baseDto, voucherType: 'RECEIPT' }),
+    ).resolves.toBeDefined();
+    expect(h.queryRunner.rollbackTransaction).not.toHaveBeenCalled();
+  });
+});
+
+describe('GarageCashflowTransactionService - chiếu sang sổ nợ v2 sau commit', () => {
+  const projectorOf = (over: Record<string, jest.Mock> = {}) => {
+    const projector = {
+      projectVoucher: jest.fn().mockResolvedValue(undefined),
+      removeVoucher: jest.fn().mockResolvedValue(undefined),
+      projectCase: jest.fn().mockResolvedValue(undefined),
+      ...over,
+    };
+    return { projector, moduleRef: { get: jest.fn(() => projector) } };
+  };
+
+  it('tạo phiếu: chiếu phiếu vừa lưu, sau commit', async () => {
+    const { projector, moduleRef } = projectorOf();
+    const h = buildHarness({}, undefined, moduleRef);
+    await h.service.createVoucher({ ...baseDto, voucherType: 'RECEIPT' });
+    expect(projector.projectVoucher).toHaveBeenCalledWith('generated-id');
+  });
+
+  it('xóa phiếu: báo projector kèm vụ việc của phiếu', async () => {
+    const { projector, moduleRef } = projectorOf();
+    const h = buildHarness(
+      {
+        voucher: {
+          id: 'v1',
+          voucherType: 'PAYMENT',
+          voucherCode: 'PC-1',
+          amount: 1,
+          caseId: 'case-9',
+        },
+      },
+      undefined,
+      moduleRef,
+    );
+    await h.service.deleteVoucher('v1');
+    expect(projector.removeVoucher).toHaveBeenCalledWith('v1', 'case-9');
+  });
+
+  it('projector lỗi chỉ ghi log, phiếu V1 vẫn lưu', async () => {
+    const { moduleRef } = projectorOf({
+      projectVoucher: jest.fn().mockRejectedValue(new Error('v2 down')),
+    });
+    const h = buildHarness({}, undefined, moduleRef);
     await expect(
       h.service.createVoucher({ ...baseDto, voucherType: 'RECEIPT' }),
     ).resolves.toBeDefined();

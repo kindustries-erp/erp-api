@@ -15,6 +15,11 @@ import {
   SUPPLIER_CASE_CONDITIONS,
 } from '../helpers/garage-debt-sql.helper';
 
+import {
+  buildSupplierLedgerQuery,
+  isLedgerReadEnabled,
+} from '../helpers/ledger-read.helper';
+
 export interface SupplierDebtListQuery extends DebtListQuery {
   branchId: string;
   from?: string;
@@ -86,6 +91,16 @@ export class SupplierDebtQueryService extends AbstractDebtQueryService<
       from && from > GARAGE_DEBT_BASELINE_DATE
         ? from
         : GARAGE_DEBT_BASELINE_DATE;
+
+    if (isLedgerReadEnabled()) {
+      const ledger = buildSupplierLedgerQuery(this.dataSource, {
+        branchId,
+        from: effectiveFrom,
+        to,
+      });
+      if (scope === 'outstanding') ledger.where('g.balance_amount > 0');
+      return ledger;
+    }
 
     const outer = this.dataSource.createQueryBuilder().from((sub) => {
       sub
