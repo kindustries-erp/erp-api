@@ -309,6 +309,7 @@ export class InvoiceListQueryService {
         licensePlate: ['inv.licensePlate', 'licensePlate'],
         settlementOrder: ['inv.settlementOrder', 'settlementOrder'],
         branchId: ['inv.branchId', 'branchId'],
+        pdfSource: ['inv.pdfSource', 'pdfSource'],
       };
 
       if (query.sort_by === 'partner' || query.sort_by === 'partnerName') {

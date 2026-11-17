@@ -1,9 +1,42 @@
 ---
 name: erp-users
-description: Module tri thức Quản lý Người dùng & Tài khoản Hệ thống (ERP Users / User Management) trong erp-api (users & users-admin). Chứa toàn bộ database schema (core_users, core_user_preferences), DTOs, API endpoints, logic kiểm tra tính duy nhất email, mã hóa bcrypt, liên kết nhân viên 1-1, server-side column options infinite scroll, nhật ký kiểm toán AuditCore và tích hợp liên module toàn hệ thống.
+description: Module tri thức Quản lý Người dùng & Tài khoản Hệ thống (ERP Users / User Management) trong erp-api (V1: users & users-admin; V2: users-management + users-core, bảng users_management). Chứa toàn bộ database schema (core_users, core_user_preferences), DTOs, API endpoints, logic kiểm tra tính duy nhất email, mã hóa bcrypt, liên kết nhân viên 1-1, server-side column options infinite scroll, nhật ký kiểm toán AuditCore và tích hợp liên module toàn hệ thống.
 ---
 
 # 📦 Module Tri Thức: Quản Lý Người Dùng Hệ Thống (ERP Users) - Backend (`erp-api`)
+
+## 0. Users V2 (`users-management`) — chạy song song V1
+
+V1 (`src/users`, `src/users-admin`, mục 1-7 bên dưới) giữ nguyên cho tới khi V2 ổn và có lệnh xóa. V2 dùng bảng riêng, không dùng chung bảng với V1.
+
+| Thành phần | Vị trí | Ghi chú |
+| :--- | :--- | :--- |
+| Lõi | `src/v2/core/users-core/` | `BaseUserEntity` (kế thừa `CoreSoftDeletableEntity`), `USER_STATUSES`, `normalizeEmail`, `hashPassword`/`verifyPassword` (bcrypt async, salt 10, tương thích hash V1), `parseStrictJsonParam` (JSON sai trả 400). Không có `@Entity`/`@Controller`. |
+| Module | `src/v2/modules/users-management/` | Route `/api/v2/users-management`, quyền `admin_users:manage` (`ErpResource.ADMIN_USERS`, `ErpAction.MANAGE`). |
+| Bảng | `users_management` | Migration `20261115100000-create-users-management` (tạo bảng) và `20261115100100-backfill-users-management` (copy từ `core_users`, giữ `id`). Mọi cột thời gian `timestamptz`; unique `email`; unique `employee_id` khi khác null; FK `employee_id` → `employees_management(id)` `ON DELETE SET NULL` (đổi từ `erp_employees` bởi migration `20261115130000`; xem skill `employees-core`); CHECK `extra_data` là object; có `is_deleted`, `extra_data`. |
+
+Endpoint: `GET /` (list `{ items, pagination }`), `GET /column-options`, `GET /:id`, `POST /`, `PATCH /:id`, `POST /:id/activate|deactivate|reset-password|link-employee|unlink-employee`. Response bản ghi `{ message, data }`, không bao giờ có `passwordHash`.
+
+Khác V1 (có chủ đích):
+- Mọi thao tác ghi chạy trong MỘT transaction, khóa hàng `pessimistic_write` (tài khoản và nhân viên): hai request đồng thời không liên kết một nhân viên cho hai tài khoản. Vi phạm unique do đua request trả 409.
+- Audit đúng một dòng cho mỗi thao tác (`CREATE_USER`, `UPDATE_USER`, `ACTIVATE_USER`, `DEACTIVATE_USER`, `RESET_PASSWORD`, `LINK_EMPLOYEE`, `UNLINK_EMPLOYEE`), ghi sau commit. Lỗi ghi audit chỉ được log, không trả 500.
+- Email chuẩn hóa chữ thường, kiểm trùng trên `users_management` (nguồn chính). DTO chặt (`@IsEmail`, `@IsIn` status, `@IsUUID`, `ParseUUIDPipe`, mật khẩu 8-72 ký tự).
+- Admin không tự vô hiệu hóa chính mình. Vô hiệu hóa hoặc reset mật khẩu thu hồi mọi phiên (`core_refresh_tokens` và `auth_sessions`).
+- JSON filter sai định dạng trả 400 (V1 bỏ qua im lặng và trả toàn bộ).
+
+**Nguồn chính và bản sao `core_users`** (`services/legacy-core-user.sync.ts`, xóa khi cutover FK): `users_management` là nguồn chính. Mọi thao tác ghi user (users-management, auth v2, auth v1, admin v1, register v1) đi qua `UsersManagementCommandService` hoặc `UsersAuthService`, khóa hàng `pessimistic_write`, rồi mirror một chiều sang `core_users` (cùng `id`) trong CÙNG transaction, vì FK của roles, preferences, notifications, approval, `core_refresh_tokens` còn trỏ `core_users`. Không còn cơ chế kéo từ `core_users` (migration `20261115110100-reconcile-users-management` đối chiếu một lần cuối). `revokeAllUserSessions` thu hồi cả `core_refresh_tokens` và `auth_sessions`.
+- Auth v2 (đăng nhập, phiên, đổi mật khẩu, hồ sơ) xem skill `auth-sessions`; v1 `/api/v1/auth` giữ hợp đồng, ủy quyền sang service v2. `/api/v1/admin/users` **đã tắt mặc định**: `V1AdminUsersDisabledGuard` (`src/users-admin/guards/`) trả 410 Gone; đặt `ENABLE_V1_ADMIN_USERS=true` để bật lại (code V1 giữ nguyên, khi bật vẫn ủy quyền sang v2). `UsersService` v1 `@deprecated`.
+- V1 auth phát token **đã tắt mặc định**: `V1AuthTokensGuard` (`src/auth/guards/`) gắn lên `login`, `refresh`, `impersonate` của `/api/v1/auth` trả 410 Gone; đặt `ENABLE_V1_AUTH_TOKENS=true` để bật lại (đường lùi tức thì, khi bật có log cảnh báo kèm UA, không ghi email/token). `register`, `logout`, `change-password`, `profile` giữ nguyên. Chi tiết rollout: skill `auth-sessions`.
+- Hiện trạng FK (đối chiếu `pg_constraint` staging 2026-11-15): chỉ 2 FK còn trỏ `core_users` là `core_notifications` và `core_refresh_tokens`; `core_user_preferences` không có FK (30 dòng mồ côi). `core_notifications` đóng băng từ 2026-11-05 (web dùng `notifications_inbox`). Chưa đổi FK, chưa xóa mirror `syncToLegacyCoreUser`, chưa xóa bảng/dòng nào.
+- Cutover xóa hẳn (đợt riêng, theo lệnh): đổi/bỏ 2 FK còn lại, xóa mirror, bảng và code v1.
+
+Web: trang `/erp-users` đã trỏ về V2 (page key `users-management`); trang V1 chỉ còn file cũ. Web không còn consumer runtime của `/api/v1/admin/users` (trang phân quyền V1 đã ngắt; guard test `noV1UsersApi.test.ts` bên erp-web). Audit timeline user dùng entity `users_management` (`/api/v2/audit-logs/users_management/:id/timeline`). Chưa xóa V1.
+
+Múi giờ: DB lưu `timestamptz` (múi giờ DB là UTC), API trả ISO, client hiển thị theo múi giờ của browser hoặc thiết bị.
+
+Kiểm thử: `bunx jest src/v2/modules/users-management src/v2/core/users-core`; smoke trên API đang chạy (không chạy trên production): `bun run test:smoke:users` (cần `E2E_ADMIN_EMAIL`, `E2E_PASSWORD`; tạo dữ liệu test tiền tố `smoke-users-` và mã nhân viên `SMK`, dọn bằng SQL sau khi chạy).
+
+---
 
 ## 1. Tổng quan Nghiệp vụ
 
@@ -20,7 +53,7 @@ Module `erp-users` (bao gồm `src/users` và `src/users-admin`) là trung tâm 
   - Hỗ trợ gỡ liên kết an toàn (unlink employee), tự động xóa `userId` trên bảng `erp_employees`.
 - **Cấu hình Người dùng Cá nhân hóa (Preferences)**:
   - Bảng `core_user_preferences`: Lưu theme (`classic`), ngôn ngữ giao diện (`vi`), cấu hình bảng (`table_configs`), và thiết lập UI (`ui_configs`).
-  - Bảng `core_user_table_preferences`: Quản lý cấu hình cột hiển thị, thứ tự sắp xếp và các custom view của bảng dữ liệu theo từng màn hình.
+  - Bảng `table_preferences` (trước đây `core_user_table_preferences`): Quản lý cấu hình cột hiển thị, thứ tự sắp xếp và các custom view của bảng dữ liệu theo từng màn hình.
 - **Tra cứu, Lọc Đa Chiều & Infinite Scroll Column Options**:
   - Tìm kiếm tổng hợp (`search`): Tìm đồng thời trên `user.email`, `emp.fullName` và `emp.employeeCode`.
   - Lọc theo cột (`column_filters`): Hỗ trợ đa giá trị, giá trị rỗng `__BLANK__`, và tìm kiếm toàn bộ kết quả khớp `__ALL_MATCHING__`.
@@ -38,10 +71,10 @@ Module `erp-users` (bao gồm `src/users` và `src/users-admin`) là trung tâm 
 erDiagram
     core_users ||--o| erp_employees : "1-to-1 (employee_id / user_id)"
     core_users ||--o| core_user_preferences : "1-to-1 (user_id)"
-    core_users ||--o{ core_user_roles : "1-to-many (user_id)"
+    users_management ||--o{ rbac_user_roles : "1-to-many (user_id)"
     core_users ||--o{ core_refresh_tokens : "1-to-many (user_id)"
-    core_users ||--o{ core_user_table_preferences : "1-to-many (user_id)"
-    core_users ||--o{ notifications_inbox : "1-to-many (user_id)"
+    users_management ||--o{ table_preferences : "1-to-many (user_id)"
+    users_management ||--o{ notifications_inbox : "1-to-many (user_id)"
 
     core_users {
         uuid id PK
@@ -202,12 +235,12 @@ Toàn bộ các API quản trị người dùng thuộc `UsersAdminController` �
    - Tham chiếu chéo giữa `core_users.employee_id` và `erp_employees.user_id`.
    - Cho phép hiển thị thông tin nhân viên (họ tên, mã NV, phòng ban) kèm theo tài khoản trên giao diện quản trị.
 3. **`rbac-core` (Phân quyền & Vai trò)**:
-   - Bảng `core_user_roles` liên kết nhiều-nhiều giữa `core_users.id` và `core_roles.id`.
+   - Bảng `rbac_user_roles` liên kết nhiều-nhiều giữa `users_management.id` và `core_roles.id`.
    - Khi kiểm tra quyền qua `CoreRbacGuard`, hệ thống nạp các quyền từ những vai trò mà user đang nắm giữ.
 4. **`audit-core` (Kiểm toán Hệ thống)**:
    - Tiếp nhận các sự kiện thay đổi dữ liệu người dùng (`CREATE_USER`, `UPDATE_USER`, `RESET_PASSWORD`, v.v.).
 5. **`table-preferences-core` & `app-config` (Cá nhân hóa Giao diện)**:
-   - Bảng `core_user_table_preferences` và `core_user_preferences` gắn liền với `user_id`, tự động dọn dẹp theo `ON DELETE CASCADE` khi user bị xóa khỏi DB.
+   - Bảng `table_preferences` (FK `users_management`) và `core_user_preferences` gắn liền với `user_id`, tự động dọn dẹp theo `ON DELETE CASCADE` khi user bị xóa khỏi DB.
 6. **`notifications-inbox` (Hộp thư Thông báo)**:
    - Lưu trữ các thông báo gửi trực tiếp đến từng người dùng cụ thể thông qua `notifications_inbox.user_id`.
 

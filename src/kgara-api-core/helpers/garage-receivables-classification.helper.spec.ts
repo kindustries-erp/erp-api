@@ -94,3 +94,66 @@ describe('buildReceivablesTrendItem', () => {
     expect(trend.collectionRate).toBe(0);
   });
 });
+
+describe('buildReceivablesTrendItem: còn phải thu theo từng phiếu', () => {
+  it('phiếu thu dư không bù trừ phiếu còn nợ trong cùng nhóm', () => {
+    const cases = [
+      {
+        id: 'a',
+        classification: 'SUA_CHUA_CHUNG',
+        tienCoThue: 1000,
+        tienDaThanhToan: 1500,
+      },
+      {
+        id: 'b',
+        classification: 'SUA_CHUA_CHUNG',
+        tienCoThue: 1000,
+        tienDaThanhToan: 0,
+      },
+    ];
+    const item = buildReceivablesTrendItem('2026-10', cases);
+    expect(item.receivable).toBe(1000);
+  });
+
+  it('phiếu chiết khấu đã thu đủ phần ròng không còn nợ (dùng settlement RECEIPT)', () => {
+    const cases = [
+      {
+        id: 'c',
+        classification: 'SUA_CHUA_CHUNG',
+        tienCoThue: 5309550,
+        tienDaThanhToan: 4769550,
+      },
+    ];
+    const receipts = new Map([['c', 4769550]]);
+    const item = buildReceivablesTrendItem(
+      '2026-10',
+      cases,
+      new Map(),
+      new Map(),
+      new Map(),
+      receipts,
+    );
+    expect(item.receivable).toBe(540000);
+  });
+
+  it('phiếu loại trừ công nợ không vào tổng nào', () => {
+    const cases = [
+      {
+        id: 'd',
+        classification: 'OJ',
+        excludeFromDebt: true,
+        tienCoThue: 9000,
+        tienDaThanhToan: 0,
+      },
+      {
+        id: 'e',
+        classification: 'SUA_CHUA_CHUNG',
+        tienCoThue: 1000,
+        tienDaThanhToan: 0,
+      },
+    ];
+    const item = buildReceivablesTrendItem('2026-10', cases);
+    expect(item.receivable).toBe(1000);
+    expect(item.tienCoThue).toBe(1000);
+  });
+});

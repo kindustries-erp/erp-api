@@ -15,5 +15,11 @@
   },
   "serviceFile": "base-invoice-engine.service.ts",
   "permissionPattern": "invoices",
-  "requiredModuleFiles": ["contracts", "controllers", "dto", "entities", "services"]
+  "requiredModuleFiles": [
+    "contracts",
+    "controllers",
+    "dto",
+    "entities",
+    "services"
+  ]
 }

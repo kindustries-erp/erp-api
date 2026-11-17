@@ -10,6 +10,7 @@ import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
 import { RequirePermissions } from '@/auth/decorators/require-permissions.decorator';
 import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
 import {
+  QueryStockBalanceColumnOptionsDto,
   QueryStockBalanceDto,
   QueryStockTransactionDto,
   StockBalanceListResponseDto,
@@ -35,6 +36,18 @@ export class InventoryMovementsGarageLedgerController {
   @Get('balances')
   balances(@Query() query: QueryStockBalanceDto) {
     return this.service.listBalances(query);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_STOCK_LEDGER,
+    action: ErpAction.READ,
+  })
+  @ApiOperation({
+    summary: 'Gợi ý giá trị cột cho bộ lọc tiêu đề bảng tồn kho',
+  })
+  @Get('column-options')
+  columnOptions(@Query() query: QueryStockBalanceColumnOptionsDto) {
+    return this.service.columnOptions(query);
   }
 
   @RequirePermissions({

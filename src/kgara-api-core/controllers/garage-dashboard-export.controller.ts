@@ -23,7 +23,7 @@ import { GarageExportJobsService } from '../services/garage-export-jobs.service'
 import {
   exportProgressStream,
   sendReadyExportFile,
-} from './garage-export.helper';
+} from '@/v2/core/export-jobs-core';
 
 /** File báo cáo chứa cả công nợ nên cần quyền Garage và quyền Công nợ Garage. */
 const DASHBOARD_EXPORT_PERMISSIONS = [

@@ -323,4 +323,77 @@ describe('GarageMonthlyReceivablesBreakdownService', () => {
     expect(result.categorized?.individual.totals.paid).toBe(2000000);
     expect(result.categorized?.individual.totals.remaining).toBe(0);
   });
+
+  describe('phạm vi theo mốc tuổi nợ (cùng điều kiện với analytics)', () => {
+    const makeQb = () => {
+      const qb: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      };
+      mockCaseRepo.createQueryBuilder.mockReturnValue(qb);
+      return qb;
+    };
+    const conditions = (qb: any): string[] =>
+      qb.andWhere.mock.calls.map((c: any[]) => String(c[0]));
+
+    it('mốc: hoàn thành (tình trạng 3), từ mốc đối soát, đúng chi nhánh', async () => {
+      const qb = makeQb();
+
+      await service.getMonthlyReceivablesBreakdown(
+        undefined,
+        'branch-01',
+        'overdue31To60',
+        '2026-01-01',
+        '2026-12-31',
+      );
+
+      const conds = conditions(qb);
+      expect(conds).toContain('c.tinh_trang_dich_vu = 3');
+      expect(conds).toContain('c.ngay_hoan_thanh_cong_viec >= :horizonFrom');
+      expect(conds).toContain('c.branch_external_id = :branchId');
+      expect(conds.some((c) => c.includes('!= 9'))).toBe(false);
+      expect(conds.some((c) => c.includes('BETWEEN 31 AND 60'))).toBe(true);
+      const horizonFrom = qb.andWhere.mock.calls.find(
+        (c: any[]) => c[0] === 'c.ngay_hoan_thanh_cong_viec >= :horizonFrom',
+      )?.[1];
+      expect(horizonFrom).toEqual({ horizonFrom: '2026-07-01' });
+    });
+
+    it('mốc: ngày bắt đầu sau mốc đối soát được giữ nguyên', async () => {
+      const qb = makeQb();
+
+      await service.getMonthlyReceivablesBreakdown(
+        undefined,
+        undefined,
+        'nextWeekDue',
+        '2026-08-01',
+        '2026-08-31 23:59:59.999',
+      );
+
+      const fromCall = qb.andWhere.mock.calls.find(
+        (c: any[]) => c[0] === 'c.ngay_hoan_thanh_cong_viec >= :horizonFrom',
+      );
+      expect(fromCall?.[1]).toEqual({ horizonFrom: '2026-08-01' });
+      expect(conditions(qb)).not.toContain('c.branch_external_id = :branchId');
+    });
+
+    it('tháng: giữ điều kiện cũ (tình trạng != 9, khoảng tháng, chi nhánh lỏng)', async () => {
+      const qb = makeQb();
+
+      await service.getMonthlyReceivablesBreakdown('2026-10', 'branch-01');
+
+      const conds = conditions(qb);
+      expect(conds).toContain(
+        '(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)',
+      );
+      expect(conds).toContain(
+        '(c.branch_external_id = :branchId OR c.branch_external_id IS NULL)',
+      );
+      expect(conds.some((c) => c.includes('tinh_trang_dich_vu = 3'))).toBe(
+        false,
+      );
+    });
+  });
 });

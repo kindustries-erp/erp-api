@@ -7,8 +7,8 @@ import {
   writeGroupTitle,
   writeKpiCards,
   type CardGroupTheme,
-} from '../../common/xlsx-charts/dashboard-sheet.helper';
-import type { XlsxChartSpec } from '../../common/xlsx-charts/xlsx-chart.types';
+} from '@/v2/core/xlsx-core';
+import type { XlsxChartSpec } from '@/v2/core/xlsx-core';
 import { formatPeriod } from './garage-debts-export.helper';
 import type { GaragePeriodReportData } from './garage-period-report.types';
 import {

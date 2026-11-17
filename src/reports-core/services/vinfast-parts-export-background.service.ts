@@ -3,9 +3,18 @@ import {
   Injectable,
   NotFoundException,
   OnModuleDestroy,
+  Optional,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { Subject } from 'rxjs';
+import { Observable, Subject } from 'rxjs';
+
+import {
+  formatExportTimestamp,
+  isExportJobsV2Enabled,
+  normalizeJsonString,
+  stableStringify,
+} from '@/v2/core/export-jobs-core';
+import { VinfastPartsExportJobsService } from '@/v2/modules/export-jobs-vinfast-parts';
 
 export type VinfastPartsExportQuery = {
   dateFrom?: string;
@@ -77,21 +86,35 @@ type VinfastPartsExportJob = {
 export class VinfastPartsExportBackgroundService implements OnModuleDestroy {
   private static readonly HISTORY_TTL_MS = 24 * 60 * 60 * 1000;
 
-  public readonly progress$ = new Subject<VinfastPartsExportProgressEvent>();
+  /** Luồng tiến độ của cơ chế cũ (chỉ dùng khi cờ `EXPORT_JOBS_V2` tắt). */
+  private readonly legacyProgress$ =
+    new Subject<VinfastPartsExportProgressEvent>();
 
   private readonly jobs = new Map<string, VinfastPartsExportJob>();
   private readonly activeJobByUser = new Map<string, string>();
   private readonly cleanupIntervalId: NodeJS.Timeout;
 
-  constructor() {
+  constructor(
+    @Optional() private readonly v2Jobs?: VinfastPartsExportJobsService,
+  ) {
     this.cleanupIntervalId = setInterval(() => {
       this.cleanupExpiredJobs();
     }, 60_000);
   }
 
+  /** Job nền V2 (lõi `export-jobs-core`) khi cờ bật và đã được cấp; ngược lại dùng cơ chế cũ bên dưới. */
+  private get v2(): VinfastPartsExportJobsService | undefined {
+    return this.v2Jobs && isExportJobsV2Enabled() ? this.v2Jobs : undefined;
+  }
+
+  get progress$(): Observable<VinfastPartsExportProgressEvent> {
+    return (this.v2?.progress$ ??
+      this.legacyProgress$) as Observable<VinfastPartsExportProgressEvent>;
+  }
+
   onModuleDestroy() {
     clearInterval(this.cleanupIntervalId);
-    this.progress$.complete();
+    this.legacyProgress$.complete();
   }
 
   async startBackgroundExport(
@@ -106,6 +129,18 @@ export class VinfastPartsExportBackgroundService implements OnModuleDestroy {
     }
 
     const queryFingerprint = this.buildQueryFingerprint(query);
+
+    if (this.v2) {
+      return this.v2.startBackgroundExport({
+        userId,
+        fingerprint: queryFingerprint,
+        fileName: `Bao_cao_phu_tung_VINFAST_${formatExportTimestamp(new Date())}.xlsx`,
+        totalUnits: 100,
+        dateFrom: query.dateFrom,
+        dateTo: query.dateTo,
+        producer: executor,
+      });
+    }
 
     const runningJobId = this.activeJobByUser.get(userId);
     if (runningJobId) {
@@ -131,7 +166,7 @@ export class VinfastPartsExportBackgroundService implements OnModuleDestroy {
     }
 
     const now = new Date();
-    const fileName = `Bao_cao_phu_tung_VINFAST_${this.formatDateForFileName(now)}.xlsx`;
+    const fileName = `Bao_cao_phu_tung_VINFAST_${formatExportTimestamp(now)}.xlsx`;
 
     const job: VinfastPartsExportJob = {
       id: randomUUID(),
@@ -172,6 +207,8 @@ export class VinfastPartsExportBackgroundService implements OnModuleDestroy {
     page = 1,
     pageSize = 10,
   ): VinfastPartsExportHistoryResult {
+    if (this.v2) return this.v2.listHistoryForUser(userId, page, pageSize);
+
     const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
     const safePageSize = Number.isFinite(pageSize)
       ? Math.min(100, Math.max(1, Math.floor(pageSize)))
@@ -198,6 +235,12 @@ export class VinfastPartsExportBackgroundService implements OnModuleDestroy {
   getJobSnapshotForUser(
     userId: string,
   ): VinfastPartsExportProgressEvent | null {
+    if (this.v2) {
+      return this.v2.getJobSnapshotForUser(
+        userId,
+      ) as VinfastPartsExportProgressEvent | null;
+    }
+
     const activeJobId = this.activeJobByUser.get(userId);
     if (!activeJobId) return null;
 
@@ -224,6 +267,8 @@ export class VinfastPartsExportBackgroundService implements OnModuleDestroy {
   }
 
   getReadyExportFile(jobId: string, userId: string) {
+    if (this.v2) return this.v2.getReadyFile(jobId, userId);
+
     const job = this.jobs.get(jobId);
     if (!job || job.userId !== userId) {
       throw new NotFoundException('Không tìm thấy file bảng kê.');
@@ -331,7 +376,7 @@ export class VinfastPartsExportBackgroundService implements OnModuleDestroy {
       message: string;
     },
   ) {
-    this.progress$.next({
+    this.legacyProgress$.next({
       processId: 'vinfast-parts-xlsx-export',
       userId: job.userId,
       jobId: job.id,
@@ -412,45 +457,11 @@ export class VinfastPartsExportBackgroundService implements OnModuleDestroy {
       search: (query.search || '').trim(),
       sortBy: (query.sortBy || '').trim(),
       sortDir: (query.sortDir || '').trim(),
-      sorts: this.normalizeJsonString(query.sorts),
-      columnSearch: this.normalizeJsonString(query.columnSearch),
-      columnFilters: this.normalizeJsonString(query.columnFilters),
+      sorts: normalizeJsonString(query.sorts),
+      columnSearch: normalizeJsonString(query.columnSearch),
+      columnFilters: normalizeJsonString(query.columnFilters),
     };
 
-    return this.stableStringify(normalized);
-  }
-
-  private normalizeJsonString(input?: string) {
-    if (!input) return '';
-    try {
-      return this.stableStringify(JSON.parse(input));
-    } catch {
-      return input.trim();
-    }
-  }
-
-  private stableStringify(value: unknown): string {
-    if (value === null || value === undefined) return String(value);
-    if (typeof value !== 'object') return JSON.stringify(value);
-    if (Array.isArray(value)) {
-      return `[${value.map((item) => this.stableStringify(item)).join(',')}]`;
-    }
-
-    const obj = value as Record<string, unknown>;
-    const keys = Object.keys(obj).sort();
-    const entries = keys.map(
-      (key) => `${JSON.stringify(key)}:${this.stableStringify(obj[key])}`,
-    );
-    return `{${entries.join(',')}}`;
-  }
-
-  private formatDateForFileName(date: Date) {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    const h = String(date.getHours()).padStart(2, '0');
-    const mi = String(date.getMinutes()).padStart(2, '0');
-    const s = String(date.getSeconds()).padStart(2, '0');
-    return `${y}${m}${d}_${h}${mi}${s}`;
+    return stableStringify(normalized);
   }
 }

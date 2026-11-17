@@ -8,18 +8,23 @@ import { FinanceInvoiceCommandService } from './services/finance-invoice-command
 import { FinanceInvoiceQueryService } from './services/finance-invoice-query.service';
 import { InvoicesCoreModule } from '@/v2/core/invoices-core/invoices-core.module';
 import { R2Module } from '@/r2/r2.module';
+import { FileAttachmentsModule } from '@/v2/modules/file-attachments-management/file-attachments-management.module';
+import { InvoiceAttachmentsController } from './controllers/invoice-attachments.controller';
+import { InvoiceFileOwnerPolicy } from './helpers/invoice-file-owner.policy';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([FinanceInvoice, FinanceInvoiceItem]),
     InvoicesCoreModule,
     R2Module,
+    FileAttachmentsModule,
   ],
-  controllers: [FinanceInvoiceController],
+  controllers: [FinanceInvoiceController, InvoiceAttachmentsController],
   providers: [
     FinanceInvoicesService,
     FinanceInvoiceQueryService,
     FinanceInvoiceCommandService,
+    InvoiceFileOwnerPolicy,
   ],
   exports: [FinanceInvoicesService],
 })

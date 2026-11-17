@@ -239,6 +239,23 @@ export abstract class BaseInvoiceEntity
   })
   xmlFileKey: string | null;
 
+  /** Nguồn PDF gốc: provider_original, manual_upload, failed, ... (null = chưa có) */
+  @Column({ type: 'varchar', length: 30, name: 'pdf_source', nullable: true })
+  pdfSource: string | null;
+
+  /** Lý do tải PDF gốc thất bại */
+  @Column({ type: 'text', name: 'pdf_error', nullable: true })
+  pdfError: string | null;
+
+  /** Mã nhà cung cấp hóa đơn điện tử dùng để tra cứu PDF gốc */
+  @Column({
+    type: 'varchar',
+    length: 50,
+    name: 'provider_code',
+    nullable: true,
+  })
+  providerCode: string | null;
+
   @Column({
     type: 'varchar',
     length: 20,

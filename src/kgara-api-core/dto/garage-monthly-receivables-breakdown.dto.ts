@@ -13,7 +13,7 @@ export class GetGarageMonthlyReceivablesBreakdownQueryDto {
 
   @ApiPropertyOptional({
     description:
-      'Mốc thời gian tuổi nợ (nextWeekDue, nextMonthDue, overdue30To90, criticalOverdue90Plus)',
+      'Mốc thời gian tuổi nợ (nextWeekDue, nextMonthDue, overdue31To60, overdue61To90, overdue30To90 (deprecated), criticalOverdue90Plus)',
     example: 'criticalOverdue90Plus',
   })
   @IsOptional()

@@ -4,12 +4,15 @@ import { CoreUser } from '../users/entities/core-user.entity';
 import { CoreUserPreference } from '../users/entities/core-user-preference.entity';
 import { CoreUserTablePreference } from '@/v2/core/table-preferences-core/entities/core-user-table-preference.entity';
 import { NotificationInbox } from '@/v2/modules/notifications-inbox/entities/notification-inbox.entity';
+import { FileAttachment } from '@/v2/modules/file-attachments-management/entities/file-attachment.entity';
+import { FileAttachmentSettings } from '@/v2/modules/file-attachments-management/entities/file-attachment-settings.entity';
 import { CoreRefreshToken } from '../auth/entities/core-refresh-token.entity';
 import { CoreRole } from '@/v2/core/rbac-core/entities/core-role.entity';
 import { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.entity';
 import { CoreUserRole } from '@/v2/core/rbac-core/entities/core-user-role.entity';
 import { ErpEmployee } from '../employees-core/entities/erp_employee.entity';
 import { ErpBusinessPartner } from '@/v2/core/business-partners-core';
+import { EmployeeManagement } from '@/v2/core/employees-core';
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
 import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventory_transaction.entity';
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
@@ -43,6 +46,7 @@ import { ErpInventoryTrackingCustom } from '../inventory-core/entities/erp_inven
 import { ErpTrackingPolicy } from '../inventory-core/entities/erp_tracking_policy.entity';
 import { ErpBranch } from '../v2/core/branches-core/entities/erp_branch.entity';
 import { ErpAuditLog } from '../audit-core/entities/erp-audit-log.entity';
+import { AuditLog } from '../v2/modules/audit-logs/entities/audit-log.entity';
 import { ErpItemType } from '../inventory-core/entities/erp_item_type.entity';
 import { ErpUom } from '../inventory-core/entities/erp_uom.entity';
 import { ErpVehicle } from '../erp-mfg-core/entities/erp_vehicle.entity';
@@ -92,6 +96,9 @@ import {
 import { GarageGoodsReceipt } from '@/v2/modules/goods-receipts-garage/entities/garage-goods-receipt.entity'; // api-v2-module:goods-receipts-garage:entity-imports
 import { GarageGoodsReceiptLine } from '@/v2/modules/goods-receipts-garage/entities/garage-goods-receipt-line.entity';
 import { GarageInventoryBalance } from '@/v2/modules/goods-receipts-garage/entities/garage-inventory-balance.entity';
+import { DebtGarage } from '@/v2/modules/debts-garage/entities/debt-garage.entity';
+import { DebtAllocationGarage } from '@/v2/modules/debts-garage/entities/debt-allocation-garage.entity';
+import { CashflowVoucherGarage } from '@/v2/modules/cashflow-vouchers-garage/entities/cashflow-voucher-garage.entity';
 import { ApprovalEvent } from '@/v2/core/approval-core/entities/approval-event.entity';
 import { ApprovalSetting } from '@/v2/core/approval-core/entities/approval-setting.entity';
 import { ProcurementRequest } from '@/v2/modules/procurement-requests-erp/entities/procurement-request.entity';
@@ -119,6 +126,8 @@ import {
 } from '@/v2/modules/loans-tool/entities'; // api-v2-module:loans:entity-imports
 import { GarageItem } from '@/v2/modules/items-garage/entities/garage-item.entity'; // api-v2-module:items-garage:entity-imports
 import { AiHubUsageLog } from '@/v2/modules/ai-hub-gateway/entities/ai-hub-usage-log.entity'; // api-v2-module:ai-hub-gateway:entity-imports
+import { UsersManagement } from '@/v2/modules/users-management/entities/users-management.entity'; // api-v2-module:users-management:entity-imports
+import { AuthSession } from '@/v2/modules/auth-sessions/entities/auth-session.entity'; // api-v2-module:auth-sessions:entity-imports
 // plop:api-v2-entity-imports
 const entities = [
   ApprovalEvent,
@@ -146,6 +155,7 @@ const entities = [
   ErpAiPromptTemplate,
   ErpEmployee,
   ErpBusinessPartner,
+  EmployeeManagement,
   ErpOperatingExpense,
   ErpInventoryItem,
   ErpInventoryTransaction,
@@ -180,6 +190,7 @@ const entities = [
   ErpTrackingPolicy,
   ErpBranch,
   ErpAuditLog,
+  AuditLog,
   ErpItemType,
   ErpUom,
   ErpVehicle,
@@ -219,9 +230,14 @@ const entities = [
   VinfastPartsLedger,
   FinanceInvoice, // api-v2-module:invoices-finance:entities
   NotificationInbox, // api-v2-module:notifications-inbox:entities
+  FileAttachment, // api-v2-module:file-attachments:entities
+  FileAttachmentSettings,
   FinanceInvoiceItem,
   GarageGoodsReceipt, // api-v2-module:goods-receipts-garage:entities
   GarageGoodsReceiptLine,
+  DebtGarage,
+  DebtAllocationGarage,
+  CashflowVoucherGarage,
   GarageInventoryBalance,
   InventoryMovementsGarageReceiptLine,
   InventoryMovementsGarageIssueLine,
@@ -236,6 +252,8 @@ const entities = [
   LoanPaymentEntity,
   GarageItem, // api-v2-module:items-garage:entities
   AiHubUsageLog, // api-v2-module:ai-hub-gateway:entities
+  UsersManagement, // api-v2-module:users-management:entities
+  AuthSession, // api-v2-module:auth-sessions:entities
   // plop:api-v2-entities
 ];
 

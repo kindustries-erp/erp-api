@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 
-import type { ExportProgressReporter } from '../../common/export-jobs/export-job-runner';
+import type { ExportProgressReporter } from '@/v2/core/export-jobs-core';
 import type {
   GarageDashboardExportDto,
   GarageDebtsExportDto,

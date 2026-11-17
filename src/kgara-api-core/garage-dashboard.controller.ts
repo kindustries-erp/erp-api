@@ -65,7 +65,7 @@ export class GarageDashboardController {
     name: 'horizon',
     required: false,
     description:
-      'Mốc thời gian tuổi nợ (nextWeekDue, nextMonthDue, overdue30To90, criticalOverdue90Plus...)',
+      'Mốc thời gian tuổi nợ (nextWeekDue, nextMonthDue, overdue31To60, overdue61To90, overdue30To90 (deprecated = 31-60 + 61-90), criticalOverdue90Plus...)',
   })
   @ApiQuery({
     name: 'branch_id',

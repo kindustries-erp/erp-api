@@ -9,6 +9,11 @@ import { Repository } from 'typeorm';
 import { ErpEmployee } from '../employees-core/entities/erp_employee.entity';
 import { CoreUser } from './entities/core-user.entity';
 
+/**
+ * @deprecated Đường ghi `core_users` v1. Auth và admin v1 đã chuyển sang `UsersAuthService` / `UsersManagementService`
+ * (`users_management` là nguồn chính, `core_users` chỉ là bản sao cùng transaction). Chỉ còn rbac-roles đọc;
+ * xóa khi cutover các FK.
+ */
 @Injectable()
 export class UsersService {
   constructor(

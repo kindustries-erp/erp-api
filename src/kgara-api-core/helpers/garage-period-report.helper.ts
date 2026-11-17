@@ -1,7 +1,7 @@
 import * as ExcelJS from 'exceljs';
 
-import { createDashboardSheet } from '../../common/xlsx-charts/dashboard-sheet.helper';
-import { injectCharts } from '../../common/xlsx-charts/xlsx-chart-injector';
+import { createDashboardSheet } from '@/v2/core/xlsx-core';
+import { injectCharts } from '@/v2/core/xlsx-core';
 import {
   DEBT_DASHBOARD_SHEET,
   GARAGE_DEBT_CASE_COLUMNS,

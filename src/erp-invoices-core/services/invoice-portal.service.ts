@@ -69,6 +69,7 @@ import {
   InvoicePortalDetailApplier,
   PortalDetailItem,
 } from './sub-services/invoice-portal-detail-applier.service';
+import { LegacyFileRegistrarService } from '@/v2/modules/file-attachments-management/services/legacy-file-registrar.service';
 
 export type PortalProgressEvent = {
   processId: string;
@@ -110,6 +111,8 @@ export class InvoicePortalService implements OnModuleInit {
     private readonly detailApplier: InvoicePortalDetailApplier,
     @Optional()
     private readonly categoryAutopostService?: InvoiceCategoryAutopostService,
+    @Optional()
+    private readonly fileRegistrar?: LegacyFileRegistrarService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -1720,6 +1723,12 @@ export class InvoicePortalService implements OnModuleInit {
       const updateData: any = { xmlFileKey: xmlKey };
 
       await this.repository.update(invoice.id, updateData);
+      await this.fileRegistrar?.registerInvoiceFile({
+        invoiceId: invoice.id,
+        fileKey: xmlKey,
+        column: 'xml_file_key',
+        fileSize: xmlBuffer.length,
+      });
       this.logger.log(`XML saved for invoice ${invoice.invoiceNo}: ${xmlKey}`);
     } catch (err) {
       this.logger.warn(

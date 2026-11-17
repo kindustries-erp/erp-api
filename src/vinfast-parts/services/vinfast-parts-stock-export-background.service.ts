@@ -3,9 +3,18 @@ import {
   Injectable,
   NotFoundException,
   OnModuleDestroy,
+  Optional,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { Subject } from 'rxjs';
+import { Observable, Subject } from 'rxjs';
+
+import {
+  formatExportTimestamp,
+  isExportJobsV2Enabled,
+  normalizeJsonString,
+  stableStringify,
+} from '@/v2/core/export-jobs-core';
+import { VinfastPartsStockExportJobsService } from '@/v2/modules/export-jobs-vinfast-parts';
 
 export type VinfastPartsStockExportQuery = {
   dateFrom?: string;
@@ -79,22 +88,35 @@ type VinfastPartsStockExportJob = {
 export class VinfastPartsStockExportBackgroundService implements OnModuleDestroy {
   private static readonly HISTORY_TTL_MS = 24 * 60 * 60 * 1000;
 
-  public readonly progress$ =
+  /** Luồng tiến độ của cơ chế cũ (chỉ dùng khi cờ `EXPORT_JOBS_V2` tắt). */
+  private readonly legacyProgress$ =
     new Subject<VinfastPartsStockExportProgressEvent>();
 
   private readonly jobs = new Map<string, VinfastPartsStockExportJob>();
   private readonly activeJobByUser = new Map<string, string>();
   private readonly cleanupIntervalId: NodeJS.Timeout;
 
-  constructor() {
+  constructor(
+    @Optional() private readonly v2Jobs?: VinfastPartsStockExportJobsService,
+  ) {
     this.cleanupIntervalId = setInterval(() => {
       this.cleanupExpiredJobs();
     }, 60_000);
   }
 
+  /** Job nền V2 (lõi `export-jobs-core`) khi cờ bật và đã được cấp; ngược lại dùng cơ chế cũ bên dưới. */
+  private get v2(): VinfastPartsStockExportJobsService | undefined {
+    return this.v2Jobs && isExportJobsV2Enabled() ? this.v2Jobs : undefined;
+  }
+
+  get progress$(): Observable<VinfastPartsStockExportProgressEvent> {
+    return (this.v2?.progress$ ??
+      this.legacyProgress$) as Observable<VinfastPartsStockExportProgressEvent>;
+  }
+
   onModuleDestroy() {
     clearInterval(this.cleanupIntervalId);
-    this.progress$.complete();
+    this.legacyProgress$.complete();
   }
 
   async startBackgroundExport(
@@ -109,6 +131,18 @@ export class VinfastPartsStockExportBackgroundService implements OnModuleDestroy
     }
 
     const queryFingerprint = this.buildQueryFingerprint(query);
+
+    if (this.v2) {
+      return this.v2.startBackgroundExport({
+        userId,
+        fingerprint: queryFingerprint,
+        fileName: this.resolveExportFileName(query),
+        totalUnits: 100,
+        dateFrom: query.dateFrom,
+        dateTo: query.dateTo,
+        producer: executor,
+      });
+    }
 
     const runningJobId = this.activeJobByUser.get(userId);
     if (runningJobId) {
@@ -133,22 +167,7 @@ export class VinfastPartsStockExportBackgroundService implements OnModuleDestroy
       };
     }
 
-    let skuSuffix = '';
-    if (query.columnFilters) {
-      try {
-        const parsed = JSON.parse(query.columnFilters);
-        if (
-          parsed.sku &&
-          Array.isArray(parsed.sku) &&
-          parsed.sku.length === 1
-        ) {
-          skuSuffix = `_${parsed.sku[0]}`;
-        }
-      } catch (e) {}
-    }
-
-    const now = new Date();
-    const fileName = `Bao_cao_phu_tung_VINFAST${skuSuffix}_${this.formatDateForFileName(now)}.xlsx`;
+    const fileName = this.resolveExportFileName(query);
 
     const job: VinfastPartsStockExportJob = {
       id: randomUUID(),
@@ -189,6 +208,8 @@ export class VinfastPartsStockExportBackgroundService implements OnModuleDestroy
     page = 1,
     pageSize = 10,
   ): VinfastPartsStockExportHistoryResult {
+    if (this.v2) return this.v2.listHistoryForUser(userId, page, pageSize);
+
     const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
     const safePageSize = Number.isFinite(pageSize)
       ? Math.min(100, Math.max(1, Math.floor(pageSize)))
@@ -215,6 +236,12 @@ export class VinfastPartsStockExportBackgroundService implements OnModuleDestroy
   getJobSnapshotForUser(
     userId: string,
   ): VinfastPartsStockExportProgressEvent | null {
+    if (this.v2) {
+      return this.v2.getJobSnapshotForUser(
+        userId,
+      ) as VinfastPartsStockExportProgressEvent | null;
+    }
+
     const activeJobId = this.activeJobByUser.get(userId);
     if (!activeJobId) return null;
 
@@ -241,6 +268,8 @@ export class VinfastPartsStockExportBackgroundService implements OnModuleDestroy
   }
 
   getReadyExportFile(jobId: string, userId: string) {
+    if (this.v2) return this.v2.getReadyFile(jobId, userId);
+
     const job = this.jobs.get(jobId);
     if (!job || job.userId !== userId) {
       throw new NotFoundException('Không tìm thấy file bảng kê.');
@@ -348,7 +377,7 @@ export class VinfastPartsStockExportBackgroundService implements OnModuleDestroy
       message: string;
     },
   ) {
-    this.progress$.next({
+    this.legacyProgress$.next({
       processId: 'vinfast-parts-stock-xlsx-export',
       userId: job.userId,
       jobId: job.id,
@@ -422,6 +451,25 @@ export class VinfastPartsStockExportBackgroundService implements OnModuleDestroy
       .sort((a, b) => b.createdAt - a.createdAt)[0];
   }
 
+  /** Tên file xuất: giữ hậu tố sku khi lọc đúng một sku (dùng chung cho V2 và cũ). */
+  private resolveExportFileName(query: VinfastPartsStockExportQuery) {
+    let skuSuffix = '';
+    if (query.columnFilters) {
+      try {
+        const parsed = JSON.parse(query.columnFilters);
+        if (
+          parsed.sku &&
+          Array.isArray(parsed.sku) &&
+          parsed.sku.length === 1
+        ) {
+          skuSuffix = `_${parsed.sku[0]}`;
+        }
+      } catch (e) {}
+    }
+
+    return `Bao_cao_phu_tung_VINFAST${skuSuffix}_${formatExportTimestamp(new Date())}.xlsx`;
+  }
+
   private buildQueryFingerprint(query: VinfastPartsStockExportQuery) {
     const normalized = {
       dateFrom: query.dateFrom || '',
@@ -429,46 +477,12 @@ export class VinfastPartsStockExportBackgroundService implements OnModuleDestroy
       search: (query.search || '').trim(),
       sortBy: (query.sortBy || '').trim(),
       sortDir: (query.sortDir || '').trim(),
-      sorts: this.normalizeJsonString(query.sorts),
-      columnSearch: this.normalizeJsonString(query.columnSearch),
-      columnFilters: this.normalizeJsonString(query.columnFilters),
+      sorts: normalizeJsonString(query.sorts),
+      columnSearch: normalizeJsonString(query.columnSearch),
+      columnFilters: normalizeJsonString(query.columnFilters),
       vehicleType: query.vehicleType || '',
     };
 
-    return this.stableStringify(normalized);
-  }
-
-  private normalizeJsonString(input?: string) {
-    if (!input) return '';
-    try {
-      return this.stableStringify(JSON.parse(input));
-    } catch {
-      return input.trim();
-    }
-  }
-
-  private stableStringify(value: unknown): string {
-    if (value === null || value === undefined) return String(value);
-    if (typeof value !== 'object') return JSON.stringify(value);
-    if (Array.isArray(value)) {
-      return `[${value.map((item) => this.stableStringify(item)).join(',')}]`;
-    }
-
-    const obj = value as Record<string, unknown>;
-    const keys = Object.keys(obj).sort();
-    const entries = keys.map(
-      (key) => `${JSON.stringify(key)}:${this.stableStringify(obj[key])}`,
-    );
-    return `{${entries.join(',')}}`;
-  }
-
-  private formatDateForFileName(date: Date) {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    const h = String(date.getHours()).padStart(2, '0');
-    const mi = String(date.getMinutes()).padStart(2, '0');
-    const s = String(date.getSeconds()).padStart(2, '0');
-    return `${y}${m}${d}_${h}${mi}${s}`;
+    return stableStringify(normalized);
   }
 }

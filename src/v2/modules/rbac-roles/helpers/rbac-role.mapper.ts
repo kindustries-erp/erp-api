@@ -1,6 +1,6 @@
 import type { CoreRole } from '@/v2/core/rbac-core/entities/core-role.entity';
 import type { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.entity';
-import type { CoreUser } from '@/users/entities/core-user.entity';
+import type { UsersManagement } from '@/v2/modules/users-management/entities/users-management.entity';
 import type {
   PermissionResponse,
   RoleListItemResponse,
@@ -10,7 +10,7 @@ import type {
 
 /** Chỉ lộ id và email của người dùng; không trả password_hash hay các cột khác. */
 export function toRoleUser(
-  user: Pick<CoreUser, 'id' | 'email'> | null | undefined,
+  user: Pick<UsersManagement, 'id' | 'email'> | null | undefined,
 ): RoleUserResponse {
   return { id: user?.id as string, email: user?.email as string };
 }

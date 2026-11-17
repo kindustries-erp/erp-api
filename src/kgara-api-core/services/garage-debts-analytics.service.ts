@@ -8,6 +8,11 @@ import {
 import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraPayable } from '../entities/kgara_payable.entity';
 import { KGARA_STATUS_COMPLETED } from '../helpers/kgara-completion-date.helper';
+import {
+  CASE_PAID_SQL,
+  CASE_REMAINING_SQL,
+  RECEIPT_BY_CASE_JOIN,
+} from '../helpers/kgara-case-remaining.helper';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
 import {
   GarageDebtsAnalyticsResponse,
@@ -70,14 +75,15 @@ export class GarageDebtsAnalyticsService {
     const caseAggSql = `
       SELECT
         COALESCE(SUM("c"."tien_co_thue"), 0)::numeric as "totalReceivable",
-        COALESCE(SUM("c"."tien_da_thanh_toan"), 0)::numeric as "paidReceivable",
-        COALESCE(SUM("c"."tien_con_phai_thanh_toan"), 0)::numeric as "remainingReceivable",
-        COALESCE(SUM(CASE WHEN "c"."tien_con_phai_thanh_toan" > 0 AND (CURRENT_DATE - DATE("c"."ngay_hoan_thanh_cong_viec")) <= 30 THEN "c"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric as "aging0To30",
-        COALESCE(SUM(CASE WHEN "c"."tien_con_phai_thanh_toan" > 0 AND (CURRENT_DATE - DATE("c"."ngay_hoan_thanh_cong_viec")) BETWEEN 31 AND 60 THEN "c"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric as "aging31To60",
-        COALESCE(SUM(CASE WHEN "c"."tien_con_phai_thanh_toan" > 0 AND (CURRENT_DATE - DATE("c"."ngay_hoan_thanh_cong_viec")) BETWEEN 61 AND 90 THEN "c"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric as "aging61To90",
-        COALESCE(SUM(CASE WHEN "c"."tien_con_phai_thanh_toan" > 0 AND (CURRENT_DATE - DATE("c"."ngay_hoan_thanh_cong_viec")) > 90 THEN "c"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric as "agingOver90",
-        COALESCE(SUM(CASE WHEN "c"."tien_con_phai_thanh_toan" > 0 AND (CURRENT_DATE - DATE("c"."ngay_hoan_thanh_cong_viec")) <= 7 THEN "c"."tien_con_phai_thanh_toan" ELSE 0 END), 0)::numeric as "dueNextWeek"
+        COALESCE(SUM(${CASE_PAID_SQL}), 0)::numeric as "paidReceivable",
+        COALESCE(SUM(${CASE_REMAINING_SQL}), 0)::numeric as "remainingReceivable",
+        COALESCE(SUM(CASE WHEN ${CASE_REMAINING_SQL} > 0 AND (CURRENT_DATE - DATE("c"."ngay_hoan_thanh_cong_viec")) <= 30 THEN ${CASE_REMAINING_SQL} ELSE 0 END), 0)::numeric as "aging0To30",
+        COALESCE(SUM(CASE WHEN ${CASE_REMAINING_SQL} > 0 AND (CURRENT_DATE - DATE("c"."ngay_hoan_thanh_cong_viec")) BETWEEN 31 AND 60 THEN ${CASE_REMAINING_SQL} ELSE 0 END), 0)::numeric as "aging31To60",
+        COALESCE(SUM(CASE WHEN ${CASE_REMAINING_SQL} > 0 AND (CURRENT_DATE - DATE("c"."ngay_hoan_thanh_cong_viec")) BETWEEN 61 AND 90 THEN ${CASE_REMAINING_SQL} ELSE 0 END), 0)::numeric as "aging61To90",
+        COALESCE(SUM(CASE WHEN ${CASE_REMAINING_SQL} > 0 AND (CURRENT_DATE - DATE("c"."ngay_hoan_thanh_cong_viec")) > 90 THEN ${CASE_REMAINING_SQL} ELSE 0 END), 0)::numeric as "agingOver90",
+        COALESCE(SUM(CASE WHEN ${CASE_REMAINING_SQL} > 0 AND (CURRENT_DATE - DATE("c"."ngay_hoan_thanh_cong_viec")) <= 7 THEN ${CASE_REMAINING_SQL} ELSE 0 END), 0)::numeric as "dueNextWeek"
       FROM "kgara_cases" "c"
+      ${RECEIPT_BY_CASE_JOIN}
       WHERE ${caseWhere}
     `;
     const caseAggRows = await this.caseRepo.manager.query(
@@ -261,7 +267,23 @@ export class GarageDebtsAnalyticsService {
         payable: pDueWeek,
         net: rDueWeek - pDueWeek,
       },
-      nextMonthDue: { receivable: r0_30, payable: p0_30, net: r0_30 - p0_30 },
+      // 8–30 ngày = bucket 0–30 trừ phần ≤ 7 ngày: hai mốc không chồng lấn.
+      nextMonthDue: {
+        receivable: r0_30 - rDueWeek,
+        payable: p0_30 - pDueWeek,
+        net: r0_30 - rDueWeek - (p0_30 - pDueWeek),
+      },
+      overdue31To60: {
+        receivable: r31_60,
+        payable: p31_60,
+        net: r31_60 - p31_60,
+      },
+      overdue61To90: {
+        receivable: r61_90,
+        payable: p61_90,
+        net: r61_90 - p61_90,
+      },
+      /** @deprecated Tương thích client cũ: bằng overdue31To60 + overdue61To90. */
       overdue30To90: {
         receivable: r31_60 + r61_90,
         payable: p31_60 + p61_90,

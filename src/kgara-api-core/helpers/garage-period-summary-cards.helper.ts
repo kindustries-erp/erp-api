@@ -1,4 +1,4 @@
-import type { DashboardKpi } from '../../common/xlsx-charts/dashboard-sheet.helper';
+import type { DashboardKpi } from '@/v2/core/xlsx-core';
 import type { PeriodSummary } from './garage-period-summary.builder';
 
 const fmtPct = (value: number) =>

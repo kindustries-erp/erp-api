@@ -9,11 +9,14 @@ interface HarnessState {
   voucher?: any;
   settlement?: any;
   opex?: any;
+  caseRow?: any;
+  paidBH?: number;
 }
 
 function buildHarness(
   state: HarnessState = {},
   garageHub?: Record<string, jest.Mock>,
+  moduleRef?: unknown,
 ) {
   const created: Array<{ entity: unknown; data: any }> = [];
   const manager: any = {
@@ -21,7 +24,8 @@ function buildHarness(
       if (entity === KgaraCashflowVoucher) return state.voucher ?? null;
       if (entity === KgaraCaseSettlement) return state.settlement ?? null;
       if (entity === KgaraOperatingExpense) return state.opex ?? null;
-      if (entity === KgaraCase) return { id: 'case-1', rawData: {} };
+      if (entity === KgaraCase)
+        return state.caseRow ?? { id: 'case-1', rawData: {} };
       return null;
     }),
     find: jest.fn(async () => []),
@@ -47,6 +51,7 @@ function buildHarness(
     commitTransaction: jest.fn(),
     rollbackTransaction: jest.fn(),
     release: jest.fn(),
+    query: jest.fn(async () => [{ paid: String(state.paidBH ?? 0) }]),
     manager,
   };
   const dataSource: any = { createQueryRunner: () => queryRunner };
@@ -57,6 +62,7 @@ function buildHarness(
     dataSource,
     undefined,
     garageHub as any,
+    moduleRef as any,
   );
   const createdOf = (entity: unknown) =>
     created.filter((c) => c.entity === entity).map((c) => c.data);
@@ -88,6 +94,55 @@ describe('GarageCashflowTransactionService - đồng bộ dự thu sau khi lưu 
       handleCaseReceiptChanged: jest.fn().mockRejectedValue(new Error('boom')),
     };
     const h = buildHarness({}, hub);
+    await expect(
+      h.service.createVoucher({ ...baseDto, voucherType: 'RECEIPT' }),
+    ).resolves.toBeDefined();
+    expect(h.queryRunner.rollbackTransaction).not.toHaveBeenCalled();
+  });
+});
+
+describe('GarageCashflowTransactionService - chiếu sang sổ nợ v2 sau commit', () => {
+  const projectorOf = (over: Record<string, jest.Mock> = {}) => {
+    const projector = {
+      projectVoucher: jest.fn().mockResolvedValue(undefined),
+      removeVoucher: jest.fn().mockResolvedValue(undefined),
+      projectCase: jest.fn().mockResolvedValue(undefined),
+      ...over,
+    };
+    return { projector, moduleRef: { get: jest.fn(() => projector) } };
+  };
+
+  it('tạo phiếu: chiếu phiếu vừa lưu, sau commit', async () => {
+    const { projector, moduleRef } = projectorOf();
+    const h = buildHarness({}, undefined, moduleRef);
+    await h.service.createVoucher({ ...baseDto, voucherType: 'RECEIPT' });
+    expect(projector.projectVoucher).toHaveBeenCalledWith('generated-id');
+  });
+
+  it('xóa phiếu: báo projector kèm vụ việc của phiếu', async () => {
+    const { projector, moduleRef } = projectorOf();
+    const h = buildHarness(
+      {
+        voucher: {
+          id: 'v1',
+          voucherType: 'PAYMENT',
+          voucherCode: 'PC-1',
+          amount: 1,
+          caseId: 'case-9',
+        },
+      },
+      undefined,
+      moduleRef,
+    );
+    await h.service.deleteVoucher('v1');
+    expect(projector.removeVoucher).toHaveBeenCalledWith('v1', 'case-9');
+  });
+
+  it('projector lỗi chỉ ghi log, phiếu V1 vẫn lưu', async () => {
+    const { moduleRef } = projectorOf({
+      projectVoucher: jest.fn().mockRejectedValue(new Error('v2 down')),
+    });
+    const h = buildHarness({}, undefined, moduleRef);
     await expect(
       h.service.createVoucher({ ...baseDto, voucherType: 'RECEIPT' }),
     ).resolves.toBeDefined();
@@ -268,6 +323,113 @@ describe('GarageCashflowTransactionService - quy tắc phiếu chi', () => {
       expect(h.manager.delete).toHaveBeenCalledWith(KgaraOperatingExpense, {
         sourceCashflowVoucherId: 'v1',
       });
+    });
+  });
+});
+
+describe('GarageCashflowTransactionService - bên thanh toán KH/BH của phiếu thu', () => {
+  const insuranceCase = {
+    id: 'case-1',
+    tienCoThue: 1_000_000,
+    rawData: {
+      XeLamBaoHiem: true,
+      TienThanhToanBH: 800_000,
+      TienThanhToanKH: 200_000,
+    },
+  };
+  const receipt = { ...baseDto, voucherType: 'RECEIPT' as const };
+
+  it('AC-1: số tiền khớp phần BH thì tự gán BH và trả payerType trong response', async () => {
+    const h = buildHarness({ caseRow: insuranceCase });
+    const res = await h.service.createVoucher({ ...receipt, amount: 800_000 });
+    expect(h.createdOf(KgaraCaseSettlement)[0].payerType).toBe('BH');
+    expect(res.payerType).toBe('BH');
+  });
+
+  it('AC-1: số tiền không khớp phần BH thì KH', async () => {
+    const h = buildHarness({ caseRow: insuranceCase });
+    await h.service.createVoucher({ ...receipt, amount: 200_000 });
+    expect(h.createdOf(KgaraCaseSettlement)[0].payerType).toBe('KH');
+  });
+
+  it('AC-1: payerType gửi lên thắng tự gán', async () => {
+    const h = buildHarness({ caseRow: insuranceCase });
+    await h.service.createVoucher({
+      ...receipt,
+      amount: 800_000,
+      payerType: 'KH',
+    });
+    expect(h.createdOf(KgaraCaseSettlement)[0].payerType).toBe('KH');
+  });
+
+  it('AC-1/AC-6: phiếu không có phần BH luôn KH; phiếu chi luôn KH', async () => {
+    const h = buildHarness();
+    await h.service.createVoucher({ ...receipt, amount: 800_000 });
+    expect(h.createdOf(KgaraCaseSettlement)[0].payerType).toBe('KH');
+    const p = buildHarness({ caseRow: insuranceCase });
+    await p.service.createVoucher({
+      ...baseDto,
+      amount: 800_000,
+      paymentStatus: 'PAID',
+      paymentContent: '7. Phụ tùng / vật tư',
+    });
+    expect(p.createdOf(KgaraCaseSettlement)[0].payerType).toBe('KH');
+  });
+
+  describe('updateVoucher', () => {
+    const existingVoucher = () => ({
+      id: 'v1',
+      voucherType: 'RECEIPT',
+      paymentStatus: 'PAID',
+      caseId: 'case-1',
+      amount: 800_000,
+      transDate: '2026-10-05',
+    });
+
+    it('AC-2: sửa ghi chú giữ nguyên payer đã lưu', async () => {
+      const settlement = { id: 's1', payerType: 'BH' };
+      const h = buildHarness({
+        caseRow: insuranceCase,
+        voucher: existingVoucher(),
+        settlement,
+      });
+      await h.service.updateVoucher('v1', { note: 'đổi ghi chú' });
+      expect(settlement.payerType).toBe('BH');
+      expect(h.queryRunner.query).not.toHaveBeenCalled();
+    });
+
+    it('AC-2: đổi số tiền không gửi payerType thì tính lại theo số tiền mới', async () => {
+      const settlement = { id: 's1', payerType: 'BH' };
+      const h = buildHarness({
+        caseRow: insuranceCase,
+        voucher: existingVoucher(),
+        settlement,
+      });
+      await h.service.updateVoucher('v1', { amount: 200_000 });
+      expect(settlement.payerType).toBe('KH');
+    });
+
+    it('AC-2: gửi payerType thì đổi payer', async () => {
+      const settlement = { id: 's1', payerType: 'BH' };
+      const h = buildHarness({
+        caseRow: insuranceCase,
+        voucher: existingVoucher(),
+        settlement,
+      });
+      const res = await h.service.updateVoucher('v1', { payerType: 'KH' });
+      expect(settlement.payerType).toBe('KH');
+      expect(res.payerType).toBe('KH');
+    });
+
+    it('AC-2: đổi sang phiếu dịch vụ khác không gửi payerType thì tính lại theo số tiền', async () => {
+      const settlement = { id: 's1', payerType: 'KH' };
+      const h = buildHarness({
+        caseRow: { ...insuranceCase, id: 'case-2' },
+        voucher: existingVoucher(),
+        settlement,
+      });
+      await h.service.updateVoucher('v1', { caseId: 'case-2' });
+      expect(settlement.payerType).toBe('BH');
     });
   });
 });

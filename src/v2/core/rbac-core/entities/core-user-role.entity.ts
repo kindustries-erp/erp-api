@@ -8,10 +8,10 @@ import {
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import type { CoreRole } from './core-role.entity';
-import type { CoreUser } from '@/users/entities/core-user.entity';
+import type { UsersManagement } from '@/v2/modules/users-management/entities/users-management.entity';
 
-@Entity({ name: 'core_user_roles' })
-@Index(['userId', 'roleId'], { unique: true })
+@Entity({ name: 'rbac_user_roles' })
+@Index('UQ_rbac_user_roles_user_role', ['userId', 'roleId'], { unique: true })
 export class CoreUserRole {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -19,9 +19,9 @@ export class CoreUserRole {
   @Column({ type: 'uuid', name: 'user_id' })
   userId: string;
 
-  @ManyToOne('CoreUser', { onDelete: 'CASCADE' })
+  @ManyToOne('UsersManagement', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
-  user: CoreUser;
+  user: UsersManagement;
 
   @Column({ type: 'uuid', name: 'role_id' })
   roleId: string;
@@ -30,6 +30,6 @@ export class CoreUserRole {
   @JoinColumn({ name: 'role_id' })
   role: CoreRole;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 }

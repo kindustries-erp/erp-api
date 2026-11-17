@@ -24,7 +24,7 @@ import { parseSelectedColumns } from '../services/vinfast-parts-stock-excel.buil
 import {
   applySseHeaders,
   SSE_PING_INTERVAL_MS,
-} from '../helpers/sse-headers.helper';
+} from '@/v2/core/export-jobs-core';
 
 @ApiTags('VinFast Parts')
 @ApiBearerAuth()

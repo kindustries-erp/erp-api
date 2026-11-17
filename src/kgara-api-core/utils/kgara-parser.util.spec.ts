@@ -4,6 +4,7 @@ import {
   extractKgaraClassification,
   mapKgaraClassificationToErp,
   resolveStoredRevenue,
+  resolveStoredNetPayable,
 } from './kgara-parser.util';
 
 describe('kgara-parser.util', () => {
@@ -115,5 +116,36 @@ describe('resolveStoredRevenue', () => {
   it('uses the computed net amount when the list row carries discount fields', () => {
     const row = { TienCoThue: 6500000, TienChietKhau: 650000 };
     expect(resolveStoredRevenue(6500000, row, 5850000)).toBe(5850000);
+  });
+
+  describe('resolveStoredNetPayable', () => {
+    it('recomputes from raw when discount fields exist', () => {
+      const item = {
+        tienCoThue: 1,
+        rawData: {
+          TienCoThue: 5855800,
+          TienChietKhau: 546250,
+          TongTienThanhToan: 5309550,
+        },
+      };
+      expect(resolveStoredNetPayable(item)).toBe(5309550);
+    });
+
+    it('keeps the stored net when raw lacks discount fields (list row)', () => {
+      const item = {
+        tienCoThue: 5309550,
+        rawData: { TienCoThue: 5855800, TienThanhToanKH: 0 },
+      };
+      expect(resolveStoredNetPayable(item)).toBe(5309550);
+    });
+
+    it('falls back to extractNetPayableAmount when nothing is stored', () => {
+      const item = { tienCoThue: 0, rawData: { TienCoThue: 1000 } };
+      expect(resolveStoredNetPayable(item)).toBe(1000);
+    });
+
+    it('returns 0 for missing input', () => {
+      expect(resolveStoredNetPayable(null)).toBe(0);
+    });
   });
 });

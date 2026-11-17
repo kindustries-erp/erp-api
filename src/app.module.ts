@@ -14,6 +14,7 @@ import { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.ent
 import { CoreUserRole } from '@/v2/core/rbac-core/entities/core-user-role.entity';
 import { EmployeesCoreModule } from './employees-core/employees-core.module';
 import { BusinessPartnersManagementModule } from './v2/modules/business-partners-management/business-partners-management.module';
+import { EmployeesManagementModule } from './v2/modules/employees-management/employees-management.module';
 import { InventoryCoreModule } from './inventory-core/inventory-core.module';
 import { BomCoreModule } from './bom-core/bom-core.module';
 import { ModuleConfigModule } from './module-config/module-config.module';
@@ -26,6 +27,7 @@ import { ProductionCoreModule } from './production-core/production-core.module';
 import { BranchesManagementModule } from './v2/modules/branches-management/branches-management.module';
 import { TablePreferencesModule } from './v2/modules/table-preferences/table-preferences.module';
 import { NotificationsInboxModule } from './v2/modules/notifications-inbox/notifications-inbox.module';
+import { FileAttachmentsModule } from './v2/modules/file-attachments-management/file-attachments-management.module';
 import { SchedulerJobsModule } from './v2/modules/scheduler-jobs/scheduler-jobs.module';
 import { SalesServiceOrdersCoreModule } from './sales-service-orders-core/sales-service-orders-core.module';
 import { InventoryStockCoreModule } from './inventory-stock-core/inventory-stock-core.module';
@@ -33,7 +35,9 @@ import { ErpMfgCoreModule } from './erp-mfg-core/erp-mfg-core.module';
 import { AuditCoreModule } from './audit-core/audit-core.module';
 import { UsersAdminModule } from './users-admin/users-admin.module';
 import { APP_INTERCEPTOR } from '@nestjs/core';
-import { GlobalAuditInterceptor } from './audit-core/interceptors/global-audit.interceptor';
+import { AuditLogsV2Module } from './v2/modules/audit-logs/audit-logs-v2.module';
+import { GlobalAuditInterceptor as GlobalAuditInterceptorV1 } from './audit-core/interceptors/global-audit.interceptor';
+import { GlobalAuditInterceptor as GlobalAuditInterceptorV2 } from './v2/modules/audit-logs/interceptors/global-audit.interceptor';
 import { RbacCoreModule } from '@/v2/core/rbac-core';
 import { RbacRolesModule } from './v2/modules/rbac-roles/rbac-roles.module';
 import { BasicMastersCoreModule } from './basic-masters-core/basic-masters-core.module';
@@ -74,6 +78,12 @@ import { LoansModule } from './v2/modules/loans-tool/loans.module'; // api-v2-mo
 import { ItemsGarageModule } from './v2/modules/items-garage/items-garage.module'; // api-v2-module:items-garage:app-imports
 import { AiHubGatewayModule } from './v2/modules/ai-hub-gateway/ai-hub-gateway.module'; // api-v2-module:ai-hub-gateway:app-imports
 import { AiHubGarageModule } from './v2/modules/ai-hub-garage/ai-hub-garage.module'; // api-v2-module:ai-hub-garage:app-imports
+import { DebtsGarageModule } from './v2/modules/debts-garage/debts-garage.module'; // api-v2-module:debts-garage:app-imports
+import { CashflowVouchersGarageModule } from './v2/modules/cashflow-vouchers-garage/cashflow-vouchers-garage.module'; // api-v2-module:cashflow-vouchers-garage:app-imports
+import { DebtsFlowGarageModule } from './v2/modules/debts-flow-garage/debts-flow-garage.module'; // api-v2-module:debts-flow-garage:app-imports
+import { CasesGarageModule } from './v2/modules/cases-garage/cases-garage.module'; // api-v2-module:cases-garage:app-imports
+import { UsersManagementModule } from './v2/modules/users-management/users-management.module'; // api-v2-module:users-management:app-imports
+import { AuthSessionsModule } from './v2/modules/auth-sessions/auth-sessions.module'; // api-v2-module:auth-sessions:app-imports
 // plop:api-v2-imports
 
 @Module({
@@ -150,6 +160,7 @@ import { AiHubGarageModule } from './v2/modules/ai-hub-garage/ai-hub-garage.modu
     AuthModule,
     EmployeesCoreModule,
     BusinessPartnersManagementModule,
+    EmployeesManagementModule,
     InventoryCoreModule,
     ErpInvoicesCoreModule,
     ErpAttachmentsCoreModule,
@@ -166,10 +177,12 @@ import { AiHubGarageModule } from './v2/modules/ai-hub-garage/ai-hub-garage.modu
     TablePreferencesModule,
     SchedulerJobsModule,
     NotificationsInboxModule, // api-v2-module:notifications-inbox:module
+    FileAttachmentsModule, // api-v2-module:file-attachments:module
     SalesServiceOrdersCoreModule,
     InventoryStockCoreModule,
     ErpMfgCoreModule,
     AuditCoreModule,
+    AuditLogsV2Module,
     UsersAdminModule,
     RbacCoreModule,
     RbacRolesModule,
@@ -207,14 +220,25 @@ import { AiHubGarageModule } from './v2/modules/ai-hub-garage/ai-hub-garage.modu
     ItemsGarageModule, // api-v2-module:items-garage:app-modules
     AiHubGatewayModule, // api-v2-module:ai-hub-gateway:app-modules
     AiHubGarageModule, // api-v2-module:ai-hub-garage:app-modules
+    DebtsGarageModule, // api-v2-module:debts-garage:app-modules
+    CashflowVouchersGarageModule, // api-v2-module:cashflow-vouchers-garage:app-modules
+    DebtsFlowGarageModule, // api-v2-module:debts-flow-garage:app-modules
+    CasesGarageModule, // api-v2-module:cases-garage:app-modules
+    UsersManagementModule, // api-v2-module:users-management:app-modules
+    AuthSessionsModule, // api-v2-module:auth-sessions:app-modules
     // plop:api-v2-modules
   ],
   controllers: [AppController],
   providers: [
     AppService,
+    // V1 ghi route ngoài /api/v2 vào `erp_audit_logs`; V2 chỉ ghi /api/v2 vào `audit_logs`.
     {
       provide: APP_INTERCEPTOR,
-      useClass: GlobalAuditInterceptor,
+      useClass: GlobalAuditInterceptorV1,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: GlobalAuditInterceptorV2,
     },
   ],
 })

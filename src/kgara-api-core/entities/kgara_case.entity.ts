@@ -28,6 +28,7 @@ export class KgaraCase {
   // ── V2 typed columns ──────────────────────────────────────────────────────
 
   /** SoChungTu – case/document number */
+  @Index('IDX_kgara_cases_so_chung_tu')
   @Column({ type: 'varchar', length: 100, name: 'so_chung_tu', nullable: true })
   soChungTu: string | null;
 

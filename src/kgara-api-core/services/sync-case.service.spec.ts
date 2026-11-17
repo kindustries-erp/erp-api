@@ -76,6 +76,7 @@ function buildService() {
     branchRepo,
     caseRepo,
     caseServiceRepo,
+    settlementRepo,
     syncDeletion,
     lineManager,
   };
@@ -212,6 +213,45 @@ describe('SyncCaseService (Kgara account scope)', () => {
     const saved = ctx.caseRepo.save.mock.calls[0][0];
     expect(saved.rawData.ListPhieuDichVuChiTiet).toEqual(storedLines);
     expect(saved.rawData.SoChungTu).toBe('GR-PDV2610-0001');
+  });
+
+  it('chiết khấu: còn phải thu = net đã lưu − RECEIPT, không dùng gross của dòng danh sách', async () => {
+    const ctx = buildService();
+    ctx.client.getCases.mockResolvedValue({
+      data: [
+        {
+          HdPhieuDichVuID: MAIN_GUID,
+          SoChungTu: 'GR-PDV2608-0060',
+          TinhTrangDichVu: 1,
+          TienCoThue: 5855800,
+          TienDaThanhToan: 0,
+        },
+      ],
+      pagination: { totalPages: 1 },
+    });
+    ctx.caseRepo.findOne.mockResolvedValue({
+      id: 'case-row-chk',
+      hdPhieuDichVuId: MAIN_GUID,
+      accountKey: 'MAIN',
+      tienCoThue: 5309550,
+      rawData: {},
+    } as unknown as KgaraCase);
+    ctx.settlementRepo.find.mockResolvedValue([
+      { settlementType: 'RECEIPT', amount: 4769550 },
+    ]);
+
+    await ctx.service.syncCasesForBranch(
+      BRANCH,
+      '2026-01-01',
+      '2026-11-03',
+      undefined,
+      KgaraAccountKey.MAIN,
+    );
+
+    const saved = ctx.caseRepo.save.mock.calls[0][0];
+    expect(saved.tienCoThue).toBe(5309550);
+    expect(saved.tienDaThanhToan).toBe(4769550);
+    expect(saved.tienConPhaiThanhToan).toBe(540000);
   });
 
   it('soft-deletes stored lines that Kgara no longer returns when the detail has a valid array', async () => {

@@ -1,16 +1,13 @@
 import * as ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 
-import { injectCharts } from '../../common/xlsx-charts/xlsx-chart-injector';
+import { injectCharts } from '@/v2/core/xlsx-core';
 import {
   PNL_SHEET,
   buildPnlSheet,
   buildPnlTableRows,
 } from './garage-period-pnl.builder';
-import {
-  LABEL_MONEY_FMT,
-  LABEL_PERCENT_FMT,
-} from '../../common/xlsx-charts/xlsx-chart.types';
+import { LABEL_MONEY_FMT, LABEL_PERCENT_FMT } from '@/v2/core/xlsx-core';
 import type { PnlMonthRow } from './garage-pnl-month.helper';
 
 const month = (

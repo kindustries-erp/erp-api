@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Repository,
@@ -10,6 +10,7 @@ import {
 import { ErpAttachment } from './entities/erp_attachment.entity';
 import { R2Service } from '../r2/r2.service';
 import * as crypto from 'crypto';
+import { LegacyFileRegistrarService } from '@/v2/modules/file-attachments-management/services/legacy-file-registrar.service';
 
 @Injectable()
 export class ErpAttachmentsCoreService {
@@ -17,6 +18,8 @@ export class ErpAttachmentsCoreService {
     @InjectRepository(ErpAttachment)
     private readonly repo: Repository<ErpAttachment>,
     private readonly r2Service: R2Service,
+    @Optional()
+    private readonly fileRegistrar?: LegacyFileRegistrarService,
   ) {}
 
   async findAll(query: any) {
@@ -293,7 +296,10 @@ export class ErpAttachmentsCoreService {
   async remove(id: string) {
     const attachment = await this.findOne(id);
     await this.r2Service.deleteObject(attachment.fileKey);
+    const fileKey = attachment.fileKey;
     await this.repo.remove(attachment);
+    // Object đã bị xóa: các dòng V2 trỏ khóa này không còn tải được nên đánh dấu xóa mềm
+    await this.fileRegistrar?.unregisterByKey(fileKey);
     return { success: true };
   }
 
