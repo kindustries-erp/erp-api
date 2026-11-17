@@ -29,6 +29,8 @@ const DEBTS_READ = {
 export const TIME_HORIZONS = [
   'nextWeekDue',
   'nextMonthDue',
+  'overdue31To60',
+  'overdue61To90',
   'overdue30To90',
   'criticalOverdue90Plus',
   'forecastNext7Days',

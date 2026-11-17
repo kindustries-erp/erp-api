@@ -53,9 +53,16 @@ export class GrossProfitReportService {
       conds.push(`gp.report_to <= $${params.length}`);
     }
     const where = conds.join(' AND ');
+    // Một vụ việc cho mỗi dòng lãi gộp (LATERAL): mã trùng không nhân dòng cả rows lẫn totals.
     const from = `FROM kgara_gross_profit gp
-      LEFT JOIN kgara_cases c ON c.so_chung_tu = gp.vu_viec_code
-        AND c.branch_external_id = gp.branch_external_id AND c.kgara_deleted_at IS NULL`;
+      LEFT JOIN LATERAL (
+        SELECT c2.* FROM kgara_cases c2
+        WHERE c2.so_chung_tu = gp.vu_viec_code
+          AND c2.branch_external_id = gp.branch_external_id
+          AND c2.kgara_deleted_at IS NULL
+        ORDER BY c2.updated_at DESC, c2.id ASC
+        LIMIT 1
+      ) c ON true`;
 
     const [totals, rows] = await Promise.all([
       this.ds.query<Row[]>(

@@ -29,6 +29,8 @@ import {
   syncOpexFromVoucher,
 } from '../helpers/garage-cashflow-opex-sync.helper';
 import { GarageHubService } from '../hub/garage-hub.service';
+import { resolveCaseReceiptPayer } from '../helpers/kgara-case-receipt-payer.helper';
+import type { ReceiptPayerType } from '../helpers/kgara-receipt-payer-resolver.helper';
 
 @Injectable()
 export class GarageCashflowTransactionService {
@@ -116,7 +118,17 @@ export class GarageCashflowTransactionService {
         await syncOpexFromVoucher(queryRunner.manager, savedVoucher);
       }
 
+      let settlementPayer: ReceiptPayerType | null = null;
       if (dto.caseId && shouldHaveSettlement(savedVoucher)) {
+        settlementPayer =
+          dto.voucherType === 'RECEIPT'
+            ? await resolveCaseReceiptPayer(
+                queryRunner,
+                dto.caseId,
+                Number(dto.amount),
+                dto.payerType,
+              )
+            : 'KH';
         let paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'POS' | 'OTHER' = 'CASH';
         if (dto.paymentMethod === 'Chuyển khoản')
           paymentMethod = 'BANK_TRANSFER';
@@ -137,7 +149,7 @@ export class GarageCashflowTransactionService {
           cashflowVoucherId: savedVoucher.id,
           sourceChannel: 'ON_SYSTEM',
           paymentMethod,
-          payerType: 'KH',
+          payerType: settlementPayer,
           note: dto.note || undefined,
           partnerName: dto.partnerName || caseRef?.khachHangName || undefined,
         });
@@ -164,7 +176,10 @@ export class GarageCashflowTransactionService {
         });
       }
 
-      return toKgaraCashflowVoucherResponse(savedVoucher);
+      return {
+        ...toKgaraCashflowVoucherResponse(savedVoucher),
+        payerType: settlementPayer,
+      };
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;
@@ -265,11 +280,28 @@ export class GarageCashflowTransactionService {
 
       const wantsSettlement =
         !!newCaseId && shouldHaveSettlement(updatedVoucher);
+      let settlementPayer: ReceiptPayerType | null = null;
 
       if (existingSettlement) {
         if (!wantsSettlement) {
           await queryRunner.manager.remove(existingSettlement);
         } else {
+          const targetChanged =
+            oldCaseId !== newCaseId ||
+            oldType !== newType ||
+            Number(oldAmount) !== Number(newAmount);
+          if (newType !== 'RECEIPT') {
+            if (targetChanged) existingSettlement.payerType = 'KH';
+          } else if (dto.payerType !== undefined || targetChanged) {
+            existingSettlement.payerType = await resolveCaseReceiptPayer(
+              queryRunner,
+              newCaseId as string,
+              Number(newAmount),
+              dto.payerType,
+              existingSettlement.id,
+            );
+          }
+          settlementPayer = existingSettlement.payerType as ReceiptPayerType;
           existingSettlement.caseId = newCaseId || undefined;
           existingSettlement.amount = newAmount;
           existingSettlement.transDate = newTransDate;
@@ -313,6 +345,15 @@ export class GarageCashflowTransactionService {
           paymentMethod = 'POS';
         else if (dto.paymentMethod) paymentMethod = 'OTHER';
 
+        settlementPayer =
+          newType === 'RECEIPT'
+            ? await resolveCaseReceiptPayer(
+                queryRunner,
+                newCaseId as string,
+                Number(newAmount),
+                dto.payerType,
+              )
+            : 'KH';
         const newSettlement = queryRunner.manager.create(KgaraCaseSettlement, {
           caseId: newCaseId,
           settlementType: newType,
@@ -322,7 +363,7 @@ export class GarageCashflowTransactionService {
           cashflowVoucherId: updatedVoucher.id,
           sourceChannel: 'ON_SYSTEM',
           paymentMethod,
-          payerType: 'KH',
+          payerType: settlementPayer,
           note: updatedVoucher.note || undefined,
           partnerName: dto.partnerName || partnerName,
         });
@@ -367,7 +408,10 @@ export class GarageCashflowTransactionService {
         });
       }
 
-      return toKgaraCashflowVoucherResponse(updatedVoucher);
+      return {
+        ...toKgaraCashflowVoucherResponse(updatedVoucher),
+        payerType: settlementPayer,
+      };
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;

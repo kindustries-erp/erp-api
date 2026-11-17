@@ -11,6 +11,7 @@ import {
   SUPPLIER_CASE_CONDITIONS,
 } from '../helpers/garage-debt-sql.helper';
 import { buildAnalyticsResponse } from '../helpers/garage-debts-analytics.mapper';
+import { parseDebtDate } from '../helpers/garage-debt-date.helper';
 
 export interface DebtsAnalyticsFilter {
   branchId: string;
@@ -21,8 +22,14 @@ export interface DebtsAnalyticsFilter {
 type Row = Record<string, unknown>;
 const RECEIVABLE_BAL = 'c.tien_con_phai_thanh_toan';
 const RECEIVABLE_DATE = 'c.ngay_hoan_thanh_cong_viec';
+/** Một dòng lãi gộp cho mỗi vụ việc (LATERAL): mã không duy nhất thì không nhân dòng. */
 const CASE_FROM_GP = `FROM kgara_cases c
-  LEFT JOIN kgara_gross_profit gp ON gp.vu_viec_code = c.so_chung_tu
+  LEFT JOIN LATERAL (
+    SELECT g.* FROM kgara_gross_profit g
+    WHERE g.vu_viec_code = c.so_chung_tu
+    ORDER BY g.updated_at DESC, g.id ASC
+    LIMIT 1
+  ) gp ON true
   ${PAYMENT_BY_CASE_JOIN}`;
 
 /** Điều kiện + tham số `$n` cho một biểu thức ngày; mốc theo dõi, chi nhánh, đến ngày. */
@@ -46,8 +53,13 @@ export class DebtsAnalyticsService {
   constructor(@InjectDataSource() private readonly ds: DataSource) {}
 
   async getAnalytics(
-    f: DebtsAnalyticsFilter,
+    input: DebtsAnalyticsFilter,
   ): Promise<GarageDebtsAnalyticsResponse> {
+    const f: DebtsAnalyticsFilter = {
+      ...input,
+      dateFrom: parseDebtDate(input.dateFrom, 'date_from'),
+      dateTo: parseDebtDate(input.dateTo, 'date_to'),
+    };
     const rec = scope(f, RECEIVABLE_DATE, 'c.branch_external_id');
     const pay = scope(
       f,

@@ -60,7 +60,10 @@ export function buildAnalyticsResponse(
     agingComparison: buildAgingComparison(rt, pt),
     timeHorizons: {
       nextWeekDue: horizonPair(rDue, pDue),
-      nextMonthDue: horizonPair(rt.d0_30, pt.d0_30),
+      // 8–30 ngày = bucket 0–30 trừ phần ≤ 7 ngày: hai mốc không chồng lấn.
+      nextMonthDue: horizonPair(rt.d0_30 - rDue, pt.d0_30 - pDue),
+      overdue31To60: horizonPair(rt.d31_60, pt.d31_60),
+      overdue61To90: horizonPair(rt.d61_90, pt.d61_90),
       overdue30To90: horizonPair(rt.d31_60 + rt.d61_90, pt.d31_60 + pt.d61_90),
       criticalOverdue90Plus: horizonPair(rt.over90, pt.over90),
     },

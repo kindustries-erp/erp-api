@@ -26,6 +26,22 @@ describe('DebtsAnalyticsService', () => {
     }
   });
 
+  it('lãi gộp nối LATERAL LIMIT 1 để không nhân dòng khi mã vụ việc trùng', async () => {
+    const { service, query } = makeService();
+
+    await service.getAnalytics({ branchId: 'b1' });
+
+    const withGp = query.mock.calls
+      .map(([sql]) => sql as string)
+      .filter((sql) => sql.includes('kgara_gross_profit'));
+    expect(withGp.length).toBeGreaterThan(0);
+    for (const sql of withGp) {
+      expect(sql).toContain('LEFT JOIN LATERAL');
+      expect(sql).toContain('LIMIT 1');
+      expect(sql).not.toMatch(/LEFT JOIN kgara_gross_profit gp/);
+    }
+  });
+
   it('dateFrom trước mốc bị thay bằng mốc; dateTo chỉ có ngày thì lấy hết ngày', async () => {
     const { service, query } = makeService();
 

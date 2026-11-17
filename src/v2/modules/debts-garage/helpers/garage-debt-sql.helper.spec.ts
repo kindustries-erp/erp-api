@@ -1,8 +1,17 @@
 import {
   agingSumColumns,
   AGING_COLUMN_BY_BUCKET,
+  PAYABLE_EXPRS,
 } from './garage-debt-sql.helper';
 import { DEFAULT_AGING_BUCKETS } from '@/v2/core/debts-core';
+
+describe('PAYABLE_EXPRS.date', () => {
+  it('chỉ ép kiểu NgayKetThuc khi đúng ISO, sai format rơi về ngày phát sinh', () => {
+    expect(PAYABLE_EXPRS.date).toContain("~ '^\\d{4}-\\d{2}-\\d{2}'");
+    expect(PAYABLE_EXPRS.date).toContain('CASE WHEN');
+    expect(PAYABLE_EXPRS.date).toContain('c.ngay_phat_sinh');
+  });
+});
 
 describe('agingSumColumns', () => {
   const sql = agingSumColumns('c.bal', 'c.dt');

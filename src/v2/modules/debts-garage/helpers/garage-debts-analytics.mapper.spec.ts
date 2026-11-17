@@ -43,4 +43,48 @@ describe('buildAnalyticsResponse', () => {
       netCash: 150,
     });
   });
+
+  it('mốc 8–30 không chồng lấn ≤7; 31–60 và 61–90 tách riêng; overdue30To90 = tổng hai mốc', () => {
+    const res = buildAnalyticsResponse(
+      {
+        aging_0_30: '500',
+        due_week: '120',
+        aging_31_60: '200',
+        aging_61_90: '90',
+        aging_over_90: '40',
+      },
+      {
+        aging_0_30: '300',
+        due_week: '50',
+        aging_31_60: '70',
+        aging_61_90: '30',
+        aging_over_90: '10',
+      },
+      [],
+      [],
+      [],
+    );
+    const h = res.timeHorizons;
+    expect(h.nextWeekDue.receivable).toBe(120);
+    expect(h.nextMonthDue.receivable).toBe(380);
+    expect(h.nextWeekDue.receivable + h.nextMonthDue.receivable).toBe(500);
+    expect(h.nextMonthDue.payable).toBe(250);
+    expect(h.overdue31To60).toEqual({
+      receivable: 200,
+      payable: 70,
+      net: 130,
+    });
+    expect(h.overdue61To90).toEqual({
+      receivable: 90,
+      payable: 30,
+      net: 60,
+    });
+    expect(h.overdue30To90.receivable).toBe(
+      h.overdue31To60.receivable + h.overdue61To90.receivable,
+    );
+    expect(h.overdue30To90.payable).toBe(
+      h.overdue31To60.payable + h.overdue61To90.payable,
+    );
+    expect(h.criticalOverdue90Plus.receivable).toBe(40);
+  });
 });

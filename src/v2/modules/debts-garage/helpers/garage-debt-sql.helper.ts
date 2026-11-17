@@ -57,7 +57,8 @@ export const PAYABLE_EXPRS = (() => {
     paid,
     balance: `GREATEST(${cost} - ${paid}, 0)`,
     hasPayable: `(${cost} > 0 OR ${paid} <> 0)`,
-    date: `COALESCE(c.ngay_hoan_thanh_cong_viec, (gp.raw_data->>'NgayKetThuc')::timestamp, c.ngay_phat_sinh)`,
+    // Chỉ ép kiểu khi NgayKetThuc đúng ISO; sai format thì rơi về ngày phát sinh thay vì làm lỗi cả truy vấn.
+    date: `COALESCE(c.ngay_hoan_thanh_cong_viec, CASE WHEN gp.raw_data->>'NgayKetThuc' ~ '^\\d{4}-\\d{2}-\\d{2}' THEN (gp.raw_data->>'NgayKetThuc')::timestamp END, c.ngay_phat_sinh)`,
     plateRaw: `COALESCE(c.bien_so_xe, substring(gp.vu_viec_name from 'Biển số: ([^ ]+)'))`,
     caseCode: 'COALESCE(c.so_chung_tu, gp.vu_viec_code)',
   };

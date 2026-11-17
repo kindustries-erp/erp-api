@@ -22,7 +22,11 @@ export function getHorizonCaseSqlCondition(
     case 'nextWeekDue':
       return `${age} <= 7`;
     case 'nextMonthDue':
-      return `${age} <= 30`;
+      return `${age} > 7 AND ${age} <= 30`;
+    case 'overdue31To60':
+      return `${age} BETWEEN 31 AND 60`;
+    case 'overdue61To90':
+      return `${age} BETWEEN 61 AND 90`;
     case 'overdue30To90':
       return `${age} > 30 AND ${age} <= 90`;
     case 'criticalOverdue90Plus':
@@ -38,7 +42,9 @@ export function getHorizonCaseSqlCondition(
 
 const HORIZON_TITLES: Record<string, string> = {
   nextWeekDue: 'Mới phát sinh (≤ 7 ngày)',
-  nextMonthDue: 'Trong hạn chuẩn (≤ 30 ngày)',
+  nextMonthDue: 'Trong hạn chuẩn (8–30 ngày)',
+  overdue31To60: 'Quá hạn 31-60 ngày',
+  overdue61To90: 'Quá hạn 61-90 ngày',
   overdue30To90: 'Quá hạn 31-90 ngày',
   criticalOverdue90Plus: 'Quá hạn >90 ngày',
   forecastNext7Days: 'Dự báo 7 ngày tới (T+7)',

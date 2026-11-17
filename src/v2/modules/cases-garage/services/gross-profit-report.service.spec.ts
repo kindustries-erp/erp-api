@@ -25,10 +25,12 @@ describe('GrossProfitReportService', () => {
     await service.getReport({ branchId: 'b1', from: '2026-07-01' });
 
     const [sql, params] = query.mock.calls[0];
-    expect(sql).toContain('c.so_chung_tu = gp.vu_viec_code');
-    // Trùng mã giữa hai chi nhánh không được nhân dòng hay lộ vụ việc chi nhánh khác.
-    expect(sql).toContain('c.branch_external_id = gp.branch_external_id');
-    expect(sql).toContain('c.kgara_deleted_at IS NULL');
+    // Nối LATERAL LIMIT 1: mã trùng không nhân dòng; trùng giữa hai chi nhánh không lộ vụ việc khác.
+    expect(sql).toContain('LEFT JOIN LATERAL');
+    expect(sql).toContain('c2.so_chung_tu = gp.vu_viec_code');
+    expect(sql).toContain('c2.branch_external_id = gp.branch_external_id');
+    expect(sql).toContain('c2.kgara_deleted_at IS NULL');
+    expect(sql).toContain('LIMIT 1');
     expect(sql).not.toContain('hd_phieu_dich_vu_id');
     expect(params).toEqual(['b1', '2026-07-01']);
   });
@@ -50,7 +52,7 @@ describe('GrossProfitReportService', () => {
     });
     expect(res.pagination).toMatchObject({ page: 2, pageSize: 200, total: 45 });
     const dataSql = String(
-      query.mock.calls.find(([s]) => String(s).includes('ORDER BY'))?.[0],
+      query.mock.calls.find(([s]) => String(s).includes('OFFSET'))?.[0],
     );
     expect(dataSql).toContain('LIMIT 200 OFFSET 200');
   });

@@ -46,7 +46,7 @@ describe('TimeHorizonCasesService', () => {
     expect(res.items[0]).toMatchObject({ id: 'c1', balanceAmount: 200 });
     expect(res.pagination).toMatchObject({ page: 2, pageSize: 20, total: 45 });
     expect(res.extraData.summary).toMatchObject({
-      horizonLabel: 'Trong hạn chuẩn (≤ 30 ngày)',
+      horizonLabel: 'Trong hạn chuẩn (8–30 ngày)',
       receivableAmount: 200,
     });
     expect(res.extraData.summary.topPartners[0].sharePercentage).toBe(25);

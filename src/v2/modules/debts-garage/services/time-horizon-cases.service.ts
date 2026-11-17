@@ -15,6 +15,7 @@ import {
   getHorizonCaseSqlCondition,
   getHorizonTitle,
 } from '../helpers/garage-debts-horizon.helper';
+import { parseDebtDate } from '../helpers/garage-debt-date.helper';
 
 export interface TimeHorizonCasesFilter {
   horizon: string;
@@ -48,8 +49,13 @@ export class TimeHorizonCasesService {
   constructor(@InjectDataSource() private readonly ds: DataSource) {}
 
   async findCases(
-    f: TimeHorizonCasesFilter,
+    input: TimeHorizonCasesFilter,
   ): Promise<TimeHorizonCasesResponse> {
+    const f: TimeHorizonCasesFilter = {
+      ...input,
+      dateFrom: parseDebtDate(input.dateFrom, 'date_from'),
+      dateTo: parseDebtDate(input.dateTo, 'date_to'),
+    };
     const page = Math.max(1, Math.floor(f.page ?? 1) || 1);
     const pageSize = Math.min(
       200,
