@@ -1,12 +1,12 @@
 import * as ExcelJS from 'exceljs';
 
-import { writeDataTable } from '../../common/xlsx-charts/dashboard-sheet.helper';
+import { writeDataTable } from '@/v2/core/xlsx-core';
 import {
   CHART_PALETTE,
   CHART_TINT,
   LABEL_MONEY_FMT,
   type XlsxChartSpec,
-} from '../../common/xlsx-charts/xlsx-chart.types';
+} from '@/v2/core/xlsx-core';
 import {
   BUCKET_UNIT_LABEL,
   buildCashflowSeries,

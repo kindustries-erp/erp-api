@@ -105,6 +105,12 @@ export class CreateKgaraCashflowVoucherDto {
   @IsString()
   @IsOptional()
   note?: string;
+
+  /** Bên thanh toán của khoản thu gắn phiếu dịch vụ; bỏ trống thì API tự gán theo số tiền. */
+  @IsString()
+  @IsOptional()
+  @IsIn(['KH', 'BH'])
+  payerType?: 'KH' | 'BH';
 }
 
 export class UpdateKgaraCashflowVoucherDto {
@@ -166,6 +172,11 @@ export class UpdateKgaraCashflowVoucherDto {
   @IsString()
   @IsOptional()
   referenceNumber?: string;
+
+  @IsString()
+  @IsOptional()
+  @IsIn(['KH', 'BH'])
+  payerType?: 'KH' | 'BH';
 }
 
 export class ListKgaraCashflowVoucherQueryDto {
@@ -249,6 +260,8 @@ export class KgaraCashflowVoucherResponseDto {
     | null;
   referenceNumber?: string | null;
   caseId?: string | null;
+  /** Bên thanh toán lấy từ settlement của phiếu; null khi phiếu chưa gắn phiếu dịch vụ. */
+  payerType?: 'KH' | 'BH' | null;
   erpBankTransactionId?: string | null;
   erpCashVoucherId?: string | null;
   createdBy?: string | null;

@@ -25,6 +25,7 @@ function chain(
     'groupBy',
     'skip',
     'take',
+    'leftJoin',
   ]) {
     qb[m] = jest.fn(() => qb);
   }
@@ -37,6 +38,7 @@ function chain(
     result.many ?? [],
     result.total ?? 0,
   ]);
+  qb.getMany = jest.fn(async () => result.many ?? []);
   qb.getRawOne = jest.fn(async () => result.raw);
   qb.getRawMany = jest.fn(async () => result.rows ?? []);
   qb.getCount = jest.fn(async () => result.count ?? 0);
@@ -160,16 +162,134 @@ describe('StockLedgerQueryService', () => {
     expect(txCalls).toHaveLength(0);
   });
 
-  it('lists transactions by item within the configured scope', async () => {
-    const qb = chain('t', { many: [], total: 0 });
+  it('lists transactions by item within the configured scope with running balance', async () => {
+    const rawRows = [
+      {
+        id: 'tx1',
+        transactionDate: new Date('2026-01-01'),
+        transactionType: 'RECEIPT',
+        documentType: 'PURCHASE_RECEIPT',
+        documentId: 'd1',
+        qtyIn: '10',
+        qtyOut: '0',
+        unitCost: '100',
+      },
+      {
+        id: 'tx2',
+        transactionDate: new Date('2026-01-02'),
+        transactionType: 'ISSUE',
+        documentType: 'ISSUE',
+        documentId: 'd2',
+        qtyIn: '0',
+        qtyOut: '4',
+        unitCost: '100',
+      },
+    ];
+    const qb = chain('t', { many: rawRows, total: 2 });
     const { svc } = build([qb]);
-    await svc.listTransactions({ itemCode: 'A', dateFrom: '2026-01-01' });
+    const res = await svc.listTransactions({
+      itemCode: 'A',
+      costingMethod: 'WEIGHTED_AVG',
+    });
+
     expect(qb.where).toHaveBeenCalledWith('t.ledgerScope = :scope', {
       scope: 'GARAGE',
     });
     expect(qb.andWhere).toHaveBeenCalledWith('t.itemCode = :itemCode', {
       itemCode: 'A',
     });
-    expect(qb.orderBy).toHaveBeenCalledWith('t.transactionDate', 'DESC');
+    expect(qb.orderBy).toHaveBeenCalledWith('t.transactionDate', 'ASC');
+
+    // Kết quả phân trang đảo ngược (mới nhất tx2 lên đầu)
+    expect(res.items).toHaveLength(2);
+    expect(res.items[0].id).toBe('tx2');
+    expect(res.items[0].balanceQty).toBe(6);
+    expect(res.items[1].id).toBe('tx1');
+    expect(res.items[1].balanceQty).toBe(10);
+  });
+
+  it('filters balances by column_filters and column_operators correctly', async () => {
+    const list = chain('b', { many: [], total: 0 });
+    const codes = chain('b', { rows: [] });
+    const sums = chain('b', { raw: {} });
+    const tabs = [0, 1, 2, 3].map(() => chain('b', {}));
+    const { svc } = build([list, codes, sums, ...tabs]);
+
+    await svc.listBalances({
+      column_filters: JSON.stringify({ unit: ['Cái'], itemCode: ['ITEM-01'] }),
+      column_operators: JSON.stringify({
+        qtyOnHand: { operator: 'gt', value: '0' },
+      }),
+    });
+
+    expect(list.andWhere).toHaveBeenCalledWith(
+      expect.stringContaining('b.unit IN (:...bf_select_'),
+      expect.objectContaining({ bf_select_0: ['Cái'] }),
+    );
+    expect(list.andWhere).toHaveBeenCalledWith(
+      expect.stringContaining('b.itemCode IN (:...bf_select_'),
+      expect.objectContaining({ bf_select_1: ['ITEM-01'] }),
+    );
+    expect(list.andWhere).toHaveBeenCalledWith('b.qtyOnHand > :bf_operator_0', {
+      bf_operator_0: 0,
+    });
+  });
+
+  it('finds balance column options with search and pagination', async () => {
+    const countQb = chain('b', { raw: { count: 2 } });
+    const dataQb = chain('b', {
+      rows: [{ value: 'Cái' }, { value: 'Bộ' }],
+    });
+    const { svc } = build([countQb, dataQb]);
+
+    const res = await svc.findBalanceColumnOptions({
+      column: 'unit',
+      search: 'Cá',
+      page: 1,
+      pageSize: 20,
+    });
+
+    expect(countQb.andWhere).toHaveBeenCalledWith('b.unit IS NOT NULL');
+    expect(countQb.andWhere).toHaveBeenCalledWith('b.unit ILIKE :search', {
+      search: '%Cá%',
+    });
+    expect(res.items).toEqual([
+      { label: 'Cái', value: 'Cái' },
+      { label: 'Bộ', value: 'Bộ' },
+    ]);
+    expect(res.pagination.total).toBe(2);
+  });
+
+  it('finds numeric column options with numeric order and normalized values', async () => {
+    const countQb = chain('b', { raw: { count: 3 } });
+    const dataQb = chain('b', {
+      rows: [{ num_val: '0.000' }, { num_val: '5.000' }, { num_val: '10' }],
+    });
+    const { svc } = build([countQb, dataQb]);
+
+    const res = await svc.findBalanceColumnOptions({
+      column: 'qtyReceived',
+      page: 1,
+      pageSize: 20,
+    });
+
+    expect(dataQb.orderBy).toHaveBeenCalledWith('num_val', 'ASC');
+    expect(res.items).toEqual([
+      { label: '0', value: '0' },
+      { label: '5', value: '5' },
+      { label: '10', value: '10' },
+    ]);
+    expect(res.pagination.total).toBe(3);
+  });
+
+  it('returns empty page for unsupported column options without throwing', async () => {
+    const { svc } = build([]);
+    const res = await svc.findBalanceColumnOptions({
+      column: 'nonExistentColumn',
+      page: 1,
+      pageSize: 20,
+    });
+    expect(res.items).toEqual([]);
+    expect(res.pagination.total).toBe(0);
   });
 });

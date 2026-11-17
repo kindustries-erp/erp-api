@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import * as ExcelJS from 'exceljs';
-import { Subject } from 'rxjs';
+import { Observable } from 'rxjs';
 import {
   VINFAST_CAR_PART_CODES,
   isVinfastCarPartCode,
@@ -41,7 +41,7 @@ export class ReportsCoreService {
     private readonly vinfastPartsExportBackgroundService: VinfastPartsExportBackgroundService,
   ) {}
 
-  get vinfastPartsExportProgress$(): Subject<VinfastPartsExportProgressEvent> {
+  get vinfastPartsExportProgress$(): Observable<VinfastPartsExportProgressEvent> {
     return this.vinfastPartsExportBackgroundService.progress$;
   }
 

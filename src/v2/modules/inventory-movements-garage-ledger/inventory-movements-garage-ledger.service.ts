@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import {
+  QueryStockBalanceColumnOptionsDto,
   QueryStockBalanceDto,
   QueryStockTransactionDto,
   StockLedgerQueryService,
@@ -22,6 +23,10 @@ export class InventoryMovementsGarageLedgerService {
 
   listBalances(query: QueryStockBalanceDto) {
     return this.query.listBalances(query);
+  }
+
+  columnOptions(query: QueryStockBalanceColumnOptionsDto) {
+    return this.query.findBalanceColumnOptions(query);
   }
 
   listTransactions(query: QueryStockTransactionDto) {

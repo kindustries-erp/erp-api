@@ -55,9 +55,19 @@ export class StockTransactionItemDto {
   @ApiProperty() transactionType: string;
   @ApiProperty() documentType: string;
   @ApiProperty() documentId: string;
+  @ApiPropertyOptional({ description: 'Mã số chứng từ (Số phiếu)' })
+  documentNo?: string;
   @ApiProperty() qtyIn: number;
   @ApiProperty() qtyOut: number;
   @ApiProperty() unitCost: number;
+  @ApiPropertyOptional({ description: 'Thành tiền giao dịch' })
+  totalAmount?: number;
+  @ApiPropertyOptional({ description: 'Số lượng tồn lũy kế sau dòng này' })
+  balanceQty?: number;
+  @ApiPropertyOptional({ description: 'Giá trị tồn lũy kế sau dòng này' })
+  balanceValue?: number;
+  @ApiPropertyOptional({ description: 'Thời điểm tạo giao dịch' })
+  createdAt?: Date;
 }
 
 export class StockTransactionListResponseDto {

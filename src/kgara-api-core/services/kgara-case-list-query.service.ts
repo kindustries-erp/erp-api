@@ -6,7 +6,7 @@ import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
 import { KgaraCaseLinkedInvoice } from '../entities/kgara_case_linked_invoice.entity';
 import { KgaraSuppliersDebtQueryEngine } from './engines/kgara-suppliers-debt-query.engine';
-import { extractNetPayableAmount } from '../kgara-sync.service';
+import { resolveStoredNetPayable } from '../utils/kgara-parser.util';
 import { EntityCustomFieldsHelper } from '../../module-config/helpers/entity-custom-fields.helper';
 import {
   getCaseColumnSelectExpr,
@@ -221,7 +221,7 @@ export class KgaraCaseListQueryService {
 
       const setInfo = settlementsMap[item.id];
       const hasSettlement = setInfo !== undefined;
-      const targetRev = extractNetPayableAmount(item);
+      const targetRev = resolveStoredNetPayable(item);
       const totalPaid = hasSettlement
         ? setInfo.receipts
         : Number(item.tienDaThanhToan) || 0;

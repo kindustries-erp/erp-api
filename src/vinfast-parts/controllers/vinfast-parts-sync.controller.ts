@@ -19,7 +19,7 @@ import { VinfastPartsService } from '../vinfast-parts.service';
 import {
   applySseHeaders,
   SSE_PING_INTERVAL_MS,
-} from '../helpers/sse-headers.helper';
+} from '@/v2/core/export-jobs-core';
 import type { Response } from 'express';
 
 @ApiTags('VinFast Parts')

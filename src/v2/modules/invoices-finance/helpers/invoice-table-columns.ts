@@ -57,6 +57,9 @@ export const INVOICE_TABLE_COLUMNS: TableColumnMap = {
   note: { sql: 'e.notes', type: 'text' },
   settlementOrder: { sql: 'e.settlementOrder', type: 'text' },
   licensePlate: { sql: 'e.licensePlate', type: 'text' },
+  // Cột PDF gốc: V1 web gửi khóa pdfSource, bảng V2 gửi originalPdf
+  pdfSource: { sql: 'e.pdfSource', type: 'text' },
+  originalPdf: { sql: 'e.pdfSource', type: 'text' },
   notes: { sql: 'e.notes', type: 'text' },
 };
 

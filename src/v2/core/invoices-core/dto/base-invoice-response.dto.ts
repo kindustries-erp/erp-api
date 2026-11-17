@@ -133,6 +133,10 @@ export class BaseInvoiceResponseDto {
   @ApiPropertyOptional()
   remainingAmount?: number;
 
+  /** Chỉ có trong danh sách (`GET /`), số file đính kèm chưa xóa (từ `file_attachments`). */
+  @ApiPropertyOptional()
+  attachmentCount?: number;
+
   @ApiPropertyOptional()
   purchaseOrderId?: string;
 
@@ -177,6 +181,17 @@ export class BaseInvoiceResponseDto {
 
   @ApiPropertyOptional()
   xmlFileKey?: string;
+
+  @ApiPropertyOptional({
+    description: 'Nguồn PDF gốc: provider_original, manual_upload, failed',
+  })
+  pdfSource?: string;
+
+  @ApiPropertyOptional()
+  pdfError?: string;
+
+  @ApiPropertyOptional()
+  providerCode?: string;
 
   @ApiPropertyOptional({ type: Object })
   effectiveData?: Record<string, unknown>;

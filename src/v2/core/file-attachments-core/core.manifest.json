@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "layer": "api",
+  "family": "file-attachments-core",
+  "entity": "BaseFileAttachmentEntity",
+  "style": "v2-core",
+  "barrel": "src/v2/core/file-attachments-core/index.ts",
+  "module": null,
+  "moduleFile": null,
+  "baseClasses": {
+    "entity": "BaseFileAttachmentEntity",
+    "createDto": null,
+    "contract": null,
+    "service": null
+  },
+  "serviceFile": null,
+  "permissionPattern": null,
+  "requiredModuleFiles": []
+}

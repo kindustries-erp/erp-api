@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as ExcelJS from 'exceljs';
 
-import type { ExportProgressReporter } from '../../common/export-jobs/export-job-runner';
+import type { ExportProgressReporter } from '@/v2/core/export-jobs-core';
 import {
   createDashboardSheet,
   writeDashboardHeader,
@@ -14,13 +14,13 @@ import {
   rowAfterCharts,
   setDashboardPrintArea,
   type DashboardKpi,
-} from '../../common/xlsx-charts/dashboard-sheet.helper';
-import { injectCharts } from '../../common/xlsx-charts/xlsx-chart-injector';
+} from '@/v2/core/xlsx-core';
+import { injectCharts } from '@/v2/core/xlsx-core';
 import {
   CHART_PALETTE,
   LABEL_MONEY_FMT,
   type XlsxChartSpec,
-} from '../../common/xlsx-charts/xlsx-chart.types';
+} from '@/v2/core/xlsx-core';
 import {
   applyStandardExcelReportLayout,
   initSheetStructure,

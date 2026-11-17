@@ -11,12 +11,9 @@ import {
   writeDataTable,
   writeKpiCards,
   type DashboardKpi,
-} from '../../common/xlsx-charts/dashboard-sheet.helper';
-import { injectCharts } from '../../common/xlsx-charts/xlsx-chart-injector';
-import {
-  CHART_PALETTE,
-  type XlsxChartSpec,
-} from '../../common/xlsx-charts/xlsx-chart.types';
+} from '@/v2/core/xlsx-core';
+import { injectCharts } from '@/v2/core/xlsx-core';
+import { CHART_PALETTE, type XlsxChartSpec } from '@/v2/core/xlsx-core';
 import {
   applyStandardExcelReportLayout,
   initSheetStructure,

@@ -55,6 +55,9 @@ export function toInvoiceResponse(
     createdBy: entity.createdBy ?? undefined,
     pdfFileKey: entity.pdfFileKey ?? undefined,
     xmlFileKey: entity.xmlFileKey ?? undefined,
+    pdfSource: entity.pdfSource ?? undefined,
+    pdfError: entity.pdfError ?? undefined,
+    providerCode: entity.providerCode ?? undefined,
     effectiveData: entity.effectiveData ?? undefined,
     items: items?.map(toInvoiceItemResponse),
     createdAt: entity.createdAt,
@@ -68,6 +71,7 @@ export function toInvoiceListItem(row: InvoiceListRow): InvoiceResponseDto {
     ...toInvoiceResponse(row),
     netOffAmount: row.netOffAmount,
     remainingAmount: row.remainingAmount,
+    attachmentCount: row.attachmentCount,
   };
 }
 

@@ -23,6 +23,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import { ErpResource, ErpAction } from '@/v2/core/rbac-core';
+import { DeprecatedV1FileWrite } from '@/common/decorators/deprecated-v1-file-write.decorator';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ErpAttachmentsCoreService } from './erp-attachments-core.service';
 import type { Response } from 'express';
@@ -71,7 +72,7 @@ export class ErpAttachmentsCoreController {
     resource: ErpResource.ATTACHMENTS,
     action: ErpAction.CREATE,
   })
-  @ApiOperation({ summary: 'Tải lên tập tin đính kèm mới' })
+  @DeprecatedV1FileWrite('Tải lên tập tin đính kèm mới')
   @Post('upload')
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(
@@ -111,7 +112,7 @@ export class ErpAttachmentsCoreController {
     resource: ErpResource.ATTACHMENTS,
     action: ErpAction.DELETE,
   })
-  @ApiOperation({ summary: 'Xóa tài liệu đính kèm' })
+  @DeprecatedV1FileWrite('Xóa tài liệu đính kèm')
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.service.remove(id);

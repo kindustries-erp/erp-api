@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "layer": "api",
+  "family": "debts-core",
+  "entity": "DebtFlow",
+  "style": "orchestrator",
+  "barrel": "src/v2/core/debts-core/index.ts",
+  "module": null,
+  "moduleFile": null,
+  "baseClasses": {
+    "contract": "DebtFlowEventPort",
+    "service": "AbstractDebtFlowService"
+  },
+  "serviceFile": "abstract-debt-flow.service.ts",
+  "permissionPattern": "debts-core",
+  "requiredModuleFiles": ["services"]
+}

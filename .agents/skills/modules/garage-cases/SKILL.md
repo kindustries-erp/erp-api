@@ -5,6 +5,8 @@ description: Module tri thức Quản lý Vụ việc Dịch vụ Garage & Sửa
 
 # 📦 Module Tri Thức: Quản Lý Vụ Việc Dịch Vụ & Lợi Nhuận Gộp Garage (Garage Cases & Gross Profit) - Backend (`erp-api`)
 
+> Bản đọc v2 (2026-11): `cases-garage` (cases, services, gross-profit-report) và `debts-garage` (công nợ) chạy song song V1; xem `modules/cases-garage`, `modules/debts-garage`, `modules/debts-core`.
+
 ## 1. Tổng quan Nghiệp vụ
 
 Phân hệ Quản lý Vụ việc Garage (`kgara-api-core`) chịu trách nhiệm tiếp nhận, lưu trữ, xử lý và đồng bộ toàn bộ dữ liệu hoạt động sửa chữa, bảo dưỡng xe và phân tích lợi nhuận tại xưởng dịch vụ từ hệ thống KGara (Greenway).
@@ -438,6 +440,7 @@ Cơ chế dùng chung `ExportJobRunner` (`src/common/export-jobs/export-job-runn
      - Mục tiêu thu (`targetRevenue`): **Tổng tiền thanh toán có thuế** (`tienCoThue` / `TongTienThanhToan`), **tuyệt đối không fallback sang doanh thu chưa thuế** (`doanhThu`).
      - Đã thu thực tế (ERP): `totalCollected = directReceiptOnSystem + directReceiptOffSystem`.
      - Còn phải thu (`tienConPhaiThanhToan`): `Math.max(0, targetRevenue - totalCollected)`.
+     - **Chiết khấu**: `targetRevenue` phải là số **ròng sau chiết khấu** (`TongTienThanhToan`, = `TienCoThue − TienChietKhau`). Dòng danh sách Kgara không có field chiết khấu nên không được dùng gross của dòng danh sách; dùng `resolveStoredNetPayable` (`src/kgara-api-core/utils/kgara-parser.util.ts`) để lấy số ròng đã lưu (`tien_co_thue`). Đã sửa ở `sync-case.service.ts`, `garage-cashflow-transaction.service.ts`, list query v1 và mapper v2. Phiếu có chiết khấu: dự thu `DT-GARA` tự sinh phải bằng số còn phải thu mới; về 0 thì xóa. Backfill dữ liệu cũ: `scripts/backfill-discount-case-receivables.ts`.
   2. **Chiều Phải Chi (Tổng chi phí vụ việc / Nhà cung cấp)**:
      - Mục tiêu chi: Tổng chi phí vụ việc (`ChiPhi` từ `kgara_gross_profit` hoặc `kgara_cases`).
      - Đã thanh toán (ERP): `totalPaid = directPaymentOnSystem + directPaymentOffSystem`.

@@ -4,6 +4,8 @@ import { CoreUser } from '../users/entities/core-user.entity';
 import { CoreUserPreference } from '../users/entities/core-user-preference.entity';
 import { CoreUserTablePreference } from '@/v2/core/table-preferences-core/entities/core-user-table-preference.entity';
 import { NotificationInbox } from '@/v2/modules/notifications-inbox/entities/notification-inbox.entity';
+import { FileAttachment } from '@/v2/modules/file-attachments-management/entities/file-attachment.entity';
+import { FileAttachmentSettings } from '@/v2/modules/file-attachments-management/entities/file-attachment-settings.entity';
 import { CoreRefreshToken } from '../auth/entities/core-refresh-token.entity';
 import { CoreRole } from '@/v2/core/rbac-core/entities/core-role.entity';
 import { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.entity';
@@ -225,6 +227,8 @@ const entities = [
   VinfastPartsLedger,
   FinanceInvoice, // api-v2-module:invoices-finance:entities
   NotificationInbox, // api-v2-module:notifications-inbox:entities
+  FileAttachment, // api-v2-module:file-attachments:entities
+  FileAttachmentSettings,
   FinanceInvoiceItem,
   GarageGoodsReceipt, // api-v2-module:goods-receipts-garage:entities
   GarageGoodsReceiptLine,

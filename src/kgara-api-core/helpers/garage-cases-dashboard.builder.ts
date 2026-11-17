@@ -11,12 +11,12 @@ import {
   writeDataTable,
   writeKpiCards,
   type DashboardKpi,
-} from '../../common/xlsx-charts/dashboard-sheet.helper';
+} from '@/v2/core/xlsx-core';
 import {
   CHART_PALETTE,
   CHART_TINT,
   type XlsxChartSpec,
-} from '../../common/xlsx-charts/xlsx-chart.types';
+} from '@/v2/core/xlsx-core';
 import {
   buildCashSeries,
   buildTimeSeries,

@@ -512,3 +512,9 @@ src/modules/bank-statements/components/BankStatementsTab/
 - Parser sổ quỹ `parsers/cash.parser.ts`: header chứa "thu", "phát sinh nợ", "ghi nợ" → `creditAmount`; header chứa "chi", "phát sinh có", "ghi có" → `debitAmount`. Khóa nội bộ `receipt`/`payment`.
 - Hạn chế đã biết: so khớp header theo chuỗi con nên tiêu đề có chứa "chi" (ví dụ "Chi nhánh") có thể bị nhận nhầm là cột Chi. Chưa siết (ngoài phạm vi).
 - Form web đã sửa cùng quy ước (`receiptAmount` → `creditAmount`, `paymentAmount` → `debitAmount`).
+
+## Job nền xuất Excel trên lõi V2 `export-jobs-core`
+- Mặc định (cờ `EXPORT_JOBS_V2` bật) BankStatementExportBackgroundService chạy trên module `export-jobs-bank-statements` (lõi `src/v2/core/export-jobs-core`, `AbstractExportJobService` + `ExportJobRunner`). Tắt cờ (`false/0/off/no`) và restart thì quay về cơ chế cũ nằm dưới nhánh delegation trong service nền.
+- V2 chỉ quản lý job, tiến độ, tải file; producer, tên file và fingerprint do service cũ truyền vào nên **nội dung xlsx và tên file không đổi**. URL, quyền, SSE, bộ field `ExportProgressEvent` giữ nguyên.
+- Khác biệt chủ ý: chuỗi thông báo thống nhất theo runner, job FAILED bị dọn sau TTL, `reused` thống nhất theo runner.
+- Spec bảo toàn file: `bank-statement-export-background.v2.spec.ts`.

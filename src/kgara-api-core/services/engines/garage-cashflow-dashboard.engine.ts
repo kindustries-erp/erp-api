@@ -57,7 +57,12 @@ export class GarageCashflowDashboardEngine {
       if (!hasCaseJoin) {
         qb.leftJoin('v.case', 'c');
       }
-      qb.leftJoin(KgaraBranch, 'b', 'b.external_id = c.branch_external_id');
+      // Chi nhánh có một dòng cho mỗi account_key (MAIN, OJ): join đủ hai cột để không nhân đôi phiếu.
+      qb.leftJoin(
+        KgaraBranch,
+        'b',
+        'b.external_id = c.branch_external_id AND b.account_key = c.account_key',
+      );
       qb.andWhere(
         '(c.branch_external_id = :branchId OR CAST(b.id AS TEXT) = :branchId OR b.name = :branchId OR b.code = :branchId)',
         {

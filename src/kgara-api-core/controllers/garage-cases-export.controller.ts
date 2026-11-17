@@ -23,7 +23,7 @@ import { GarageExportJobsService } from '../services/garage-export-jobs.service'
 import {
   exportProgressStream,
   sendReadyExportFile,
-} from './garage-export.helper';
+} from '@/v2/core/export-jobs-core';
 
 /** Xuất Excel nền bảng kê phiếu dịch vụ (cases): job, lịch sử, tải file, SSE. */
 @ApiTags('greenway_cases_export')

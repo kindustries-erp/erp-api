@@ -1,5 +1,6 @@
 import {
   Entity,
+  Index,
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
@@ -18,12 +19,14 @@ export class KgaraCaseLinkedInvoice {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Index('IDX_kgara_case_linked_invoice_case_db_id')
   @Column({ type: 'uuid', nullable: true })
   caseDbId: string;
 
   @Column({ type: 'uuid', name: 'gross_profit_id', nullable: true })
   grossProfitId: string;
 
+  @Index('IDX_kgara_case_linked_invoice_invoice_id')
   @Column({ type: 'uuid' })
   invoiceId: string;
 

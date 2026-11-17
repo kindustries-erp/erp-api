@@ -30,6 +30,7 @@ import {
   extractStandardItemCode,
   isVinfastCandidateSeller,
 } from '../helpers/vinfast-part-code.helper';
+import { LegacyFileRegistrarService } from '@/v2/modules/file-attachments-management/services/legacy-file-registrar.service';
 
 // ---------------------------------------------------------------------------
 // Result types
@@ -78,6 +79,8 @@ export class InvoiceImportService {
     private readonly vinfastPartsService?: VinfastPartsService,
     @Optional()
     private readonly categoryAutopostService?: InvoiceCategoryAutopostService,
+    @Optional()
+    private readonly fileRegistrar?: LegacyFileRegistrarService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -321,6 +324,13 @@ export class InvoiceImportService {
               updatePayload.xmlFileKey = xmlKey;
               existingInvoice.xmlFileKey = xmlKey;
               updated = true;
+              await this.fileRegistrar?.registerInvoiceFile({
+                invoiceId: existingInvoice.id,
+                fileKey: xmlKey,
+                column: 'xml_file_key',
+                fileName: file.filename,
+                fileSize: file.buffer.length,
+              });
             } catch (r2Err) {
               this.logger.warn(
                 `R2 upload XML backfill failed for ${file.filename}: ${(r2Err as Error).message}`,
@@ -361,6 +371,13 @@ export class InvoiceImportService {
                 existingInvoice.pdfFileKey = pdfKey;
                 existingInvoice.pdfFiles = newPdfList;
                 updated = true;
+                await this.fileRegistrar?.registerInvoiceFile({
+                  invoiceId: existingInvoice.id,
+                  fileKey: pdfKey,
+                  column: 'pdf_file_key',
+                  fileName: matchedPdf.filename,
+                  fileSize: matchedPdf.buffer.length,
+                });
                 pdfAttached.push({
                   filename: matchedPdf.filename,
                   invoiceNo: existingInvoice.invoiceNo,
@@ -625,6 +642,22 @@ export class InvoiceImportService {
           newInvoice,
         )) as ErpInvoice;
 
+        // Đăng ký file mới vào V2 (không làm hỏng luồng import nếu lỗi)
+        await this.fileRegistrar?.registerInvoiceFile({
+          invoiceId: savedInvoice.id,
+          fileKey: savedInvoice.xmlFileKey,
+          column: 'xml_file_key',
+          fileName: file.filename,
+          fileSize: file.buffer.length,
+        });
+        await this.fileRegistrar?.registerInvoiceFile({
+          invoiceId: savedInvoice.id,
+          fileKey: savedInvoice.pdfFileKey,
+          column: 'pdf_file_key',
+          fileName: matchedPdf?.filename,
+          fileSize: matchedPdf?.buffer.length,
+        });
+
         // 3.4. Save ErpInvoiceItem line items
         if (parsed.items && parsed.items.length > 0) {
           const invoiceLineCount = parsed.items.length;
@@ -751,6 +784,13 @@ export class InvoiceImportService {
             pdfFiles: currentPdfFiles,
             pdfFileKey: foundInvoice.pdfFileKey || pdfKey,
           } as any);
+          await this.fileRegistrar?.registerInvoiceFile({
+            invoiceId: foundInvoice.id,
+            fileKey: pdfKey,
+            column: foundInvoice.pdfFileKey ? 'pdf_files' : 'pdf_file_key',
+            fileName: pdf.filename,
+            fileSize: pdf.buffer.length,
+          });
           pdfAttached.push({
             filename: pdf.filename,
             invoiceNo: foundInvoice.invoiceNo,

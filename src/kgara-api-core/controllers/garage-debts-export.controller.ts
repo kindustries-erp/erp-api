@@ -24,7 +24,7 @@ import { GarageExportJobsService } from '../services/garage-export-jobs.service'
 import {
   exportProgressStream,
   sendReadyExportFile,
-} from './garage-export.helper';
+} from '@/v2/core/export-jobs-core';
 
 const DEBTS_READ = {
   resource: ErpResource.GARAGE_DEBTS,

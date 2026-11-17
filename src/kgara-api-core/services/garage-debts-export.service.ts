@@ -2,7 +2,7 @@ import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import type { ExportProgressReporter } from '../../common/export-jobs/export-job-runner';
+import type { ExportProgressReporter } from '@/v2/core/export-jobs-core';
 import type { GarageDebtsExportDto } from '../dto/garage-export.dto';
 import { KgaraBranch } from '../entities/kgara_branch.entity';
 import {

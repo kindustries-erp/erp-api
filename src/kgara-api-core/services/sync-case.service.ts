@@ -274,9 +274,10 @@ export class SyncCaseService {
                 .filter((s) => s.settlementType === 'RECEIPT')
                 .reduce((sum, s) => sum + Number(s.amount || 0), 0);
               gwCase.tienDaThanhToan = totalReceipts;
+              // Dùng số ròng đã lưu (resolveStoredRevenue), không dùng netPayable của dòng danh sách (thiếu chiết khấu).
               gwCase.tienConPhaiThanhToan = Math.max(
                 0,
-                netPayable - totalReceipts,
+                Number(gwCase.tienCoThue) - totalReceipts,
               );
             }
           }
