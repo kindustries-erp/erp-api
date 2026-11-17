@@ -4,6 +4,7 @@ export * from './contracts/debt-allocation.contract';
 export * from './contracts/debt-summary.contract';
 export * from './contracts/debt-list.contract';
 export * from './contracts/debt-settlement.port';
+export * from './entities';
 export * from './engines/debt-balance.engine';
 export * from './engines/debt-aging.engine';
 export * from './services/abstract-debt-flow.service';

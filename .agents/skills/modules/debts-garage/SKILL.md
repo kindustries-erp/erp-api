@@ -24,3 +24,7 @@ Vị trí: `src/v2/modules/debts-garage`. Quyền `GARAGE_DEBTS:READ`. Chi nhán
 
 ## 3. Chưa làm
 Drill-down `customers/:customerCode/cases`, `suppliers/:supplierId/cases`. Ghi settlement vẫn ở V1 tới plan orchestration.
+
+## 4. Sổ công nợ (entity, chưa có service ghi)
+- Entity `DebtGarage` (`debts_garage`) và `DebtAllocationGarage` (`debt_allocations_garage`) ở `entities/`, kế thừa entity base của `debts-core`. Migration `1794900000000-GarageCashflowDebtsV2Tables` đã chạy trên staging 2026-11-17 (bảng rỗng, chưa backfill; production chưa).
+- Lớp đọc hiện tại vẫn tính từ `kgara_*`; chưa có cờ `DEBTS_GARAGE_LEDGER_READ`. Chi tiết: skill `debts-core`.
