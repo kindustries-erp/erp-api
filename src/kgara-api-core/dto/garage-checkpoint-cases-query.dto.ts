@@ -48,6 +48,13 @@ export class GarageCheckpointCasesQueryDto {
   @IsString()
   classification?: string;
 
+  @ApiPropertyOptional({
+    enum: ['all', 'quotation', 'in_progress', 'completed', 'cancelled'],
+  })
+  @IsOptional()
+  @IsString()
+  status?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
+import { quotationStatusSql } from '../helpers/kgara-case-filter.helper';
 import {
   startOfMonth,
   endOfMonth,
@@ -458,13 +459,20 @@ export class GarageCheckpointService {
     classification?: string,
     sortBy: string = 'ngayHoanThanhCongViec',
     sortOrder: 'ASC' | 'DESC' = 'DESC',
+    status?: string,
   ) {
     const effectiveDateTo =
       dateTo.length === 10 ? `${dateTo} 23:59:59.999` : dateTo;
 
+    const isFunnelMode = Boolean(classification && classification !== 'ALL');
+    const openCase =
+      '(c.ngay_hoan_thanh_cong_viec IS NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9))';
+    const quotation = quotationStatusSql('c');
+
     // 3.1 Truy vấn Summary Toàn Kỳ (Không bị phân trang)
-    const summaryRaw = await this.caseRepo
+    const summaryQb = this.caseRepo
       .createQueryBuilder('c')
+      .leftJoin('erp_module_categories', 'cat', 'cat.id = c.category_id')
       .leftJoin(
         KgaraGrossProfit,
         'gp',
@@ -498,15 +506,96 @@ export class GarageCheckpointService {
         'COUNT(CASE WHEN COALESCE(c.tien_da_thanh_toan, 0) <= 0 AND COALESCE(c.tien_co_thue, 0) > 0 THEN 1 END)',
         'unpaidCount',
       )
+      .addSelect(
+        `COUNT(CASE WHEN ${openCase} AND ${quotation} THEN 1 END)`,
+        'quotationCount',
+      )
+      .addSelect(
+        `COUNT(CASE WHEN ${openCase} AND NOT (${quotation}) THEN 1 END)`,
+        'inProgressCount',
+      )
+      .addSelect(
+        `COUNT(CASE WHEN c.ngay_hoan_thanh_cong_viec IS NOT NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9) THEN 1 END)`,
+        'completedCount',
+      )
+      .addSelect(
+        `COUNT(CASE WHEN c.tinh_trang_dich_vu = 9 THEN 1 END)`,
+        'cancelledCount',
+      )
       .where('c.kgara_deleted_at IS NULL')
-      .andWhere('(c.exclude_from_reports IS NOT TRUE)')
-      .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
-      .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
-      .andWhere('c.ngay_hoan_thanh_cong_viec >= :dateFrom', { dateFrom })
-      .andWhere('c.ngay_hoan_thanh_cong_viec <= :dateTo', {
-        dateTo: effectiveDateTo,
-      })
-      .getRawOne();
+      .andWhere('(c.exclude_from_reports IS NOT TRUE)');
+
+    if (isFunnelMode) {
+      summaryQb
+        .andWhere(
+          'COALESCE(c.ngay_hoan_thanh_cong_viec, c.ngay_phat_sinh, c.created_at) >= :dateFrom',
+          { dateFrom },
+        )
+        .andWhere(
+          'COALESCE(c.ngay_hoan_thanh_cong_viec, c.ngay_phat_sinh, c.created_at) <= :dateTo',
+          { dateTo: effectiveDateTo },
+        );
+
+      if (status === 'quotation') {
+        summaryQb.andWhere(`(${openCase} AND ${quotation})`);
+      } else if (status === 'in_progress') {
+        summaryQb.andWhere(`(${openCase} AND NOT (${quotation}))`);
+      } else if (status === 'completed') {
+        summaryQb.andWhere(
+          '(c.ngay_hoan_thanh_cong_viec IS NOT NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9))',
+        );
+      } else if (status === 'cancelled') {
+        summaryQb.andWhere('c.tinh_trang_dich_vu = 9');
+      }
+    } else {
+      summaryQb
+        .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
+        .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
+        .andWhere('c.ngay_hoan_thanh_cong_viec >= :dateFrom', { dateFrom })
+        .andWhere('c.ngay_hoan_thanh_cong_viec <= :dateTo', {
+          dateTo: effectiveDateTo,
+        });
+    }
+
+    if (search && search.trim()) {
+      const s = `%${search.trim()}%`;
+      summaryQb.andWhere(
+        '(c.so_chung_tu ILIKE :search OR c.bien_so_xe ILIKE :search OR c.khach_hang_name ILIKE :search OR c.khach_hang_code ILIKE :search)',
+        { search: s },
+      );
+    }
+
+    if (paymentStatus === 'remaining') {
+      summaryQb.andWhere('COALESCE(c.tien_con_phai_thanh_toan, 0) > 0');
+    } else if (paymentStatus === 'paid') {
+      summaryQb.andWhere(
+        'COALESCE(c.tien_con_phai_thanh_toan, 0) <= 0 AND COALESCE(c.tien_da_thanh_toan, 0) > 0',
+      );
+    } else if (paymentStatus === 'unpaid') {
+      summaryQb.andWhere('COALESCE(c.tien_da_thanh_toan, 0) <= 0');
+    }
+
+    if (classification && classification !== 'ALL') {
+      if (classification === 'SUA_CHUA_CHUNG') {
+        summaryQb.andWhere(
+          "COALESCE(cat.code, c.classification) = 'SUA_CHUA_CHUNG'",
+        );
+      } else if (classification === 'KY_GUI_NOI_BO') {
+        summaryQb.andWhere(
+          "COALESCE(cat.code, c.classification) IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO')",
+        );
+      } else if (classification === 'OJ_NGOAI') {
+        summaryQb.andWhere(
+          "COALESCE(cat.code, c.classification) IN ('OJ', 'OJ_NGOAI')",
+        );
+      } else if (classification === 'KHAC') {
+        summaryQb.andWhere(
+          "(COALESCE(cat.code, c.classification) IS NULL OR COALESCE(cat.code, c.classification) NOT IN ('SUA_CHUA_CHUNG', 'KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'OJ', 'OJ_NGOAI'))",
+        );
+      }
+    }
+
+    const summaryRaw = await summaryQb.getRawOne();
 
     // 3.2 Phân rã theo Phân loại ERP toàn kỳ
     const classificationSummaryRaw = await this.caseRepo
@@ -600,6 +689,13 @@ export class GarageCheckpointService {
       paidCount: Number(summaryRaw?.paidCount) || 0,
       remainingCount: Number(summaryRaw?.remainingCount) || 0,
       unpaidCount: Number(summaryRaw?.unpaidCount) || 0,
+      funnelCounts: {
+        total: Number(summaryRaw?.totalCount) || 0,
+        quotation: Number(summaryRaw?.quotationCount) || 0,
+        inProgress: Number(summaryRaw?.inProgressCount) || 0,
+        completed: Number(summaryRaw?.completedCount) || 0,
+        cancelled: Number(summaryRaw?.cancelledCount) || 0,
+      },
     };
 
     // 3.3 Truy vấn Danh sách Phan trang có Bộ lọc
@@ -613,13 +709,36 @@ export class GarageCheckpointService {
         'gp.hd_phieu_dich_vu_id = c.hd_phieu_dich_vu_id OR gp.vu_viec_code = c.so_chung_tu',
       )
       .where('c.kgara_deleted_at IS NULL')
-      .andWhere('(c.exclude_from_reports IS NOT TRUE)')
-      .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
-      .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
-      .andWhere('c.ngay_hoan_thanh_cong_viec >= :dateFrom', { dateFrom })
-      .andWhere('c.ngay_hoan_thanh_cong_viec <= :dateTo', {
-        dateTo: effectiveDateTo,
-      });
+      .andWhere('(c.exclude_from_reports IS NOT TRUE)');
+
+    if (isFunnelMode) {
+      qb.andWhere(
+        'COALESCE(c.ngay_hoan_thanh_cong_viec, c.ngay_phat_sinh, c.created_at) >= :dateFrom',
+        { dateFrom },
+      ).andWhere(
+        'COALESCE(c.ngay_hoan_thanh_cong_viec, c.ngay_phat_sinh, c.created_at) <= :dateTo',
+        { dateTo: effectiveDateTo },
+      );
+
+      if (status === 'quotation') {
+        qb.andWhere(`(${openCase} AND ${quotation})`);
+      } else if (status === 'in_progress') {
+        qb.andWhere(`(${openCase} AND NOT (${quotation}))`);
+      } else if (status === 'completed') {
+        qb.andWhere(
+          '(c.ngay_hoan_thanh_cong_viec IS NOT NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9))',
+        );
+      } else if (status === 'cancelled') {
+        qb.andWhere('c.tinh_trang_dich_vu = 9');
+      }
+    } else {
+      qb.andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
+        .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
+        .andWhere('c.ngay_hoan_thanh_cong_viec >= :dateFrom', { dateFrom })
+        .andWhere('c.ngay_hoan_thanh_cong_viec <= :dateTo', {
+          dateTo: effectiveDateTo,
+        });
+    }
 
     // Filter by search keyword
     if (search && search.trim()) {
@@ -668,9 +787,19 @@ export class GarageCheckpointService {
     } else if (sortBy === 'tienConPhaiThanhToan') {
       qb.orderBy('c.tienConPhaiThanhToan', sortOrder);
     } else if (sortBy === 'doanhThu') {
-      qb.orderBy('COALESCE(c.doanhThu, c.tienCoThue, 0)', sortOrder);
+      qb.orderBy('c.doanhThu', sortOrder).addOrderBy('c.tienCoThue', sortOrder);
+    } else if (sortBy === 'ngayPhatSinh') {
+      qb.orderBy('c.ngayPhatSinh', sortOrder, 'NULLS LAST');
+    } else if (sortBy === 'soChungTu') {
+      qb.orderBy('c.soChungTu', sortOrder);
     } else {
-      qb.orderBy('c.ngayHoanThanhCongViec', sortOrder);
+      if (isFunnelMode) {
+        qb.orderBy('c.ngayPhatSinh', sortOrder, 'NULLS LAST')
+          .addOrderBy('c.ngayHoanThanhCongViec', sortOrder, 'NULLS LAST')
+          .addOrderBy('c.createdAt', sortOrder);
+      } else {
+        qb.orderBy('c.ngayHoanThanhCongViec', sortOrder);
+      }
     }
 
     qb.skip((page - 1) * pageSize).take(pageSize);
@@ -692,6 +821,7 @@ export class GarageCheckpointService {
           bienSoXe: c.bienSoXe,
           khachHangCode: c.khachHangCode,
           khachHangName: c.khachHangName,
+          tinhTrangDichVu: c.tinhTrangDichVu,
           tenTinhTrangDichVu: c.tenTinhTrangDichVu,
           classification: c.classification || 'KHAC',
           doanhThu: rev,
