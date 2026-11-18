@@ -1,19 +1,19 @@
 // Smoke API Auth V2 (`/api/v2/auth-sessions`) trên API đang chạy, không qua UI.
 // Cấu hình qua biến môi trường (xem erp-api/.agents/skills/erp-e2e-api-smoke/SKILL.md):
 //   E2E_API_URL        (mặc định suy từ PORT trong erp-api/.env, xem e2e-ports.mjs)
-//   E2E_ADMIN_EMAIL    (BẮT BUỘC; để chạy impersonate phải là admin@liouni.com)
-//   E2E_ADMIN_PASSWORD (mặc định dùng E2E_PASSWORD)
+//   E2E_TAO_EMAIL     (mặc định ai-test-tao@example.com; tài khoản người tạo)
+//   E2E_PASSWORD      (BẮT BUỘC, mật khẩu tài khoản ai-test-*)
 // Tạo tài khoản test `smoke-auth-<tag>-*@example.com`; không có API xóa nên dọn bằng SQL sau khi chạy.
 // Chỉ chạy trên staging/dev. KHÔNG chạy trên DB production.
 // Chạy: bun run test:smoke:auth-sessions
 import { resolveApiUrl } from './e2e-ports.mjs';
 
 const BASE = resolveApiUrl();
-const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL;
+const ADMIN_EMAIL = process.env.E2E_TAO_EMAIL ?? 'ai-test-tao@example.com';
 const ADMIN_PASSWORD =
-  process.env.E2E_ADMIN_PASSWORD ?? process.env.E2E_PASSWORD;
+  process.env.E2E_PASSWORD;
 if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
-  console.error('Thiếu E2E_ADMIN_EMAIL hoặc E2E_PASSWORD/E2E_ADMIN_PASSWORD.');
+  console.error('Thiếu E2E_PASSWORD.');
   process.exit(2);
 }
 const V1 = `${BASE}/api/v1`;
@@ -373,6 +373,8 @@ if (ADMIN_EMAIL === 'admin@liouni.com') {
     imp.data?.data?.user?.id === idA,
   );
   await call(A, T, 'POST', '/impersonate', { targetUserId: idB }, [401]);
+} else {
+  console.log(`INFO: bỏ qua impersonate (backend chỉ cho admin@liouni.com, đang dùng ${ADMIN_EMAIL}).`);
 }
 await call(
   A,

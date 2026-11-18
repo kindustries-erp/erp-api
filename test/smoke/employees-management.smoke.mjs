@@ -1,19 +1,19 @@
 // Smoke API Employees V2 (chạy trên API đang chạy, không qua UI).
 // Cấu hình qua biến môi trường (xem erp-api/.agents/skills/erp-e2e-api-smoke/SKILL.md):
 //   E2E_API_URL        (mặc định suy từ PORT trong erp-api/.env, xem e2e-ports.mjs)
-//   E2E_ADMIN_EMAIL    (BẮT BUỘC, tài khoản có quyền employees:read/create/update/delete)
-//   E2E_ADMIN_PASSWORD (mặc định dùng E2E_PASSWORD)
+//   E2E_TAO_EMAIL     (mặc định ai-test-tao@example.com; tài khoản người tạo)
+//   E2E_PASSWORD      (BẮT BUỘC, mật khẩu tài khoản ai-test-*)
 // Tạo dữ liệu test có mã `SME<tag>`; xóa mềm cuối bài, CCCD test cũng được xóa theo.
 // KHÔNG chạy trên DB production.
 // Chạy: bun run test:smoke:employees
 import { resolveApiUrl } from './e2e-ports.mjs';
 
 const BASE = resolveApiUrl();
-const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL;
+const ADMIN_EMAIL = process.env.E2E_TAO_EMAIL ?? 'ai-test-tao@example.com';
 const ADMIN_PASSWORD =
-  process.env.E2E_ADMIN_PASSWORD ?? process.env.E2E_PASSWORD;
+  process.env.E2E_PASSWORD;
 if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
-  console.error('Thiếu E2E_ADMIN_EMAIL hoặc E2E_PASSWORD/E2E_ADMIN_PASSWORD.');
+  console.error('Thiếu E2E_PASSWORD.');
   process.exit(2);
 }
 const V2 = `${BASE}/api/v2/employees`;
@@ -64,15 +64,15 @@ async function call(token, method, path, body, expect) {
 
 const check = (label, cond) => record(`CHECK ${label}`, '', 'true', !!cond);
 
-const loginRes = await raw(`${BASE}/api/v1/auth/login`, 'POST', null, {
+const loginRes = await raw(`${BASE}/api/v2/auth-sessions/login`, 'POST', null, {
   email: ADMIN_EMAIL,
   password: ADMIN_PASSWORD,
 });
-if (loginRes.status !== 201) {
+if (loginRes.status !== 200 && loginRes.status !== 201) {
   console.error(`Đăng nhập admin thất bại: ${loginRes.status}`);
   process.exit(2);
 }
-const T = loginRes.data.accessToken;
+const T = loginRes.data.data.accessToken;
 
 // ---------- A. Đọc và hợp đồng ----------
 const list = await call(T, 'GET', '?page=1&pageSize=5', undefined, [200]);

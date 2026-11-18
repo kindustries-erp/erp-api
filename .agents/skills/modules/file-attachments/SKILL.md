@@ -33,7 +33,7 @@ Quản lý toàn hệ thống (RBAC `attachments`), prefix `api/v2/file-attachme
 ## 4. Dữ liệu & backfill
 - Migration `20261116100000-create-file-attachments.ts` (có `down()`), unique một phần `(owner_type, owner_id, file_key) WHERE is_deleted=false`.
 - Backfill `scripts/backfill-invoice-files.ts`: mặc định dry-run; `--apply --confirm=<tên DB>`; nạp env bằng `load-script-env`; khử trùng theo (hóa đơn, file_key) ưu tiên bản có metadata; idempotent. Dữ liệu legacy có `file_size = 0` (không có metadata). Rollback: `DELETE FROM file_attachments WHERE origin='LEGACY'`.
-- Smoke: `bun run test:smoke:file-attachments` (đọc `SEED_ADMIN_*` từ `.env`; `E2E_PASSWORD` là của tài khoản ai-test-*, không đăng nhập admin được).
+- Smoke: `bun run test:smoke:file-attachments` (dùng `E2E_TAO_EMAIL`, mặc định `ai-test-tao@example.com`, và `E2E_PASSWORD`).
 
 ## 5. Thêm owner mới (ví dụ Garage PR) — không sửa core
 1. Thêm giá trị vào `FileOwnerType`.

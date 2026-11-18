@@ -66,7 +66,7 @@ src/
 ```bash
 # Yêu cầu: Bun >= 1.x, Node >= 18, và PostgreSQL DATABASE_URL
 cp .env.example .env
-# Điền DATABASE_URL, JWT_SECRET, SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD
+# Điền DATABASE_URL, JWT_SECRET, E2E_PASSWORD (mật khẩu tài khoản test ai-test-*)
 
 bun install
 bun run start:dev
