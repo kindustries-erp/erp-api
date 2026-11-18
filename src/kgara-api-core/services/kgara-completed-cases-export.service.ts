@@ -10,6 +10,7 @@ import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
 import { KgaraCaseLinkedInvoice } from '../entities/kgara_case_linked_invoice.entity';
 import { GarageHubService } from '../hub/garage-hub.service';
 import { applyCaseListFilters } from '../helpers/kgara-case-filter.helper';
+import { KgaraCostEnricherHelper } from '../helpers/kgara-cost-enricher.helper';
 import {
   applyCaseListDefaultOrder,
   applyCaseListSorts,
@@ -387,7 +388,65 @@ export class KgaraCompletedCasesExportService {
       if (Array.isArray(rawList) && rawList.length > 0)
         map.set(c.hdPhieuDichVuId, rawList);
     }
+    await this.enrichServiceLinesWithJournal(map, cases);
     return map;
+  }
+
+  /**
+   * Làm giàu đơn giá vốn / tổng vốn cho dòng phụ tùng từ journal đã lưu (kgara_gross_profit).
+   * Chỉ đọc và tính trong bộ nhớ, không gọi KGara và không ghi DB.
+   */
+  private async enrichServiceLinesWithJournal(
+    map: Map<string, any[]>,
+    cases: any[],
+  ): Promise<void> {
+    if (!this.grossProfitRepo || map.size === 0) return;
+    const targets = cases.filter(
+      (c) => c.hdPhieuDichVuId && map.get(c.hdPhieuDichVuId)?.length,
+    );
+    if (targets.length === 0) return;
+
+    try {
+      const chunkSize = 2000;
+      const rows: Array<{
+        hdPhieuDichVuId?: string | null;
+        vuViecCode?: string | null;
+        rawData?: Record<string, any> | null;
+      }> = [];
+      for (let i = 0; i < targets.length; i += chunkSize) {
+        const chunk = targets.slice(i, i + chunkSize);
+        const ids = chunk.map((c) => c.hdPhieuDichVuId as string);
+        const codes = chunk
+          .map((c) => c.soChungTu as string | null)
+          .filter((v): v is string => Boolean(v));
+        const found = await this.grossProfitRepo
+          .createQueryBuilder('gp')
+          .select(['gp.hdPhieuDichVuId', 'gp.vuViecCode', 'gp.rawData'])
+          .where(
+            'gp.hdPhieuDichVuId IN (:...ids) OR gp.vuViecCode IN (:...codes)',
+            { ids, codes: codes.length ? codes : [''] },
+          )
+          .getMany();
+        rows.push(...found);
+      }
+
+      const index = KgaraCostEnricherHelper.buildJournalIndex(rows);
+      for (const c of targets) {
+        const journal = KgaraCostEnricherHelper.pickJournal(
+          index,
+          c.hdPhieuDichVuId,
+          c.soChungTu,
+        );
+        if (!journal) continue;
+        const lines = map.get(c.hdPhieuDichVuId) || [];
+        map.set(
+          c.hdPhieuDichVuId,
+          KgaraCostEnricherHelper.enrichCaseLines(lines, journal).lines,
+        );
+      }
+    } catch (err) {
+      this.logger.warn(`Failed to enrich service cost from journal: ${err}`);
+    }
   }
 
   private async getSettlementsMap(

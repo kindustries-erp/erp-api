@@ -864,8 +864,15 @@ export const COMPLETED_CASE_SERVICES_COLUMNS: ExcelReportColumnDef[] = [
     style: { numFmt: '#,##0.00' },
   },
   {
-    header: 'Giá vốn PT (VNĐ)',
+    header: 'Đơn giá vốn (VNĐ)',
     key: 'giaVonPhuTung',
+    width: 18,
+    align: 'right',
+    style: { numFmt: '#,##0.00' },
+  },
+  {
+    header: 'Tổng vốn (VNĐ)',
+    key: 'tongVon',
     width: 18,
     isSum: true,
     align: 'right',
@@ -963,8 +970,15 @@ export const CASE_SERVICES_EXPORT_COLUMNS: ExcelReportColumnDef[] = [
     style: { numFmt: '#,##0.00' },
   },
   {
-    header: 'Giá vốn PT',
+    header: 'Đơn giá vốn',
     key: 'giaVonPhuTung',
+    width: 16,
+    align: 'right',
+    style: { numFmt: '#,##0.00' },
+  },
+  {
+    header: 'Tổng vốn',
+    key: 'tongVon',
     width: 16,
     isSum: true,
     align: 'right',

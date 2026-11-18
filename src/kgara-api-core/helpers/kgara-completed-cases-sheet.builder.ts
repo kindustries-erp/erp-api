@@ -16,6 +16,7 @@ import {
   type ExcelReportColumnDef,
 } from './kgara-excel-style.helper';
 import { resolveCaseVatAmount } from './kgara-case-financial-parser.helper';
+import { KgaraCostEnricherHelper } from './kgara-cost-enricher.helper';
 
 export const CLASSIFICATION_LABELS: Record<string, string> = {
   KY_GUI_NOI_BO: 'Ký gửi nội bộ',
@@ -320,7 +321,6 @@ export function buildSheet1CompletedCases(
       const loaiChiTiet = line.loaiChiTiet ?? line.LoaiChiTiet;
       const nhomIn = (line.nhomInName || line.NhomInName || '').toLowerCase();
       const pt = Number(line.tienPhuTung ?? line.TienPhuTung ?? 0);
-      const gv = Number(line.giaVonPhuTung ?? line.GiaVonPhuTung ?? 0);
       const isPt =
         loaiCode === 'PT' ||
         loaiChiTiet === 1 ||
@@ -329,7 +329,7 @@ export function buildSheet1CompletedCases(
         nhomIn.includes('vật tư') ||
         pt > 0;
       if (isPt) {
-        gvPt += gv;
+        gvPt += KgaraCostEnricherHelper.resolveLineCost(line).total;
       }
     }
     const chiPhiPhuTung = gvPt;
@@ -569,7 +569,6 @@ export function buildSheet2PnlTracking(
       const loaiChiTiet = line.loaiChiTiet ?? line.LoaiChiTiet;
       const nhomIn = (line.nhomInName || line.NhomInName || '').toLowerCase();
       const pt = Number(line.tienPhuTung ?? line.TienPhuTung ?? 0);
-      const gv = Number(line.giaVonPhuTung ?? line.GiaVonPhuTung ?? 0);
       const dv = Number(line.tienDichVu ?? line.TienDichVu ?? 0);
       const isPt =
         loaiCode === 'PT' ||
@@ -581,7 +580,7 @@ export function buildSheet2PnlTracking(
 
       if (isPt) {
         dtPt += pt > 0 ? pt : Number(line.tienCoThue ?? line.TienCoThue ?? 0);
-        gvPt += gv;
+        gvPt += KgaraCostEnricherHelper.resolveLineCost(line).total;
       } else {
         dtDv += dv > 0 ? dv : Number(line.tienCoThue ?? line.TienCoThue ?? 0);
       }
@@ -687,7 +686,7 @@ export function buildSheet3ItemizedServices(
     soGioCongLam: 0,
     tienDichVu: 0,
     tienPhuTung: 0,
-    giaVonPhuTung: 0,
+    tongVon: 0,
     tienChietKhauCt: 0,
   };
 
@@ -721,9 +720,8 @@ export function buildSheet3ItemizedServices(
       const tienCoThue = Number(line.tienCoThue ?? line.TienCoThue ?? 0);
       const soGioCongLam = Number(line.soGioCongLam ?? line.SoGioCongLam ?? 0);
       const tienDichVu = Number(line.tienDichVu ?? line.TienDichVu ?? 0);
-      const giaVonPhuTung = Number(
-        line.giaVonPhuTung ?? line.GiaVonPhuTung ?? 0,
-      );
+      const { unit: giaVonDonVi, total: tongVon } =
+        KgaraCostEnricherHelper.resolveLineCost(line);
       const tienChietKhauCt = Number(
         line.tienChietKhauCt ??
           line.TienChietKhauCT ??
@@ -737,7 +735,7 @@ export function buildSheet3ItemizedServices(
       sums.soGioCongLam += soGioCongLam;
       sums.tienDichVu += tienDichVu;
       sums.tienPhuTung += pt;
-      sums.giaVonPhuTung += giaVonPhuTung;
+      sums.tongVon += tongVon;
       sums.tienChietKhauCt += tienChietKhauCt;
 
       const row = sheet.addRow({
@@ -762,7 +760,8 @@ export function buildSheet3ItemizedServices(
         soGioCongLam,
         tienDichVu,
         tienPhuTung: pt,
-        giaVonPhuTung,
+        giaVonPhuTung: giaVonDonVi,
+        tongVon,
         tienChietKhauCt,
         khoCode: line.khoCode || line.KhoCode || line.KhoName || '—',
         ghiChu:
