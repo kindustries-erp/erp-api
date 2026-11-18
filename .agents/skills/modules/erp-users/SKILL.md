@@ -34,7 +34,7 @@ Web: trang `/erp-users` đã trỏ về V2 (page key `users-management`); trang 
 
 Múi giờ: DB lưu `timestamptz` (múi giờ DB là UTC), API trả ISO, client hiển thị theo múi giờ của browser hoặc thiết bị.
 
-Kiểm thử: `bunx jest src/v2/modules/users-management src/v2/core/users-core`; smoke trên API đang chạy (không chạy trên production): `bun run test:smoke:users` (cần `E2E_ADMIN_EMAIL`, `E2E_PASSWORD`; tạo dữ liệu test tiền tố `smoke-users-` và mã nhân viên `SMK`, dọn bằng SQL sau khi chạy).
+Kiểm thử: `bunx jest src/v2/modules/users-management src/v2/core/users-core`; smoke trên API đang chạy (không chạy trên production): `bun run test:smoke:users` (cần `E2E_PASSWORD` và `E2E_TAO_EMAIL` mặc định `ai-test-tao`, tài khoản cần quyền `admin_users:manage`; tạo dữ liệu test tiền tố `smoke-users-` và mã nhân viên `SMK`, dọn bằng SQL sau khi chạy).
 
 ---
 

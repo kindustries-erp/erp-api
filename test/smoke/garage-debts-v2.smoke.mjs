@@ -1,11 +1,13 @@
 // Smoke chỉ đọc: đối chiếu V1 (/api/v1/greenway/...) với v2 (/api/v2/debts-garage, /api/v2/cases-garage).
-// Env: E2E_API_URL (mặc định suy từ PORT), E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD, E2E_BRANCH_ID (external id chi nhánh).
+// Env: E2E_API_URL (mặc định suy từ PORT), E2E_TAO_EMAIL (mặc định ai-test-tao), E2E_PASSWORD, E2E_BRANCH_ID (branch_external_id trong kgara_cases, ví dụ 0b4d6d3a-55df-492b-abaf-377d84b61d05; KHÔNG phải branches_management.id).
 import { resolveApiUrl } from './e2e-ports.mjs';
 
 const BASE = resolveApiUrl();
-const { E2E_ADMIN_EMAIL: EMAIL, E2E_ADMIN_PASSWORD: PASSWORD, E2E_BRANCH_ID: BRANCH } = process.env;
+const { E2E_BRANCH_ID: BRANCH } = process.env;
+const EMAIL = process.env.E2E_TAO_EMAIL ?? 'ai-test-tao@example.com';
+const PASSWORD = process.env.E2E_PASSWORD;
 if (!EMAIL || !PASSWORD || !BRANCH) {
-  console.error('Thiếu E2E_ADMIN_EMAIL, E2E_ADMIN_PASSWORD hoặc E2E_BRANCH_ID.');
+  console.error('Thiếu E2E_PASSWORD hoặc E2E_BRANCH_ID.');
   process.exit(2);
 }
 const results = [];
@@ -14,13 +16,13 @@ const check = (name, ok, detail = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ` :: ${detail}`}`);
 };
 
-const login = await fetch(`${BASE}/api/v1/auth/login`, {
+const login = await fetch(`${BASE}/api/v2/auth-sessions/login`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
 });
-if (login.status !== 201) { console.error(`login -> ${login.status}`); process.exit(1); }
-const token = (await login.json()).accessToken;
+if (login.status !== 200 && login.status !== 201) { console.error(`login -> ${login.status}`); process.exit(1); }
+const token = (await login.json()).data?.accessToken;
 const headers = { Authorization: `Bearer ${token}`, 'x-kgara-branch-id': BRANCH };
 
 async function get(path, h = headers) {

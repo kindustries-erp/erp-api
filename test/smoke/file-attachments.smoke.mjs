@@ -1,18 +1,18 @@
 // Smoke API file đính kèm V2 (`/api/v2/invoices/:id/attachments`, `/api/v2/file-attachments-management`) trên API đang chạy.
 // Biến môi trường (xem erp-api/.agents/skills/erp-e2e-api-smoke/SKILL.md):
 //   E2E_API_URL    (mặc định suy từ PORT trong erp-api/.env)
-//   E2E_EMAIL      (BẮT BUỘC, tài khoản admin: dùng SEED_ADMIN_EMAIL trong .env)
-//   E2E_PASSWORD   (BẮT BUỘC, mật khẩu admin: dùng SEED_ADMIN_PASSWORD trong .env; không phải mật khẩu tài khoản ai-test-*)
+//   E2E_TAO_EMAIL     (mặc định ai-test-tao@example.com)
+//   E2E_PASSWORD      (BẮT BUỘC, mật khẩu tài khoản ai-test-*)
 // Ghi thật lên R2 và DB: chỉ chạy trên staging/dev, KHÔNG chạy trên DB production.
 // Tự dọn: mọi file do smoke tạo đều được xóa mềm rồi xóa vĩnh viễn ở cuối.
 // Chạy: bun run test:smoke:file-attachments
 import { resolveApiUrl } from './e2e-ports.mjs';
 
 const BASE = resolveApiUrl();
-const EMAIL = process.env.E2E_EMAIL;
+const EMAIL = process.env.E2E_TAO_EMAIL ?? 'ai-test-tao@example.com';
 const PASSWORD = process.env.E2E_PASSWORD;
 if (!EMAIL || !PASSWORD) {
-  console.error('Thiếu E2E_EMAIL hoặc E2E_PASSWORD.');
+  console.error('Thiếu E2E_PASSWORD.');
   process.exit(2);
 }
 const V2 = `${BASE}/api/v2`;

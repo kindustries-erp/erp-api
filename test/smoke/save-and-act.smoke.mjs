@@ -17,14 +17,15 @@ const tag = `SMOKE-SAA-${Date.now()}`;
 const today = new Date().toISOString().slice(0, 10);
 
 async function login(email) {
-  const r = await fetch(`${BASE}/api/v1/auth/login`, {
+  const r = await fetch(`${BASE}/api/v2/auth-sessions/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password: PASSWORD }),
   });
   const body = await r.json();
-  if (r.status !== 201) throw new Error(`login ${email} -> ${r.status}`);
-  return { token: body.accessToken, user: body.user };
+  if (r.status !== 200 && r.status !== 201) throw new Error(`login ${email} -> ${r.status}`);
+  const p = body.data ?? body;
+  return { token: p.accessToken, user: p.user };
 }
 
 async function call(session, method, path, body, expect) {
