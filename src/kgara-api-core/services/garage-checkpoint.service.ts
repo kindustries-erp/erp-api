@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
+import { quotationStatusSql } from '../helpers/kgara-case-filter.helper';
 import {
   startOfMonth,
   endOfMonth,
@@ -363,6 +364,212 @@ export class GarageCheckpointService {
     const projectedToday = formatPipeline(inProgressTodayRaw);
     const projectedMonth = formatPipeline(inProgressMonthRaw);
 
+    /**
+     * 5. Helper truy vấn số lượng xe theo các giai đoạn tiếp nhận và cơ cấu phân loại trong khoảng thời gian [startDate, endDate]:
+     * - totalIntake: Tổng số xe tiếp nhận trong kỳ (mới + các giai đoạn)
+     * - intake: Mới tiếp nhận (status = 0 hoặc tên chứa 'tiếp nhận')
+     * - quotation: Đang báo giá (status = 1 hoặc tên chứa báo giá/chờ/nháp)
+     * - inProgress: Đang sửa chữa / xử lý dịch vụ
+     * - completed: Đã hoàn tất công việc / nghiệm thu
+     * - cancelled: Hủy / từ chối dịch vụ (status = 9)
+     * - classifications: Cơ cấu 4 phân loại xe trong kỳ (suaChua, kyGui, oj, khac)
+     * - byStage: Chi tiết cơ cấu phân loại cho từng giai đoạn (intake, quotation, inProgress, completed)
+     */
+    const getPeriodStages = async (startDate: string, endDate: string) => {
+      const openCase =
+        '(c.ngay_hoan_thanh_cong_viec IS NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9))';
+      const quotation = quotationStatusSql('c');
+      const inProgress = `(${openCase} AND NOT (${quotation}))`;
+      const completed =
+        '(c.ngay_hoan_thanh_cong_viec IS NOT NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9))';
+      const intake = `((c.tinh_trang_dich_vu = 0 OR c.ten_tinh_trang_dich_vu ILIKE '%tiếp nhận%') AND ${openCase})`;
+
+      const res = await this.caseRepo
+        .createQueryBuilder('c')
+        .select('COUNT(c.id)', 'totalIntake')
+        .addSelect(`COUNT(CASE WHEN ${intake} THEN 1 END)`, 'intakeCount')
+        .addSelect(
+          `COUNT(CASE WHEN ${openCase} AND ${quotation} THEN 1 END)`,
+          'quotationCount',
+        )
+        .addSelect(
+          `COUNT(CASE WHEN ${inProgress} THEN 1 END)`,
+          'inProgressCount',
+        )
+        .addSelect(`COUNT(CASE WHEN ${completed} THEN 1 END)`, 'completedCount')
+        .addSelect(
+          `COUNT(CASE WHEN c.tinh_trang_dich_vu = 9 THEN 1 END)`,
+          'cancelledCount',
+        )
+
+        // Tổng tiền phát sinh (tien_co_thue) theo từng giai đoạn
+        .addSelect(
+          `SUM(CASE WHEN ${intake} THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)`,
+          'intakeAmount',
+        )
+        .addSelect(
+          `SUM(CASE WHEN ${openCase} AND ${quotation} THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)`,
+          'quotationAmount',
+        )
+        .addSelect(
+          `SUM(CASE WHEN ${inProgress} THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)`,
+          'inProgressAmount',
+        )
+        .addSelect(
+          `SUM(CASE WHEN ${completed} THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)`,
+          'completedAmount',
+        )
+
+        // Phân loại xe tổng thể trong kỳ
+        .addSelect(
+          `COUNT(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' THEN 1 END)`,
+          'totalSuaChua',
+        )
+        .addSelect(
+          `COUNT(CASE WHEN c.classification = 'KY_GUI_NOI_BO' THEN 1 END)`,
+          'totalKyGui',
+        )
+        .addSelect(
+          `COUNT(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN 1 END)`,
+          'totalOj',
+        )
+        .addSelect(
+          `COUNT(CASE WHEN c.classification IS NULL OR c.classification NOT IN ('SUA_CHUA_CHUNG', 'KY_GUI_NOI_BO', 'OJ', 'OJ_NGOAI') THEN 1 END)`,
+          'totalKhac',
+        )
+
+        // Phân loại xe cho giai đoạn intake
+        .addSelect(
+          `COUNT(CASE WHEN ${intake} AND c.classification = 'SUA_CHUA_CHUNG' THEN 1 END)`,
+          'intakeSuaChua',
+        )
+        .addSelect(
+          `COUNT(CASE WHEN ${intake} AND c.classification = 'KY_GUI_NOI_BO' THEN 1 END)`,
+          'intakeKyGui',
+        )
+        .addSelect(
+          `COUNT(CASE WHEN ${intake} AND c.classification IN ('OJ', 'OJ_NGOAI') THEN 1 END)`,
+          'intakeOj',
+        )
+        .addSelect(
+          `COUNT(CASE WHEN ${intake} AND (c.classification IS NULL OR c.classification NOT IN ('SUA_CHUA_CHUNG', 'KY_GUI_NOI_BO', 'OJ', 'OJ_NGOAI')) THEN 1 END)`,
+          'intakeKhac',
+        )
+
+        // Phân loại xe cho giai đoạn quotation
+        .addSelect(
+          `COUNT(CASE WHEN ${openCase} AND ${quotation} AND c.classification = 'SUA_CHUA_CHUNG' THEN 1 END)`,
+          'quotationSuaChua',
+        )
+        .addSelect(
+          `COUNT(CASE WHEN ${openCase} AND ${quotation} AND c.classification = 'KY_GUI_NOI_BO' THEN 1 END)`,
+          'quotationKyGui',
+        )
+        .addSelect(
+          `COUNT(CASE WHEN ${openCase} AND ${quotation} AND c.classification IN ('OJ', 'OJ_NGOAI') THEN 1 END)`,
+          'quotationOj',
+        )
+        .addSelect(
+          `COUNT(CASE WHEN ${openCase} AND ${quotation} AND (c.classification IS NULL OR c.classification NOT IN ('SUA_CHUA_CHUNG', 'KY_GUI_NOI_BO', 'OJ', 'OJ_NGOAI')) THEN 1 END)`,
+          'quotationKhac',
+        )
+
+        // Phân loại xe cho giai đoạn in_progress
+        .addSelect(
+          `COUNT(CASE WHEN ${inProgress} AND c.classification = 'SUA_CHUA_CHUNG' THEN 1 END)`,
+          'inProgressSuaChua',
+        )
+        .addSelect(
+          `COUNT(CASE WHEN ${inProgress} AND c.classification = 'KY_GUI_NOI_BO' THEN 1 END)`,
+          'inProgressKyGui',
+        )
+        .addSelect(
+          `COUNT(CASE WHEN ${inProgress} AND c.classification IN ('OJ', 'OJ_NGOAI') THEN 1 END)`,
+          'inProgressOj',
+        )
+        .addSelect(
+          `COUNT(CASE WHEN ${inProgress} AND (c.classification IS NULL OR c.classification NOT IN ('SUA_CHUA_CHUNG', 'KY_GUI_NOI_BO', 'OJ', 'OJ_NGOAI')) THEN 1 END)`,
+          'inProgressKhac',
+        )
+
+        // Phân loại xe cho giai đoạn completed
+        .addSelect(
+          `COUNT(CASE WHEN ${completed} AND c.classification = 'SUA_CHUA_CHUNG' THEN 1 END)`,
+          'completedSuaChua',
+        )
+        .addSelect(
+          `COUNT(CASE WHEN ${completed} AND c.classification = 'KY_GUI_NOI_BO' THEN 1 END)`,
+          'completedKyGui',
+        )
+        .addSelect(
+          `COUNT(CASE WHEN ${completed} AND c.classification IN ('OJ', 'OJ_NGOAI') THEN 1 END)`,
+          'completedOj',
+        )
+        .addSelect(
+          `COUNT(CASE WHEN ${completed} AND (c.classification IS NULL OR c.classification NOT IN ('SUA_CHUA_CHUNG', 'KY_GUI_NOI_BO', 'OJ', 'OJ_NGOAI')) THEN 1 END)`,
+          'completedKhac',
+        )
+        .where('c.kgara_deleted_at IS NULL')
+        .andWhere('(c.exclude_from_reports IS NOT TRUE)')
+        .andWhere(
+          'COALESCE(c.ngay_hoan_thanh_cong_viec, c.ngay_phat_sinh, c.created_at) >= :startDate AND COALESCE(c.ngay_hoan_thanh_cong_viec, c.ngay_phat_sinh, c.created_at) <= :endDate',
+          { startDate, endDate },
+        )
+        .getRawOne();
+
+      return {
+        totalIntake: Number(res?.totalIntake) || 0,
+        intake: Number(res?.intakeCount) || 0,
+        intakeAmount: Number(res?.intakeAmount) || 0,
+        quotation: Number(res?.quotationCount) || 0,
+        quotationAmount: Number(res?.quotationAmount) || 0,
+        inProgress: Number(res?.inProgressCount) || 0,
+        inProgressAmount: Number(res?.inProgressAmount) || 0,
+        completed: Number(res?.completedCount) || 0,
+        completedAmount: Number(res?.completedAmount) || 0,
+        cancelled: Number(res?.cancelledCount) || 0,
+        classifications: {
+          suaChua: Number(res?.totalSuaChua) || 0,
+          kyGui: Number(res?.totalKyGui) || 0,
+          oj: Number(res?.totalOj) || 0,
+          khac: Number(res?.totalKhac) || 0,
+        },
+        byStage: {
+          intake: {
+            suaChua: Number(res?.intakeSuaChua) || 0,
+            kyGui: Number(res?.intakeKyGui) || 0,
+            oj: Number(res?.intakeOj) || 0,
+            khac: Number(res?.intakeKhac) || 0,
+          },
+          quotation: {
+            suaChua: Number(res?.quotationSuaChua) || 0,
+            kyGui: Number(res?.quotationKyGui) || 0,
+            oj: Number(res?.quotationOj) || 0,
+            khac: Number(res?.quotationKhac) || 0,
+          },
+          inProgress: {
+            suaChua: Number(res?.inProgressSuaChua) || 0,
+            kyGui: Number(res?.inProgressKyGui) || 0,
+            oj: Number(res?.inProgressOj) || 0,
+            khac: Number(res?.inProgressKhac) || 0,
+          },
+          completed: {
+            suaChua: Number(res?.completedSuaChua) || 0,
+            kyGui: Number(res?.completedKyGui) || 0,
+            oj: Number(res?.completedOj) || 0,
+            khac: Number(res?.completedKhac) || 0,
+          },
+        },
+      };
+    };
+
+    // Truy vấn song song thống kê giai đoạn tiếp nhận cho Tháng, Tuần, Hôm nay
+    const [monthStages, weekStages, dayStages] = await Promise.all([
+      getPeriodStages(curMonthStart, curMonthEnd),
+      getPeriodStages(curWeekStart, curWeekEnd),
+      getPeriodStages(curDayStart, curDayEnd),
+    ]);
+
     const mTotalBilled = Number(curMonthRes?.tienCoThue) || 0;
     const mTotalPaid = Number(curMonthRes?.paid) || 0;
     const mTotalReceivable = Number(curMonthRes?.receivable) || 0;
@@ -397,6 +604,7 @@ export class GarageCheckpointService {
         totalReceivable: mTotalReceivable,
         collectionRate: mCollectionRate,
         totalCount: Number(curMonthRes?.count) || 0,
+        stages: monthStages,
         revenueChart: monthRevenueChart,
         costChart: monthCostChart,
         profitChart: monthProfitChart,
@@ -414,6 +622,7 @@ export class GarageCheckpointService {
         totalReceivable: wTotalReceivable,
         collectionRate: wCollectionRate,
         totalCount: Number(curWeekRes?.count) || 0,
+        stages: weekStages,
         revenueChart: weekRevenueChart,
         costChart: weekCostChart,
         profitChart: weekProfitChart,
@@ -431,6 +640,7 @@ export class GarageCheckpointService {
         totalReceivable: dTotalReceivable,
         collectionRate: dCollectionRate,
         totalCount: Number(curDayRes?.count) || 0,
+        stages: dayStages,
         revenueChart: dayRevenueChart,
         costChart: dayCostChart,
         profitChart: dayProfitChart,
@@ -458,13 +668,25 @@ export class GarageCheckpointService {
     classification?: string,
     sortBy: string = 'ngayHoanThanhCongViec',
     sortOrder: 'ASC' | 'DESC' = 'DESC',
+    status?: string,
+    isFunnel?: boolean,
   ) {
     const effectiveDateTo =
       dateTo.length === 10 ? `${dateTo} 23:59:59.999` : dateTo;
 
+    const isFunnelMode = Boolean(
+      (classification && classification !== 'ALL') ||
+      isFunnel ||
+      (status && status.toLowerCase() !== 'all'),
+    );
+    const openCase =
+      '(c.ngay_hoan_thanh_cong_viec IS NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9))';
+    const quotation = quotationStatusSql('c');
+
     // 3.1 Truy vấn Summary Toàn Kỳ (Không bị phân trang)
-    const summaryRaw = await this.caseRepo
+    const summaryQb = this.caseRepo
       .createQueryBuilder('c')
+      .leftJoin('erp_module_categories', 'cat', 'cat.id = c.category_id')
       .leftJoin(
         KgaraGrossProfit,
         'gp',
@@ -498,15 +720,96 @@ export class GarageCheckpointService {
         'COUNT(CASE WHEN COALESCE(c.tien_da_thanh_toan, 0) <= 0 AND COALESCE(c.tien_co_thue, 0) > 0 THEN 1 END)',
         'unpaidCount',
       )
+      .addSelect(
+        `COUNT(CASE WHEN ${openCase} AND ${quotation} THEN 1 END)`,
+        'quotationCount',
+      )
+      .addSelect(
+        `COUNT(CASE WHEN ${openCase} AND NOT (${quotation}) THEN 1 END)`,
+        'inProgressCount',
+      )
+      .addSelect(
+        `COUNT(CASE WHEN c.ngay_hoan_thanh_cong_viec IS NOT NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9) THEN 1 END)`,
+        'completedCount',
+      )
+      .addSelect(
+        `COUNT(CASE WHEN c.tinh_trang_dich_vu = 9 THEN 1 END)`,
+        'cancelledCount',
+      )
       .where('c.kgara_deleted_at IS NULL')
-      .andWhere('(c.exclude_from_reports IS NOT TRUE)')
-      .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
-      .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
-      .andWhere('c.ngay_hoan_thanh_cong_viec >= :dateFrom', { dateFrom })
-      .andWhere('c.ngay_hoan_thanh_cong_viec <= :dateTo', {
-        dateTo: effectiveDateTo,
-      })
-      .getRawOne();
+      .andWhere('(c.exclude_from_reports IS NOT TRUE)');
+
+    if (isFunnelMode) {
+      summaryQb
+        .andWhere(
+          'COALESCE(c.ngay_hoan_thanh_cong_viec, c.ngay_phat_sinh, c.created_at) >= :dateFrom',
+          { dateFrom },
+        )
+        .andWhere(
+          'COALESCE(c.ngay_hoan_thanh_cong_viec, c.ngay_phat_sinh, c.created_at) <= :dateTo',
+          { dateTo: effectiveDateTo },
+        );
+
+      if (status === 'quotation') {
+        summaryQb.andWhere(`(${openCase} AND ${quotation})`);
+      } else if (status === 'in_progress') {
+        summaryQb.andWhere(`(${openCase} AND NOT (${quotation}))`);
+      } else if (status === 'completed') {
+        summaryQb.andWhere(
+          '(c.ngay_hoan_thanh_cong_viec IS NOT NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9))',
+        );
+      } else if (status === 'cancelled') {
+        summaryQb.andWhere('c.tinh_trang_dich_vu = 9');
+      }
+    } else {
+      summaryQb
+        .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
+        .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
+        .andWhere('c.ngay_hoan_thanh_cong_viec >= :dateFrom', { dateFrom })
+        .andWhere('c.ngay_hoan_thanh_cong_viec <= :dateTo', {
+          dateTo: effectiveDateTo,
+        });
+    }
+
+    if (search && search.trim()) {
+      const s = `%${search.trim()}%`;
+      summaryQb.andWhere(
+        '(c.so_chung_tu ILIKE :search OR c.bien_so_xe ILIKE :search OR c.khach_hang_name ILIKE :search OR c.khach_hang_code ILIKE :search)',
+        { search: s },
+      );
+    }
+
+    if (paymentStatus === 'remaining') {
+      summaryQb.andWhere('COALESCE(c.tien_con_phai_thanh_toan, 0) > 0');
+    } else if (paymentStatus === 'paid') {
+      summaryQb.andWhere(
+        'COALESCE(c.tien_con_phai_thanh_toan, 0) <= 0 AND COALESCE(c.tien_da_thanh_toan, 0) > 0',
+      );
+    } else if (paymentStatus === 'unpaid') {
+      summaryQb.andWhere('COALESCE(c.tien_da_thanh_toan, 0) <= 0');
+    }
+
+    if (classification && classification !== 'ALL') {
+      if (classification === 'SUA_CHUA_CHUNG') {
+        summaryQb.andWhere(
+          "COALESCE(cat.code, c.classification) = 'SUA_CHUA_CHUNG'",
+        );
+      } else if (classification === 'KY_GUI_NOI_BO') {
+        summaryQb.andWhere(
+          "COALESCE(cat.code, c.classification) IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO')",
+        );
+      } else if (classification === 'OJ_NGOAI') {
+        summaryQb.andWhere(
+          "COALESCE(cat.code, c.classification) IN ('OJ', 'OJ_NGOAI')",
+        );
+      } else if (classification === 'KHAC') {
+        summaryQb.andWhere(
+          "(COALESCE(cat.code, c.classification) IS NULL OR COALESCE(cat.code, c.classification) NOT IN ('SUA_CHUA_CHUNG', 'KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'OJ', 'OJ_NGOAI'))",
+        );
+      }
+    }
+
+    const summaryRaw = await summaryQb.getRawOne();
 
     // 3.2 Phân rã theo Phân loại ERP toàn kỳ
     const classificationSummaryRaw = await this.caseRepo
@@ -600,12 +903,19 @@ export class GarageCheckpointService {
       paidCount: Number(summaryRaw?.paidCount) || 0,
       remainingCount: Number(summaryRaw?.remainingCount) || 0,
       unpaidCount: Number(summaryRaw?.unpaidCount) || 0,
+      funnelCounts: {
+        total: Number(summaryRaw?.totalCount) || 0,
+        quotation: Number(summaryRaw?.quotationCount) || 0,
+        inProgress: Number(summaryRaw?.inProgressCount) || 0,
+        completed: Number(summaryRaw?.completedCount) || 0,
+        cancelled: Number(summaryRaw?.cancelledCount) || 0,
+      },
     };
 
     // 3.3 Truy vấn Danh sách Phan trang có Bộ lọc
     const qb = this.caseRepo
       .createQueryBuilder('c')
-      .leftJoin('erp_module_categories', 'cat', 'cat.id = c.category_id')
+      .leftJoinAndSelect('c.category', 'cat')
       .leftJoinAndMapOne(
         'c.grossProfit',
         KgaraGrossProfit,
@@ -613,13 +923,36 @@ export class GarageCheckpointService {
         'gp.hd_phieu_dich_vu_id = c.hd_phieu_dich_vu_id OR gp.vu_viec_code = c.so_chung_tu',
       )
       .where('c.kgara_deleted_at IS NULL')
-      .andWhere('(c.exclude_from_reports IS NOT TRUE)')
-      .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
-      .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
-      .andWhere('c.ngay_hoan_thanh_cong_viec >= :dateFrom', { dateFrom })
-      .andWhere('c.ngay_hoan_thanh_cong_viec <= :dateTo', {
-        dateTo: effectiveDateTo,
-      });
+      .andWhere('(c.exclude_from_reports IS NOT TRUE)');
+
+    if (isFunnelMode) {
+      qb.andWhere(
+        'COALESCE(c.ngay_hoan_thanh_cong_viec, c.ngay_phat_sinh, c.created_at) >= :dateFrom',
+        { dateFrom },
+      ).andWhere(
+        'COALESCE(c.ngay_hoan_thanh_cong_viec, c.ngay_phat_sinh, c.created_at) <= :dateTo',
+        { dateTo: effectiveDateTo },
+      );
+
+      if (status === 'quotation') {
+        qb.andWhere(`(${openCase} AND ${quotation})`);
+      } else if (status === 'in_progress') {
+        qb.andWhere(`(${openCase} AND NOT (${quotation}))`);
+      } else if (status === 'completed') {
+        qb.andWhere(
+          '(c.ngay_hoan_thanh_cong_viec IS NOT NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9))',
+        );
+      } else if (status === 'cancelled') {
+        qb.andWhere('c.tinh_trang_dich_vu = 9');
+      }
+    } else {
+      qb.andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
+        .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
+        .andWhere('c.ngay_hoan_thanh_cong_viec >= :dateFrom', { dateFrom })
+        .andWhere('c.ngay_hoan_thanh_cong_viec <= :dateTo', {
+          dateTo: effectiveDateTo,
+        });
+    }
 
     // Filter by search keyword
     if (search && search.trim()) {
@@ -668,9 +1001,19 @@ export class GarageCheckpointService {
     } else if (sortBy === 'tienConPhaiThanhToan') {
       qb.orderBy('c.tienConPhaiThanhToan', sortOrder);
     } else if (sortBy === 'doanhThu') {
-      qb.orderBy('COALESCE(c.doanhThu, c.tienCoThue, 0)', sortOrder);
+      qb.orderBy('c.doanhThu', sortOrder).addOrderBy('c.tienCoThue', sortOrder);
+    } else if (sortBy === 'ngayPhatSinh') {
+      qb.orderBy('c.ngayPhatSinh', sortOrder, 'NULLS LAST');
+    } else if (sortBy === 'soChungTu') {
+      qb.orderBy('c.soChungTu', sortOrder);
     } else {
-      qb.orderBy('c.ngayHoanThanhCongViec', sortOrder);
+      if (isFunnelMode) {
+        qb.orderBy('c.ngayPhatSinh', sortOrder, 'NULLS LAST')
+          .addOrderBy('c.ngayHoanThanhCongViec', sortOrder, 'NULLS LAST')
+          .addOrderBy('c.createdAt', sortOrder);
+      } else {
+        qb.orderBy('c.ngayHoanThanhCongViec', sortOrder);
+      }
     }
 
     qb.skip((page - 1) * pageSize).take(pageSize);
@@ -686,14 +1029,31 @@ export class GarageCheckpointService {
         const rawData = c.rawData || {};
         const tienThueKH = Number(rawData.TienThueKH ?? 0);
 
+        const rawClass = (c.classification || c.category?.code || '')
+          .trim()
+          .toUpperCase();
+        let normalizedClass = 'KHAC';
+        if (rawClass === 'SUA_CHUA_CHUNG') {
+          normalizedClass = 'SUA_CHUA_CHUNG';
+        } else if (['KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO'].includes(rawClass)) {
+          normalizedClass = 'KY_GUI_NOI_BO';
+        } else if (
+          ['OJ', 'OJ_NGOAI'].includes(rawClass) ||
+          c.accountKey === 'OJ' ||
+          (c.soChungTu && String(c.soChungTu).startsWith('GN-'))
+        ) {
+          normalizedClass = 'OJ_NGOAI';
+        }
+
         return {
           id: c.id,
           soChungTu: c.soChungTu,
           bienSoXe: c.bienSoXe,
           khachHangCode: c.khachHangCode,
           khachHangName: c.khachHangName,
+          tinhTrangDichVu: c.tinhTrangDichVu,
           tenTinhTrangDichVu: c.tenTinhTrangDichVu,
-          classification: c.classification || 'KHAC',
+          classification: normalizedClass,
           doanhThu: rev,
           chiPhi: cost,
           loiNhuan: profit,

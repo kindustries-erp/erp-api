@@ -105,10 +105,17 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
     - `PnlOpexItemRow.tsx`: Molecule bóc tách từ `PnlOpexRows.tsx` để khống chế 100% files dưới 180 LoC.
 - **Chỉ số KPI Sparklines theo Chu kỳ (`getCheckpointKpis` & `GarageStatsCards.tsx`)**:
   - Phân tích 3 chu kỳ: **Tháng này** (Sparkline 6 tháng), **Tuần này** (Sparkline 4 tuần), **Hôm nay** (Sparkline 7 ngày) theo Ngày hoàn thành.
+  - Cung cấp thông số các giai đoạn tiếp nhận dịch vụ (`stages`: `intake`, `quotation`, `inProgress`, `completed`, `cancelled`) kèm số tiền phát sinh theo từng giai đoạn (`intakeAmount`, `quotationAmount`, `inProgressAmount`, `completedAmount`) và cơ cấu phân loại xe (`classifications`, `byStage`).
   - Tooltip Sparkline hiển thị 2 dòng tinh gọn và chuẩn xác:
     - Card Doanh thu: **Doanh thu thuần** & **Doanh thu có VAT** (khớp số liệu với bảng chi tiết).
     - Card Chi phí: **Chi phí thuần** & **Chi phí có VAT**.
   - Hỗ trợ click-to-drilldown xem danh sách phiếu dịch vụ chi tiết hoàn thành trong kỳ (`getCheckpointCases`).
+  - **Drilldown Phân Loại ERP & Phễu Chuyển Đổi (`getCheckpointCases` kèm `classification` & `status`)**:
+    - Khi `classification` được cung cấp (khác `'ALL'`), API tự động kích hoạt **chế độ Funnel**:
+      - Không yêu cầu `c.ngay_hoan_thanh_cong_viec IS NOT NULL`, mà sử dụng khoảng thời gian trên `COALESCE(c.ngay_hoan_thanh_cong_viec, c.ngay_phat_sinh, c.created_at)` để bao quát toàn bộ 5 giai đoạn phễu.
+      - Hỗ trợ tham số `status` (`ALL`, `QUOTATION`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`).
+      - Trả về `funnelCounts` (`total`, `quotation`, `inProgress`, `completed`, `cancelled`) và `tinhTrangDichVu` trong từng dòng kết quả.
+    - Khi `classification` không truyền hoặc là `'ALL'` (click Card Doanh thu): giữ nguyên 100% quy tắc hoàn thành nghiêm ngặt (`c.ngay_hoan_thanh_cong_viec IS NOT NULL`).
 - **Pipeline Dự Thu & Phễu Chuyển Đổi Dịch Vụ (`GarageConversionFunnelCard.tsx`)**:
   - Hub phân tích 3 tầng tích hợp toàn diện:
     - **Tầng 1**: 4 Cards tổng quan tiếp nhận & tiến độ (Tổng tiếp nhận, Đang xử lý, Đã hoàn thành, Hủy) kèm sub-badge Dự thu Hôm nay & Tháng này và thanh tỷ lệ chuyển đổi trực quan.
