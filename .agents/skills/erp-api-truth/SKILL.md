@@ -83,7 +83,7 @@ Tài liệu chi tiết của từng module nằm tại `.agents/skills/modules/<
 - **Phụ tùng VinFast**: `vinfast-parts-stock`, `vinfast-parts-dashboard`
 - **Đối tác**: `business-partners-core` (lõi `src/v2/core/business-partners-core`, module `src/v2/modules/business-partners-management`)
 - **Nhân viên (v2)**: `employees-core` (lõi `src/v2/core/employees-core`, module `src/v2/modules/employees-management`, route `/api/v2/employees`, bảng `employees_management`; V1 `erp_employees` đóng băng)
-- **Chi nhánh**: `branches-core` (lõi `src/v2/core/branches-core`, module `src/v2/modules/branches-management`; entity consumers import canonical v2, route `/api/v2/branches`)
+- **Chi nhánh**: `branches-core` (lõi base-only `src/v2/core/branches-core`, module `src/v2/modules/branches-management`, bảng `branches_management` đổi tên từ `erp_branches`, view tương thích `erp_branches` tạm thời, `DELETE` xóa mềm; consumers import `BranchManagement` từ module; route `/api/v2/branches`)
 - **Xác thực v2**: `auth-sessions` (lõi `src/v2/core/auth-core`, module `src/v2/modules/auth-sessions`, route `/api/v2/auth-sessions`, bảng `auth_sessions`; người dùng từ `users_management`; v1 `/api/v1/auth` chạy song song, dùng chung JWT)
 - **Thông báo (v2, theo user, không RBAC)**: `notifications-inbox` (`/api/v2/notifications-inbox`, bảng `notifications_inbox`; job xóa cứng định kỳ; base dùng chung ở lõi `notifications-core`)
 - **AI Hub v2**: `ai-hub-v2` (lõi `src/v2/core/ai-hub-core`; module `ai-hub-gateway` gọi 9router theo tier từ `NINE_ROUTER_TIER_MODELS`, `items-core` (lõi) + `items-garage` (module) là danh mục mã hàng garage dùng chung qua cổng `ItemCatalogPort`, `ai-hub-garage` đọc hóa đơn tạo đề nghị mua nháp; không import `ai-hub-core` v1)

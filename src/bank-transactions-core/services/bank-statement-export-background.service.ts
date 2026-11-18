@@ -404,7 +404,7 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
           'inv.buyer_name as "buyerName"',
           'inv.buyer_tax_code as "buyerTaxCode"',
           'inv.total_amount as "totalAmount"',
-          '(SELECT string_agg(ib.name, \', \' ORDER BY ib.name) FROM erp_branches ib WHERE ib.id = ANY(inv.branch_ids)) as "invoiceBranchName"',
+          '(SELECT string_agg(ib.name, \', \' ORDER BY ib.name) FROM branches_management ib WHERE ib.id = ANY(inv.branch_ids)) as "invoiceBranchName"',
         ])
         .where('netoff.bank_transaction_id IN (:...ids)', { ids })
         .orderBy('inv.invoice_date', 'ASC')
@@ -433,7 +433,7 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
     if (allIds.length === 0) return;
     const rows: { id: string; name: string }[] =
       await this.transactionRepo.manager.query(
-        'SELECT id, name FROM erp_branches WHERE id = ANY($1::uuid[])',
+        'SELECT id, name FROM branches_management WHERE id = ANY($1::uuid[])',
         [allIds],
       );
     const nameById = new Map(rows.map((r) => [r.id, r.name]));

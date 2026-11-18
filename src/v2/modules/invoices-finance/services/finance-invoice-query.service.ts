@@ -166,13 +166,13 @@ export class FinanceInvoiceQueryService {
   }
 
   /**
-   * Trả về các id chi nhánh còn hoạt động. Bảng `erp_branches` dùng cột `is_active`
-   * (không có `is_deleted`). Dùng để kiểm tra trước khi gán chi nhánh.
+   * Trả về các id chi nhánh còn hoạt động. Chỉ lấy chi nhánh chưa xóa mềm (`is_deleted = false`)
+   * và còn `is_active`. Dùng để kiểm tra trước khi gán chi nhánh.
    */
   async findExistingBranchIds(ids: string[]): Promise<string[]> {
     if (ids.length === 0) return [];
     const rows: { id: string }[] = await this.repo.query(
-      'SELECT id FROM erp_branches WHERE id = ANY($1::uuid[]) AND is_active = true',
+      'SELECT id FROM branches_management WHERE id = ANY($1::uuid[]) AND is_deleted = false AND is_active = true',
       [ids],
     );
     return rows.map((row) => row.id);

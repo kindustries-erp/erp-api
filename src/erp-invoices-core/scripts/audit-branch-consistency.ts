@@ -60,8 +60,8 @@ async function run(): Promise<void> {
 
     const jeByPair = await client.query(`
       SELECT
-        COALESCE((SELECT string_agg(b.code, ',' ORDER BY b.code) FROM erp_branches b WHERE b.id = ANY(i.branch_ids)), '(chưa gán)') AS invoice_branches,
-        COALESCE((SELECT code FROM erp_branches WHERE id = je.branch_id), '(trống)') AS journal_branch,
+        COALESCE((SELECT string_agg(b.code, ',' ORDER BY b.code) FROM branches_management b WHERE b.id = ANY(i.branch_ids)), '(chưa gán)') AS invoice_branches,
+        COALESCE((SELECT code FROM branches_management WHERE id = je.branch_id), '(trống)') AS journal_branch,
         i.direction,
         count(*) AS invoices
       FROM erp_invoices i

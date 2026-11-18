@@ -346,7 +346,7 @@ export function _applyColumnSearch(
       // Tìm theo tên hoặc mã của mọi chi nhánh gán cho hóa đơn (không chỉ chi nhánh đầu)
       applyMultiKeywordFilter(
         qb,
-        "(SELECT string_agg(bb.name || ' ' || bb.code, ' ') FROM erp_branches bb WHERE bb.id = ANY(inv.branch_ids))",
+        "(SELECT string_agg(bb.name || ' ' || bb.code, ' ') FROM branches_management bb WHERE bb.id = ANY(inv.branch_ids))",
         val,
         'branchIdSearch',
       );

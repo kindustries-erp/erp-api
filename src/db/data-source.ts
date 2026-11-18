@@ -44,7 +44,8 @@ import { ErpInventoryTrackingSerial } from '../inventory-core/entities/erp_inven
 import { ErpInventoryTrackingLot } from '../inventory-core/entities/erp_inventory_tracking_lot.entity';
 import { ErpInventoryTrackingCustom } from '../inventory-core/entities/erp_inventory_tracking_custom.entity';
 import { ErpTrackingPolicy } from '../inventory-core/entities/erp_tracking_policy.entity';
-import { ErpBranch } from '../v2/core/branches-core/entities/erp_branch.entity';
+import { BranchManagement } from '../v2/modules/branches-management/entities/branch-management.entity';
+import { BranchManagementExternalLink } from '../v2/modules/branches-management/entities/branch-management-external-link.entity';
 import { ErpAuditLog } from '../audit-core/entities/erp-audit-log.entity';
 import { AuditLog } from '../v2/modules/audit-logs/entities/audit-log.entity';
 import { ErpItemType } from '../inventory-core/entities/erp_item_type.entity';
@@ -188,7 +189,8 @@ const entities = [
   ErpInventoryTrackingLot,
   ErpInventoryTrackingCustom,
   ErpTrackingPolicy,
-  ErpBranch,
+  BranchManagement,
+  BranchManagementExternalLink,
   ErpAuditLog,
   AuditLog,
   ErpItemType,

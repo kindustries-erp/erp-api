@@ -186,7 +186,7 @@ describe('TransactionAccountingService', () => {
     );
   });
 
-  it('createManualTransaction rejects branch ids not found in erp_branches', async () => {
+  it('createManualTransaction rejects branch ids not found in branches_management', async () => {
     dataSource.query.mockResolvedValueOnce([{ id: 'branch-a' }]);
 
     await expect(
@@ -202,7 +202,7 @@ describe('TransactionAccountingService', () => {
     expect(transactionRepo.save).not.toHaveBeenCalled();
   });
 
-  it('updateTransaction rejects a branchId not found in erp_branches', async () => {
+  it('updateTransaction rejects a branchId not found in branches_management', async () => {
     transactionRepo.findOne.mockResolvedValue({
       id: 'txn-4',
       isDeleted: false,

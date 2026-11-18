@@ -42,7 +42,7 @@ export class TransactionAccountingService {
   private async assertBranchesExist(branchIds: string[]): Promise<void> {
     if (branchIds.length === 0) return;
     const rows: { id: string }[] = await this.dataSource.query(
-      'SELECT id FROM erp_branches WHERE id = ANY($1)',
+      'SELECT id FROM branches_management WHERE id = ANY($1) AND is_deleted = false',
       [branchIds],
     );
     const found = new Set(rows.map((row) => row.id));

@@ -631,7 +631,7 @@ graph TD
     INVOICE <-->|Net-Off Cấn trừ| BANK["bank-transactions-core<br/>(ErpBankTransaction)"]
     INVOICE -->|Trigger Recalc FIFO| VF["vinfast-parts<br/>(VinfastPartsStock)"]
     INVOICE -->|Notify Expiry / Sync Status| NOTIF["notifications-inbox<br/>(NotificationsPublisherService)"]
-    INVOICE -->|Resolve Branch| BRANCH["branches-core<br/>(ErpBranch)"]
+    INVOICE -->|Resolve Branch| BRANCH["branches-management<br/>(BranchManagement)"]
     PO["purchase-orders-core<br/>(PurchaseOrder)"] -->|Link Invoice| INVOICE
 ```
 

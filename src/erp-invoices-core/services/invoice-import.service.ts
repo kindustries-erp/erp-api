@@ -5,7 +5,7 @@ import AdmZip from 'adm-zip';
 
 import { ErpInvoice } from '../entities/erp_invoice.entity';
 import { ErpInvoiceItem } from '../entities/erp_invoice_item.entity';
-import { ErpBranch } from '@/v2/core/branches-core/entities/erp_branch.entity';
+import { BranchManagement } from '@/v2/modules/branches-management/entities/branch-management.entity';
 import { R2Service } from '../../r2/r2.service';
 import { VinfastPartsService } from '../../vinfast-parts/vinfast-parts.service';
 import { InvoiceBranchService } from './invoice-branch.service';
@@ -73,8 +73,8 @@ export class InvoiceImportService {
     private readonly r2: R2Service,
     private readonly branchService: InvoiceBranchService,
     @Optional()
-    @InjectRepository(ErpBranch)
-    private readonly branchRepository?: Repository<ErpBranch>,
+    @InjectRepository(BranchManagement)
+    private readonly branchRepository?: Repository<BranchManagement>,
     @Optional()
     private readonly vinfastPartsService?: VinfastPartsService,
     @Optional()

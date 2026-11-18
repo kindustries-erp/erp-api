@@ -86,7 +86,7 @@ export class CreateEmployeeManagementDto {
   @MaxLength(255)
   department?: string | null;
 
-  @ApiPropertyOptional({ description: 'Chi nhánh (erp_branches.id)' })
+  @ApiPropertyOptional({ description: 'Chi nhánh (branches_management.id)' })
   @IsOptional()
   @IsUUID()
   branchId?: string | null;

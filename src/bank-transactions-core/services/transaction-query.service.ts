@@ -459,7 +459,7 @@ export class TransactionQueryService {
             searchField = 'txn.correspondentBank';
           else if (col === 'branch')
             searchField =
-              "(SELECT string_agg(bb.name, ' ') FROM erp_branches bb WHERE bb.id = ANY(txn.branch_ids))";
+              "(SELECT string_agg(bb.name, ' ') FROM branches_management bb WHERE bb.id = ANY(txn.branch_ids))";
           else if (col === 'referenceNumber')
             searchField = 'txn.referenceNumber';
           else if (col === 'cashflowClassification')
@@ -828,7 +828,11 @@ export class TransactionQueryService {
       selectField = 'txn.correspondentBank';
     else if (column === 'branch') {
       // Mọi chi nhánh của dòng (join theo mảng branch_ids), không chỉ chi nhánh đầu
-      qb.innerJoin('erp_branches', 'branch', 'branch.id = ANY(txn.branch_ids)');
+      qb.innerJoin(
+        'branches_management',
+        'branch',
+        'branch.id = ANY(txn.branch_ids)',
+      );
       selectField = 'branch.id';
       labelField = 'branch.name';
     } else if (column === 'referenceNumber')

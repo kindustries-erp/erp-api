@@ -208,7 +208,7 @@ export class InvoiceItemsQueryService {
         taxInvoiceStatus: 'inv.tax_invoice_status',
         branchId: 'inv.branch_id',
         branchName:
-          "(SELECT string_agg(bb.name, ', ' ORDER BY bb.name) FROM erp_branches bb WHERE bb.id = ANY(inv.branch_ids))",
+          "(SELECT string_agg(bb.name, ', ' ORDER BY bb.name) FROM branches_management bb WHERE bb.id = ANY(inv.branch_ids))",
         licensePlate: 'inv.license_plate',
         settlementOrder: 'inv.settlement_order',
         createdAt: 'ii.created_at',
@@ -257,7 +257,7 @@ export class InvoiceItemsQueryService {
         'inv.settlement_order AS settlement_order',
         'inv.branch_ids AS branch_ids',
         'inv.tax_invoice_status AS tax_invoice_status',
-        "(SELECT string_agg(bb.name, ', ' ORDER BY bb.name) FROM erp_branches bb WHERE bb.id = ANY(inv.branch_ids)) AS branch_name",
+        "(SELECT string_agg(bb.name, ', ' ORDER BY bb.name) FROM branches_management bb WHERE bb.id = ANY(inv.branch_ids)) AS branch_name",
       ])
       .offset((page - 1) * pageSize)
       .limit(pageSize)

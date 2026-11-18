@@ -626,7 +626,7 @@ export class InvoiceLifecycleService {
       const systemBranches: { id: string }[] = validBranch
         ? []
         : await this.repository.manager.query(
-            `SELECT id FROM erp_branches WHERE is_active = true LIMIT 2`,
+            `SELECT id FROM branches_management WHERE is_deleted = false AND is_active = true LIMIT 2`,
           );
       const inferred =
         validBranch ??
