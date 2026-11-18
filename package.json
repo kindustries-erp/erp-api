@@ -25,6 +25,7 @@
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start --host 0.0.0.0",
     "start:dev": "NODE_OPTIONS=\"--max-old-space-size=384\" nest start -b swc --watch --host 0.0.0.0",
+    "start:dev:safe": "bash bin/dev-guard.sh --env-file .env --default-port 10003 -- bun run start:dev",
     "start:debug": "nest start --debug --watch",
     "start:prod": "bun dist/main.js",
     "plop": "plop",
