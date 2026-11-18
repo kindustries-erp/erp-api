@@ -706,7 +706,7 @@ export class GarageCheckpointService {
     // 3.3 Truy vấn Danh sách Phan trang có Bộ lọc
     const qb = this.caseRepo
       .createQueryBuilder('c')
-      .leftJoin('erp_module_categories', 'cat', 'cat.id = c.category_id')
+      .leftJoinAndSelect('c.category', 'cat')
       .leftJoinAndMapOne(
         'c.grossProfit',
         KgaraGrossProfit,
@@ -820,6 +820,22 @@ export class GarageCheckpointService {
         const rawData = c.rawData || {};
         const tienThueKH = Number(rawData.TienThueKH ?? 0);
 
+        const rawClass = (c.classification || c.category?.code || '')
+          .trim()
+          .toUpperCase();
+        let normalizedClass = 'KHAC';
+        if (rawClass === 'SUA_CHUA_CHUNG') {
+          normalizedClass = 'SUA_CHUA_CHUNG';
+        } else if (['KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO'].includes(rawClass)) {
+          normalizedClass = 'KY_GUI_NOI_BO';
+        } else if (
+          ['OJ', 'OJ_NGOAI'].includes(rawClass) ||
+          c.accountKey === 'OJ' ||
+          (c.soChungTu && String(c.soChungTu).startsWith('GN-'))
+        ) {
+          normalizedClass = 'OJ_NGOAI';
+        }
+
         return {
           id: c.id,
           soChungTu: c.soChungTu,
@@ -828,7 +844,7 @@ export class GarageCheckpointService {
           khachHangName: c.khachHangName,
           tinhTrangDichVu: c.tinhTrangDichVu,
           tenTinhTrangDichVu: c.tenTinhTrangDichVu,
-          classification: c.classification || 'KHAC',
+          classification: normalizedClass,
           doanhThu: rev,
           chiPhi: cost,
           loiNhuan: profit,
