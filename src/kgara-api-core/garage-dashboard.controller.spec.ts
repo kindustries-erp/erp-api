@@ -93,6 +93,7 @@ describe('GarageDashboardController — checkpoint-cases', () => {
       'ngayHoanThanhCongViec', // sort_by mặc định
       'DESC', // sort_order mặc định
       undefined, // status
+      undefined, // is_funnel
     );
   });
 
@@ -120,6 +121,7 @@ describe('GarageDashboardController — checkpoint-cases', () => {
       'ngayHoanThanhCongViec',
       'ASC',
       undefined,
+      undefined,
     );
   });
 
@@ -131,6 +133,7 @@ describe('GarageDashboardController — checkpoint-cases', () => {
         date_to: '2026-11-30',
         classification: 'SUA_CHUA_CHUNG',
         status: 'quotation',
+        is_funnel: 'true',
       })
       .expect(200);
 
@@ -145,6 +148,7 @@ describe('GarageDashboardController — checkpoint-cases', () => {
       'ngayHoanThanhCongViec',
       'DESC',
       'quotation',
+      true,
     );
   });
 });

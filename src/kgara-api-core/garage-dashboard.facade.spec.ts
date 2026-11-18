@@ -108,6 +108,7 @@ describe('GarageDashboardService (Facade)', () => {
       'ngayHoanThanhCongViec',
       'DESC',
       'quotation',
+      true,
     );
     expect(mockCheckpointService.getCheckpointCases).toHaveBeenCalledWith(
       '2026-01-01',
@@ -120,6 +121,7 @@ describe('GarageDashboardService (Facade)', () => {
       'ngayHoanThanhCongViec',
       'DESC',
       'quotation',
+      true,
     );
   });
 

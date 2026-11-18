@@ -112,6 +112,7 @@ export class GarageDashboardController {
       query.sort_by || 'ngayHoanThanhCongViec',
       query.sort_order || 'DESC',
       query.status,
+      query.is_funnel,
     );
   }
 

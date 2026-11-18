@@ -460,11 +460,16 @@ export class GarageCheckpointService {
     sortBy: string = 'ngayHoanThanhCongViec',
     sortOrder: 'ASC' | 'DESC' = 'DESC',
     status?: string,
+    isFunnel?: boolean,
   ) {
     const effectiveDateTo =
       dateTo.length === 10 ? `${dateTo} 23:59:59.999` : dateTo;
 
-    const isFunnelMode = Boolean(classification && classification !== 'ALL');
+    const isFunnelMode = Boolean(
+      (classification && classification !== 'ALL') ||
+      isFunnel ||
+      (status && status.toLowerCase() !== 'all'),
+    );
     const openCase =
       '(c.ngay_hoan_thanh_cong_viec IS NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9))';
     const quotation = quotationStatusSql('c');
