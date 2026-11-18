@@ -22,6 +22,8 @@ Các nghiệp vụ trọng tâm:
   - **Đồng bộ 2 Chiều & Mã Tham Chiếu Chuẩn**: `InvoiceCategoryAutopostService` tự động sinh và duy trì mã tham chiếu `reference = [Số HĐ]-[Ký hiệu HĐ]` cùng `source_id = invoice.id` sang Sổ cái (`erp_journal_entries`) cho cả luồng tạo mới và tái hạch toán In-Place khi đổi danh mục.
 - **Đối soát & Cấn trừ Sổ quỹ/Ngân hàng (Voucher Net-Off)**: Bảng `erp_invoice_voucher_netoff` liên kết hóa đơn với các giao dịch sao kê ngân hàng (`ErpBankTransaction`). Khi liên kết hoặc gỡ bỏ liên kết, hệ thống tự động kích hoạt `transactionAccountingService.refreshJournalEntriesForBankTransaction` để biến đổi đối ứng sao kê sang `331`/`131` hoặc hoàn nguyên về `T0001`.
 - **Lưu trữ & Quản lý Tệp Đa phương tiện trên Cloudflare R2**: Lưu trữ file XML gốc (`xml_file_key`), PDF chính (`pdf_file_key`), nhiều tệp PDF đính kèm (`pdf_files` JSONB) và liên kết tệp chung (`ErpInvoiceAttachment`). Hỗ trợ tạo pre-signed URL, tải trực tiếp hoặc nén tệp ZIP hàng loạt có streaming.
+  - **Lọc/sắp xếp `pdfSource`**: `column_filters={"pdfSource":[...]}` (`__BLANK__` = `pdf_source IS NULL`) hoạt động ở V1 (`_applyColumnFilters`) và V2 (`INVOICE_TABLE_COLUMNS`); V2 trả `pdfSource`, `pdfError`, `providerCode`, `attachmentCount` (đếm `file_attachments`).
+  - **File đính kèm V2 (nguồn mới)**: `GET/POST/DELETE /api/v2/invoices/:id/attachments` (module `file-attachments`, bảng `file_attachments`, RBAC `invoices` read/update). Dữ liệu cũ đã backfill vào bảng này (`origin=LEGACY`); các route V1 `erp-attachments`, `/erp-invoices/:id/pdfs`, `attachments/link|unlink` vẫn là đường ghi song song cho tới khi cutover (chưa làm). Xem module skill `file-attachments`.
 - **Xuất Báo cáo Excel Nền (Background Export & SSE Streaming)**: Hỗ trợ xuất dữ liệu hàng chục nghìn hóa đơn theo tác vụ nền, theo dõi tiến độ thời gian thực qua Server-Sent Events (SSE) `/export/excel/progress/stream` và `/debts/export/excel/progress/stream`.
 - **Báo cáo & Phân tích Dashboard Hóa đơn**: API thống kê dòng tiền/thuế (`cashTrend`), cơ cấu hóa đơn theo đối tác/nhà cung cấp (`getDashboardPartners`), phân tích chân trời tài chính (`InvoiceDashboardHorizonService`) và xuất Excel đối soát.
 - **Kiến trúc Dịch vụ Hóa đơn (Facade & Sub-Services Architecture - Pattern A & B)**:
@@ -629,7 +631,7 @@ graph TD
     INVOICE <-->|Net-Off Cấn trừ| BANK["bank-transactions-core<br/>(ErpBankTransaction)"]
     INVOICE -->|Trigger Recalc FIFO| VF["vinfast-parts<br/>(VinfastPartsStock)"]
     INVOICE -->|Notify Expiry / Sync Status| NOTIF["notifications-inbox<br/>(NotificationsPublisherService)"]
-    INVOICE -->|Resolve Branch| BRANCH["branches-core<br/>(ErpBranch)"]
+    INVOICE -->|Resolve Branch| BRANCH["branches-management<br/>(BranchManagement)"]
     PO["purchase-orders-core<br/>(PurchaseOrder)"] -->|Link Invoice| INVOICE
 ```
 

@@ -14,7 +14,7 @@ description: Module tri thức Nhân viên V2 trong erp-api gồm lõi src/v2/co
 
 ## 2. Schema `employees_management`
 
-Kế thừa `CoreSoftDeletableEntity`: `id`, `extra_data` (jsonb, CHECK object), `created_at`/`updated_at` timestamptz, `is_deleted`. Cột riêng: `employee_code`, `full_name`, `email`, `phone`, `status` (ACTIVE/INACTIVE), `user_id`, `address`, `notes`, `birth_date`/`start_date`/`leave_date` (timestamptz), `job_title`, `department` (text tự do), `branch_id` (FK `erp_branches`), `national_id` (varchar 20).
+Kế thừa `CoreSoftDeletableEntity`: `id`, `extra_data` (jsonb, CHECK object), `created_at`/`updated_at` timestamptz, `is_deleted`. Cột riêng: `employee_code`, `full_name`, `email`, `phone`, `status` (ACTIVE/INACTIVE), `user_id`, `address`, `notes`, `birth_date`/`start_date`/`leave_date` (timestamptz), `job_title`, `department` (text tự do), `branch_id` (FK `branches_management`; quan hệ chuỗi `@ManyToOne('BranchManagement')`, lõi không import module), `national_id` (varchar 20).
 Unique một phần `WHERE is_deleted = false`: `employee_code`, `user_id`, `national_id` (khi khác null). Mã đã xóa mềm dùng lại được.
 
 ## 3. Contract API

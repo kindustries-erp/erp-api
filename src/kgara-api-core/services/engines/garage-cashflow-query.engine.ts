@@ -722,8 +722,28 @@ export class GarageCashflowQueryEngine {
         .reduce((sum, d) => sum + Number(d.amount || 0), 0);
     }
 
+    const payerByVoucher = new Map<string, 'KH' | 'BH'>();
+    const voucherIds = data.map((d) => d.id);
+    if (voucherIds.length > 0) {
+      const rows: Array<{ voucher_id: string; payer_type: string }> =
+        await this.voucherRepo.manager.query(
+          `SELECT cashflow_voucher_id AS voucher_id, payer_type
+           FROM kgara_case_settlements
+           WHERE cashflow_voucher_id = ANY($1::uuid[])`,
+          [voucherIds],
+        );
+      for (const r of rows) {
+        if (r.payer_type === 'KH' || r.payer_type === 'BH') {
+          payerByVoucher.set(r.voucher_id, r.payer_type);
+        }
+      }
+    }
+
     return {
-      data: data.map(toKgaraCashflowVoucherResponse),
+      data: data.map((v) => ({
+        ...toKgaraCashflowVoucherResponse(v),
+        payerType: payerByVoucher.get(v.id) ?? null,
+      })),
       total,
       totalPages,
       totals: {

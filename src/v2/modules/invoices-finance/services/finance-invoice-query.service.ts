@@ -33,10 +33,14 @@ import {
   REMAINING_AMOUNT_SQL,
 } from '../helpers/invoice-netoff.helper';
 
+/** Đếm file đính kèm chưa xóa của hóa đơn (bảng `file_attachments`, owner INVOICE). */
+export const ATTACHMENT_COUNT_SQL = `(SELECT COUNT(*)::int FROM file_attachments fa WHERE fa.owner_type = 'INVOICE' AND fa.owner_id = e.id AND fa.is_deleted = false)`;
+
 /** Hóa đơn kèm số đã cấn trừ và số còn lại (tính trong SQL, không lưu cột). */
 export type FinanceInvoiceListRow = Invoice & {
   netOffAmount: number;
   remainingAmount: number;
+  attachmentCount: number;
 };
 export type InvoiceListRow = FinanceInvoiceListRow;
 
@@ -109,6 +113,7 @@ export class FinanceInvoiceQueryService {
     const { entities, raw } = await qb
       .addSelect(NET_OFF_SUM_SQL, 'netOffAmount')
       .addSelect(REMAINING_AMOUNT_SQL, 'remainingAmount')
+      .addSelect(ATTACHMENT_COUNT_SQL, 'attachmentCount')
       .offset((page - 1) * pageSize)
       .limit(pageSize)
       .getRawAndEntities<Record<string, unknown>>();
@@ -120,6 +125,7 @@ export class FinanceInvoiceQueryService {
       return Object.assign(entity, {
         netOffAmount: Number(extra?.netOffAmount ?? 0),
         remainingAmount: Number(extra?.remainingAmount ?? 0),
+        attachmentCount: Number(extra?.attachmentCount ?? 0),
       });
     });
     return { items, total, page, pageSize, summaries };
@@ -160,13 +166,13 @@ export class FinanceInvoiceQueryService {
   }
 
   /**
-   * Trả về các id chi nhánh còn hoạt động. Bảng `erp_branches` dùng cột `is_active`
-   * (không có `is_deleted`). Dùng để kiểm tra trước khi gán chi nhánh.
+   * Trả về các id chi nhánh còn hoạt động. Chỉ lấy chi nhánh chưa xóa mềm (`is_deleted = false`)
+   * và còn `is_active`. Dùng để kiểm tra trước khi gán chi nhánh.
    */
   async findExistingBranchIds(ids: string[]): Promise<string[]> {
     if (ids.length === 0) return [];
     const rows: { id: string }[] = await this.repo.query(
-      'SELECT id FROM erp_branches WHERE id = ANY($1::uuid[]) AND is_active = true',
+      'SELECT id FROM branches_management WHERE id = ANY($1::uuid[]) AND is_deleted = false AND is_active = true',
       [ids],
     );
     return rows.map((row) => row.id);

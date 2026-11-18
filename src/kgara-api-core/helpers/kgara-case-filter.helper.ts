@@ -5,6 +5,10 @@ import {
   applyMultiKeywordFilter,
   applyMultiKeywordMultiFieldFilter,
 } from '../../common/utils/query-builder.util';
+import {
+  AGING_HORIZON_COLUMN,
+  applyAgingHorizonFilter,
+} from './kgara-case-horizon-filter.helper';
 
 /**
  * Điều kiện SQL của trạng thái "Báo giá" (tab Báo giá của danh sách vụ việc và giai đoạn
@@ -112,6 +116,12 @@ export function applySingleCaseColumnFilter(
   paramPrefix: string,
 ): void {
   if (!values || values.length === 0) return;
+
+  // 0a. Mốc tuổi nợ (drawer mốc → danh sách phiếu)
+  if (column === AGING_HORIZON_COLUMN) {
+    applyAgingHorizonFilter(qb, values);
+    return;
+  }
 
   // 0. Xử lý khoảng ngày (Date Range: "YYYY-MM-DD..YYYY-MM-DD" hoặc "YYYY-MM-DD|YYYY-MM-DD")
   if (

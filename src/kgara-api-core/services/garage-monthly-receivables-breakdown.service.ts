@@ -1,8 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, SelectQueryBuilder } from 'typeorm';
 import { KgaraCase } from '../entities/kgara_case.entity';
+import { KGARA_STATUS_COMPLETED } from '../helpers/kgara-completion-date.helper';
+import { GARAGE_DEBT_BASELINE_DATE } from './kgara-customers-debt-query.service';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
+import { computeCaseRemaining } from '../helpers/kgara-case-remaining.helper';
+import { allocateReceiptsToPayers } from '../helpers/kgara-receipt-payer-allocation.helper';
+import { getCaseReceivableDues } from '../helpers/kgara-case-dues.helper';
 import { KgaraCaseLinkedInvoice } from '../entities/kgara_case_linked_invoice.entity';
 import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
 import { ErpInvoice } from '../../erp-invoices-core/entities/erp_invoice.entity';
@@ -118,6 +123,37 @@ export class GarageMonthlyReceivablesBreakdownService {
     );
   }
 
+  /**
+   * Phạm vi vụ việc của một mốc tuổi nợ: cùng điều kiện với analytics (số trên thẻ)
+   * gồm hoàn thành (tình trạng 3), từ mốc đối soát, đúng chi nhánh và đúng khoảng tuổi nợ.
+   * `dateTo` đã được chuẩn hóa thành datetime ở nơi gọi.
+   */
+  private applyHorizonScope(
+    qb: SelectQueryBuilder<KgaraCase>,
+    horizon: string,
+    dateFrom: string,
+    dateTo: string,
+    branchId?: string,
+  ): void {
+    const from =
+      dateFrom && dateFrom > GARAGE_DEBT_BASELINE_DATE
+        ? dateFrom
+        : GARAGE_DEBT_BASELINE_DATE;
+    qb.andWhere(`c.tinh_trang_dich_vu = ${KGARA_STATUS_COMPLETED}`)
+      .andWhere('c.ngay_hoan_thanh_cong_viec >= :horizonFrom', {
+        horizonFrom: from,
+      })
+      .andWhere(getHorizonCaseSqlCondition(horizon, 'c'));
+    if (dateTo) {
+      qb.andWhere('c.ngay_hoan_thanh_cong_viec <= :horizonTo', {
+        horizonTo: dateTo,
+      });
+    }
+    if (branchId) {
+      qb.andWhere('c.branch_external_id = :branchId', { branchId });
+    }
+  }
+
   async getMonthlyReceivablesBreakdown(
     month?: string,
     branchId?: string,
@@ -172,28 +208,20 @@ export class GarageMonthlyReceivablesBreakdownService {
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('(c.exclude_from_reports IS NOT TRUE)')
       .andWhere('(c.exclude_from_debt IS NOT TRUE)')
-      .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
       .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL');
 
     if (horizon) {
-      qb.andWhere(getHorizonCaseSqlCondition(horizon, 'c'));
-      if (dateFrom) {
-        qb.andWhere('c.ngay_hoan_thanh_cong_viec >= :dateFrom', { dateFrom });
-      }
-      if (dateTo) {
-        qb.andWhere('c.ngay_hoan_thanh_cong_viec <= :dateTo', { dateTo });
-      }
+      this.applyHorizonScope(qb, horizon, dateFrom, dateTo, branchId);
     } else {
-      qb.andWhere('c.ngay_hoan_thanh_cong_viec >= :dateFrom', {
-        dateFrom,
-      }).andWhere('c.ngay_hoan_thanh_cong_viec <= :dateTo', { dateTo });
-    }
-
-    if (branchId) {
-      qb.andWhere(
-        '(c.branch_external_id = :branchId OR c.branch_external_id IS NULL)',
-        { branchId },
-      );
+      qb.andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
+        .andWhere('c.ngay_hoan_thanh_cong_viec >= :dateFrom', { dateFrom })
+        .andWhere('c.ngay_hoan_thanh_cong_viec <= :dateTo', { dateTo });
+      if (branchId) {
+        qb.andWhere(
+          '(c.branch_external_id = :branchId OR c.branch_external_id IS NULL)',
+          { branchId },
+        );
+      }
     }
 
     const cases = await qb
@@ -329,7 +357,13 @@ export class GarageMonthlyReceivablesBreakdownService {
 
     const settlementsMap = new Map<
       string,
-      { kh: number; bh: number; total: number; paidCost: number }
+      {
+        kh: number;
+        bh: number;
+        total: number;
+        paidCost: number;
+        receipts: { amount: number; payerType: string | null }[];
+      }
     >();
     for (const s of settlements) {
       const cId =
@@ -341,12 +375,14 @@ export class GarageMonthlyReceivablesBreakdownService {
         bh: 0,
         total: 0,
         paidCost: 0,
+        receipts: [],
       };
       const amt = Number(s.amount) || 0;
       if (s.settlementType === 'PAYMENT') {
         cur.paidCost += amt;
       } else {
         cur.total += amt;
+        cur.receipts.push({ amount: amt, payerType: s.payerType ?? null });
         if (s.payerType === 'BH') {
           cur.bh += amt;
         } else {
@@ -458,27 +494,11 @@ export class GarageMonthlyReceivablesBreakdownService {
       const raw = c.rawData || {};
       const targetRev = Number(c.tienCoThue) || 0;
 
-      // Phải thu BH
-      let phaiThuBH = 0;
-      if (raw?.TienThanhToanBH != null && !isNaN(Number(raw.TienThanhToanBH))) {
-        phaiThuBH = Number(raw.TienThanhToanBH);
-      } else if (
-        raw?.XeLamBaoHiem === true &&
-        raw?.TienBaoHiemDuyet != null &&
-        !isNaN(Number(raw.TienBaoHiemDuyet))
-      ) {
-        phaiThuBH = Math.max(0, Number(raw.TienBaoHiemDuyet));
-      }
-
-      // Phải thu KH
-      let phaiThuKH = 0;
-      if (raw?.TienThanhToanKH != null && !isNaN(Number(raw.TienThanhToanKH))) {
-        phaiThuKH = Number(raw.TienThanhToanKH);
-      } else if (!raw?.XeLamBaoHiem) {
-        phaiThuKH = targetRev;
-      } else {
-        phaiThuKH = Math.max(0, targetRev - phaiThuBH);
-      }
+      // Phải thu KH/BH của phiếu (công thức dùng chung với writer phiếu thu)
+      const { dueKH: phaiThuKH, dueBH: phaiThuBH } = getCaseReceivableDues(
+        raw,
+        targetRev,
+      );
 
       // Thuế VAT từ KGara
       const vatTotal = Number(raw?.TienThue) || 0;
@@ -495,9 +515,16 @@ export class GarageMonthlyReceivablesBreakdownService {
       const setInfo = settlementsMap.get(c.id);
       let daThuKH = 0;
       let daThuBH = 0;
-      if (setInfo) {
-        daThuKH = setInfo.kh;
-        daThuBH = setInfo.bh;
+      const hasReceipts = Boolean(setInfo && setInfo.receipts.length > 0);
+      if (setInfo && hasReceipts) {
+        // Khoản đã gắn payer_type 'BH' giữ nguyên; khoản cũ còn 'KH' mơ hồ thì suy ra theo số tiền
+        const alloc = allocateReceiptsToPayers(
+          setInfo.receipts,
+          phaiThuKH,
+          phaiThuBH,
+        );
+        daThuKH = alloc.kh;
+        daThuBH = alloc.bh;
       } else {
         const paidTotal = Number(c.tienDaThanhToan) || 0;
         if (phaiThuBH <= 0) {
@@ -511,9 +538,18 @@ export class GarageMonthlyReceivablesBreakdownService {
       const conPhaiThuKH = Math.max(0, phaiThuKH - daThuKH);
       const conPhaiThuBH = Math.max(0, phaiThuBH - daThuBH);
 
+      // Tổng theo công thức chung (ròng − đã thu, loại trừ phiếu không tính công nợ).
+      // Tách KH/BH bên dưới vẫn theo payer_type như trước.
+      const remainingTotal = computeCaseRemaining({
+        netRevenue: targetRev,
+        storedPaid: c.tienDaThanhToan,
+        hasSettlement: hasReceipts,
+        receipts: setInfo ? setInfo.kh + setInfo.bh : 0,
+        excludeFromDebt: false,
+      });
       totalBilled += targetRev;
-      totalPaid += daThuKH + daThuBH;
-      totalRemaining += conPhaiThuKH + conPhaiThuBH;
+      totalPaid += remainingTotal.paid;
+      totalRemaining += remainingTotal.remaining;
 
       // Invoices matching
       const invList = invoicesMap.get(c.id) || [];
@@ -879,12 +915,18 @@ export class GarageMonthlyReceivablesBreakdownService {
       if (s.paidCost > 0) paidCostByCaseId.set(cId, s.paidCost);
     }
 
+    const receiptsByCaseId = new Map<string, number>();
+    for (const [cId, s] of settlementsMap.entries()) {
+      // Có khoản thu RECEIPT là tính "có settlement", kể cả tổng bằng 0 (khớp CASE_PAID_SQL)
+      if (s.receipts.length > 0) receiptsByCaseId.set(cId, s.total);
+    }
     const trendItem = buildReceivablesTrendItem(
       monthKey,
       cases,
       gpCostByCaseId,
       caseHasInvoiceMap,
       paidCostByCaseId,
+      receiptsByCaseId,
     );
 
     return {

@@ -9,7 +9,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { ErpBranch } from '@/v2/core/branches-core/entities/erp_branch.entity';
+import { BranchManagement } from '@/v2/modules/branches-management/entities/branch-management.entity';
 import { ErpBankAccount } from './erp_bank_account.entity';
 import { ErpCashBook } from './erp_cash_book.entity';
 import { ErpInvoiceVoucherNetOff } from '../../erp-invoices-core/entities/erp_invoice_voucher_netoff.entity';
@@ -87,9 +87,9 @@ export class ErpBankTransaction {
   })
   branchIds: string[];
 
-  @ManyToOne(() => ErpBranch, { nullable: true })
+  @ManyToOne(() => BranchManagement, { nullable: true })
   @JoinColumn({ name: 'branch_id' })
-  branch: ErpBranch | null;
+  branch: BranchManagement | null;
 
   @Column({ type: 'int', name: 'stt', nullable: true })
   stt: number | null;

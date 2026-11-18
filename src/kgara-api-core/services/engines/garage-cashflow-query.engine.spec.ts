@@ -45,6 +45,11 @@ describe('GarageCashflowQueryEngine', () => {
 
     mockRepo = {
       createQueryBuilder: jest.fn().mockReturnValue(qb),
+      manager: {
+        query: jest
+          .fn()
+          .mockResolvedValue([{ voucher_id: 'voucher-1', payer_type: 'BH' }]),
+      },
     };
 
     engine = new GarageCashflowQueryEngine(mockRepo);
@@ -58,6 +63,7 @@ describe('GarageCashflowQueryEngine', () => {
       expect(qb.addOrderBy).toHaveBeenCalledWith('voucher.createdAt', 'DESC');
       expect(qb.addOrderBy).toHaveBeenCalledWith('voucher.voucherCode', 'DESC');
       expect(result.data).toHaveLength(1);
+      expect(result.data[0].payerType).toBe('BH');
       expect(result.total).toBe(1);
     });
 

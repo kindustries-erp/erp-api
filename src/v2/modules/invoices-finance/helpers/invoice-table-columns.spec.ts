@@ -28,6 +28,15 @@ describe('invoice-table-columns', () => {
     ).toBe('number');
   });
 
+  it('lọc và sắp xếp được theo nguồn PDF gốc (pdfSource và alias originalPdf)', () => {
+    expect(resolveTableColumn(INVOICE_TABLE_COLUMNS, 'pdfSource')?.sql).toBe(
+      'e.pdfSource',
+    );
+    expect(resolveTableColumn(INVOICE_TABLE_COLUMNS, 'originalPdf')?.sql).toBe(
+      'e.pdfSource',
+    );
+  });
+
   it('sums netoff and remaining in the summary row', () => {
     const keys = INVOICE_SUMMARY_COLUMNS.map((column) => column.key);
 

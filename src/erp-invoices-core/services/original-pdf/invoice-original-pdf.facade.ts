@@ -3,6 +3,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -15,6 +16,7 @@ import {
 } from './invoice-provider-detector.service';
 import { readXmlFromBuffer } from './invoice-xml-reader.helper';
 import { R2Service } from '../../../r2/r2.service';
+import { LegacyFileRegistrarService } from '@/v2/modules/file-attachments-management/services/legacy-file-registrar.service';
 
 export interface SyncAdvancedParams {
   companyTaxCode: string;
@@ -68,6 +70,8 @@ export class InvoiceOriginalPdfFacade {
     private readonly workerService: InvoicePdfDownloadWorkerService,
     private readonly detectorService: InvoiceProviderDetectorService,
     private readonly r2Service: R2Service,
+    @Optional()
+    private readonly fileRegistrar?: LegacyFileRegistrarService,
   ) {}
 
   async downloadForInvoice(invoiceId: string): Promise<DownloadInvoiceResult> {
@@ -233,6 +237,13 @@ export class InvoiceOriginalPdfFacade {
     invoice.pdfSource = 'manual_upload';
     invoice.pdfError = null;
     await this.invoiceRepo.save(invoice);
+    await this.fileRegistrar?.registerInvoiceFile({
+      invoiceId: invoice.id,
+      fileKey: pdfFileKey,
+      column: 'pdf_file_key',
+      fileName: `${invoice.invoiceNo ?? invoice.id}.pdf`,
+      fileSize: fileBuffer.length,
+    });
 
     return {
       invoiceId: invoice.id,

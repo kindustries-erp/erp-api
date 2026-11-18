@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "layer": "api",
+  "family": "cashflow-vouchers-core",
+  "entity": "CashflowVoucher",
+  "style": "orchestrator",
+  "barrel": "src/v2/core/cashflow-vouchers-core/index.ts",
+  "module": null,
+  "moduleFile": null,
+  "baseClasses": {
+    "entity": "BaseCashflowVoucherEntity"
+  },
+  "serviceFile": null,
+  "permissionPattern": "cashflow-vouchers-core",
+  "requiredModuleFiles": []
+}

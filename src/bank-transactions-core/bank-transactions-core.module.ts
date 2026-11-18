@@ -20,9 +20,11 @@ import { TransactionAnalyticsService } from './services/transaction-analytics.se
 import { TransactionAccountingService } from './services/transaction-accounting.service';
 import { BankStatementExportBackgroundService } from './services/bank-statement-export-background.service';
 import { BankStatementExcelBuilder } from './services/bank-statement-excel.builder';
+import { ExportJobsBankStatementsModule } from '@/v2/modules/export-jobs-bank-statements';
 
 @Module({
   imports: [
+    ExportJobsBankStatementsModule,
     TypeOrmModule.forFeature([
       ErpBankAccount,
       ErpCashBook,

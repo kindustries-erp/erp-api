@@ -88,6 +88,27 @@ export function resolveStoredRevenue(
 }
 
 /**
+ * Tổng tiền thanh toán (đã trừ chiết khấu) của một vụ việc, dùng khi tính còn phải thu.
+ * - Có TongTienThanhToan / TienChietKhau trong raw: tính lại từ raw (số ròng chuẩn).
+ * - Raw thiếu field chiết khấu (dòng danh sách): giữ tienCoThue đã lưu, vì writer chi tiết đã lưu số ròng.
+ * - Không có gì để dùng: fallback về extractNetPayableAmount.
+ */
+export function resolveStoredNetPayable(item: any): number {
+  if (!item) return 0;
+  const raw = item.rawData || item;
+  const hasDiscountFields =
+    Number(raw.TongTienThanhToan) > 0 || Number(raw.TienChietKhau) > 0;
+  if (hasDiscountFields) {
+    return extractNetPayableAmount(item);
+  }
+  const stored = Number(item.tienCoThue);
+  if (!isNaN(stored) && stored > 0) {
+    return stored;
+  }
+  return extractNetPayableAmount(item);
+}
+
+/**
  * Trích xuất trường Phân loại xe (NguonGocKhachHangName / NguonGocKhachHangCode) từ payload KGara
  */
 export function extractKgaraClassification(item: any): {

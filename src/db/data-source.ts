@@ -4,6 +4,8 @@ import { CoreUser } from '../users/entities/core-user.entity';
 import { CoreUserPreference } from '../users/entities/core-user-preference.entity';
 import { CoreUserTablePreference } from '@/v2/core/table-preferences-core/entities/core-user-table-preference.entity';
 import { NotificationInbox } from '@/v2/modules/notifications-inbox/entities/notification-inbox.entity';
+import { FileAttachment } from '@/v2/modules/file-attachments-management/entities/file-attachment.entity';
+import { FileAttachmentSettings } from '@/v2/modules/file-attachments-management/entities/file-attachment-settings.entity';
 import { CoreRefreshToken } from '../auth/entities/core-refresh-token.entity';
 import { CoreRole } from '@/v2/core/rbac-core/entities/core-role.entity';
 import { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.entity';
@@ -42,7 +44,8 @@ import { ErpInventoryTrackingSerial } from '../inventory-core/entities/erp_inven
 import { ErpInventoryTrackingLot } from '../inventory-core/entities/erp_inventory_tracking_lot.entity';
 import { ErpInventoryTrackingCustom } from '../inventory-core/entities/erp_inventory_tracking_custom.entity';
 import { ErpTrackingPolicy } from '../inventory-core/entities/erp_tracking_policy.entity';
-import { ErpBranch } from '../v2/core/branches-core/entities/erp_branch.entity';
+import { BranchManagement } from '../v2/modules/branches-management/entities/branch-management.entity';
+import { BranchManagementExternalLink } from '../v2/modules/branches-management/entities/branch-management-external-link.entity';
 import { ErpAuditLog } from '../audit-core/entities/erp-audit-log.entity';
 import { AuditLog } from '../v2/modules/audit-logs/entities/audit-log.entity';
 import { ErpItemType } from '../inventory-core/entities/erp_item_type.entity';
@@ -94,6 +97,9 @@ import {
 import { GarageGoodsReceipt } from '@/v2/modules/goods-receipts-garage/entities/garage-goods-receipt.entity'; // api-v2-module:goods-receipts-garage:entity-imports
 import { GarageGoodsReceiptLine } from '@/v2/modules/goods-receipts-garage/entities/garage-goods-receipt-line.entity';
 import { GarageInventoryBalance } from '@/v2/modules/goods-receipts-garage/entities/garage-inventory-balance.entity';
+import { DebtGarage } from '@/v2/modules/debts-garage/entities/debt-garage.entity';
+import { DebtAllocationGarage } from '@/v2/modules/debts-garage/entities/debt-allocation-garage.entity';
+import { CashflowVoucherGarage } from '@/v2/modules/cashflow-vouchers-garage/entities/cashflow-voucher-garage.entity';
 import { ApprovalEvent } from '@/v2/core/approval-core/entities/approval-event.entity';
 import { ApprovalSetting } from '@/v2/core/approval-core/entities/approval-setting.entity';
 import { ProcurementRequest } from '@/v2/modules/procurement-requests-erp/entities/procurement-request.entity';
@@ -183,7 +189,8 @@ const entities = [
   ErpInventoryTrackingLot,
   ErpInventoryTrackingCustom,
   ErpTrackingPolicy,
-  ErpBranch,
+  BranchManagement,
+  BranchManagementExternalLink,
   ErpAuditLog,
   AuditLog,
   ErpItemType,
@@ -225,9 +232,14 @@ const entities = [
   VinfastPartsLedger,
   FinanceInvoice, // api-v2-module:invoices-finance:entities
   NotificationInbox, // api-v2-module:notifications-inbox:entities
+  FileAttachment, // api-v2-module:file-attachments:entities
+  FileAttachmentSettings,
   FinanceInvoiceItem,
   GarageGoodsReceipt, // api-v2-module:goods-receipts-garage:entities
   GarageGoodsReceiptLine,
+  DebtGarage,
+  DebtAllocationGarage,
+  CashflowVoucherGarage,
   GarageInventoryBalance,
   InventoryMovementsGarageReceiptLine,
   InventoryMovementsGarageIssueLine,

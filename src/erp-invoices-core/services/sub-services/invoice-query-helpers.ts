@@ -204,6 +204,7 @@ export function _mapSortByToQbColumn(
     licensePlate: 'inv.licensePlate',
     settlementOrder: 'inv.settlementOrder',
     branchId: 'inv.branchId',
+    pdfSource: 'inv.pdfSource',
     netOffAmount: 'COALESCE(netoff_agg.net_off_sum, 0)',
     remainingAmount: '(inv.total_amount - COALESCE(netoff_agg.net_off_sum, 0))',
   };
@@ -345,7 +346,7 @@ export function _applyColumnSearch(
       // Tìm theo tên hoặc mã của mọi chi nhánh gán cho hóa đơn (không chỉ chi nhánh đầu)
       applyMultiKeywordFilter(
         qb,
-        "(SELECT string_agg(bb.name || ' ' || bb.code, ' ') FROM erp_branches bb WHERE bb.id = ANY(inv.branch_ids))",
+        "(SELECT string_agg(bb.name || ' ' || bb.code, ' ') FROM branches_management bb WHERE bb.id = ANY(inv.branch_ids))",
         val,
         'branchIdSearch',
       );
@@ -414,7 +415,23 @@ export function _applyColumnFilters(
 
     if (key === 'status')
       qb.andWhere('inv.status IN (:...statusVals)', { statusVals: vals });
-    else if (key === 'postingStatus')
+    else if (key === 'pdfSource') {
+      // '__BLANK__' = chưa có nguồn PDF gốc (pdf_source IS NULL)
+      const hasBlank = vals.includes('__BLANK__');
+      const realVals = vals.filter((v) => v !== '__BLANK__');
+      if (hasBlank && realVals.length > 0) {
+        qb.andWhere(
+          '(inv.pdf_source IN (:...pdfSourceVals) OR inv.pdf_source IS NULL)',
+          { pdfSourceVals: realVals },
+        );
+      } else if (hasBlank) {
+        qb.andWhere('inv.pdf_source IS NULL');
+      } else {
+        qb.andWhere('inv.pdf_source IN (:...pdfSourceVals)', {
+          pdfSourceVals: realVals,
+        });
+      }
+    } else if (key === 'postingStatus')
       qb.andWhere('inv.posting_status IN (:...postingStatusVals)', {
         postingStatusVals: vals,
       });
