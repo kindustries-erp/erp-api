@@ -7,7 +7,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { ErpBranch } from '@/v2/core/branches-core/entities/erp_branch.entity';
+import { BranchManagement } from '@/v2/modules/branches-management/entities/branch-management.entity';
 import { ErpChartOfAccount } from '../../accounting-core/entities/erp_chart_of_account.entity';
 
 @Entity({ name: 'erp_bank_accounts' })
@@ -18,9 +18,9 @@ export class ErpBankAccount {
   @Column({ type: 'uuid', name: 'branch_id' })
   branchId: string;
 
-  @ManyToOne(() => ErpBranch)
+  @ManyToOne(() => BranchManagement)
   @JoinColumn({ name: 'branch_id' })
-  branch: ErpBranch;
+  branch: BranchManagement;
 
   @Column({ type: 'uuid', name: 'accounting_account_id', nullable: true })
   accountingAccountId: string | null;

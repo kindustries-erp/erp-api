@@ -1,6 +1,6 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import { CoreSoftDeletableEntity } from '../../base-core/entities/core-soft-deletable.entity';
-import { ErpBranch } from '../../branches-core/entities/erp_branch.entity';
+import type { BranchRef } from '../../branches-core/contracts/branch.contract';
 
 /**
  * Nhân viên (v2). Bảng mới `employees_management`, tách khỏi `erp_employees` (v1).
@@ -61,9 +61,10 @@ export class EmployeeManagement extends CoreSoftDeletableEntity {
   @Column({ type: 'uuid', name: 'branch_id', nullable: true })
   branchId: string | null;
 
-  @ManyToOne(() => ErpBranch, { nullable: true, onDelete: 'NO ACTION' })
+  // Quan hệ chuỗi tới `BranchManagement` (module branches-management): lõi không import module.
+  @ManyToOne('BranchManagement', { nullable: true, onDelete: 'NO ACTION' })
   @JoinColumn({ name: 'branch_id' })
-  branch?: ErpBranch | null;
+  branch?: BranchRef | null;
 
   // CCCD/CMND: dữ liệu nhạy cảm. Không đưa vào tìm kiếm chung, response chỉ trả bản che
   @Index('UQ_employees_management_national_id_active', ['nationalId'], {

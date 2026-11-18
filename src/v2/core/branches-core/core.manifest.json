@@ -2,21 +2,18 @@
   "schemaVersion": 1,
   "layer": "api",
   "family": "branches-core",
-  "entity": "ErpBranch",
-  "style": "legacy-compatible",
+  "entity": "BaseBranchEntity",
+  "style": "v2-core",
   "barrel": "src/v2/core/branches-core/index.ts",
-  "module": "BranchesCoreModule",
-  "moduleFile": "branches-core.module.ts",
+  "module": null,
+  "moduleFile": null,
   "baseClasses": {
-    "entity": "ErpBranch",
+    "entity": "BaseBranchEntity",
     "createDto": null,
-    "contract": null,
-    "service": "BranchesCoreService"
+    "contract": "BranchReferencePort",
+    "service": "AbstractBranchCommandService"
   },
-  "serviceFile": "services/branches-core.service.ts",
+  "serviceFile": "services/abstract-branch-command.service.ts",
   "permissionPattern": null,
-  "requiredModuleFiles": [
-    "entities",
-    "services"
-  ]
+  "requiredModuleFiles": ["entities", "services"]
 }

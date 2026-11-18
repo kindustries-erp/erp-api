@@ -1,19 +1,23 @@
 import { toPagedList } from '@/common/utils/paginated-result';
 import { Injectable } from '@nestjs/common';
 import { PaginationDto } from '@/common/dto/pagination.dto';
-import { BranchesCoreService } from '@/v2/core/branches-core';
 import {
   CreateErpBranchInput,
   UpdateErpBranchInput,
 } from './dto/create-erp-branch.dto';
 import { toErpBranchResponse } from './helpers/erp-branch.mapper';
+import { BranchManagementCommandService } from './services/branch-management-command.service';
+import { BranchManagementQueryService } from './services/branch-management-query.service';
 
 @Injectable()
 export class BranchesManagementService {
-  constructor(private readonly core: BranchesCoreService) {}
+  constructor(
+    private readonly query: BranchManagementQueryService,
+    private readonly command: BranchManagementCommandService,
+  ) {}
 
   async findAll(query: PaginationDto) {
-    const page = await this.core.findAll(query);
+    const page = await this.query.findAll(query);
     return toPagedList(
       page.items.map((item) => toErpBranchResponse(item)),
       page.page,
@@ -23,12 +27,12 @@ export class BranchesManagementService {
   }
 
   async create(body: CreateErpBranchInput) {
-    const result = await this.core.create(body);
+    const result = await this.command.create(body);
     return { data: toErpBranchResponse(result.data), message: result.message };
   }
 
   async update(id: string, body: UpdateErpBranchInput) {
-    const result = await this.core.update(id, body);
+    const result = await this.command.update(id, body);
     return {
       data: result.data ? toErpBranchResponse(result.data) : null,
       message: result.message,
@@ -36,6 +40,6 @@ export class BranchesManagementService {
   }
 
   remove(id: string) {
-    return this.core.remove(id);
+    return this.command.remove(id);
   }
 }

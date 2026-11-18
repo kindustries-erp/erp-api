@@ -70,7 +70,7 @@ export class InvoiceStatsService {
         CROSS JOIN LATERAL unnest(inv.branch_ids) AS bid
         WHERE ${whereClause}
       ) x
-      LEFT JOIN erp_branches b ON b.id = x.branch_id
+      LEFT JOIN branches_management b ON b.id = x.branch_id
       GROUP BY x.day_date, x.branch_id, b.name
       ORDER BY x.day_date ASC
       `,

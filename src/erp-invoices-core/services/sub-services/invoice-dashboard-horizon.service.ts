@@ -609,7 +609,7 @@ export class InvoiceDashboardHorizonService {
           CASE WHEN cardinality(q."branchIds") = 0 THEN ARRAY[NULL::uuid] ELSE q."branchIds" END
         ) AS x(bid)
       ) s
-      LEFT JOIN erp_branches b ON b.id = s.bid
+      LEFT JOIN branches_management b ON b.id = s.bid
       GROUP BY s.bid, b.name, b.code
       ORDER BY "outAmount" DESC, "inAmount" DESC
     `;

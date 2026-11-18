@@ -9,7 +9,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
-import { ErpBranch } from '@/v2/core/branches-core/entities/erp_branch.entity';
+import { BranchManagement } from '@/v2/modules/branches-management/entities/branch-management.entity';
 import { ErpBusinessPartner } from '@/v2/core/business-partners-core';
 
 @Entity({ name: 'erp_operating_expenses' })
@@ -24,9 +24,9 @@ export class ErpOperatingExpense {
   @Column({ type: 'uuid', name: 'branch_id', nullable: true })
   branchId: string | null;
 
-  @ManyToOne(() => ErpBranch)
+  @ManyToOne(() => BranchManagement)
   @JoinColumn({ name: 'branch_id' })
-  branch?: ErpBranch;
+  branch?: BranchManagement;
 
   @Column({ type: 'uuid', name: 'supplier_id', nullable: true })
   supplierId: string | null;

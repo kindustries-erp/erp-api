@@ -1092,7 +1092,7 @@ export class OperatingExpensesCoreService {
     let branchId = expense.branchId;
     if (!branchId) {
       const branchRows = await this.dataSource.query(
-        `SELECT id FROM erp_branches WHERE is_deleted = false LIMIT 1`,
+        `SELECT id FROM branches_management WHERE is_deleted = false LIMIT 1`,
       );
       if (branchRows.length > 0) branchId = branchRows[0].id;
     }
