@@ -563,6 +563,22 @@ export const COMPLETED_CASES_OPTIONAL_COLUMNS: ExcelReportColumnDef[] = [
     width: 26,
     align: 'left',
   },
+  { header: 'Số khung', key: 'soKhung', width: 20, align: 'left' },
+  { header: 'Hãng xe', key: 'hangXe', width: 16, align: 'left' },
+  { header: 'Dòng xe', key: 'dongXe', width: 18, align: 'left' },
+  {
+    header: 'Năm SX',
+    key: 'namSanXuat',
+    width: 10,
+    align: 'center',
+    style: { numFmt: '0' },
+  },
+  {
+    header: 'Đối tượng thanh toán',
+    key: 'doiTuongThanhToan',
+    width: 28,
+    align: 'left',
+  },
   {
     header: 'Ngày tạo',
     key: 'createdAt',

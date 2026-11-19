@@ -4,7 +4,10 @@ import {
   resolveCompletedCasesColumns,
   SHEET1_NAME,
 } from './kgara-completed-cases-sheet.builder';
-import { COMPLETED_CASES_COLUMNS } from './kgara-excel-style.helper';
+import {
+  COMPLETED_CASES_COLUMNS,
+  COMPLETED_CASES_EXPORT_COLUMN_KEYS,
+} from './kgara-excel-style.helper';
 
 const sampleCase = {
   id: 'case-1',
@@ -151,6 +154,60 @@ describe('cột tùy chọn của Sheet 1', () => {
     expect(created.value).toEqual(new Date(Date.UTC(2026, 2, 2, 8, 30)));
     expect(created.numFmt).toBe('dd/mm/yyyy hh:mm');
     expect(summary.sums.vatAmount).toBe(1800000);
+  });
+
+  it('chọn 5 cột xe và đối tượng thanh toán thì xuất đúng, thiếu dữ liệu ra —', () => {
+    const keys = [
+      'soKhung',
+      'hangXe',
+      'dongXe',
+      'namSanXuat',
+      'doiTuongThanhToan',
+    ];
+    const build = (data: Record<string, unknown>) => {
+      const workbook = new ExcelJS.Workbook();
+      buildSheet1CompletedCases(
+        workbook,
+        [{ ...sampleCase, ...data }],
+        {},
+        {},
+        {},
+        undefined,
+        {},
+        keys,
+      );
+      const row = (
+        workbook.getWorksheet(SHEET1_NAME) as ExcelJS.Worksheet
+      ).getRow(5);
+      return keys.map((_, i) => row.getCell(i + 1).value);
+    };
+
+    expect(
+      build({
+        soKhung: ' RLV123 ',
+        hangXeName: 'VinFast',
+        hangXeCode: 'VF',
+        dongXeName: null,
+        dongXeCode: 'VF8',
+        namSanXuat: 2024,
+        doiTuongThanhToanName: 'Bảo hiểm A',
+      }),
+    ).toEqual(['RLV123', 'VinFast', 'VF8', 2024, 'Bảo hiểm A']);
+    expect(build({})).toEqual(['—', '—', '—', '—', '—']);
+  });
+
+  it('5 cột xe nằm trong khóa hợp lệ nhưng không thuộc 30 cột mặc định', () => {
+    const defaults = resolveCompletedCasesColumns().map((c) => c.key);
+    for (const key of [
+      'soKhung',
+      'hangXe',
+      'dongXe',
+      'namSanXuat',
+      'doiTuongThanhToan',
+    ]) {
+      expect(defaults).not.toContain(key);
+      expect(COMPLETED_CASES_EXPORT_COLUMN_KEYS).toContain(key);
+    }
   });
 
   it('phiếu không có TienThue vẫn ra thuế GTGT theo chênh lệch 8% của dòng dịch vụ', () => {
