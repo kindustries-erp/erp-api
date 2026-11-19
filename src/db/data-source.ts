@@ -46,6 +46,7 @@ import { ErpInventoryTrackingCustom } from '../inventory-core/entities/erp_inven
 import { ErpTrackingPolicy } from '../inventory-core/entities/erp_tracking_policy.entity';
 import { BranchManagement } from '../v2/modules/branches-management/entities/branch-management.entity';
 import { BranchManagementExternalLink } from '../v2/modules/branches-management/entities/branch-management-external-link.entity';
+import { BankManagement } from '../v2/modules/banks-management/entities/bank-management.entity';
 import { ErpAuditLog } from '../audit-core/entities/erp-audit-log.entity';
 import { AuditLog } from '../v2/modules/audit-logs/entities/audit-log.entity';
 import { ErpItemType } from '../inventory-core/entities/erp_item_type.entity';
@@ -191,6 +192,7 @@ const entities = [
   ErpTrackingPolicy,
   BranchManagement,
   BranchManagementExternalLink,
+  BankManagement,
   ErpAuditLog,
   AuditLog,
   ErpItemType,
