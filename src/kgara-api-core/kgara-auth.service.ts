@@ -165,7 +165,13 @@ export class KgaraAuthService {
       }
 
       const data = await response.json();
-      return this.saveTokens(data, accountKey);
+      // KGara có thể trả HTTP 200 kèm body { status, message } khi từ chối đăng nhập
+      if (!data?.AccessToken) {
+        throw new Error(
+          `Login rejected: ${data?.status ?? 'no token'} ${data?.message ?? ''}`.trim(),
+        );
+      }
+      return await this.saveTokens(data, accountKey);
     } catch (error: any) {
       this.lastErrors.set(accountKey, error?.message || 'Login failed');
       this.logger.error(
@@ -206,7 +212,14 @@ export class KgaraAuthService {
       }
 
       const data = await response.json();
-      return this.saveTokens(data, accountKey);
+      // KGara trả HTTP 200 kèm body { status: 401, message: 'Refresh token không hợp lệ!' } khi token hết hạn
+      if (!data?.AccessToken) {
+        this.logger.warn(
+          `Refresh rejected for account ${accountKey} (${data?.status ?? 'no token'}: ${data?.message ?? 'empty response'}), falling back to login`,
+        );
+        return this.login(accountKey);
+      }
+      return await this.saveTokens(data, accountKey);
     } catch (error: any) {
       this.logger.error(
         `Failed to refresh token for account ${accountKey}: ${error?.message}`,
@@ -219,6 +232,13 @@ export class KgaraAuthService {
     data: any,
     accountKey: KgaraAccountKey,
   ): Promise<string> {
+    const tokenExpires = new Date(data?.TokenExpires);
+    if (!data?.AccessToken || isNaN(tokenExpires.getTime())) {
+      throw new Error(
+        `Kgara trả token không hợp lệ cho tài khoản ${accountKey} (TokenExpires=${JSON.stringify(data?.TokenExpires)})`,
+      );
+    }
+
     let auth = await this.authRepo.findOne({ where: { accountKey } });
     if (!auth) {
       auth = new KgaraAuth();
@@ -226,8 +246,9 @@ export class KgaraAuthService {
     }
 
     auth.accessToken = data.AccessToken;
-    auth.refreshToken = data.RefreshToken;
-    auth.tokenExpires = new Date(data.TokenExpires);
+    // Phản hồi thiếu RefreshToken thì giữ refresh token đã lưu
+    auth.refreshToken = data.RefreshToken ?? auth.refreshToken;
+    auth.tokenExpires = tokenExpires;
     auth.ssClientId = data.SS_ClientID || '';
 
     await this.authRepo.save(auth);
