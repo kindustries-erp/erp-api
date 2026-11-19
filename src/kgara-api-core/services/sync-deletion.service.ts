@@ -1,4 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
+import { notifyCaseProjector } from '../hub/case-projector.port';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { KgaraCase } from '../entities/kgara_case.entity';
@@ -15,6 +17,8 @@ export class SyncDeletionService {
     private readonly caseRepo: Repository<KgaraCase>,
     @InjectRepository(KgaraCaseLinkedInvoice)
     private readonly linkedInvoiceRepo: Repository<KgaraCaseLinkedInvoice>,
+    @Optional()
+    private readonly moduleRef?: ModuleRef,
   ) {}
 
   /**
@@ -97,6 +101,7 @@ export class SyncDeletionService {
       }
 
       await this.caseRepo.save(c);
+      await notifyCaseProjector(this.moduleRef, this.logger, c.id);
 
       this.logger.warn(
         `Case ${c.hdPhieuDichVuId} (account: ${accountKey}) marked as deleted (count: ${c.kgaraDeleteCount}). Has linked invoices: ${hasLinks > 0}`,

@@ -25,7 +25,7 @@ const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : String(v));
 
 /**
  * Báo cáo lợi nhuận gộp theo vụ việc v2. Đi từ `kgara_gross_profit`, nối vụ việc theo mã chứng từ
- * (`vu_viec_code = so_chung_tu`) và CHỈ với vụ việc đang hoạt động: `hd_phieu_dich_vu_id` của hai bảng
+ * (`vu_viec_code = case_code`) và CHỈ với vụ việc đang hoạt động: `hd_phieu_dich_vu_id` của hai bảng
  * thuộc hai không gian ID khác nhau nên không dùng để nối, còn mã chỉ duy nhất khi bỏ vụ việc đã xóa.
  * Phân trang và tổng bằng SQL (V1 kéo toàn bộ về rồi cộng bằng JS).
  */
@@ -56,10 +56,11 @@ export class GrossProfitReportService {
     // Một vụ việc cho mỗi dòng lãi gộp (LATERAL): mã trùng không nhân dòng cả rows lẫn totals.
     const from = `FROM kgara_gross_profit gp
       LEFT JOIN LATERAL (
-        SELECT c2.* FROM kgara_cases c2
-        WHERE c2.so_chung_tu = gp.vu_viec_code
+        SELECT c2.* FROM cases_garage c2
+        WHERE c2.case_code = gp.vu_viec_code
           AND c2.branch_external_id = gp.branch_external_id
-          AND c2.kgara_deleted_at IS NULL
+          AND c2.is_deleted = false
+          AND c2.external_deleted_at IS NULL
         ORDER BY c2.updated_at DESC, c2.id ASC
         LIMIT 1
       ) c ON true`;
@@ -74,10 +75,10 @@ export class GrossProfitReportService {
       this.ds.query<Row[]>(
         `SELECT gp.id, gp.created_at, gp.updated_at, gp.vu_viec_code, gp.vu_viec_name, gp.ten_khach_hang,
           gp.doanh_thu, gp.chi_phi, gp.loi_nhuan,
-          c.id AS case_id, c.so_chung_tu, c.bien_so_xe, c.khach_hang_name, c.ngay_phat_sinh,
-          c.ngay_hoan_thanh_cong_viec, c.ten_tinh_trang_dich_vu
+          c.id AS case_id, c.case_code, c.license_plate, c.customer_name, c.issued_at,
+          c.completed_at, c.status_name
          ${from} WHERE ${where}
-         ORDER BY c.ngay_phat_sinh DESC NULLS LAST, gp.updated_at DESC, gp.id ASC
+         ORDER BY c.issued_at DESC NULLS LAST, gp.updated_at DESC, gp.id ASC
          LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`,
         params,
       ),
@@ -117,12 +118,12 @@ export function toItem(r: Row): GrossProfitReportItem {
         ? null
         : {
             id: str(r.case_id) ?? '',
-            soChungTu: str(r.so_chung_tu) ?? '',
-            bienSoXe: str(r.bien_so_xe),
-            khachHangName: str(r.khach_hang_name),
-            ngayPhatSinh: date(r.ngay_phat_sinh),
-            ngayHoanThanhCongViec: date(r.ngay_hoan_thanh_cong_viec),
-            tenTinhTrangDichVu: str(r.ten_tinh_trang_dich_vu),
+            caseCode: str(r.case_code) ?? '',
+            licensePlate: str(r.license_plate),
+            customerName: str(r.customer_name),
+            issuedAt: date(r.issued_at),
+            completedAt: date(r.completed_at),
+            statusName: str(r.status_name),
           },
   };
 }

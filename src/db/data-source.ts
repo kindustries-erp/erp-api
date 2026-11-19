@@ -100,6 +100,8 @@ import { GarageGoodsReceiptLine } from '@/v2/modules/goods-receipts-garage/entit
 import { GarageInventoryBalance } from '@/v2/modules/goods-receipts-garage/entities/garage-inventory-balance.entity';
 import { DebtGarage } from '@/v2/modules/debts-garage/entities/debt-garage.entity';
 import { DebtAllocationGarage } from '@/v2/modules/debts-garage/entities/debt-allocation-garage.entity';
+import { CaseGarage } from '@/v2/modules/cases-garage/entities/case-garage.entity';
+import { CaseServiceGarage } from '@/v2/modules/cases-garage/entities/case-service-garage.entity';
 import { CashflowVoucherGarage } from '@/v2/modules/cashflow-vouchers-garage/entities/cashflow-voucher-garage.entity';
 import { ApprovalEvent } from '@/v2/core/approval-core/entities/approval-event.entity';
 import { ApprovalSetting } from '@/v2/core/approval-core/entities/approval-setting.entity';
@@ -242,6 +244,8 @@ const entities = [
   DebtGarage,
   DebtAllocationGarage,
   CashflowVoucherGarage,
+  CaseGarage,
+  CaseServiceGarage,
   GarageInventoryBalance,
   InventoryMovementsGarageReceiptLine,
   InventoryMovementsGarageIssueLine,

@@ -17,6 +17,7 @@ import { SyncGrossProfitService } from './sync-gross-profit.service';
 import { GarageCaseForecastService } from './garage-case-forecast.service';
 import { GarageHubService } from '../hub/garage-hub.service';
 import { notifyLedgerProjector } from '../hub/ledger-projector.port';
+import { notifyCaseProjector } from '../hub/case-projector.port';
 import { resolveCompletionDate } from '../helpers/kgara-completion-date.helper';
 import {
   buildGuidMap,
@@ -79,6 +80,11 @@ export class SyncCaseService {
     return notifyLedgerProjector(this.moduleRef, this.logger, (p) =>
       p.projectCase(caseId),
     );
+  }
+
+  /** Chiếu vụ việc (kèm dòng đã lưu) sang bảng v2 `cases_garage` (lỗi chỉ log). */
+  private projectCaseToV2(caseId?: string): Promise<void> {
+    return notifyCaseProjector(this.moduleRef, this.logger, caseId);
   }
 
   async syncBranches(
@@ -428,6 +434,7 @@ export class SyncCaseService {
 
           await this.caseRepo.save(gwCase);
           await this.projectCaseToLedger(gwCase.id);
+          await this.projectCaseToV2(gwCase.id);
 
           if (this.garageHub && gwCase.id) {
             await this.garageHub.handleCaseTransition({
@@ -679,6 +686,7 @@ export class SyncCaseService {
         if (!gwCase || gwCase.soKhung) continue;
         gwCase.soKhung = chassis;
         await this.caseRepo.save(gwCase);
+        await this.projectCaseToV2(gwCase.id);
       }
     } catch (err: any) {
       this.logger.warn(
@@ -1032,6 +1040,7 @@ export class SyncCaseService {
           ),
       );
       linesCount = linesResult.upserted;
+      await this.projectCaseToV2(targetCaseId);
       if (linesResult.conflicts.length > 0) {
         this.logger.warn(
           `Case ${targetCaseId}: ${linesResult.conflicts.length} line(s) belong to another case, not moved: ${linesResult.conflicts.join(', ')}`,
