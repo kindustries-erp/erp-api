@@ -359,3 +359,283 @@ describe('SyncCaseService (Kgara account scope)', () => {
     );
   });
 });
+
+describe('SyncCaseService (số khung & đối tượng thanh toán)', () => {
+  it('list trả SoKhung rỗng không xóa số khung đã có', async () => {
+    const ctx = buildService();
+    ctx.client.getCases.mockResolvedValue({
+      data: [
+        {
+          HdPhieuDichVuID: MAIN_GUID,
+          SoChungTu: 'GR-PDV2610-0001',
+          TinhTrangDichVu: 1,
+          SoKhung: '',
+        },
+      ],
+      pagination: { totalPages: 1 },
+    });
+    ctx.caseRepo.findOne.mockResolvedValue({
+      id: 'case-row-1',
+      hdPhieuDichVuId: MAIN_GUID,
+      accountKey: 'MAIN',
+      soKhung: 'RLMWF8DXXKV007401',
+    } as unknown as KgaraCase);
+
+    await ctx.service.syncCasesForBranch(
+      BRANCH,
+      '2026-01-01',
+      '2026-11-03',
+      undefined,
+      KgaraAccountKey.MAIN,
+    );
+
+    const saved = ctx.caseRepo.save.mock.calls[0][0];
+    expect(saved.soKhung).toBe('RLMWF8DXXKV007401');
+  });
+
+  it('điền số khung từ receivables cho phiếu còn trống, không ghi đè phiếu đã có', async () => {
+    const ctx = buildService();
+    ctx.client.getCases.mockResolvedValue({
+      data: [],
+      pagination: { totalPages: 1 },
+    });
+    ctx.client.getReceivables.mockResolvedValue({
+      data: [
+        { HdPhieuDichVuID: MAIN_GUID, SoKhung: 'VIN-NEW' },
+        { HdPhieuDichVuID: 'uuid-has-1', SoKhung: 'VIN-OTHER' },
+      ],
+      pagination: { totalPages: 1 },
+    });
+    const emptyCase = {
+      id: 'c1',
+      hdPhieuDichVuId: MAIN_GUID,
+      accountKey: 'MAIN',
+      soKhung: null,
+    };
+    const filledCase = {
+      id: 'c2',
+      hdPhieuDichVuId: 'uuid-has-1',
+      accountKey: 'MAIN',
+      soKhung: 'KEEP',
+    };
+    ctx.caseRepo.findOne.mockImplementation(async ({ where }: any) => {
+      if (where.hdPhieuDichVuId === MAIN_GUID) return { ...emptyCase };
+      if (where.hdPhieuDichVuId === 'uuid-has-1') return { ...filledCase };
+      return null;
+    });
+
+    await ctx.service.syncCasesForBranch(
+      BRANCH,
+      '2026-01-01',
+      '2026-11-03',
+      undefined,
+      KgaraAccountKey.MAIN,
+    );
+
+    expect(ctx.caseRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hdPhieuDichVuId: MAIN_GUID,
+        soKhung: 'VIN-NEW',
+      }),
+    );
+    expect(ctx.caseRepo.save).not.toHaveBeenCalledWith(
+      expect.objectContaining({ hdPhieuDichVuId: 'uuid-has-1' }),
+    );
+  });
+
+  it('receivables lỗi thì sync phiếu vẫn thành công (chỉ cảnh báo)', async () => {
+    const ctx = buildService();
+    ctx.client.getCases.mockResolvedValue({
+      data: [
+        {
+          HdPhieuDichVuID: MAIN_GUID,
+          SoChungTu: 'GR-PDV2610-0002',
+          TinhTrangDichVu: 1,
+        },
+      ],
+      pagination: { totalPages: 1 },
+    });
+    ctx.client.getReceivables.mockRejectedValue(new Error('boom'));
+
+    await expect(
+      ctx.service.syncCasesForBranch(
+        BRANCH,
+        '2026-01-01',
+        '2026-11-03',
+        undefined,
+        KgaraAccountKey.MAIN,
+      ),
+    ).resolves.toBeDefined();
+    expect(ctx.caseRepo.save).toHaveBeenCalled();
+  });
+
+  it('detail có DoiTuongThanhToanCode/Name thì lưu cột typed', async () => {
+    const ctx = buildService();
+    ctx.client.getCaseDetail.mockResolvedValue({
+      data: {
+        HdPhieuDichVuID: MAIN_GUID,
+        SoChungTu: 'GR-PDV2610-0012',
+        TinhTrangDichVu: 1,
+        SoKhung: 'VIN-DETAIL',
+        DoiTuongThanhToanCode: 'BH-MIC',
+        DoiTuongThanhToanName: 'Bảo hiểm MIC',
+        ListPhieuDichVuChiTiet: [],
+      },
+      dataAsOf: '2026-11-03T10:00:00+07:00',
+    });
+    ctx.caseRepo.findOne.mockResolvedValue({
+      id: 'case-row-1',
+      hdPhieuDichVuId: MAIN_GUID,
+      accountKey: 'MAIN',
+      soKhung: null,
+    } as unknown as KgaraCase);
+
+    await ctx.service.syncCaseDetail(BRANCH, MAIN_GUID, KgaraAccountKey.MAIN);
+
+    const saved = ctx.caseRepo.save.mock.calls[0][0];
+    expect(saved.doiTuongThanhToanCode).toBe('BH-MIC');
+    expect(saved.doiTuongThanhToanName).toBe('Bảo hiểm MIC');
+    expect(saved.soKhung).toBe('VIN-DETAIL');
+  });
+
+  it('detail không có key đối tượng thì giữ nguyên giá trị đã lưu', async () => {
+    const ctx = buildService();
+    ctx.client.getCaseDetail.mockResolvedValue({
+      data: {
+        HdPhieuDichVuID: MAIN_GUID,
+        SoChungTu: 'GR-PDV2610-0013',
+        TinhTrangDichVu: 1,
+        ListPhieuDichVuChiTiet: [],
+      },
+      dataAsOf: '2026-11-03T10:00:00+07:00',
+    });
+    ctx.caseRepo.findOne.mockResolvedValue({
+      id: 'case-row-1',
+      hdPhieuDichVuId: MAIN_GUID,
+      accountKey: 'MAIN',
+      doiTuongThanhToanCode: 'BH-DBV',
+      doiTuongThanhToanName: 'Bảo hiểm DBV',
+    } as unknown as KgaraCase);
+
+    await ctx.service.syncCaseDetail(BRANCH, MAIN_GUID, KgaraAccountKey.MAIN);
+
+    const saved = ctx.caseRepo.save.mock.calls[0][0];
+    expect(saved.doiTuongThanhToanCode).toBe('BH-DBV');
+    expect(saved.doiTuongThanhToanName).toBe('Bảo hiểm DBV');
+  });
+
+  it('list có hãng/dòng xe thì lưu; list rỗng không xóa giá trị đã có', async () => {
+    const ctx = buildService();
+    ctx.client.getCases.mockResolvedValue({
+      data: [
+        {
+          HdPhieuDichVuID: MAIN_GUID,
+          SoChungTu: 'GR-PDV2610-0020',
+          TinhTrangDichVu: 1,
+          MaHangSanXuat: 'Mercedes-Benz',
+          TenHdHangSanXuat: 'Mercedes-Benz',
+          MaDongXe: '',
+          TenHdDongXe: '  ',
+        },
+      ],
+      pagination: { totalPages: 1 },
+    });
+    ctx.caseRepo.findOne.mockResolvedValue({
+      id: 'case-row-1',
+      hdPhieuDichVuId: MAIN_GUID,
+      accountKey: 'MAIN',
+      dongXeCode: 'C300',
+      dongXeName: 'C300',
+    } as unknown as KgaraCase);
+
+    await ctx.service.syncCasesForBranch(
+      BRANCH,
+      '2026-01-01',
+      '2026-11-03',
+      undefined,
+      KgaraAccountKey.MAIN,
+    );
+
+    const saved = ctx.caseRepo.save.mock.calls[0][0];
+    expect(saved.hangXeCode).toBe('Mercedes-Benz');
+    expect(saved.hangXeName).toBe('Mercedes-Benz');
+    expect(saved.dongXeCode).toBe('C300');
+    expect(saved.dongXeName).toBe('C300');
+  });
+
+  it('detail: HoSoPhuongTien chỉ điền chỗ trống (không ghi đè hãng từ list), lưu năm SX và số khung dự phòng', async () => {
+    const ctx = buildService();
+    ctx.client.getCaseDetail.mockResolvedValue({
+      data: {
+        HdPhieuDichVuID: MAIN_GUID,
+        SoChungTu: 'GR-PDV2610-0021',
+        TinhTrangDichVu: 1,
+        SoKhung: '',
+        HoSoPhuongTien: {
+          SoKhung: 'RLMWF8DXXKV007401',
+          ThuongHieuName: 'TOYOTA',
+          HdDongXeCode: 'Fortuner',
+          HdDongXeName: 'Fortuner',
+          NamSanXuat: 2019,
+        },
+        ListPhieuDichVuChiTiet: [],
+      },
+      dataAsOf: '2026-11-03T10:00:00+07:00',
+    });
+    ctx.caseRepo.findOne.mockResolvedValue({
+      id: 'case-row-1',
+      hdPhieuDichVuId: MAIN_GUID,
+      accountKey: 'MAIN',
+      soKhung: null,
+      hangXeName: 'Toyota Việt Nam',
+    } as unknown as KgaraCase);
+
+    await ctx.service.syncCaseDetail(BRANCH, MAIN_GUID, KgaraAccountKey.MAIN);
+
+    const saved = ctx.caseRepo.save.mock.calls[0][0];
+    expect(saved.soKhung).toBe('RLMWF8DXXKV007401');
+    expect(saved.hangXeName).toBe('Toyota Việt Nam');
+    expect(saved.dongXeCode).toBe('Fortuner');
+    expect(saved.dongXeName).toBe('Fortuner');
+    expect(saved.namSanXuat).toBe(2019);
+  });
+
+  it('detail: năm SX không hợp lệ giữ giá trị cũ, thiếu HoSoPhuongTien giữ nguyên thông tin xe', async () => {
+    const ctx = buildService();
+    ctx.client.getCaseDetail.mockResolvedValue({
+      data: {
+        HdPhieuDichVuID: MAIN_GUID,
+        SoChungTu: 'GR-PDV2610-0022',
+        TinhTrangDichVu: 1,
+        ListPhieuDichVuChiTiet: [],
+      },
+      dataAsOf: '2026-11-03T10:00:00+07:00',
+    });
+    ctx.caseRepo.findOne.mockResolvedValue({
+      id: 'case-row-1',
+      hdPhieuDichVuId: MAIN_GUID,
+      accountKey: 'MAIN',
+      hangXeName: 'Volvo',
+      namSanXuat: 2021,
+    } as unknown as KgaraCase);
+
+    await ctx.service.syncCaseDetail(BRANCH, MAIN_GUID, KgaraAccountKey.MAIN);
+
+    const saved = ctx.caseRepo.save.mock.calls[0][0];
+    expect(saved.hangXeName).toBe('Volvo');
+    expect(saved.namSanXuat).toBe(2021);
+  });
+
+  it('detail rỗng: thông báo lỗi kèm lý do KGara trả về', async () => {
+    const ctx = buildService();
+    ctx.client.getCaseDetail.mockResolvedValue({
+      status: 500,
+      message: 'Internal Server Error: Thiếu thông chi nhánh!',
+      data: null,
+    });
+
+    await expect(
+      ctx.service.syncCaseDetail(BRANCH, MAIN_GUID, KgaraAccountKey.MAIN),
+    ).rejects.toThrow(/detail not found on Kgara: .*Thiếu thông chi nhánh/);
+  });
+});

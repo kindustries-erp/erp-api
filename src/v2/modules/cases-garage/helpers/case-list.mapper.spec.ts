@@ -30,6 +30,68 @@ const base = {
   rawData: {},
 } as unknown as KgaraCase;
 
+describe('toCaseListItem — số khung & đối tượng thanh toán', () => {
+  it('trả soKhung và đối tượng thanh toán từ cột typed; thiếu thì null', () => {
+    const withPayer = toCaseListItem(
+      {
+        ...base,
+        soKhung: 'RLMWF8DXXKV007401',
+        doiTuongThanhToanCode: 'BH-MIC',
+        doiTuongThanhToanName: 'Bảo hiểm MIC',
+      } as unknown as KgaraCase,
+      undefined,
+      undefined,
+      null,
+    );
+    expect(withPayer.soKhung).toBe('RLMWF8DXXKV007401');
+    expect(withPayer.doiTuongThanhToanCode).toBe('BH-MIC');
+    expect(withPayer.doiTuongThanhToanName).toBe('Bảo hiểm MIC');
+
+    const without = toCaseListItem(
+      base as unknown as KgaraCase,
+      undefined,
+      undefined,
+      null,
+    );
+    expect(without.soKhung).toBeNull();
+    expect(without.doiTuongThanhToanCode).toBeNull();
+    expect(without.doiTuongThanhToanName).toBeNull();
+  });
+});
+
+describe('toCaseListItem — hãng xe, dòng xe, năm sản xuất', () => {
+  it('trả 5 trường xe từ cột typed; thiếu thì null', () => {
+    const withVehicle = toCaseListItem(
+      {
+        ...base,
+        hangXeCode: 'TOYOTA',
+        hangXeName: 'TOYOTA',
+        dongXeCode: 'Fortuner',
+        dongXeName: 'Fortuner',
+        namSanXuat: 2019,
+      } as unknown as KgaraCase,
+      undefined,
+      undefined,
+      null,
+    );
+    expect(withVehicle.hangXeCode).toBe('TOYOTA');
+    expect(withVehicle.hangXeName).toBe('TOYOTA');
+    expect(withVehicle.dongXeCode).toBe('Fortuner');
+    expect(withVehicle.dongXeName).toBe('Fortuner');
+    expect(withVehicle.namSanXuat).toBe(2019);
+
+    const without = toCaseListItem(
+      base as unknown as KgaraCase,
+      undefined,
+      undefined,
+      null,
+    );
+    expect(without.hangXeName).toBeNull();
+    expect(without.dongXeCode).toBeNull();
+    expect(without.namSanXuat).toBeNull();
+  });
+});
+
 describe('insuranceReceivable / customerReceivable', () => {
   it('ưu tiên TienThanhToanBH, rồi TienBaoHiemDuyet khi xe làm bảo hiểm', () => {
     expect(insuranceReceivable({ TienThanhToanBH: '300' })).toBe(300);

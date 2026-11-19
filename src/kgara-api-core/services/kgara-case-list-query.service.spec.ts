@@ -159,6 +159,31 @@ describe('KgaraCaseListQueryService - Cumulative & Totals Calculation', () => {
     expect(res.totals.cumulativeReceivable).toBe(575953840 + 8550000);
   });
 
+  it('V1 trả nguyên cột hãng/dòng xe và năm sản xuất của entity', async () => {
+    mockQueryBuilder.getManyAndCount.mockResolvedValue([
+      [
+        {
+          id: 'case-v',
+          soChungTu: 'PDV-010',
+          hangXeName: 'Isuzu',
+          dongXeName: 'Hi-lander',
+          namSanXuat: 2019,
+          tienCoThue: 0,
+          tienDaThanhToan: 0,
+        },
+      ],
+      1,
+    ]);
+
+    const res = await service.findCases({ page: 1, pageSize: 20 });
+
+    expect(res.data[0]).toMatchObject({
+      hangXeName: 'Isuzu',
+      dongXeName: 'Hi-lander',
+      namSanXuat: 2019,
+    });
+  });
+
   it('Page 2: should query cumulative rows and correctly accumulate without fallback to tien_co_thue', async () => {
     const page2Data = [
       {

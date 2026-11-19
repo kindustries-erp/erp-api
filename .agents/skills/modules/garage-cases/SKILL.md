@@ -1005,3 +1005,22 @@ Nhằm tinh gọn tối đa thanh công cụ (Toolbar) và đồng bộ trải n
 - Đã thu của phiếu = tổng settlement `RECEIPT` nếu phiếu có ít nhất một RECEIPT; chỉ có `PAYMENT` hoặc không có settlement thì giữ `tien_da_thanh_toan` đã lưu (Kgara báo). Dùng `hasReceiptSettlement` / `computeCaseRemaining` (`kgara-case-remaining.helper.ts`), tham số `hasReceipt`. Không dùng `settlements.length > 0` hay `setInfo !== undefined` để chọn nguồn đã thu.
 - Còn phải thu = max(0, số ròng − đã thu). Số ròng của entity đã lưu lấy bằng `resolveStoredNetPayable`, không dùng `extractNetPayableAmount` trên entity (chỉ dùng trên payload Kgara).
 - V1 (`kgara-case-list-query`, `kgara-customer-cases-detail`, sheet xuất) và V2 (`cases-garage`: `CaseSettlementSums.hasReceipt`) cùng quy tắc.
+
+## Số khung & đối tượng thanh toán (cập nhật 2026-11-19)
+
+- Cột mới trên `kgara_cases`: `doi_tuong_thanh_toan_code` / `doi_tuong_thanh_toan_name` (entity `doiTuongThanhToanCode/Name`), index trên code. Migration `20261119090000-add-payer-columns-to-kgara-cases.ts` backfill từ `raw_data` (chỉ cho phiếu đã sync chi tiết). **Chưa chạy trên staging/production** tại thời điểm ghi chú này.
+- Nguồn từng trường từ KGara:
+  - `so_khung`: `gr/cases/list` trả `SoKhung: ""` (không dùng được). Nguồn: (1) `gr/exports/receivables` (`fillChassisFromReceivables`), (2) `gr/cases/detail` → `HoSoPhuongTien.SoKhung` (dự phòng, trùng receivables 41/41 khi quét 10/2026). Một số giá trị là biển số hoặc dạng lạ do nhập liệu bên KGara.
+  - `doi_tuong_thanh_toan_*`: chỉ có ở `gr/cases/detail` (`DoiTuongThanhToanCode/Name`), toàn phiếu bảo hiểm.
+- Quy tắc ghi: `pickNonEmpty` không ghi đè giá trị đã có bằng chuỗi rỗng; detail thiếu key đối tượng thì giữ nguyên giá trị đã lưu.
+
+## Hãng xe, dòng xe, năm sản xuất (cập nhật 2026-11-19)
+
+- KGara đã bổ sung thông tin xe. Cột mới trên `kgara_cases`: `hang_xe_code`, `hang_xe_name`, `dong_xe_code`, `dong_xe_name`, `nam_san_xuat` (smallint), index `IDX_kgara_cases_hang_xe_code`. Migration `20261119100000-add-vehicle-columns-to-kgara-cases.ts` backfill từ `raw_data` (list và `HoSoPhuongTien`). **Chưa chạy trên staging/production** tại thời điểm ghi chú này.
+- Nguồn từng trường:
+  - List (`gr/cases/list`): `MaHangSanXuat` → `hang_xe_code`, `TenHdHangSanXuat` → `hang_xe_name`, `MaDongXe` → `dong_xe_code`, `TenHdDongXe` → `dong_xe_name`.
+  - Detail (`gr/cases/detail`) → `HoSoPhuongTien`: `ThuongHieuName`, `HdDongXeCode`, `HdDongXeName` (điền khi list chưa có), `NamSanXuat` (**chỉ có ở detail**, qua `toModelYearOrNull`: 1900-2099, còn lại bỏ qua).
+  - `HdDongXeID` là ID dòng xe của hồ sơ phương tiện, không dùng làm mã dòng xe.
+- Quy tắc ghi: `pickNonEmpty`, không ghi đè giá trị đã có bằng rỗng; detail thiếu `HoSoPhuongTien` thì giữ nguyên.
+- API: V1 `GET /greenway/cases` trả nguyên entity nên có sẵn 5 trường; V2 `cases-garage` thêm `hangXeCode`, `hangXeName`, `dongXeCode`, `dongXeName`, `namSanXuat`. Tìm kiếm `q` (V1 và V2) khớp thêm tên hãng/dòng xe.
+- DTO list v2 (`cases-garage`): thêm `soKhung`, `doiTuongThanhToanCode`, `doiTuongThanhToanName` (null khi thiếu).

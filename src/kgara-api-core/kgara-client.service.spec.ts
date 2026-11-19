@@ -1,6 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { KgaraClientService } from './kgara-client.service';
+import {
+  isKgaraDeadlockBody,
+  KGARA_DEADLOCK_MAX_RETRIES,
+  KgaraClientService,
+} from './kgara-client.service';
 import { KgaraAuthService } from './kgara-auth.service';
 import { KgaraAccountKey } from './enums/kgara-account.enum';
 
@@ -113,5 +117,71 @@ describe('KgaraClientService (Multi-Account Routing)', () => {
         }),
       }),
     );
+  });
+
+  describe('deadlock retry', () => {
+    const DEADLOCK_BODY = {
+      status: 500,
+      message:
+        'Internal Server Error: Transaction (Process ID 242) was deadlocked on lock resources with another process and has been chosen as the deadlock victim. Rerun the transaction.',
+      data: null,
+    };
+    const okResponse = (body: unknown) =>
+      ({ ok: true, status: 200, json: () => Promise.resolve(body) }) as any;
+
+    beforeEach(() => {
+      jest.spyOn(service as any, 'sleep').mockResolvedValue(undefined);
+    });
+
+    it('isKgaraDeadlockBody chỉ nhận status 500 có thông báo deadlock', () => {
+      expect(isKgaraDeadlockBody(DEADLOCK_BODY)).toBe(true);
+      expect(
+        isKgaraDeadlockBody({ status: 500, message: 'Thiếu thông chi nhánh!' }),
+      ).toBe(false);
+      expect(isKgaraDeadlockBody({ status: 200, message: 'deadlock' })).toBe(
+        false,
+      );
+      expect(isKgaraDeadlockBody(null)).toBe(false);
+    });
+
+    it('thử lại khi gặp deadlock rồi trả dữ liệu khi thành công', async () => {
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce(okResponse(DEADLOCK_BODY))
+        .mockResolvedValueOnce(okResponse(DEADLOCK_BODY))
+        .mockResolvedValueOnce(
+          okResponse({ status: 200, message: 'Ok', data: { id: 'c1' } }),
+        );
+
+      const result = await service.getCaseDetail('c1', 'branch-1');
+
+      expect(result.data).toEqual({ id: 'c1' });
+      expect(global.fetch).toHaveBeenCalledTimes(3);
+    });
+
+    it('ném lỗi nêu rõ deadlock khi hết lượt thử lại', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue(okResponse(DEADLOCK_BODY));
+
+      await expect(service.getCaseDetail('c1', 'branch-1')).rejects.toThrow(
+        /deadlock sau 3 lần thử lại/,
+      );
+      expect(global.fetch).toHaveBeenCalledTimes(
+        KGARA_DEADLOCK_MAX_RETRIES + 1,
+      );
+    });
+
+    it('không thử lại với phản hồi thành công hoặc lỗi nghiệp vụ khác', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue(
+        okResponse({
+          status: 500,
+          message: 'Thiếu thông chi nhánh!',
+          data: null,
+        }),
+      );
+
+      const result = await service.getCaseDetail('c1', 'branch-1');
+
+      expect(result.message).toBe('Thiếu thông chi nhánh!');
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
   });
 });
