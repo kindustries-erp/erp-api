@@ -10,7 +10,7 @@ description: Quy trình E2E/smoke cho erp-api. Gồm jest e2e (`*.e2e-spec.ts`, 
 | Loại | Lệnh | Yêu cầu |
 |---|---|---|
 | Jest e2e (`test/*.e2e-spec.ts`, cấu hình `test/jest-e2e.json`) | `bun run test:e2e` | Boot app qua Nest testing module, cần DB test |
-| Smoke trên API đang chạy (`test/smoke/*.smoke.mjs`) | `bun run test:smoke:clone`, `bun run test:smoke:procurement`, `bun run test:smoke:save-and-act` (orchestration save-and-submit/confirm/post, rollback, hoàn nhập), `bun run test:smoke:users` (users-management V2, tiền tố `smoke-users-`), `bun run test:smoke:auth-sessions` (auth V2 `/api/v2/auth-sessions`: login, refresh xoay vòng, dùng lại token thu hồi, đua refresh, đổi mật khẩu/ngưng tài khoản thu hồi phiên, đổi token v1 sang v2, impersonate, v1 admin ghi qua v2; cần `E2E_ADMIN_EMAIL`, `E2E_ADMIN_PASSWORD`, dọn `smoke-auth-<tag>-*` bằng SQL) | API đang chạy ở `E2E_API_URL`, DB đúng, tài khoản test |
+| Smoke trên API đang chạy (`test/smoke/*.smoke.mjs`) | `bun run test:smoke:clone`, `bun run test:smoke:procurement`, `bun run test:smoke:save-and-act` (orchestration save-and-submit/confirm/post, rollback, hoàn nhập), `bun run test:smoke:users` (users-management V2, tiền tố `smoke-users-`), `bun run test:smoke:auth-sessions` (auth V2 `/api/v2/auth-sessions`: login, refresh xoay vòng, dùng lại token thu hồi, đua refresh, đổi mật khẩu/ngưng tài khoản thu hồi phiên, đổi token v1 sang v2, impersonate, v1 admin ghi qua v2; dùng `E2E_PASSWORD` với `E2E_TAO_EMAIL` (ai-test-tao); nhánh impersonate chỉ chạy khi tài khoản là `admin@liouni.com`, còn lại in INFO và bỏ qua; dọn `smoke-auth-<tag>-*` bằng SQL) | API đang chạy ở `E2E_API_URL`, DB đúng, tài khoản test |
 
 Unit test (`bunx jest --forceExit`, hoặc scope hẹp `bunx jest --forceExit procurement`) vẫn là lớp kiểm tra chính trước commit.
 
@@ -21,11 +21,13 @@ Unit test (`bunx jest --forceExit`, hoặc scope hẹp `bunx jest --forceExit pr
 - `E2E_API_URL`: BẮT BUỘC suy từ `PORT` trong `erp/erp-api/.env` (đọc bằng `sed -n 's/^PORT=//p' .env | head -1`, không in secret). Đặt `E2E_API_URL=http://localhost:<PORT>`. Không dùng mặc định cố định. Chỉ ghi đè khi người dùng yêu cầu rõ.
   - Quy tắc PORT API ↔ Web (dùng chung với `erp-e2e-playwright`):
 
-| API `PORT` | Workspace | Web port (`E2E_WEB_URL`) |
-|---|---|---|
-| 10001 | repos-dev-01 | 5171 |
-| 10002 | repos-dev-02 | 5172 |
-| 10003 | repos-dev-03 | 5173 |
+| API `PORT` | Web port (`E2E_WEB_URL`) |
+|---|---|
+| 10001 | 5171 |
+| 10002 | 5172 |
+| 10003 | 5173 |
+
+Cặp port không phụ thuộc workspace `repos-dev-0X`; chỉ phụ thuộc giá trị `PORT` trong `erp/erp-api/.env`.
 
   - `PORT` ngoài ba giá trị trên: dừng và hỏi người dùng trước khi chạy.
 - `E2E_TAO_EMAIL` (mặc định `ai-test-tao@example.com`), `E2E_DUYET_EMAIL` (mặc định `ai-test-duyet@example.com`).
@@ -36,7 +38,10 @@ Trước khi chạy: xác nhận `DATABASE_URL` trong `.env` không phải produ
 
 ## 3. Điều kiện trước khi chạy smoke
 
-1. API chạy đúng `PORT` trong `.env` (`bun start:dev`), và `E2E_API_URL` khớp `PORT` đó. Web (nếu cần E2E UI) chạy theo bảng ở mục 2. Không chạy smoke trên DB production.
+1. API chạy đúng `PORT` trong `.env`, và `E2E_API_URL` khớp `PORT` đó. Không chạy smoke trên DB production.
+   - Kiểm cổng trước: nếu `http://localhost:<PORT>` không có tiến trình nghe (curl báo connection refused), tự chạy nền `bun start:dev` trong `erp/erp-api` (`run_in_background`) và chờ cổng nghe, tối đa khoảng 120 giây.
+   - Web (chỉ khi cần E2E UI): nếu `E2E_WEB_URL` (bảng ở mục 2) chưa nghe, tự chạy nền `bun run dev` trong `erp/erp-web` và chờ trả HTTP 200.
+   - Không kill tiến trình đang chạy của phiên khác. Nếu cổng bị chiếm bởi tiến trình lạ thì dừng và báo người dùng.
 2. Trước khi ghi DB: `SELECT current_database();`, báo tên DB cho người dùng. Không suy ra DB từ tên file env.
 3. Smoke tạo dữ liệu mới (tên có tag, số chứng từ mới). Dữ liệu này không tự dọn, nên ghi rõ trong báo cáo nếu người dùng cần dọn.
 

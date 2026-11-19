@@ -268,7 +268,7 @@ Header nhận diện Chi nhánh: `x-kgara-branch-id` hoặc `x-greenway-branch-i
 | :--- | :--- | :--- | :--- |
 | `GET` | `/branches` | — | Lấy danh sách tất cả các chi nhánh xưởng dịch vụ |
 | `GET` | `/cases` | `@BranchId()`, `page`, `pageSize`, `q`, `from`, `to`, `filtersStr`, `includeDeleted`, `sorts` | Lấy danh sách vụ việc có phân trang, tìm kiếm đa trường, lọc nâng cao (`statusTab`, `classification`, `hasInvoice`, `hasLinkedInvoice`, `collectionProgress`, `costProgress`, `margin`), bóc tách số lượng hóa đơn liên kết (`linkedInvoiceCount`, `linkedInvoiceOutCount`, `linkedInvoiceInCount`), hỗ trợ sắp xếp đa cột server-side qua `sorts`, và trả về `totals` (`grandTotal`, `cumulative`) phục vụ thanh tổng hợp SubtotalSummaryCell. `totals.grandTotalPaidCost` và `grandTotalRemainingPayable` (Còn phải trả) lấy từ `KgaraSuppliersDebtQueryEngine.getSuppliersDebt` cùng phạm vi và công thức sàn 0 theo vụ việc với Dashboard công nợ NCC (`buildPayableExprs`), không còn cộng từ danh sách hiển thị |
-| `GET` | `/cases/export/excel` | `branchId`, `date_from`, `date_to`, `date_type`, `classification`, `status`, `q` | Xuất file Excel 3 Sheets chuyên nghiệp (`Bảng kê phiếu kết thúc` & công nợ hai chiều Thu/Trả, `Theo dõi PnL` phân tích lợi nhuận gộp/biên LN/đánh giá sinh lời, và `Chi tiết DV & Phụ tùng`) cho các vụ việc đã kết thúc theo kỳ, gắn công thức Excel động tự động tính cấn trừ Phải - Đã |
+| `GET` | `/cases/export/excel` | `branchId`, `date_from`, `date_to`, `date_type`, `classification`, `status`, `q` | Xuất file Excel 3 Sheets chuyên nghiệp (`Bảng kê phiếu kết thúc` & công nợ hai chiều Thu/Trả, `Theo dõi PnL` phân tích lợi nhuận gộp/biên LN/đánh giá sinh lời, và `Chi tiết DV & Phụ tùng`) cho các vụ việc đã kết thúc theo kỳ, gắn công thức Excel động tự động tính cấn trừ Phải - Đã. Giá vốn phụ tùng được làm giàu **trong bộ nhớ** từ `journal_items` đã lưu ở `kgara_gross_profit.raw_data` (khớp TK 1541 qua `KgaraCostEnricherHelper`), không gọi KGara và không ghi DB. Sheet `Chi tiết DV & Phụ tùng` có 2 cột `Đơn giá vốn` (= `giaVonPhuTung`) và `Tổng vốn` (= `tongVon` hoặc đơn giá × SL); sheet `Bảng kê` lấy **tổng vốn** làm Chi phí phụ tùng. Phiếu chưa có `journal_items` đã lưu vẫn xuất giá vốn = 0 (journal chỉ được lưu khi mở drawer phiếu và KGara truy cập được) |
 | `GET` | `/cases/column-options` | `@BranchId()`, `column`, `search`, `page`, `pageSize`, `filtersStr` | Lấy danh sách giá trị distinct phân trang cho bộ lọc từng cột của bảng (hỗ trợ `caseCode` ghép Số chứng từ + Biển số xe, `hasInvoice` đồng bộ theo `TienThueKH > 0`, `hasLinkedInvoice`, `statusName`, `classification`, `soChungTu`, `bienSoXe`, `khachHangName`...) |
 | `GET` | `/cases/:id` | `id` (UUID ERP) | Lấy chi tiết một vụ việc theo khóa chính nội bộ ERP (được bảo vệ bởi Regex UUID guard tránh nuốt các route con) |
 | `GET` | `/cases/by-code/:code`| `code` (`so_chung_tu` hoặc UUID `id`/`hd_phieu_dich_vu_id`) | Tra cứu vụ việc theo số chứng từ hoặc UUID (xử lý qua `KgaraCaseLookupService`: tự nhận diện UUID để query theo `id`/`soChungTu`/`hdPhieuDichVuId`, nạp quan hệ `category` chuẩn Module Config, EAV custom fields, và tự động fetch detail từ KGara nếu thiếu dòng) |
@@ -1000,3 +1000,27 @@ Nhằm tinh gọn tối đa thanh công cụ (Toolbar) và đồng bộ trải n
   - `SyncDeletionService` chỉ so khớp danh sách vụ việc trong phạm vi cùng `account_key`.
   - Tránh triệt để rủi ro quét tài khoản OJ xóa mềm nhầm vụ việc của MAIN và ngược lại.
 
+## Quy tắc "đã thu = RECEIPT-only" và số ròng (cập nhật 2026-11-19)
+
+- Đã thu của phiếu = tổng settlement `RECEIPT` nếu phiếu có ít nhất một RECEIPT; chỉ có `PAYMENT` hoặc không có settlement thì giữ `tien_da_thanh_toan` đã lưu (Kgara báo). Dùng `hasReceiptSettlement` / `computeCaseRemaining` (`kgara-case-remaining.helper.ts`), tham số `hasReceipt`. Không dùng `settlements.length > 0` hay `setInfo !== undefined` để chọn nguồn đã thu.
+- Còn phải thu = max(0, số ròng − đã thu). Số ròng của entity đã lưu lấy bằng `resolveStoredNetPayable`, không dùng `extractNetPayableAmount` trên entity (chỉ dùng trên payload Kgara).
+- V1 (`kgara-case-list-query`, `kgara-customer-cases-detail`, sheet xuất) và V2 (`cases-garage`: `CaseSettlementSums.hasReceipt`) cùng quy tắc.
+
+## Số khung & đối tượng thanh toán (cập nhật 2026-11-19)
+
+- Cột mới trên `kgara_cases`: `doi_tuong_thanh_toan_code` / `doi_tuong_thanh_toan_name` (entity `doiTuongThanhToanCode/Name`), index trên code. Migration `20261119090000-add-payer-columns-to-kgara-cases.ts` backfill từ `raw_data` (chỉ cho phiếu đã sync chi tiết). **Chưa chạy trên staging/production** tại thời điểm ghi chú này.
+- Nguồn từng trường từ KGara:
+  - `so_khung`: `gr/cases/list` trả `SoKhung: ""` (không dùng được). Nguồn: (1) `gr/exports/receivables` (`fillChassisFromReceivables`), (2) `gr/cases/detail` → `HoSoPhuongTien.SoKhung` (dự phòng, trùng receivables 41/41 khi quét 10/2026). Một số giá trị là biển số hoặc dạng lạ do nhập liệu bên KGara.
+  - `doi_tuong_thanh_toan_*`: chỉ có ở `gr/cases/detail` (`DoiTuongThanhToanCode/Name`), toàn phiếu bảo hiểm.
+- Quy tắc ghi: `pickNonEmpty` không ghi đè giá trị đã có bằng chuỗi rỗng; detail thiếu key đối tượng thì giữ nguyên giá trị đã lưu.
+
+## Hãng xe, dòng xe, năm sản xuất (cập nhật 2026-11-19)
+
+- KGara đã bổ sung thông tin xe. Cột mới trên `kgara_cases`: `hang_xe_code`, `hang_xe_name`, `dong_xe_code`, `dong_xe_name`, `nam_san_xuat` (smallint), index `IDX_kgara_cases_hang_xe_code`. Migration `20261119100000-add-vehicle-columns-to-kgara-cases.ts` backfill từ `raw_data` (list và `HoSoPhuongTien`). **Chưa chạy trên staging/production** tại thời điểm ghi chú này.
+- Nguồn từng trường:
+  - List (`gr/cases/list`): `MaHangSanXuat` → `hang_xe_code`, `TenHdHangSanXuat` → `hang_xe_name`, `MaDongXe` → `dong_xe_code`, `TenHdDongXe` → `dong_xe_name`.
+  - Detail (`gr/cases/detail`) → `HoSoPhuongTien`: `ThuongHieuName`, `HdDongXeCode`, `HdDongXeName` (điền khi list chưa có), `NamSanXuat` (**chỉ có ở detail**, qua `toModelYearOrNull`: 1900-2099, còn lại bỏ qua).
+  - `HdDongXeID` là ID dòng xe của hồ sơ phương tiện, không dùng làm mã dòng xe.
+- Quy tắc ghi: `pickNonEmpty`, không ghi đè giá trị đã có bằng rỗng; detail thiếu `HoSoPhuongTien` thì giữ nguyên.
+- API: V1 `GET /greenway/cases` trả nguyên entity nên có sẵn 5 trường; V2 `cases-garage` thêm `hangXeCode`, `hangXeName`, `dongXeCode`, `dongXeName`, `namSanXuat`. Tìm kiếm `q` (V1 và V2) khớp thêm tên hãng/dòng xe.
+- DTO list v2 (`cases-garage`): thêm `soKhung`, `doiTuongThanhToanCode`, `doiTuongThanhToanName` (null khi thiếu).

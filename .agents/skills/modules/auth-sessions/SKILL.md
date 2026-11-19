@@ -44,7 +44,7 @@ v1 giữ nguyên hợp đồng nhưng dùng cùng service: `AuthService` (`/api/
 ## 5. Kiểm thử
 
 - Unit: `bunx jest src/v2/modules/auth-sessions src/v2/core/auth-core src/auth src/users-admin src/v2/modules/users-management`.
-- Smoke (API đang chạy, chỉ staging/dev): `bun run test:smoke:auth-sessions` (cần `E2E_ADMIN_EMAIL`, `E2E_ADMIN_PASSWORD`; impersonate chỉ chạy khi admin là `admin@liouni.com`). Dọn `smoke-auth-<tag>-*` bằng SQL.
+- Smoke (API đang chạy, chỉ staging/dev): `bun run test:smoke:auth-sessions` (dùng `E2E_PASSWORD` với `E2E_TAO_EMAIL` mặc định `ai-test-tao`; nhánh impersonate chỉ chạy khi tài khoản là `admin@liouni.com`, còn lại in INFO và bỏ qua). Dọn `smoke-auth-<tag>-*` bằng SQL.
 
 ## 5b. Ngắt V1 auth bằng cờ `ENABLE_V1_AUTH_TOKENS` (mặc định tắt)
 

@@ -74,7 +74,7 @@ const DISCOUNT_CASES_SQL = `
          k.tien_co_thue::text,
          k.tien_da_thanh_toan::text,
          k.tien_con_phai_thanh_toan::text,
-         EXISTS (SELECT 1 FROM kgara_case_settlements s WHERE s.case_id = k.id) AS has_s,
+         EXISTS (SELECT 1 FROM kgara_case_settlements s WHERE s.case_id = k.id AND s.settlement_type = 'RECEIPT') AS has_s,
          (SELECT COALESCE(SUM(s.amount), 0)::text FROM kgara_case_settlements s
            WHERE s.case_id = k.id AND s.settlement_type = 'RECEIPT') AS rec,
          COALESCE((k.raw_data->>'TienChietKhau')::numeric, 0) > 0 AS has_discount
@@ -124,7 +124,7 @@ async function main(): Promise<void> {
         const fix = computeDiscountCaseFix({
           tienCoThue: num(c.tien_co_thue),
           storedPaid: num(c.tien_da_thanh_toan),
-          hasSettlement: c.has_s,
+          hasReceipt: c.has_s,
           receipts: num(c.rec),
         });
         newRemainingByCase.set(c.id, fix.remaining);
@@ -172,7 +172,7 @@ async function main(): Promise<void> {
           const fix = computeDiscountCaseFix({
             tienCoThue: num(c.tien_co_thue),
             storedPaid: num(c.tien_da_thanh_toan),
-            hasSettlement: c.has_s,
+            hasReceipt: c.has_s,
             receipts: num(c.rec),
           });
           return num(c.tien_con_phai_thanh_toan) !== fix.remaining;

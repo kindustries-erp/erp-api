@@ -543,7 +543,7 @@ export class GarageMonthlyReceivablesBreakdownService {
       const remainingTotal = computeCaseRemaining({
         netRevenue: targetRev,
         storedPaid: c.tienDaThanhToan,
-        hasSettlement: hasReceipts,
+        hasReceipt: hasReceipts,
         receipts: setInfo ? setInfo.kh + setInfo.bh : 0,
         excludeFromDebt: false,
       });

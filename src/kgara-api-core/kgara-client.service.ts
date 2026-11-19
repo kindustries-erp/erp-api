@@ -3,6 +3,18 @@ import { ConfigService } from '@nestjs/config';
 import { KgaraAuthService } from './kgara-auth.service';
 import { KgaraAccountKey } from './enums/kgara-account.enum';
 
+/** Số lần thử lại tối đa khi KGara (SQL Server) chọn request làm nạn nhân deadlock. */
+export const KGARA_DEADLOCK_MAX_RETRIES = 3;
+const KGARA_DEADLOCK_BASE_DELAY_MS = 500;
+
+/**
+ * KGara trả HTTP 200 nhưng body `status: 500` kèm thông báo "deadlocked ... Rerun the transaction"
+ * khi nhiều request chạy song song. Lỗi này tạm thời và thử lại là thành công.
+ */
+export function isKgaraDeadlockBody(body: any): boolean {
+  return body?.status === 500 && /deadlock/i.test(String(body?.message ?? ''));
+}
+
 @Injectable()
 export class KgaraClientService {
   private readonly logger = new Logger(KgaraClientService.name);
@@ -12,12 +24,17 @@ export class KgaraClientService {
     private configService: ConfigService,
   ) {}
 
+  protected sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
   async request(
     endpoint: string,
     options: RequestInit = {},
     branchId?: string,
     isRetry = false,
     accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
+    deadlockAttempt = 0,
   ): Promise<any> {
     const token = await this.authService.getValidToken(accountKey);
     if (!token) {
@@ -71,7 +88,32 @@ export class KgaraClientService {
       throw new Error(`Kgara API Error: ${response.status} ${message}`);
     }
 
-    return response.json();
+    const body = await response.json();
+    // Chỉ thử lại request đọc (GET): ghi lại có thể lặp tác dụng phụ nếu KGara đã commit một phần
+    const isRead = !options.method || options.method.toUpperCase() === 'GET';
+    if (isRead && isKgaraDeadlockBody(body)) {
+      if (deadlockAttempt >= KGARA_DEADLOCK_MAX_RETRIES) {
+        throw new Error(
+          `Kgara API Error: deadlock sau ${KGARA_DEADLOCK_MAX_RETRIES} lần thử lại (${endpoint}): ${body.message}`,
+        );
+      }
+      const delay =
+        KGARA_DEADLOCK_BASE_DELAY_MS * 2 ** deadlockAttempt +
+        Math.floor(Math.random() * 250);
+      this.logger.warn(
+        `Kgara deadlock (${endpoint}), thử lại lần ${deadlockAttempt + 1}/${KGARA_DEADLOCK_MAX_RETRIES} sau ${delay}ms`,
+      );
+      await this.sleep(delay);
+      return this.request(
+        endpoint,
+        options,
+        branchId,
+        isRetry,
+        accountKey,
+        deadlockAttempt + 1,
+      );
+    }
+    return body;
   }
 
   async getBranches(

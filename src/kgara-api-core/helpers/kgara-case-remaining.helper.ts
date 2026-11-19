@@ -15,8 +15,8 @@ export interface CaseRemainingInput {
   /** tien_da_thanh_toan đã lưu (dùng khi không có settlement). */
   storedPaid: number | string | null | undefined;
   /** Phiếu có settlement RECEIPT hay không. */
-  hasSettlement: boolean;
-  /** Tổng settlement RECEIPT của phiếu (chỉ dùng khi hasSettlement). */
+  hasReceipt: boolean;
+  /** Tổng settlement RECEIPT của phiếu (chỉ dùng khi hasReceipt). */
   receipts: number | string | null | undefined;
   /** Phiếu bị loại khỏi công nợ. */
   excludeFromDebt: boolean | null | undefined;
@@ -25,6 +25,19 @@ export interface CaseRemainingInput {
 export interface CaseRemainingResult {
   paid: number;
   remaining: number;
+}
+
+/**
+ * Phiếu có settlement RECEIPT hay không. Settlement PAYMENT (chi) không được coi là đã thu.
+ * Dùng ở mọi nơi chọn giữa "tổng RECEIPT" và tien_da_thanh_toan đã lưu.
+ */
+export function hasReceiptSettlement(
+  settlements:
+    | ReadonlyArray<{ settlementType?: string | null }>
+    | null
+    | undefined,
+): boolean {
+  return (settlements ?? []).some((s) => s.settlementType === 'RECEIPT');
 }
 
 export function computeCaseRemaining(
@@ -36,7 +49,7 @@ export function computeCaseRemaining(
   return computeDiscountCaseFix({
     tienCoThue: toNumber(input.netRevenue),
     storedPaid: toNumber(input.storedPaid),
-    hasSettlement: input.hasSettlement,
+    hasReceipt: input.hasReceipt,
     receipts: toNumber(input.receipts),
   });
 }

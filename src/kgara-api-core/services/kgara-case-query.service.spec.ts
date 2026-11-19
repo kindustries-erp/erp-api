@@ -241,8 +241,9 @@ describe('KgaraCaseQueryService', () => {
         expect.objectContaining({ formula: 'L5-M5', result: 5000000 }),
       ); // conPhaiThu formula
       expect((row5?.getCell(15).fill as any)?.fgColor?.argb).toBe('FFFFFBEB'); // Ghi chú thu pastel fill
-      expect(row5?.getCell(16).value).toBe(8300000); // chiPhiNhanCong (9M - 700k phụ tùng)
-      expect(row5?.getCell(17).value).toBe(700000); // chiPhiPhuTung (gvPt)
+      // giaVonPhuTung là đơn giá vốn; tổng vốn dòng = 700k × SL 4 = 2.8M (khớp "ĐG vốn × SL = Tổng vốn" trên drawer)
+      expect(row5?.getCell(16).value).toBe(6200000); // chiPhiNhanCong (9M - 2.8M phụ tùng)
+      expect(row5?.getCell(17).value).toBe(2800000); // chiPhiPhuTung (gvPt = tổng vốn)
       expect(row5?.getCell(18).value).toEqual(
         expect.objectContaining({ formula: 'SUM(P5:Q5)', result: 9000000 }),
       ); // phaiTra

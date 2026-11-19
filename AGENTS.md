@@ -101,8 +101,8 @@ Repo-level workflows (e.g. `erp/erp-web/.agents/workflows/standardize-drawer.md`
 1. Trình plan theo `/erp-plan`, dùng cơ chế plan của agent (Claude Code: `/plan`; Antigravity: `implementation_plan.md`). Xem mục "Tầng Cơ Chế Plan Theo Agent" trong workflow.
 2. Execute **5 phases**: Discovery → Tech Plan → Task Breakdown (X.Y.Z) → Approval → Execution.
 3. Plan (DoD, lệnh verify) trình trong hội thoại; chỉ làm sau khi người dùng trả lời `OK`.
-4. Tạo Epic/Story/Task trên Plane (project KINDU) bằng skill `plane-work-items`.
-5. Cập nhật trạng thái task trên Plane theo thời gian thực.
+4. Ngay sau `OK` và TRƯỚC khi sửa file: tạo Epic/Story/Task con trên Plane (project KINDU) bằng skill `plane-work-items`. Không làm xong rồi mới tạo task.
+5. Trong khi làm: task bắt đầu thì `In Progress`, PASS verification thì `Done`; việc phát sinh thì tạo Task mới ngay.
 6. (Tùy chọn, khi chạy trong Antigravity) giữ `implementation_plan.md` / `walkthrough.md` trong Brain làm bản phụ.
 7. When done: update the Module Skill (`erp/erp-api/.agents/skills/modules/<module>/SKILL.md` or `erp/erp-web/.agents/skills/modules/<module>/SKILL.md`).
 
@@ -310,7 +310,7 @@ Source of truth for this repo (`./erp-api`).
 - before commit/push, `cd` into the repo root (`./erp-api`)
 - **Strict Git Workflow**: You MUST follow the exact commit/push sequence defined below (test -> commit -> pull --rebase -> check:ci -> push, theo `erp-git-workflow`).
 - push this repo with `github-industries`
-- when debugging localhost, run `bun start:dev` on the port defined by `PORT` in `.env` and log in with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` from `.env` (đọc giá trị từ `.env`, không ghi vào repo)
+- when debugging localhost, run `bun start:dev` on the port defined by `PORT` in `.env` and log in with the test accounts `ai-test-tao@example.com` / `ai-test-duyet@example.com` using `E2E_PASSWORD` from `.env` (đọc giá trị từ `.env`, không ghi vào repo, không dùng tài khoản admin)
 - by default, work on the `DATABASE_URL` in `.env` (master; luôn đọc `.env` để xác nhận DB thực tế); use the matching `.env.<tenant>-<stage>` file (greenway/klotus) only when explicitly indicated; scripts must take the env file explicitly (a bare `.env` may point at a production DB)
 - before any DB scan or write, run `SELECT current_database();` to confirm the actual DB and report it before writing; never infer the DB from a file name
 - reuse existing components/modules/services/DTOs/helpers/utils/functions first

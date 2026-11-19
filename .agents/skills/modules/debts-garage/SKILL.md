@@ -34,3 +34,9 @@ Drill-down `customers/:customerCode/cases`, `suppliers/:supplierId/cases`. Ghi s
 ### Entity (cũ)
 - Entity `DebtGarage` (`debts_garage`) và `DebtAllocationGarage` (`debt_allocations_garage`) ở `entities/`, kế thừa entity base của `debts-core`. Migration `1794900000000-GarageCashflowDebtsV2Tables` đã chạy trên staging 2026-11-17 và trên DB `erp_greenway_production` (bảng rỗng, chưa backfill). Migration `20261118100100` thêm `branch_id` (nullable, FK `branches_management`) vào `debts_garage`, `debt_allocations_garage`, `cashflow_vouchers_garage`; chưa dùng để lọc/ghi, `branch_external_id` vẫn là khóa lọc hiện hành.
 - Lớp đọc hiện tại vẫn tính từ `kgara_*`; chưa có cờ `DEBTS_GARAGE_LEDGER_READ`. Chi tiết: skill `debts-core`.
+
+## Quy tắc "đã thu = RECEIPT-only" và số ròng (cập nhật 2026-11-19)
+
+- Đã thu của phiếu = tổng settlement `RECEIPT` nếu phiếu có ít nhất một RECEIPT; chỉ có `PAYMENT` hoặc không có settlement thì giữ `tien_da_thanh_toan` đã lưu (Kgara báo). Dùng `hasReceiptSettlement` / `computeCaseRemaining` (`kgara-case-remaining.helper.ts`), tham số `hasReceipt`. Không dùng `settlements.length > 0` hay `setInfo !== undefined` để chọn nguồn đã thu.
+- Còn phải thu = max(0, số ròng − đã thu). Số ròng của entity đã lưu lấy bằng `resolveStoredNetPayable`, không dùng `extractNetPayableAmount` trên entity (chỉ dùng trên payload Kgara).
+- V1 (`kgara-case-list-query`, `kgara-customer-cases-detail`, sheet xuất) và V2 (`cases-garage`: `CaseSettlementSums.hasReceipt`) cùng quy tắc.

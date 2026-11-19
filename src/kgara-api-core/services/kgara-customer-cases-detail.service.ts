@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
 import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
-import { extractNetPayableAmount } from '../kgara-sync.service';
+import { resolveStoredNetPayable } from '../utils/kgara-parser.util';
 
 export interface EnrichedCustomerCaseItem extends Record<string, any> {
   id: string;
@@ -77,7 +77,7 @@ export class KgaraCustomerCasesDetailService {
 
     const settlementsMap: Record<
       string,
-      { receipts: number; payments: number }
+      { receipts: number; payments: number; hasReceipt: boolean }
     > = {};
 
     if (caseIds.length > 0) {
@@ -93,10 +93,15 @@ export class KgaraCustomerCasesDetailService {
 
       for (const row of settlementRows) {
         if (!settlementsMap[row.caseId]) {
-          settlementsMap[row.caseId] = { receipts: 0, payments: 0 };
+          settlementsMap[row.caseId] = {
+            receipts: 0,
+            payments: 0,
+            hasReceipt: false,
+          };
         }
         if (row.settlementType === 'RECEIPT') {
           settlementsMap[row.caseId].receipts += Number(row.totalAmount || 0);
+          settlementsMap[row.caseId].hasReceipt = true;
         } else if (row.settlementType === 'PAYMENT') {
           settlementsMap[row.caseId].payments += Number(row.totalAmount || 0);
         }
@@ -140,9 +145,9 @@ export class KgaraCustomerCasesDetailService {
       }
 
       const setInfo = settlementsMap[c.id];
-      const hasSettlement = setInfo !== undefined;
-      const targetRev = extractNetPayableAmount(c);
-      const totalPaid = hasSettlement
+      const hasReceipt = setInfo?.hasReceipt === true;
+      const targetRev = resolveStoredNetPayable(c);
+      const totalPaid = hasReceipt
         ? setInfo.receipts
         : Number(c.tienDaThanhToan) || 0;
       const remainingBal = Math.max(0, targetRev - totalPaid);

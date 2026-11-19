@@ -34,6 +34,68 @@ export class KgaraCostEnricherHelper {
       .toLowerCase();
   }
 
+  /**
+   * Chuẩn hóa journal đã lưu (kgara_gross_profit) thành index theo hdPhieuDichVuId và vuViecCode.
+   * Bản ghi không có journal_items bị bỏ qua.
+   */
+  static buildJournalIndex(
+    rows: Array<{
+      hdPhieuDichVuId?: string | null;
+      vuViecCode?: string | null;
+      rawData?: Record<string, any> | null;
+    }>,
+  ): {
+    byHdId: Map<string, JournalItemCost[]>;
+    byCode: Map<string, JournalItemCost[]>;
+  } {
+    const byHdId = new Map<string, JournalItemCost[]>();
+    const byCode = new Map<string, JournalItemCost[]>();
+    for (const row of rows) {
+      const items = row.rawData?.journal_items;
+      if (!Array.isArray(items) || items.length === 0) continue;
+      if (row.hdPhieuDichVuId && !byHdId.has(row.hdPhieuDichVuId)) {
+        byHdId.set(row.hdPhieuDichVuId, items);
+      }
+      if (row.vuViecCode && !byCode.has(row.vuViecCode)) {
+        byCode.set(row.vuViecCode, items);
+      }
+    }
+    return { byHdId, byCode };
+  }
+
+  /** Lấy journal của phiếu: ưu tiên hdPhieuDichVuId, fallback mã vụ việc (số chứng từ). */
+  static pickJournal(
+    index: {
+      byHdId: Map<string, JournalItemCost[]>;
+      byCode: Map<string, JournalItemCost[]>;
+    },
+    hdPhieuDichVuId?: string | null,
+    soChungTu?: string | null,
+  ): JournalItemCost[] | null {
+    if (hdPhieuDichVuId && index.byHdId.has(hdPhieuDichVuId)) {
+      return index.byHdId.get(hdPhieuDichVuId) || null;
+    }
+    if (soChungTu && index.byCode.has(soChungTu)) {
+      return index.byCode.get(soChungTu) || null;
+    }
+    return null;
+  }
+
+  /**
+   * Đơn giá vốn và tổng vốn của một dòng.
+   * Ưu tiên tongVon đã khớp; nếu không có thì tính đơn giá vốn × số lượng.
+   */
+  static resolveLineCost(line: Record<string, any>): {
+    unit: number;
+    total: number;
+  } {
+    const unit = Number(line.giaVonPhuTung ?? line.GiaVonPhuTung ?? 0) || 0;
+    const qty = Number(line.soLuongHoaDon ?? line.SoLuongHoaDon ?? 0) || 1;
+    const explicitTotal = Number(line.tongVon ?? line.TongVon ?? 0) || 0;
+    const total = explicitTotal > 0 ? explicitTotal : unit * qty;
+    return { unit, total };
+  }
+
   static enrichCaseLines<T extends Record<string, any>>(
     lines: T[],
     journalItems?: JournalItemCost[] | null,

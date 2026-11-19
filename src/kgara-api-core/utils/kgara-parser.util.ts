@@ -188,3 +188,32 @@ export function mapKgaraClassificationToErp(
   // 3. Tất cả các trường hợp còn lại có phân loại từ KGara -> KY_GUI_NOI_BO
   return 'KY_GUI_NOI_BO';
 }
+
+/**
+ * Chỉ ghi đè khi giá trị mới không rỗng. Tránh việc list KGara trả chuỗi rỗng xóa dữ liệu đã có.
+ */
+export function pickNonEmpty(
+  next: unknown,
+  current: string | null | undefined,
+): string | null {
+  const trimmed = typeof next === 'string' ? next.trim() : '';
+  if (trimmed) return trimmed;
+  return current ?? null;
+}
+
+/** Chuỗi đã trim, rỗng hoặc null thì trả null. */
+export function toTrimmedOrNull(value: unknown): string | null {
+  const trimmed = typeof value === 'string' ? value.trim() : '';
+  return trimmed || null;
+}
+
+/** Năm sản xuất hợp lệ (số nguyên 1900-2099, khớp backfill của migration), còn lại null. Dữ liệu KGara nhập tay nên có thể là 0 hoặc rác. */
+export function toModelYearOrNull(value: unknown): number | null {
+  const n =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string' && /^\d{4}$/.test(value.trim())
+        ? Number(value.trim())
+        : NaN;
+  return Number.isInteger(n) && n >= 1900 && n <= 2099 ? n : null;
+}

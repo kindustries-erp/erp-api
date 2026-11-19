@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
-import { extractNetPayableAmount } from '../kgara-sync.service';
+import { resolveStoredNetPayable } from '../utils/kgara-parser.util';
 
 export interface GarageSmartSettlementSuggestion {
   txn: {
@@ -145,7 +145,7 @@ export class GarageSmartSettlementService {
 
     let targetAmount = 0;
     if (settlementType === 'RECEIPT') {
-      const targetRevenue = extractNetPayableAmount(kCase);
+      const targetRevenue = resolveStoredNetPayable(kCase);
       const totalCollected = settlements
         .filter((s) => s.settlementType === 'RECEIPT')
         .reduce((sum, s) => sum + Number(s.amount || 0), 0);
@@ -418,7 +418,7 @@ export class GarageSmartSettlementService {
     // Determine target amount based on direction
     let targetAmount = 0;
     if (direction === 'OUT') {
-      targetAmount = extractNetPayableAmount(kCase);
+      targetAmount = resolveStoredNetPayable(kCase);
     } else {
       targetAmount = Number(kCase.chiPhi || 0);
     }

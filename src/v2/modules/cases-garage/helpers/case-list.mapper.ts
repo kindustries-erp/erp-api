@@ -6,6 +6,8 @@ import type { CaseListItem } from '../dto/case-list.types';
 export interface CaseSettlementSums {
   receipts: number;
   payments: number;
+  /** Có ít nhất một settlement RECEIPT. Chỉ PAYMENT thì giữ tien_da_thanh_toan đã lưu. */
+  hasReceipt: boolean;
 }
 
 export interface CaseLinkCounts {
@@ -62,7 +64,9 @@ export function toCaseListItem(
   const chiPhi = numOrNull(item.chiPhi ?? gp?.chiPhi);
   const loiNhuan = numOrNull(item.loiNhuan ?? gp?.loiNhuan);
   const netPayable = toMoney(resolveStoredNetPayable(item));
-  const paid = settlement ? settlement.receipts : toMoney(item.tienDaThanhToan);
+  const paid = settlement?.hasReceipt
+    ? settlement.receipts
+    : toMoney(item.tienDaThanhToan);
   const raw = item.rawData as Raw;
   const insurance = insuranceReceivable(raw);
 
@@ -71,8 +75,16 @@ export function toCaseListItem(
     hdPhieuDichVuId: item.hdPhieuDichVuId,
     soChungTu: item.soChungTu,
     bienSoXe: item.bienSoXe,
+    soKhung: item.soKhung ?? null,
+    hangXeCode: item.hangXeCode ?? null,
+    hangXeName: item.hangXeName ?? null,
+    dongXeCode: item.dongXeCode ?? null,
+    dongXeName: item.dongXeName ?? null,
+    namSanXuat: item.namSanXuat ?? null,
     khachHangCode: item.khachHangCode,
     khachHangName: item.khachHangName,
+    doiTuongThanhToanCode: item.doiTuongThanhToanCode ?? null,
+    doiTuongThanhToanName: item.doiTuongThanhToanName ?? null,
     branchExternalId: item.branchExternalId ?? null,
     tinhTrangDichVu: item.tinhTrangDichVu,
     tenTinhTrangDichVu: item.tenTinhTrangDichVu,

@@ -1,13 +1,14 @@
 // Smoke cầu nối V1 → V2 (LegacyFileRegistrar): file ghi bằng route V1 phải xuất hiện ở V2 (origin LEGACY),
-// gỡ liên kết/xóa ở V1 phải xóa mềm dòng V2. Dùng E2E_EMAIL/E2E_PASSWORD của admin (SEED_ADMIN_* trong .env).
+// gỡ liên kết/xóa ở V1 phải xóa mềm dòng V2. Dùng E2E_TAO_EMAIL/E2E_PASSWORD (tài khoản ai-test-tao).
 // Ghi thật lên R2 và DB: chỉ staging/dev. Tự dọn: xóa attachment V1 và dòng V2 test.
 // Chạy: bun run test:smoke:file-attachments-legacy
 import { resolveApiUrl } from './e2e-ports.mjs';
 
 const BASE = resolveApiUrl();
-const { E2E_EMAIL: EMAIL, E2E_PASSWORD: PASSWORD } = process.env;
+const EMAIL = process.env.E2E_TAO_EMAIL ?? 'ai-test-tao@example.com';
+const PASSWORD = process.env.E2E_PASSWORD;
 if (!EMAIL || !PASSWORD) {
-  console.error('Thiếu E2E_EMAIL hoặc E2E_PASSWORD.');
+  console.error('Thiếu E2E_PASSWORD.');
   process.exit(2);
 }
 let failed = 0;

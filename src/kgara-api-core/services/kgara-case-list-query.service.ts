@@ -123,7 +123,9 @@ export class KgaraCaseListQueryService {
           qb.where('case.soChungTu ILIKE :q', { q: `%${q}%` })
             .orWhere('case.bienSoXe ILIKE :q', { q: `%${q}%` })
             .orWhere('case.khachHangName ILIKE :q', { q: `%${q}%` })
-            .orWhere('case.khachHangCode ILIKE :q', { q: `%${q}%` });
+            .orWhere('case.khachHangCode ILIKE :q', { q: `%${q}%` })
+            .orWhere('case.hangXeName ILIKE :q', { q: `%${q}%` })
+            .orWhere('case.dongXeName ILIKE :q', { q: `%${q}%` });
 
           if (isNumeric) {
             qb.orWhere('case.tienCoThue = :qNum', { qNum: qNumber }).orWhere(
@@ -155,7 +157,7 @@ export class KgaraCaseListQueryService {
     const caseIds = data.map((item) => item.id).filter(Boolean);
     const settlementsMap: Record<
       string,
-      { receipts: number; payments: number }
+      { receipts: number; payments: number; hasReceipt: boolean }
     > = {};
     const linkedInvoiceCounts: Record<
       string,
@@ -175,10 +177,15 @@ export class KgaraCaseListQueryService {
 
       for (const row of settlementRows) {
         if (!settlementsMap[row.caseId]) {
-          settlementsMap[row.caseId] = { receipts: 0, payments: 0 };
+          settlementsMap[row.caseId] = {
+            receipts: 0,
+            payments: 0,
+            hasReceipt: false,
+          };
         }
         if (row.settlementType === 'RECEIPT') {
           settlementsMap[row.caseId].receipts += Number(row.totalAmount || 0);
+          settlementsMap[row.caseId].hasReceipt = true;
         } else if (row.settlementType === 'PAYMENT') {
           settlementsMap[row.caseId].payments += Number(row.totalAmount || 0);
         }
@@ -220,13 +227,13 @@ export class KgaraCaseListQueryService {
           : null;
 
       const setInfo = settlementsMap[item.id];
-      const hasSettlement = setInfo !== undefined;
+      const hasReceipt = setInfo?.hasReceipt === true;
       const targetRev = resolveStoredNetPayable(item);
-      const totalPaid = hasSettlement
+      const totalPaid = hasReceipt
         ? setInfo.receipts
         : Number(item.tienDaThanhToan) || 0;
       const remainingBal = Math.max(0, targetRev - totalPaid);
-      const paidCost = hasSettlement ? setInfo.payments : 0;
+      const paidCost = setInfo ? setInfo.payments : 0;
       const linkInfo = linkedInvoiceCounts[item.id];
 
       const raw = item.rawData;

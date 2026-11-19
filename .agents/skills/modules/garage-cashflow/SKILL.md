@@ -395,3 +395,9 @@ Nguồn quy tắc: `helpers/garage-cashflow-payment-rules.ts` (có spec). Áp d�
 - Ghi mới ở v2: `cashflow-vouchers-garage` (đọc) + `debts-flow-garage` (ghi, một transaction phiếu + phân bổ). V2 mirror sang `kgara_cashflow_vouchers`/`kgara_case_settlements` cùng UUID để V1 đọc đúng.
 - V1 → v2: sau commit, `GarageCashflowTransactionService`, `KgaraCaseFinancialController` (3 endpoint settlement) và `SyncCaseService` gọi cổng `GARAGE_LEDGER_PROJECTOR` (ModuleRef lười, `@Optional()`, lỗi chỉ log).
 - Quy tắc trừ nợ giữ như V1 (`shouldHaveSettlement`): thu trừ nợ trừ EXPECTED/CANCELLED; chi chỉ khi PAID và không thuộc opex/hoa hồng. Chi tiết: skill `debts-flow-garage`.
+
+## Quy tắc "đã thu = RECEIPT-only" và số ròng (cập nhật 2026-11-19)
+
+- Đã thu của phiếu = tổng settlement `RECEIPT` nếu phiếu có ít nhất một RECEIPT; chỉ có `PAYMENT` hoặc không có settlement thì giữ `tien_da_thanh_toan` đã lưu (Kgara báo). Dùng `hasReceiptSettlement` / `computeCaseRemaining` (`kgara-case-remaining.helper.ts`), tham số `hasReceipt`. Không dùng `settlements.length > 0` hay `setInfo !== undefined` để chọn nguồn đã thu.
+- Còn phải thu = max(0, số ròng − đã thu). Số ròng của entity đã lưu lấy bằng `resolveStoredNetPayable`, không dùng `extractNetPayableAmount` trên entity (chỉ dùng trên payload Kgara).
+- V1 (`kgara-case-list-query`, `kgara-customer-cases-detail`, sheet xuất) và V2 (`cases-garage`: `CaseSettlementSums.hasReceipt`) cùng quy tắc.

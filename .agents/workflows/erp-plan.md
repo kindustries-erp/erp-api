@@ -114,17 +114,19 @@ Mẫu task chuẩn:
 
 ---
 
-### 🔸 Sau `OK`: Tích hợp Plane (`plane-work-items`)
+### 🔸 Sau `OK`: Tích hợp Plane (`plane-work-items`) — TẠO TRƯỚC KHI LÀM
+
+**Thứ tự bắt buộc**: `OK` → tạo Plane (Cycle, Module nếu thiếu, Story, toàn bộ Task con) → mới sửa file đầu tiên. Không được làm code xong rồi mới tạo task, vì như vậy Plane không còn là công cụ theo dõi.
 
 Ngay sau `OK`, agent **PHẢI HỎI** trước khi làm trên Plane:
 
 > Bạn có muốn tôi tạo và theo dõi task này trên Plane (project KINDU, workspace k-industries) không? **Có / Không**
 
-- **Có**: load skill `plane-work-items`, tạo Module, Cycle, Story và Task. Ghi identifier (ví dụ `KINDU-12`) vào plan.
+- **Có**: load skill `plane-work-items`, tạo Module, Cycle, Story và **tất cả Task con theo Task Breakdown**, gắn vào Module và Cycle, rồi ghi identifier (ví dụ `KINDU-12`) vào plan. Chỉ bắt đầu Giai đoạn 5 khi bước này xong.
 - **Không**: ghi `Plane: không theo dõi` vào plan.
-- Task ERP: khuyến nghị **Có**, theo `AGENTS.md`. Câu hỏi vẫn phải được hỏi.
+- Task ERP: khuyến nghị **Có**, theo `AGENTS.md`. Câu hỏi vẫn phải được hỏi. Nếu user đã nói rõ trong cùng yêu cầu (ví dụ "tạo Plane trước khi làm") thì không hỏi lại.
+- **Cập nhật trong khi làm** (xem Giai đoạn 5, mục 1): task bắt đầu thì chuyển `In Progress`, task PASS verification thì chuyển `Done`. Việc phát sinh ngoài plan thì tạo Task con mới ngay lúc phát hiện.
 - Chưa có `OK` thì không tạo gì trên Plane. Không ghi plan hay task vào Trilium.
-
 ---
 
 ## ⚙️ Giai Đoạn 5 — Thực thi, Checkpoint & Nghiệm thu
@@ -133,6 +135,7 @@ Ngay sau `OK`, agent **PHẢI HỎI** trước khi làm trên Plane:
 - **Single Active Task**: đổi `[ ]` thành `[/]` khi bắt đầu. Tại một thời điểm chỉ có **một** task `[/]`.
 - **Test-Before-Tick**: chỉ đổi `[/]` thành `[x]` khi lệnh `Verification` **PASS 100%**. Nếu fail, giữ `[/]` và sửa tiếp.
 - **Live Sync**: ghi trạng thái vào `implementation_plan.md` ngay sau mỗi task.
+- **Plane Live Sync** (khi `Plane: KINDU-xx`): bắt đầu task thì chuyển Task con sang `In Progress` (state group `started`); `[x]` thì chuyển `Done`. Hết task thì chuyển Story sang `Done`. Chỉ tạo hoặc cập nhật hàng loạt sau khi làm xong là sai quy trình.
 
 ### 1.1 Single-Agent và Sub-agent
 - **Mặc định**: agent chính tự làm tuần tự: `[/]` → sửa file → verification → PASS → `[x]`.

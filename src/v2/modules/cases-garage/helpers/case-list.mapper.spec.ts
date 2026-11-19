@@ -30,6 +30,68 @@ const base = {
   rawData: {},
 } as unknown as KgaraCase;
 
+describe('toCaseListItem — số khung & đối tượng thanh toán', () => {
+  it('trả soKhung và đối tượng thanh toán từ cột typed; thiếu thì null', () => {
+    const withPayer = toCaseListItem(
+      {
+        ...base,
+        soKhung: 'RLMWF8DXXKV007401',
+        doiTuongThanhToanCode: 'BH-MIC',
+        doiTuongThanhToanName: 'Bảo hiểm MIC',
+      } as unknown as KgaraCase,
+      undefined,
+      undefined,
+      null,
+    );
+    expect(withPayer.soKhung).toBe('RLMWF8DXXKV007401');
+    expect(withPayer.doiTuongThanhToanCode).toBe('BH-MIC');
+    expect(withPayer.doiTuongThanhToanName).toBe('Bảo hiểm MIC');
+
+    const without = toCaseListItem(
+      base as unknown as KgaraCase,
+      undefined,
+      undefined,
+      null,
+    );
+    expect(without.soKhung).toBeNull();
+    expect(without.doiTuongThanhToanCode).toBeNull();
+    expect(without.doiTuongThanhToanName).toBeNull();
+  });
+});
+
+describe('toCaseListItem — hãng xe, dòng xe, năm sản xuất', () => {
+  it('trả 5 trường xe từ cột typed; thiếu thì null', () => {
+    const withVehicle = toCaseListItem(
+      {
+        ...base,
+        hangXeCode: 'TOYOTA',
+        hangXeName: 'TOYOTA',
+        dongXeCode: 'Fortuner',
+        dongXeName: 'Fortuner',
+        namSanXuat: 2019,
+      } as unknown as KgaraCase,
+      undefined,
+      undefined,
+      null,
+    );
+    expect(withVehicle.hangXeCode).toBe('TOYOTA');
+    expect(withVehicle.hangXeName).toBe('TOYOTA');
+    expect(withVehicle.dongXeCode).toBe('Fortuner');
+    expect(withVehicle.dongXeName).toBe('Fortuner');
+    expect(withVehicle.namSanXuat).toBe(2019);
+
+    const without = toCaseListItem(
+      base as unknown as KgaraCase,
+      undefined,
+      undefined,
+      null,
+    );
+    expect(without.hangXeName).toBeNull();
+    expect(without.dongXeCode).toBeNull();
+    expect(without.namSanXuat).toBeNull();
+  });
+});
+
 describe('insuranceReceivable / customerReceivable', () => {
   it('ưu tiên TienThanhToanBH, rồi TienBaoHiemDuyet khi xe làm bảo hiểm', () => {
     expect(insuranceReceivable({ TienThanhToanBH: '300' })).toBe(300);
@@ -59,7 +121,7 @@ describe('toCaseListItem', () => {
         tienDaThanhToan: '0',
         rawData: { TienCoThue: 5855800 },
       } as unknown as KgaraCase,
-      { receipts: 4769550, payments: 0 } as never,
+      { receipts: 4769550, payments: 0, hasReceipt: true } as never,
       undefined,
       null,
     );
@@ -85,7 +147,7 @@ describe('toCaseListItem', () => {
   it('có settlement thì lấy RECEIPT/PAYMENT; trả dư không tạo số dư âm', () => {
     const item = toCaseListItem(
       base,
-      { receipts: 1500, payments: 400 },
+      { receipts: 1500, payments: 400, hasReceipt: true },
       { total: 3, outCount: 2, inCount: 1 },
       null,
     );
@@ -96,6 +158,20 @@ describe('toCaseListItem', () => {
       linkedInvoiceCount: 3,
       linkedInvoiceOutCount: 2,
       linkedInvoiceInCount: 1,
+    });
+  });
+
+  it('chỉ có settlement PAYMENT thì giữ tien_da_thanh_toan đã lưu, không đặt đã thu = 0', () => {
+    const item = toCaseListItem(
+      base,
+      { receipts: 0, payments: 400, hasReceipt: false },
+      undefined,
+      null,
+    );
+    expect(item).toMatchObject({
+      tienDaThanhToan: 100,
+      tienConPhaiThanhToan: 900,
+      tienDaChi: 400,
     });
   });
 
