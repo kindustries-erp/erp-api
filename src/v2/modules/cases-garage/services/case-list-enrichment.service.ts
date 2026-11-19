@@ -33,8 +33,15 @@ export class CaseListEnrichmentService {
       .addGroupBy('s.settlementType')
       .getRawMany<{ caseId: string; type: string; amount: string }>();
     for (const r of rows) {
-      const cur = map.get(r.caseId) ?? { receipts: 0, payments: 0 };
-      if (r.type === 'RECEIPT') cur.receipts += Number(r.amount) || 0;
+      const cur = map.get(r.caseId) ?? {
+        receipts: 0,
+        payments: 0,
+        hasReceipt: false,
+      };
+      if (r.type === 'RECEIPT') {
+        cur.receipts += Number(r.amount) || 0;
+        cur.hasReceipt = true;
+      }
       if (r.type === 'PAYMENT') cur.payments += Number(r.amount) || 0;
       map.set(r.caseId, cur);
     }

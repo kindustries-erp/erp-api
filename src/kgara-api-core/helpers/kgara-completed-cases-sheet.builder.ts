@@ -192,7 +192,10 @@ export function buildSheet1CompletedCases(
   cases: any[],
   branchNameMap: Record<string, string>,
   linkedInvoiceSummaryMap: Record<string, string>,
-  settlementsMap: Record<string, { receipts: number; payments: number }>,
+  settlementsMap: Record<
+    string,
+    { receipts: number; payments: number; hasReceipt: boolean }
+  >,
   serviceLinesMap?: Map<string, any[]>,
   caseLedgerMap: Record<string, CaseLedgerAmounts> = {},
   selectedColumns?: string[],
@@ -271,8 +274,9 @@ export function buildSheet1CompletedCases(
 
     const setInfo = settlementsMap[c.id];
     const hasSettlement = setInfo !== undefined;
+    const hasReceipt = setInfo?.hasReceipt === true;
     const phaiThu = Number(c.tienCoThue) || rev;
-    const daThu = hasSettlement
+    const daThu = hasReceipt
       ? setInfo.receipts
       : Number(c.tienDaThanhToan) || 0;
     const conPhaiThu = phaiThu - daThu;

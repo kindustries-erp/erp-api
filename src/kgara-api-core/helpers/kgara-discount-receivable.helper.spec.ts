@@ -10,7 +10,7 @@ describe('kgara-discount-receivable.helper', () => {
         computeDiscountCaseFix({
           tienCoThue: 5309550,
           storedPaid: 0,
-          hasSettlement: true,
+          hasReceipt: true,
           receipts: 4769550,
         }),
       ).toEqual({ paid: 4769550, remaining: 540000 });
@@ -21,7 +21,7 @@ describe('kgara-discount-receivable.helper', () => {
         computeDiscountCaseFix({
           tienCoThue: 6026400,
           storedPaid: 540000,
-          hasSettlement: false,
+          hasReceipt: false,
           receipts: 0,
         }),
       ).toEqual({ paid: 540000, remaining: 5486400 });
@@ -32,7 +32,7 @@ describe('kgara-discount-receivable.helper', () => {
         computeDiscountCaseFix({
           tienCoThue: 1000,
           storedPaid: 0,
-          hasSettlement: true,
+          hasReceipt: true,
           receipts: 1500,
         }),
       ).toEqual({ paid: 1500, remaining: 0 });
@@ -43,7 +43,7 @@ describe('kgara-discount-receivable.helper', () => {
         computeDiscountCaseFix({
           tienCoThue: '5309550.00' as unknown as number,
           storedPaid: '0' as unknown as number,
-          hasSettlement: true,
+          hasReceipt: true,
           receipts: '4769550.00' as unknown as number,
         }),
       ).toEqual({ paid: 4769550, remaining: 540000 });

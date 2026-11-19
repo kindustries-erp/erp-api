@@ -59,7 +59,7 @@ describe('toCaseListItem', () => {
         tienDaThanhToan: '0',
         rawData: { TienCoThue: 5855800 },
       } as unknown as KgaraCase,
-      { receipts: 4769550, payments: 0 } as never,
+      { receipts: 4769550, payments: 0, hasReceipt: true } as never,
       undefined,
       null,
     );
@@ -85,7 +85,7 @@ describe('toCaseListItem', () => {
   it('có settlement thì lấy RECEIPT/PAYMENT; trả dư không tạo số dư âm', () => {
     const item = toCaseListItem(
       base,
-      { receipts: 1500, payments: 400 },
+      { receipts: 1500, payments: 400, hasReceipt: true },
       { total: 3, outCount: 2, inCount: 1 },
       null,
     );
@@ -96,6 +96,20 @@ describe('toCaseListItem', () => {
       linkedInvoiceCount: 3,
       linkedInvoiceOutCount: 2,
       linkedInvoiceInCount: 1,
+    });
+  });
+
+  it('chỉ có settlement PAYMENT thì giữ tien_da_thanh_toan đã lưu, không đặt đã thu = 0', () => {
+    const item = toCaseListItem(
+      base,
+      { receipts: 0, payments: 400, hasReceipt: false },
+      undefined,
+      null,
+    );
+    expect(item).toMatchObject({
+      tienDaThanhToan: 100,
+      tienConPhaiThanhToan: 900,
+      tienDaChi: 400,
     });
   });
 

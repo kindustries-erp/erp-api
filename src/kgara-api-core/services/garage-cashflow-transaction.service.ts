@@ -5,6 +5,7 @@ import {
   Optional,
   Logger,
 } from '@nestjs/common';
+import { hasReceiptSettlement } from '@/kgara-api-core/helpers/kgara-case-remaining.helper';
 import { ModuleRef } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, QueryRunner } from 'typeorm';
@@ -539,7 +540,7 @@ export class GarageCashflowTransactionService {
     // Số ròng (sau chiết khấu): ưu tiên raw có field chiết khấu, nếu không dùng tienCoThue đã lưu (đã ròng).
     const netPayable = resolveStoredNetPayable(kCase);
 
-    if (settlements.length > 0) {
+    if (hasReceiptSettlement(settlements)) {
       const totalReceipts = settlements
         .filter((s) => s.settlementType === 'RECEIPT')
         .reduce((sum, s) => sum + Number(s.amount || 0), 0);
