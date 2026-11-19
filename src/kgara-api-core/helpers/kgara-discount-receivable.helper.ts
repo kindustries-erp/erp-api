@@ -10,8 +10,8 @@ export interface DiscountCaseInput {
   tienCoThue: number;
   /** tien_da_thanh_toan đã lưu (dùng khi không có settlement). */
   storedPaid: number;
-  hasSettlement: boolean;
-  /** Tổng settlement RECEIPT (chỉ dùng khi hasSettlement). */
+  hasReceipt: boolean;
+  /** Tổng settlement RECEIPT (chỉ dùng khi hasReceipt). */
   receipts: number;
 }
 
@@ -24,7 +24,7 @@ export function computeDiscountCaseFix(
   input: DiscountCaseInput,
 ): DiscountCaseResult {
   const net = toMoney(input.tienCoThue);
-  const paid = input.hasSettlement
+  const paid = input.hasReceipt
     ? toMoney(input.receipts)
     : toMoney(input.storedPaid);
   return { paid, remaining: Math.max(0, toMoney(net - paid)) };

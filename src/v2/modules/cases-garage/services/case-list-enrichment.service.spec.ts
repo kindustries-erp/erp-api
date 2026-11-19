@@ -37,8 +37,16 @@ describe('CaseListEnrichmentService', () => {
 
     expect(cap.calls).toHaveLength(1);
     expect(cap.calls[0].params).toEqual(['c1', 'c2']);
-    expect(sums.get('c1')).toEqual({ receipts: 100.5, payments: 40 });
-    expect(sums.get('c2')).toEqual({ receipts: 7, payments: 0 });
+    expect(sums.get('c1')).toEqual({
+      receipts: 100.5,
+      payments: 40,
+      hasReceipt: true,
+    });
+    expect(sums.get('c2')).toEqual({
+      receipts: 7,
+      payments: 0,
+      hasReceipt: true,
+    });
   });
 
   it('đếm hóa đơn liên kết theo chiều OUT và IN', async () => {

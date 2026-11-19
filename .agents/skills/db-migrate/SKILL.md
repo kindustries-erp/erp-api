@@ -12,9 +12,9 @@ Bất cứ khi nào làm việc với Database liên quan đến migration hay c
 
 ## 0. Quy tắc Database Connection (Bắt buộc)
 
-- **Chuẩn hóa Endpoint Database (Cập nhật 2026-11-14):**
-  - **Production DB (Elite):** `db-elite.liouni.com:5432` (hoặc container nội bộ `infra-postgres:5432`). Tuyệt đối không dùng domain cũ `db.liouni.com`.
-  - **Dev/Staging DB (Dev):** `db-dev.liouni.com:5433` (hoặc container nội bộ `100.90.103.19:5432`).
+- **Chuẩn hóa Endpoint Database (Cập nhật 2026-11-19):**
+  - **Mọi DB (staging, production, klotus):** `db-dev.liouni.com:5433` (hoặc container nội bộ `100.90.103.19:5432`). Các DB khác nhau bằng tên database trong `DATABASE_URL` của từng file env (`erp_greenway_staging`, `erp_greenway_production`, `erp_klotus_*`).
+  - **Cơ chế cũ, không dùng:** `db-elite.liouni.com:5432` và container `infra-postgres:5432` (Elite), cùng domain `db.liouni.com`.
 - **Kết nối DB:** DB thực tế lấy từ `DATABASE_URL` trong file env đang dùng. Chạy `SELECT current_database();` và báo tên DB trước khi ghi; không suy ra DB từ tên file.
 - **Ưu tiên `DATABASE_URL`:** Runner đọc `DATABASE_URL` từ file `.env` chỉ định (ví dụ: `.env` hoặc `.env.<tenant>-<stage>`).
 - **Fallback `DB_HOST` / `DB_PORT`:** Nếu file `.env` không có `DATABASE_URL` nhưng có cấu hình `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_DATABASE`, `DB_SSL`, runner sẽ tự động ghép chuỗi kết nối chuẩn `postgresql://USER:PASS@HOST:PORT/DB?sslmode=...`.

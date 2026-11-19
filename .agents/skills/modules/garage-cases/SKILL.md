@@ -1000,3 +1000,8 @@ Nhằm tinh gọn tối đa thanh công cụ (Toolbar) và đồng bộ trải n
   - `SyncDeletionService` chỉ so khớp danh sách vụ việc trong phạm vi cùng `account_key`.
   - Tránh triệt để rủi ro quét tài khoản OJ xóa mềm nhầm vụ việc của MAIN và ngược lại.
 
+## Quy tắc "đã thu = RECEIPT-only" và số ròng (cập nhật 2026-11-19)
+
+- Đã thu của phiếu = tổng settlement `RECEIPT` nếu phiếu có ít nhất một RECEIPT; chỉ có `PAYMENT` hoặc không có settlement thì giữ `tien_da_thanh_toan` đã lưu (Kgara báo). Dùng `hasReceiptSettlement` / `computeCaseRemaining` (`kgara-case-remaining.helper.ts`), tham số `hasReceipt`. Không dùng `settlements.length > 0` hay `setInfo !== undefined` để chọn nguồn đã thu.
+- Còn phải thu = max(0, số ròng − đã thu). Số ròng của entity đã lưu lấy bằng `resolveStoredNetPayable`, không dùng `extractNetPayableAmount` trên entity (chỉ dùng trên payload Kgara).
+- V1 (`kgara-case-list-query`, `kgara-customer-cases-detail`, sheet xuất) và V2 (`cases-garage`: `CaseSettlementSums.hasReceipt`) cùng quy tắc.

@@ -451,8 +451,13 @@ export class KgaraCompletedCasesExportService {
 
   private async getSettlementsMap(
     caseDbIds: string[],
-  ): Promise<Record<string, { receipts: number; payments: number }>> {
-    const map: Record<string, { receipts: number; payments: number }> = {};
+  ): Promise<
+    Record<string, { receipts: number; payments: number; hasReceipt: boolean }>
+  > {
+    const map: Record<
+      string,
+      { receipts: number; payments: number; hasReceipt: boolean }
+    > = {};
     if (caseDbIds.length === 0) return map;
     try {
       const chunkSize = 2000;
@@ -468,10 +473,12 @@ export class KgaraCompletedCasesExportService {
           .addGroupBy('s.settlementType')
           .getRawMany();
         for (const r of rows) {
-          if (!map[r.caseId]) map[r.caseId] = { receipts: 0, payments: 0 };
-          if (r.settlementType === 'RECEIPT')
+          if (!map[r.caseId])
+            map[r.caseId] = { receipts: 0, payments: 0, hasReceipt: false };
+          if (r.settlementType === 'RECEIPT') {
             map[r.caseId].receipts += Number(r.totalAmount || 0);
-          else if (r.settlementType === 'PAYMENT')
+            map[r.caseId].hasReceipt = true;
+          } else if (r.settlementType === 'PAYMENT')
             map[r.caseId].payments += Number(r.totalAmount || 0);
         }
       }

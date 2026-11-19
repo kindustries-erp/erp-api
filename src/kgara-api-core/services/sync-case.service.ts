@@ -1,4 +1,5 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
+import { hasReceiptSettlement } from '@/kgara-api-core/helpers/kgara-case-remaining.helper';
 import { ModuleRef } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -281,7 +282,7 @@ export class SyncCaseService {
             const existingSettlements = await this.settlementRepo.find({
               where: { caseId: gwCase.id },
             });
-            if (existingSettlements?.length > 0) {
+            if (hasReceiptSettlement(existingSettlements)) {
               const totalReceipts = existingSettlements
                 .filter((s) => s.settlementType === 'RECEIPT')
                 .reduce((sum, s) => sum + Number(s.amount || 0), 0);
@@ -697,7 +698,7 @@ export class SyncCaseService {
         const existingSettlements = await this.settlementRepo.find({
           where: { caseId: gwCase.id },
         });
-        if (existingSettlements?.length > 0) {
+        if (hasReceiptSettlement(existingSettlements)) {
           const totalReceipts = existingSettlements
             .filter((s) => s.settlementType === 'RECEIPT')
             .reduce((sum, s) => sum + Number(s.amount || 0), 0);
