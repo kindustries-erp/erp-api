@@ -46,6 +46,7 @@ import { ErpInventoryTrackingCustom } from '../inventory-core/entities/erp_inven
 import { ErpTrackingPolicy } from '../inventory-core/entities/erp_tracking_policy.entity';
 import { BranchManagement } from '../v2/modules/branches-management/entities/branch-management.entity';
 import { BranchManagementExternalLink } from '../v2/modules/branches-management/entities/branch-management-external-link.entity';
+import { BankManagement } from '../v2/modules/banks-management/entities/bank-management.entity';
 import { ErpAuditLog } from '../audit-core/entities/erp-audit-log.entity';
 import { AuditLog } from '../v2/modules/audit-logs/entities/audit-log.entity';
 import { ErpItemType } from '../inventory-core/entities/erp_item_type.entity';
@@ -99,6 +100,8 @@ import { GarageGoodsReceiptLine } from '@/v2/modules/goods-receipts-garage/entit
 import { GarageInventoryBalance } from '@/v2/modules/goods-receipts-garage/entities/garage-inventory-balance.entity';
 import { DebtGarage } from '@/v2/modules/debts-garage/entities/debt-garage.entity';
 import { DebtAllocationGarage } from '@/v2/modules/debts-garage/entities/debt-allocation-garage.entity';
+import { CaseGarage } from '@/v2/modules/cases-garage/entities/case-garage.entity';
+import { CaseServiceGarage } from '@/v2/modules/cases-garage/entities/case-service-garage.entity';
 import { CashflowVoucherGarage } from '@/v2/modules/cashflow-vouchers-garage/entities/cashflow-voucher-garage.entity';
 import { ApprovalEvent } from '@/v2/core/approval-core/entities/approval-event.entity';
 import { ApprovalSetting } from '@/v2/core/approval-core/entities/approval-setting.entity';
@@ -191,6 +194,7 @@ const entities = [
   ErpTrackingPolicy,
   BranchManagement,
   BranchManagementExternalLink,
+  BankManagement,
   ErpAuditLog,
   AuditLog,
   ErpItemType,
@@ -240,6 +244,8 @@ const entities = [
   DebtGarage,
   DebtAllocationGarage,
   CashflowVoucherGarage,
+  CaseGarage,
+  CaseServiceGarage,
   GarageInventoryBalance,
   InventoryMovementsGarageReceiptLine,
   InventoryMovementsGarageIssueLine,

@@ -54,7 +54,8 @@
     "docker:up": "docker compose -f /opt/stacks/liouni-erp-api/docker-compose.yml up -d",
     "docker:deploy": "bun run docker:build; bun run docker:up",
     "prepare": "command -v husky >/dev/null 2>&1 && husky || true",
-    "test:smoke:garage-debts-v2": "node test/smoke/garage-debts-v2.smoke.mjs"
+    "test:smoke:garage-debts-v2": "node test/smoke/garage-debts-v2.smoke.mjs",
+    "test:smoke:cases-garage-v2": "node test/smoke/cases-garage-v2.smoke.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1069.0",

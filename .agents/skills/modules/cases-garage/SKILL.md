@@ -1,25 +1,40 @@
 ---
 name: cases-garage
-description: Module vụ việc Kgara v2 (api/v2/cases-garage) - danh sách vụ việc, hạng mục dịch vụ, báo cáo lợi nhuận gộp, chi tiết. Chỉ đọc, dùng lại bảng kgara_*. Đọc trước khi sửa 3 endpoint cases của Kgara.
+description: Module vụ việc garage v2 (api/v2/cases-garage), CRUD đầy đủ trên bảng cases_garage + case_services_garage, xe NATIVE nhập tay và xe KGARA_SYNC chiếu từ V1 (kgara_cases), kèm từ điển tên V1 sang V2 và projector/mirror/backfill. Đọc trước khi sửa vụ việc garage, projector hoặc field-map.
 ---
 
 # cases-garage (api/v2/cases-garage)
 
-Vị trí: `src/v2/modules/cases-garage`. Quyền `GARAGE:READ`, chi nhánh bắt buộc. Thay 3 endpoint V1: `cases`, `cases/services`, `cases/gross-profit-report` (V1 còn song song).
+Vị trí: `src/v2/modules/cases-garage`. Entity `CaseGarage` (header, `cases_garage`, soft delete `isDeleted`) và `CaseServiceGarage` (dòng, `case_services_garage`, FK `case_id` ON DELETE CASCADE). Migration `20261119120000-create-cases-garage-tables`. Plan: `build-v2-garage-cases-crud`.
 
-## 1. Route (route cố định trước `:id`)
-`GET /`, `column-options`, `services`, `gross-profit-report`, `by-code/:code`, `:id`. Query DTO: `QueryCasesGarageDto` (`page`, `pageSize` tối đa 200, `search`, `sort` "a,-b", `column_filters` JSON, `date_from/date_to`, `summary_keys`, `serviceType`).
+## 1. Nguồn gốc (`origin`)
+- `NATIVE`: nhập tay ở v2, sửa mọi field, xóa mềm được. Tổng tiền tính từ dòng trong cùng transaction; `paidAmount` = 0 cho tới khi nối thu chi/cấn trừ.
+- `KGARA_SYNC`: chiếu từ `kgara_cases`, cùng UUID với `kgara_cases.id` (`legacyCaseId`). Chỉ sửa nhóm ERP-local: `classification`, `categoryId`, `classificationManuallyCleared`, `excludeFromReports`, `excludeFromDebt`, `internalNotes`, `partsCost` của dòng. Field khác 400, xóa 409 (`CaseOriginGuard`).
 
-## 2. Quy tắc dữ liệu
-- Vụ việc đang hoạt động: `kgara_deleted_at IS NULL`.
-- Gross profit join bằng `vu_viec_code = so_chung_tu` (KHÔNG theo `hd_phieu_dich_vu_id`, khớp 0/531 trên staging). Lọc ngày theo `report_from/report_to` như V1. Phân trang và tổng bằng SQL.
-- Hạng mục: `kgara_case_services` join vụ việc theo `hd_phieu_dich_vu_id`; tổng, tổng trang, lũy kế bằng `applyListSummaries` (V1 cộng JS).
-- List vụ việc dùng lại helper lọc/sắp xếp V1 (`applyCaseListFilters`...); tổng 8 cột khớp V1.
-- Số tiền là number; không trả `raw_data`.
-- Dòng list có thêm `soKhung`, `doiTuongThanhToanCode`, `doiTuongThanhToanName`, `hangXeCode`, `hangXeName`, `dongXeCode`, `dongXeName`, `namSanXuat` (null khi thiếu); `q` tìm thêm theo hãng/dòng xe. Nguồn và quy tắc ghi xem `garage-cases` mục "Số khung & đối tượng thanh toán".
+## 2. Route (route tĩnh trước `:id`)
+Đọc (`GARAGE:READ`): `GET /`, `column-options`, `services`, `gross-profit-report`, `by-code/:code`, `:id`. Query: `page`, `pageSize` ≤ 200, `search`, `sort`, `column_filters`, `column_*`, `date_ranges`, `summary_keys`, `origin`.
+Ghi (`CasesGarageCommandsController`): `GET next-code`, `POST /` (CREATE), `PATCH :id` (UPDATE), `PATCH :id/status`, `DELETE :id` (DELETE), `POST :id/services`, `PUT :id/services/:lineId`, `PATCH :id/services/:lineId/parts-cost`, `DELETE :id/services/:lineId`.
+Chi nhánh: header `x-kgara-branch-id` bắt buộc (thiếu 400). Mọi đọc/ghi kèm `branchExternalId`; xe chi nhánh khác = 404. Role `ai-test-tao` không có `GARAGE:DELETE` (403); smoke dùng `ai-test-duyet`.
 
-## 3. Khác V1
-Chi nhánh bắt buộc; filter cột áp trên dòng gom biển số; không có tổng "còn phải trả" ở list; không nhánh normalized-plate ở column-options.
+## 3. Quy tắc
+- Mã xe NATIVE: `VV-YYYYMMDD-NNN` (tái dùng `nextDocumentNo`). Unique `(branchExternalId, accountKey, caseCode)` khi chưa xóa (`UQ_cases_garage_case_code_active`).
+- Trạng thái `CaseStatus` (`INTAKE`, `QUOTED`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`) map từ `tinh_trang_dich_vu` 0/1/2/3/9 ở `kgara-status.map.ts`; `canTransition` giới hạn chuyển trạng thái của NATIVE.
+- Dòng NATIVE: thành tiền do server tính (`computeLineAmounts`), DTO không nhận `amountBeforeTax`/`amountWithTax`. Sửa dòng khóa `pessimistic_write` header.
+- Gross profit join `kgara_gross_profit.vu_viec_code = caseCode` cho SYNC; không join theo id KGara.
+- Sort theo biểu thức SQL + phân trang: truy vấn hai bước (id có sort rồi entity). Filter/sort/summary dùng `common/utils/table-query`.
+- Số tiền response là number; không trả `raw_data`.
 
-## 4. Chưa làm
-Ghi settlement/linked-invoice vẫn ở V1 (plan orchestration).
+## 4. Đồng bộ V1 ↔ V2
+- Projector V1→V2: port `GARAGE_CASE_PROJECTOR` (`kgara-api-core/hub/case-projector.port.ts`), `CaseProjectorService`, idempotent theo `id`/`legacyServiceId`, lỗi chỉ log. Hook V1: `sync-case.service.ts` (3 điểm), `kgara-case-config.service.ts`, `kgara-case-lookup.service.ts`, `sync-deletion.service.ts`. Query-builder `update()` và writer khác không có hook, backfill đối soát.
+- Mirror V2→V1 (`CaseKgaraMirrorService`): sửa ERP-local trên xe SYNC ghi ngược `kgara_cases` cùng transaction.
+- Backfill: `scripts/backfill-cases-garage-from-kgara.ts` (dry-run mặc định; `--apply --confirm=<db>`; `--limit`, `--branch`). Chạy bằng `TS_NODE_TRANSPILE_ONLY=1 node -r ts-node/register -r tsconfig-paths/register` (bun lỗi vòng import `data-source`).
+- Một bộ map duy nhất: `helpers/kgara-case.field-map.ts`, `kgara-case-service.field-map.ts` + engine `kgara-field-map.engine.ts`; projector, mirror, backfill chỉ gọi `kgara-case.mapper.ts`. Spec chống lệch đọc metadata TypeORM của `KgaraCase`/`KgaraCaseService`: cột V1 mới phải được map hoặc đưa vào `KGARA_CASE_IGNORED_COLUMNS`.
+
+## 5. Từ điển V1 → V2 (camelCase EN; cột DB snake_case EN)
+Header: `so_chung_tu`→`caseCode`, `hd_phieu_dich_vu_id`→`externalId`, `bien_so_xe`→`licensePlate`, `so_khung`→`chassisNumber`, `hang_xe_code/name`→`vehicleBrandCode/Name`, `dong_xe_code/name`→`vehicleModelCode/Name`, `nam_san_xuat`→`manufactureYear`, `khach_hang_code/name`→`customerCode/Name`, `kgara_classification(_code)`→`customerSourceName/Code`, `doi_tuong_thanh_toan_code/name`→`payerCode/Name`, `tinh_trang_dich_vu`→`kgaraStatusCode`+`status`, `ten_tinh_trang_dich_vu`→`statusName`, `ngay_phat_sinh/tiep_nhan/hoan_thanh_cong_viec/giao_xe_full`→`issuedAt/receivedAt/completedAt/deliveredAt`, `tien_co_thue`→`totalAmountWithTax`, `tien_da_thanh_toan`→`paidAmount`, `tien_con_phai_thanh_toan`→`outstandingAmount`, `doanh_thu/chi_phi/loi_nhuan`→`revenue/cost/profit`, `erp_notes`→`internalNotes`, `kgara_deleted_at/count`→`externalDeletedAt/externalDeleteCount`. `exclude_from_*`, `category_id`, `classification*` đổi sang camelCase cùng nghĩa. Không chép `raw_data`, `data_as_of`.
+Dòng: `noi_dung_chi_tiet`→`description`, `san_pham_code/name`, `loai_san_pham_code`→`productCode/productName/productTypeCode`, `don_vi_tinh_text`→`unitName`, `so_luong_hoa_don`→`quantity`, `don_gia`→`unitPrice`, `tien_chua_thue/co_thue`→`amountBeforeTax/amountWithTax`, `thue_suat`→`taxRate`, `so_gio_cong_lam`→`laborHours`, `tien_dich_vu/phu_tung`→`serviceAmount/partsAmount`, `gia_von_phu_tung`→`partsCost`, `ty_le/tien_chiet_khau_ct`→`lineDiscountRate/Amount`, `tien_phu_phi`→`surchargeAmount`, `kho_code`→`warehouseCode`, `deleted_at`→`externalDeletedAt`.
+
+## 6. Chưa làm / follow-up
+- Công nợ, thu chi, cấn trừ, hóa đơn liên kết vẫn ở V1; `paidAmount` NATIVE chưa nối. Projector không có `raw_data` nên list bỏ tách phải thu bảo hiểm/khách (cần khi cutover công nợ).
+- **Web follow-up (breaking đã báo)**: tên field response đổi từ tiếng Việt sang EN (`soChungTu`→`caseCode`, `bienSoXe`→`licensePlate`...); `phaiThuKhachHang`/`phaiThuBaoHiem` đã bỏ. Web chưa gọi `api/v2/cases-garage`; type `GarageCaseVehicleFields` (`erp-web/src/v2/core/garage-cases/vehicle/`) còn dùng tên V1, phải sửa khi nối Web.
+- Smoke: `bun run test:smoke:cases-garage-v2` (chi nhánh giả `smoke-<tag>`, xóa mềm cuối chạy).
