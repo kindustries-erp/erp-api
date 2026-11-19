@@ -115,6 +115,81 @@ describe('KgaraAuthService (Multi-Account)', () => {
     });
   });
 
+  describe('refresh token hết hạn (KGara trả 200 kèm body status 401)', () => {
+    const okJson = (body: unknown) =>
+      ({ ok: true, status: 200, json: () => Promise.resolve(body) }) as any;
+    const expired = {
+      accountKey: KgaraAccountKey.OJ,
+      accessToken: 'old',
+      refreshToken: 'stale-refresh',
+      tokenExpires: new Date(Date.now() - 60 * 1000),
+    };
+
+    it('chuyển sang đăng nhập lại thay vì ghi Invalid Date', async () => {
+      authRepo.findOne.mockResolvedValue({ ...expired });
+      global.fetch = jest
+        .fn()
+        .mockResolvedValueOnce(
+          okJson({
+            status: 401,
+            message: 'Refresh token không hợp lệ!',
+            data: null,
+          }),
+        )
+        .mockResolvedValueOnce(
+          okJson({
+            AccessToken: 'new-access',
+            RefreshToken: 'new-refresh',
+            TokenExpires: '2099-01-01 10:00:00',
+            SS_ClientID: 'c1',
+          }),
+        );
+
+      const token = await service.getValidToken(KgaraAccountKey.OJ);
+
+      expect(token).toBe('new-access');
+      expect((global.fetch as jest.Mock).mock.calls[0][0]).toContain(
+        '/auth/refresh-token',
+      );
+      expect((global.fetch as jest.Mock).mock.calls[1][0]).toContain(
+        '/auth/login',
+      );
+      const saved = authRepo.save.mock.calls[0][0];
+      expect(saved.tokenExpires.getTime()).not.toBeNaN();
+      expect(saved.refreshToken).toBe('new-refresh');
+    });
+
+    it('đăng nhập bị từ chối bằng HTTP 200 kèm body lỗi thì lastError nêu đúng lý do', async () => {
+      authRepo.findOne.mockResolvedValue(undefined);
+      global.fetch = jest
+        .fn()
+        .mockResolvedValue(okJson({ status: 401, message: 'Sai mật khẩu' }));
+
+      const token = await service.getValidToken(KgaraAccountKey.OJ);
+
+      expect(token).toBeNull();
+      expect(authRepo.save).not.toHaveBeenCalled();
+      expect(service.getLastError(KgaraAccountKey.OJ)).toContain(
+        'Sai mật khẩu',
+      );
+    });
+
+    it('đăng nhập trả TokenExpires không hợp lệ thì báo lỗi rõ ràng, không ghi DB', async () => {
+      authRepo.findOne.mockResolvedValue(undefined);
+      global.fetch = jest
+        .fn()
+        .mockResolvedValue(okJson({ AccessToken: 'a', TokenExpires: 'rác' }));
+
+      const token = await service.getValidToken(KgaraAccountKey.OJ);
+
+      expect(token).toBeNull();
+      expect(authRepo.save).not.toHaveBeenCalled();
+      expect(service.getLastError(KgaraAccountKey.OJ)).toContain(
+        'token không hợp lệ',
+      );
+    });
+  });
+
   describe('getValidToken', () => {
     it('returns valid cached token when not expired for MAIN', async () => {
       const futureDate = new Date(Date.now() + 60 * 60 * 1000);
