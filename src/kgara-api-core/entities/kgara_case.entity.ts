@@ -200,6 +200,25 @@ export class KgaraCase {
   })
   kgaraClassificationCode: string | null;
 
+  /** DoiTuongThanhToanCode – mã đối tượng thanh toán (công ty bảo hiểm / khách) */
+  @Index()
+  @Column({
+    type: 'varchar',
+    length: 100,
+    name: 'doi_tuong_thanh_toan_code',
+    nullable: true,
+  })
+  doiTuongThanhToanCode: string | null;
+
+  /** DoiTuongThanhToanName – tên đối tượng thanh toán */
+  @Column({
+    type: 'varchar',
+    length: 255,
+    name: 'doi_tuong_thanh_toan_name',
+    nullable: true,
+  })
+  doiTuongThanhToanName: string | null;
+
   // ── ERP Local columns ─────────────────────────────────────────────────────
 
   @Index()

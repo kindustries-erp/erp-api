@@ -2,6 +2,7 @@
 export interface KgaraReceivableRow {
   SoChungTu?: string | null;
   HdPhieuDichVuID?: string | null;
+  SoKhung?: string | null;
 }
 
 /** Dòng phiếu từ /api/v1/gr/cases/list; tài khoản OJ không có HdPhieuDichVuID */

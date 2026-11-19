@@ -7,8 +7,13 @@ export interface CaseListItem {
   hdPhieuDichVuId: string;
   soChungTu: string | null;
   bienSoXe: string | null;
+  /** Số khung (VIN). Null khi KGara chưa trả. */
+  soKhung: string | null;
   khachHangCode: string | null;
   khachHangName: string | null;
+  /** Đối tượng thanh toán (ví dụ BH-MIC, GR-KHA-000157). Null khi không phải phiếu bảo hiểm. */
+  doiTuongThanhToanCode: string | null;
+  doiTuongThanhToanName: string | null;
   branchExternalId: string | null;
   tinhTrangDichVu: number | null;
   tenTinhTrangDichVu: string | null;

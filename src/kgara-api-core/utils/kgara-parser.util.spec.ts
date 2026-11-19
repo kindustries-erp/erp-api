@@ -3,9 +3,38 @@ import {
   extractNetPayableAmount,
   extractKgaraClassification,
   mapKgaraClassificationToErp,
+  pickNonEmpty,
   resolveStoredRevenue,
   resolveStoredNetPayable,
+  toTrimmedOrNull,
 } from './kgara-parser.util';
+
+describe('pickNonEmpty', () => {
+  it('ghi giá trị mới khi không rỗng (có trim)', () => {
+    expect(pickNonEmpty('  51L50338 ', 'OLD')).toBe('51L50338');
+  });
+
+  it('giữ giá trị cũ khi giá trị mới rỗng hoặc null/undefined', () => {
+    expect(pickNonEmpty('', 'KEEP')).toBe('KEEP');
+    expect(pickNonEmpty('   ', 'KEEP')).toBe('KEEP');
+    expect(pickNonEmpty(undefined, 'KEEP')).toBe('KEEP');
+    expect(pickNonEmpty(null, 'KEEP')).toBe('KEEP');
+  });
+
+  it('trả null khi cả hai đều rỗng', () => {
+    expect(pickNonEmpty('', null)).toBeNull();
+    expect(pickNonEmpty(undefined, undefined)).toBeNull();
+  });
+});
+
+describe('toTrimmedOrNull', () => {
+  it('trim và trả null cho chuỗi rỗng', () => {
+    expect(toTrimmedOrNull(' BH-MIC ')).toBe('BH-MIC');
+    expect(toTrimmedOrNull('')).toBeNull();
+    expect(toTrimmedOrNull('   ')).toBeNull();
+    expect(toTrimmedOrNull(undefined)).toBeNull();
+  });
+});
 
 describe('kgara-parser.util', () => {
   describe('extractKgaraClassification', () => {

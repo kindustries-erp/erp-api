@@ -35,7 +35,9 @@ import {
   extractNetPayableAmount,
   extractKgaraClassification,
   mapKgaraClassificationToErp,
+  pickNonEmpty,
   resolveStoredRevenue,
+  toTrimmedOrNull,
 } from '../utils/kgara-parser.util';
 
 @Injectable()
@@ -347,7 +349,8 @@ export class SyncCaseService {
             parseSafeDate(c.NgayHoanThanhCongViec),
           );
           gwCase.ngayGiaoXeFull = parseSafeDate(c.NgayGiaoXeFull);
-          gwCase.soKhung = c.SoKhung;
+          // List KGara thường trả SoKhung rỗng: không ghi đè giá trị đã có
+          gwCase.soKhung = pickNonEmpty(c.SoKhung, gwCase.soKhung);
           gwCase.dataAsOf = parseSafeDate(dataAsOf);
 
           const caseDate =
@@ -451,6 +454,15 @@ export class SyncCaseService {
         }
         page++;
       } while (page <= totalPages);
+
+      // Số khung thường chỉ có ở receivables: điền cho các phiếu còn trống
+      await this.fillChassisFromReceivables(
+        branchExternalId,
+        effectiveFrom,
+        effectiveTo,
+        updatedSince,
+        accountKey,
+      );
 
       // Sync gross profit details to map financial data to cases across all lookback months
       try {
@@ -596,6 +608,23 @@ export class SyncCaseService {
     updatedSince: string | undefined,
     accountKey: KgaraAccountKey,
   ): Promise<Map<string, string>> {
+    const rows = await this.loadReceivableRows(
+      branchExternalId,
+      from,
+      to,
+      updatedSince,
+      accountKey,
+    );
+    return buildGuidMap(rows);
+  }
+
+  private async loadReceivableRows(
+    branchExternalId: string,
+    from: string | undefined,
+    to: string | undefined,
+    updatedSince: string | undefined,
+    accountKey: KgaraAccountKey,
+  ): Promise<KgaraReceivableRow[]> {
     const rows: KgaraReceivableRow[] = [];
     let page = 1;
     let totalPages = 1;
@@ -613,7 +642,44 @@ export class SyncCaseService {
       totalPages = response?.pagination?.totalPages || 1;
       page++;
     } while (page <= totalPages);
-    return buildGuidMap(rows);
+    return rows;
+  }
+
+  /**
+   * Điền số khung từ receivables cho các phiếu còn trống. Không ghi đè số khung đã có.
+   * Lỗi chỉ ghi cảnh báo, không làm hỏng sync phiếu.
+   */
+  private async fillChassisFromReceivables(
+    branchExternalId: string,
+    from: string | undefined,
+    to: string | undefined,
+    updatedSince: string | undefined,
+    accountKey: KgaraAccountKey,
+  ): Promise<void> {
+    try {
+      const rows = await this.loadReceivableRows(
+        branchExternalId,
+        from,
+        to,
+        updatedSince,
+        accountKey,
+      );
+      for (const row of rows) {
+        const chassis = toTrimmedOrNull(row.SoKhung);
+        const caseGuid = toTrimmedOrNull(row.HdPhieuDichVuID);
+        if (!chassis || !caseGuid) continue;
+        const gwCase = await this.caseRepo.findOne({
+          where: { hdPhieuDichVuId: caseGuid, accountKey },
+        });
+        if (!gwCase || gwCase.soKhung) continue;
+        gwCase.soKhung = chassis;
+        await this.caseRepo.save(gwCase);
+      }
+    } catch (err: any) {
+      this.logger.warn(
+        `Fill chassis from receivables failed for branch ${branchExternalId} (account: ${accountKey}): ${err?.message}`,
+      );
+    }
   }
 
   async syncCaseDetail(
@@ -758,7 +824,19 @@ export class SyncCaseService {
         parseSafeDate(caseData.NgayHoanThanhCongViec),
       );
       gwCase.ngayGiaoXeFull = parseSafeDate(caseData.NgayGiaoXeFull);
-      gwCase.soKhung = caseData.SoKhung;
+      gwCase.soKhung = pickNonEmpty(caseData.SoKhung, gwCase.soKhung);
+      // Chỉ ghi đối tượng thanh toán khi payload chi tiết có key (không xóa khi thiếu key)
+      if (
+        'DoiTuongThanhToanCode' in caseData ||
+        'DoiTuongThanhToanName' in caseData
+      ) {
+        gwCase.doiTuongThanhToanCode = toTrimmedOrNull(
+          caseData.DoiTuongThanhToanCode,
+        );
+        gwCase.doiTuongThanhToanName = toTrimmedOrNull(
+          caseData.DoiTuongThanhToanName,
+        );
+      }
       gwCase.dataAsOf = parseSafeDate(response.dataAsOf);
       gwCase.rawData = caseData;
       gwCase.accountKey = effectiveAccountKey;

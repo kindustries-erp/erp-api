@@ -188,3 +188,21 @@ export function mapKgaraClassificationToErp(
   // 3. Tất cả các trường hợp còn lại có phân loại từ KGara -> KY_GUI_NOI_BO
   return 'KY_GUI_NOI_BO';
 }
+
+/**
+ * Chỉ ghi đè khi giá trị mới không rỗng. Tránh việc list KGara trả chuỗi rỗng xóa dữ liệu đã có.
+ */
+export function pickNonEmpty(
+  next: unknown,
+  current: string | null | undefined,
+): string | null {
+  const trimmed = typeof next === 'string' ? next.trim() : '';
+  if (trimmed) return trimmed;
+  return current ?? null;
+}
+
+/** Chuỗi đã trim, rỗng hoặc null thì trả null. */
+export function toTrimmedOrNull(value: unknown): string | null {
+  const trimmed = typeof value === 'string' ? value.trim() : '';
+  return trimmed || null;
+}
