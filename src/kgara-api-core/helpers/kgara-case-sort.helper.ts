@@ -73,6 +73,14 @@ export function applyCaseListSorts(
       targetCol = 'case.kgaraClassification';
     else if (col === 'kgaraClassificationCode')
       targetCol = 'case.kgaraClassificationCode';
+    else if (col === 'soKhung') targetCol = 'case.soKhung';
+    else if (col === 'hangXe') targetCol = 'case.hangXeName';
+    else if (col === 'dongXe') targetCol = 'case.dongXeName';
+    else if (col === 'namSanXuat') targetCol = 'case.namSanXuat';
+    else if (col === 'doiTuongThanhToan')
+      targetCol = 'case.doiTuongThanhToanName';
+    else if (col === 'doiTuongThanhToanCode')
+      targetCol = 'case.doiTuongThanhToanCode';
 
     if (targetCol) {
       if (first) {
