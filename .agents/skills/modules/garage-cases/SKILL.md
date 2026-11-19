@@ -1024,3 +1024,6 @@ Nhằm tinh gọn tối đa thanh công cụ (Toolbar) và đồng bộ trải n
 - Quy tắc ghi: `pickNonEmpty`, không ghi đè giá trị đã có bằng rỗng; detail thiếu `HoSoPhuongTien` thì giữ nguyên.
 - API: V1 `GET /greenway/cases` trả nguyên entity nên có sẵn 5 trường; V2 `cases-garage` thêm `hangXeCode`, `hangXeName`, `dongXeCode`, `dongXeName`, `namSanXuat`. Tìm kiếm `q` (V1 và V2) khớp thêm tên hãng/dòng xe.
 - DTO list v2 (`cases-garage`): thêm `soKhung`, `doiTuongThanhToanCode`, `doiTuongThanhToanName` (null khi thiếu).
+
+### Khóa lọc/sắp xếp cột xe (KINDU-1433)
+- `getCaseColumnSelectExpr` và `applyCaseListSorts` hỗ trợ `soKhung`, `hangXe`(+`Code`), `dongXe`(+`Code`), `namSanXuat`, `doiTuongThanhToan`(+`Code`); dùng chung cho `filtersStr`, `sorts`, `column-options` của V1 `/greenway/cases` và V2 `cases-garage`.
