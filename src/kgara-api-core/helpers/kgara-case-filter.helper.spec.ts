@@ -43,6 +43,21 @@ describe('kgara-case-filter.helper', () => {
     });
   });
 
+  describe('getCaseColumnSelectExpr - cột xe và đối tượng thanh toán', () => {
+    it.each([
+      ['soKhung', '"case"."so_khung"'],
+      ['hangXe', '"case"."hang_xe_name"'],
+      ['hangXeCode', '"case"."hang_xe_code"'],
+      ['dongXe', '"case"."dong_xe_name"'],
+      ['dongXeCode', '"case"."dong_xe_code"'],
+      ['namSanXuat', '"case"."nam_san_xuat"'],
+      ['doiTuongThanhToan', '"case"."doi_tuong_thanh_toan_name"'],
+      ['doiTuongThanhToanCode', '"case"."doi_tuong_thanh_toan_code"'],
+    ])('map %s', (key, expr) => {
+      expect(getCaseColumnSelectExpr(key)).toBe(expr);
+    });
+  });
+
   describe('getCaseServiceColumnSelectExpr', () => {
     it('should map service columns to SQL expressions', () => {
       expect(getCaseServiceColumnSelectExpr('sanPhamCode')).toBe(
