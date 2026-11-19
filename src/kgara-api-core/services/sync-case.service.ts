@@ -24,6 +24,10 @@ import {
   resolveCaseGuid,
 } from '../helpers/kgara-case-identity.helper';
 import {
+  applyDetailVehicle,
+  applyListVehicle,
+} from '../helpers/kgara-case-vehicle.helper';
+import {
   KgaraCaseLineInput,
   reconcileCaseLines,
 } from '../helpers/kgara-case-lines-reconcile.helper';
@@ -351,6 +355,7 @@ export class SyncCaseService {
           gwCase.ngayGiaoXeFull = parseSafeDate(c.NgayGiaoXeFull);
           // List KGara thường trả SoKhung rỗng: không ghi đè giá trị đã có
           gwCase.soKhung = pickNonEmpty(c.SoKhung, gwCase.soKhung);
+          applyListVehicle(gwCase, c);
           gwCase.dataAsOf = parseSafeDate(dataAsOf);
 
           const caseDate =
@@ -726,7 +731,10 @@ export class SyncCaseService {
       );
       const caseData = response?.data;
       if (!caseData) {
-        throw new Error(`Case ${targetCaseId} detail not found on Kgara`);
+        const reason = response?.message ? `: ${response.message}` : '';
+        throw new Error(
+          `Case ${targetCaseId} detail not found on Kgara${reason}`,
+        );
       }
 
       // Update case if exists
@@ -824,7 +832,7 @@ export class SyncCaseService {
         parseSafeDate(caseData.NgayHoanThanhCongViec),
       );
       gwCase.ngayGiaoXeFull = parseSafeDate(caseData.NgayGiaoXeFull);
-      gwCase.soKhung = pickNonEmpty(caseData.SoKhung, gwCase.soKhung);
+      applyDetailVehicle(gwCase, caseData);
       // Chỉ ghi đối tượng thanh toán khi payload chi tiết có key (không xóa khi thiếu key)
       if (
         'DoiTuongThanhToanCode' in caseData ||

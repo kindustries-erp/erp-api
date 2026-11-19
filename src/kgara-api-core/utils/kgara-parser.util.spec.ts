@@ -7,6 +7,7 @@ import {
   resolveStoredRevenue,
   resolveStoredNetPayable,
   toTrimmedOrNull,
+  toModelYearOrNull,
 } from './kgara-parser.util';
 
 describe('pickNonEmpty', () => {
@@ -24,6 +25,28 @@ describe('pickNonEmpty', () => {
   it('trả null khi cả hai đều rỗng', () => {
     expect(pickNonEmpty('', null)).toBeNull();
     expect(pickNonEmpty(undefined, undefined)).toBeNull();
+  });
+});
+
+describe('toModelYearOrNull', () => {
+  it('nhận số hoặc chuỗi 4 chữ số trong khoảng 1900-2099', () => {
+    expect(toModelYearOrNull(2019)).toBe(2019);
+    expect(toModelYearOrNull(' 2024 ')).toBe(2024);
+  });
+  it('trả null với 0, rác, ngoài khoảng, rỗng', () => {
+    for (const v of [
+      0,
+      '0',
+      1800,
+      2500,
+      20.5,
+      'abc',
+      '',
+      null,
+      undefined,
+      '19999',
+    ])
+      expect(toModelYearOrNull(v)).toBeNull();
   });
 });
 

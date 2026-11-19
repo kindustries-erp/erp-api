@@ -9,6 +9,12 @@ export interface CaseListItem {
   bienSoXe: string | null;
   /** Số khung (VIN). Null khi KGara chưa trả. */
   soKhung: string | null;
+  /** Hãng xe (mã và tên), dòng xe (mã và tên), năm sản xuất. Null khi KGara chưa trả. */
+  hangXeCode: string | null;
+  hangXeName: string | null;
+  dongXeCode: string | null;
+  dongXeName: string | null;
+  namSanXuat: number | null;
   khachHangCode: string | null;
   khachHangName: string | null;
   /** Đối tượng thanh toán (ví dụ BH-MIC, GR-KHA-000157). Null khi không phải phiếu bảo hiểm. */

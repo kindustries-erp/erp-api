@@ -16,7 +16,7 @@ Vị trí: `src/v2/modules/cases-garage`. Quyền `GARAGE:READ`, chi nhánh bắ
 - Hạng mục: `kgara_case_services` join vụ việc theo `hd_phieu_dich_vu_id`; tổng, tổng trang, lũy kế bằng `applyListSummaries` (V1 cộng JS).
 - List vụ việc dùng lại helper lọc/sắp xếp V1 (`applyCaseListFilters`...); tổng 8 cột khớp V1.
 - Số tiền là number; không trả `raw_data`.
-- Dòng list có thêm `soKhung`, `doiTuongThanhToanCode`, `doiTuongThanhToanName` (null khi thiếu). Nguồn và quy tắc ghi xem `garage-cases` mục "Số khung & đối tượng thanh toán".
+- Dòng list có thêm `soKhung`, `doiTuongThanhToanCode`, `doiTuongThanhToanName`, `hangXeCode`, `hangXeName`, `dongXeCode`, `dongXeName`, `namSanXuat` (null khi thiếu); `q` tìm thêm theo hãng/dòng xe. Nguồn và quy tắc ghi xem `garage-cases` mục "Số khung & đối tượng thanh toán".
 
 ## 3. Khác V1
 Chi nhánh bắt buộc; filter cột áp trên dòng gom biển số; không có tổng "còn phải trả" ở list; không nhánh normalized-plate ở column-options.

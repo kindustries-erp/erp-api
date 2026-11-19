@@ -206,3 +206,14 @@ export function toTrimmedOrNull(value: unknown): string | null {
   const trimmed = typeof value === 'string' ? value.trim() : '';
   return trimmed || null;
 }
+
+/** Năm sản xuất hợp lệ (số nguyên 1900-2099, khớp backfill của migration), còn lại null. Dữ liệu KGara nhập tay nên có thể là 0 hoặc rác. */
+export function toModelYearOrNull(value: unknown): number | null {
+  const n =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string' && /^\d{4}$/.test(value.trim())
+        ? Number(value.trim())
+        : NaN;
+  return Number.isInteger(n) && n >= 1900 && n <= 2099 ? n : null;
+}
