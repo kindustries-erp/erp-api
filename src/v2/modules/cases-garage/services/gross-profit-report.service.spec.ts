@@ -27,9 +27,10 @@ describe('GrossProfitReportService', () => {
     const [sql, params] = query.mock.calls[0];
     // Nối LATERAL LIMIT 1: mã trùng không nhân dòng; trùng giữa hai chi nhánh không lộ vụ việc khác.
     expect(sql).toContain('LEFT JOIN LATERAL');
-    expect(sql).toContain('c2.so_chung_tu = gp.vu_viec_code');
+    expect(sql).toContain('c2.case_code = gp.vu_viec_code');
     expect(sql).toContain('c2.branch_external_id = gp.branch_external_id');
-    expect(sql).toContain('c2.kgara_deleted_at IS NULL');
+    expect(sql).toContain('c2.external_deleted_at IS NULL');
+    expect(sql).toContain('FROM cases_garage c2');
     expect(sql).toContain('LIMIT 1');
     expect(sql).not.toContain('hd_phieu_dich_vu_id');
     expect(params).toEqual(['b1', '2026-07-01']);
@@ -79,13 +80,13 @@ describe('toItem', () => {
     const item = toItem({
       ...base,
       case_id: 'c1',
-      so_chung_tu: 'PS1',
-      bien_so_xe: '51A',
+      case_code: 'PS1',
+      license_plate: '51A',
     });
     expect(item.case).toMatchObject({
       id: 'c1',
-      soChungTu: 'PS1',
-      bienSoXe: '51A',
+      caseCode: 'PS1',
+      licensePlate: '51A',
     });
   });
 });

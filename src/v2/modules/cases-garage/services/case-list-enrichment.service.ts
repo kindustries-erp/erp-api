@@ -1,8 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { KgaraCaseSettlement } from '@/kgara-api-core/entities/kgara_case_settlement.entity';
+import { ErpModuleCategory } from '@/module-config/entities/erp_module_category.entity';
+import { KgaraGrossProfit } from '@/kgara-api-core/entities/kgara_gross_profit.entity';
 import { KgaraCaseLinkedInvoice } from '@/kgara-api-core/entities/kgara_case_linked_invoice.entity';
+import type {
+  CaseCategoryRef,
+  CaseGrossProfitRef,
+} from '../helpers/case-list-item.mapper';
 import type {
   CaseLinkCounts,
   CaseSettlementSums,
@@ -16,7 +22,52 @@ export class CaseListEnrichmentService {
     private readonly settlements: Repository<KgaraCaseSettlement>,
     @InjectRepository(KgaraCaseLinkedInvoice)
     private readonly links: Repository<KgaraCaseLinkedInvoice>,
+    @InjectRepository(ErpModuleCategory)
+    private readonly categories: Repository<ErpModuleCategory>,
+    @InjectRepository(KgaraGrossProfit)
+    private readonly grossProfits: Repository<KgaraGrossProfit>,
   ) {}
+
+  /** Danh mục phân loại theo id (v2 không khai báo quan hệ chéo module). */
+  async categoryRefs(
+    ids: Array<string | null>,
+  ): Promise<Map<string, CaseCategoryRef>> {
+    const uniq = [...new Set(ids.filter((i): i is string => !!i))];
+    const map = new Map<string, CaseCategoryRef>();
+    if (!uniq.length) return map;
+    const rows = await this.categories
+      .createQueryBuilder('k')
+      .select('k.id', 'id')
+      .addSelect('k.code', 'code')
+      .addSelect('k.name', 'name')
+      .where('k.id IN (:...ids)', { ids: uniq })
+      .getRawMany<{ id: string; code: string | null; name: string | null }>();
+    for (const c of rows) {
+      map.set(c.id, { id: c.id, code: c.code ?? null, name: c.name ?? null });
+    }
+    return map;
+  }
+
+  /** Lãi gộp KGara theo `branch|mã chứng từ`, lấy dòng mới nhất mỗi mã. */
+  async grossProfitByCode(
+    branchId: string,
+    codes: string[],
+  ): Promise<Map<string, CaseGrossProfitRef>> {
+    const map = new Map<string, CaseGrossProfitRef>();
+    if (!codes.length) return map;
+    const rows = await this.grossProfits.find({
+      where: { branchExternalId: branchId, vuViecCode: In(codes) },
+      order: { updatedAt: 'ASC' },
+    });
+    for (const g of rows) {
+      map.set(g.vuViecCode as string, {
+        revenue: g.doanhThu,
+        cost: g.chiPhi,
+        profit: g.loiNhuan,
+      });
+    }
+    return map;
+  }
 
   async settlementSums(
     ids: string[],

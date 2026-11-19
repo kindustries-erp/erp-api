@@ -1027,3 +1027,6 @@ Nhằm tinh gọn tối đa thanh công cụ (Toolbar) và đồng bộ trải n
 
 ### Khóa lọc/sắp xếp cột xe (KINDU-1433)
 - `getCaseColumnSelectExpr` và `applyCaseListSorts` hỗ trợ `soKhung`, `hangXe`(+`Code`), `dongXe`(+`Code`), `namSanXuat`, `doiTuongThanhToan`(+`Code`); dùng chung cho `filtersStr`, `sorts`, `column-options` của V1 `/greenway/cases` và V2 `cases-garage`.
+
+### Xuất Excel: cột xe và đối tượng thanh toán (KINDU-1460)
+- `COMPLETED_CASES_OPTIONAL_COLUMNS` có thêm `soKhung`, `hangXe`, `dongXe`, `namSanXuat`, `doiTuongThanhToan` (chỉ sheet "Bảng kê phiếu kết thúc", chọn qua `selectedColumns`; không thuộc 30 cột mặc định). Builder dùng `pickNameOrCode` (tên, thiếu thì mã, rỗng `—`); sheet lãi lỗ và chi tiết không đổi.

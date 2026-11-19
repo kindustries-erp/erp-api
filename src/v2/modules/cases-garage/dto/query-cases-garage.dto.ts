@@ -1,5 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import { CaseOrigin } from '../entities/case-garage.enums';
 import { TableQueryDto } from '@/common/dto/table-query.dto';
 
 /**
@@ -16,4 +17,12 @@ export class QueryCasesGarageDto extends TableQueryDto {
   @IsString()
   @MaxLength(50)
   serviceType?: string;
+
+  @ApiPropertyOptional({
+    enum: CaseOrigin,
+    description: 'Lọc theo nguồn: NATIVE hoặc KGARA_SYNC',
+  })
+  @IsOptional()
+  @IsEnum(CaseOrigin)
+  origin?: CaseOrigin;
 }

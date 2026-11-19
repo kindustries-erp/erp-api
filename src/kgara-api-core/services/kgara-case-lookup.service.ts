@@ -1,4 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
+import { notifyCaseProjector } from '../hub/case-projector.port';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { KgaraCase } from '../entities/kgara_case.entity';
@@ -27,6 +34,8 @@ export class KgaraCaseLookupService {
     private readonly grossProfitRepo: Repository<KgaraGrossProfit>,
     private readonly client: KgaraClientService,
     private readonly dataSource: DataSource,
+    @Optional()
+    private readonly moduleRef?: ModuleRef,
   ) {}
 
   /**
@@ -411,6 +420,11 @@ export class KgaraCaseLookupService {
     caseData.rawData.ListPhieuDichVuChiTiet = rawLines;
     caseData.rawData.costEnriched = true;
     await this.caseRepo.save(caseData);
+    await notifyCaseProjector(
+      this.moduleRef,
+      new Logger(KgaraCaseLookupService.name),
+      caseData.id,
+    );
     return caseData;
   }
 }

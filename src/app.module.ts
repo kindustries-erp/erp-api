@@ -25,6 +25,7 @@ import { GoodsIssuesCoreModule } from './goods-issues-core/goods-issues-core.mod
 import { SalesOrdersCoreModule } from './sales-orders-core/sales-orders-core.module';
 import { ProductionCoreModule } from './production-core/production-core.module';
 import { BranchesManagementModule } from './v2/modules/branches-management/branches-management.module';
+import { BanksManagementModule } from './v2/modules/banks-management/banks-management.module';
 import { TablePreferencesModule } from './v2/modules/table-preferences/table-preferences.module';
 import { NotificationsInboxModule } from './v2/modules/notifications-inbox/notifications-inbox.module';
 import { FileAttachmentsModule } from './v2/modules/file-attachments-management/file-attachments-management.module';
@@ -174,6 +175,7 @@ import { AuthSessionsModule } from './v2/modules/auth-sessions/auth-sessions.mod
     SalesOrdersCoreModule,
     ProductionCoreModule,
     BranchesManagementModule,
+    BanksManagementModule,
     TablePreferencesModule,
     SchedulerJobsModule,
     NotificationsInboxModule, // api-v2-module:notifications-inbox:module

@@ -100,7 +100,7 @@ describe('CasesGarageController', () => {
         branchId: 'b1',
         page: 2,
         from: '2026-08-01',
-        columnFilters: '{"a":["b"]}',
+        column_filters: '{"a":["b"]}',
         summaryKeys: 'tienCoThue',
         serviceType: 'DV',
       }),

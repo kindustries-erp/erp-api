@@ -3,12 +3,12 @@ import type { PaginationMeta } from '@/common/utils/paginated-result';
 /** Vụ việc khớp với một dòng lợi nhuận gộp (chỉ vụ việc đang hoạt động, khớp theo mã chứng từ). */
 export interface GrossProfitCaseRef {
   id: string;
-  soChungTu: string;
-  bienSoXe: string | null;
-  khachHangName: string | null;
-  ngayPhatSinh: string | null;
-  ngayHoanThanhCongViec: string | null;
-  tenTinhTrangDichVu: string | null;
+  caseCode: string;
+  licensePlate: string | null;
+  customerName: string | null;
+  issuedAt: string | null;
+  completedAt: string | null;
+  statusName: string | null;
 }
 
 export interface GrossProfitReportItem {

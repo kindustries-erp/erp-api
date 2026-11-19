@@ -58,6 +58,14 @@ export function formatExclusionRules(item: Record<string, any>): string {
   return rules.length ? rules.join('; ') : '—';
 }
 
+/** Tên nếu có, thiếu thì mã; cả hai rỗng trả `—` (dùng cho hãng xe, dòng xe, đối tượng thanh toán). */
+export function pickNameOrCode(
+  name: string | null | undefined,
+  code: string | null | undefined,
+): string {
+  return name?.trim() || code?.trim() || '—';
+}
+
 export function highlightStatusCell(
   cell: ExcelJS.Cell,
   statusText: string,
@@ -449,6 +457,14 @@ export function buildSheet1CompletedCases(
       duThu,
       duChi,
       vatAmount,
+      soKhung: c.soKhung?.trim() || '—',
+      hangXe: pickNameOrCode(c.hangXeName, c.hangXeCode),
+      dongXe: pickNameOrCode(c.dongXeName, c.dongXeCode),
+      namSanXuat: c.namSanXuat ?? '—',
+      doiTuongThanhToan: pickNameOrCode(
+        c.doiTuongThanhToanName,
+        c.doiTuongThanhToanCode,
+      ),
       exclusionRules: formatExclusionRules(c),
       createdAt: toExcelWallClockDate(c.createdAt, true),
       updatedAt: toExcelWallClockDate(c.updatedAt, true),
