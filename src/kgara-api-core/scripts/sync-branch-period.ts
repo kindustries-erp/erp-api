@@ -1,7 +1,7 @@
 /**
  * sync-branch-period.ts
  *
- * Sync một chi nhánh KGara (theo MaSo) trong một khoảng ngày, tài khoản MAIN:
+ * Sync một chi nhánh KGara (theo MaSo) trong một khoảng ngày, tài khoản MAIN hoặc OJ:
  *   1. syncCasesForBranch  — danh sách phiếu (số khung từ receivables, giữ nguyên dữ liệu đã có)
  *   2. syncCaseDetailsBatch (force) — chi tiết phiếu (đối tượng thanh toán)
  *
@@ -13,7 +13,7 @@
  *
  * Tham số:
  *   --branch-code=GR      (MaSo chi nhánh, bắt buộc)
- *   --account=MAIN        (mặc định MAIN)
+ *   --account=MAIN|OJ     (mặc định MAIN; OJ dùng MaSo chi nhánh của tài khoản OJ, ví dụ GN)
  *   --from=YYYY-MM-DD     (bắt buộc, trừ khi dùng --cases-file)
  *   --to=YYYY-MM-DD       (bắt buộc, trừ khi dùng --cases-file)
  *   --concurrency=N       (1–10, mặc định 1: gọi song song làm KGara báo deadlock nhiều hơn)
@@ -24,6 +24,7 @@
  * Ví dụ:
  *   bun src/kgara-api-core/scripts/sync-branch-period.ts --target=greenway-staging --branch-code=GR --from=2026-10-01 --to=2026-10-31
  *   ... (thêm) --apply
+ *   bun src/kgara-api-core/scripts/sync-branch-period.ts --target=greenway-staging --branch-code=GN --account=OJ --from=2026-05-01 --to=2026-12-31 --concurrency=2
  */
 
 import * as fs from 'fs';
@@ -105,8 +106,8 @@ async function main(): Promise<void> {
       'Thiếu --branch-code, hoặc thiếu --from/--to (khi không dùng --cases-file).',
     );
   }
-  if (account !== 'MAIN') {
-    throw new ScriptEnvError('Script này chỉ hỗ trợ --account=MAIN.');
+  if (account !== 'MAIN' && account !== 'OJ') {
+    throw new ScriptEnvError('--account phải là MAIN hoặc OJ.');
   }
 
   const scopeLabel = caseIds
@@ -172,7 +173,8 @@ async function main(): Promise<void> {
   });
   try {
     const sync = app.get(SyncCaseService);
-    const accountKey = KgaraAccountKey.MAIN;
+    const accountKey =
+      account === 'OJ' ? KgaraAccountKey.OJ : KgaraAccountKey.MAIN;
 
     if (caseIds) {
       console.log(
