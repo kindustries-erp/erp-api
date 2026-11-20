@@ -62,6 +62,7 @@ Quy tắc chung:
   | Không chạm cấu trúc (ví dụ sửa một endpoint nhỏ) | — | `Structure: N/A (lý do)` |
 
 - **Chọn Track (khi chạm module v1 hoặc v2)**: `T1` = refactor v1 theo hướng v2-ready (mặc định). `T2` = migrate sang v2, chỉ khi user ra lệnh cho từng module. Module mới: đề xuất v2 qua plop, hỏi user ở Approval Gate. Ghi `Track:` đầu `implementation_plan.md`.
+- **Quét tiền lệ Plane**: trước khi lập plan, tìm trên Plane (project KINDU) việc tương tự, kể cả `Done`/`Cancelled`, theo `plane-work-items` mục 5. Báo cáo bảng Tiền lệ và chờ người dùng chốt: dùng lại, tiếp tục, tạo mới có liên kết, hoặc hủy. Ghi vào mục `🔎 Tiền lệ trên Plane` của plan.
 - **Scope Boundaries**: In-Scope và Out-of-Scope rõ ràng để tránh scope creep.
 - **Threat Model**: phụ lục repo quy định checklist cụ thể.
 - Sub-agent research là tùy chọn khi môi trường hỗ trợ và task đọc diện rộng. CLI đơn luồng thì agent chính tự làm tuần tự.
@@ -90,6 +91,7 @@ Mẫu task chuẩn:
 ```markdown
 - [ ] **Task X.Y.Z: [Tên task súc tích, rõ hành động]**
   - **Phân hệ**: `[DB / API / Web / QC]` | **Ưu tiên**: `[P0 / P1 / P2]`
+  - **Plane**: `[<module>] X.Y.Z` | **Ngày**: `start → target` | **State**: `Backlog → Todo → In Progress → Done`
   - **Runner**: `[Main Agent]` *(Mặc định Main Agent. Chỉ ghi `Sub-agent (self)` khi agent có sub-agent và task độc lập hoàn toàn)*
   - **Files**: `[NEW]` / `[MODIFY]` / `[DELETE]` [path/to/file](erp/<repo>/path/to/file)
   - **DoD**: tiêu chí hoàn thành cụ thể.
@@ -125,7 +127,12 @@ Ngay sau `OK`, agent **PHẢI HỎI** trước khi làm trên Plane:
 - **Có**: load skill `plane-work-items`, tạo Module, Cycle, Story và **tất cả Task con theo Task Breakdown**, gắn vào Module và Cycle, rồi ghi identifier (ví dụ `KINDU-12`) vào plan. Chỉ bắt đầu Giai đoạn 5 khi bước này xong.
 - **Không**: ghi `Plane: không theo dõi` vào plan.
 - Task ERP: khuyến nghị **Có**, theo `AGENTS.md`. Câu hỏi vẫn phải được hỏi. Nếu user đã nói rõ trong cùng yêu cầu (ví dụ "tạo Plane trước khi làm") thì không hỏi lại.
-- **Cập nhật trong khi làm** (xem Giai đoạn 5, mục 1): task bắt đầu thì chuyển `In Progress`, task PASS verification thì chuyển `Done`. Việc phát sinh ngoài plan thì tạo Task con mới ngay lúc phát hiện.
+- **Quy chuẩn Plane (bắt buộc)**, theo `plane-work-items` mục 2–4:
+  - Luồng state: tạo ở `Backlog`; gắn Cycle rồi chuyển `Todo`; bắt đầu làm chuyển `In Progress`; PASS verification chuyển `Done`. Cấm nhảy `Backlog → In Progress`.
+  - Tên: Story `[<module>] <n>. <tên>`; Task `[<module>] X.Y.Z <tên>`, với `X.Y.Z` khớp Task Breakdown.
+  - Mọi Story và Task có `start_date` và `target_date`, nằm trong khoảng Cycle chứa nó.
+  - Cycle: nếu `parallel_cycles` tắt thì tuần tự, không chồng lấn; chỉ một cycle `current`; cycle mới nối sau cycle cuối.
+  - Việc phát sinh ngoài plan thì tạo Task con mới ngay lúc phát hiện.
 - Chưa có `OK` thì không tạo gì trên Plane. Không ghi plan hay task vào Trilium.
 ---
 
@@ -135,7 +142,7 @@ Ngay sau `OK`, agent **PHẢI HỎI** trước khi làm trên Plane:
 - **Single Active Task**: đổi `[ ]` thành `[/]` khi bắt đầu. Tại một thời điểm chỉ có **một** task `[/]`.
 - **Test-Before-Tick**: chỉ đổi `[/]` thành `[x]` khi lệnh `Verification` **PASS 100%**. Nếu fail, giữ `[/]` và sửa tiếp.
 - **Live Sync**: ghi trạng thái vào `implementation_plan.md` ngay sau mỗi task.
-- **Plane Live Sync** (khi `Plane: KINDU-xx`): bắt đầu task thì chuyển Task con sang `In Progress` (state group `started`); `[x]` thì chuyển `Done`. Hết task thì chuyển Story sang `Done`. Chỉ tạo hoặc cập nhật hàng loạt sau khi làm xong là sai quy trình.
+- **Plane Live Sync** (khi `Plane: KINDU-xx`): trước khi `[/]` một task phát sinh, quét nhanh tiền lệ. Bắt đầu task thì chuyển Task con sang `In Progress`; `[x]` thì chuyển `Done`. Hết task thì chuyển Story sang `Done`. Chỉ tạo hoặc cập nhật hàng loạt sau khi làm xong là sai quy trình.
 
 ### 1.1 Single-Agent và Sub-agent
 - **Mặc định**: agent chính tự làm tuần tự: `[/]` → sửa file → verification → PASS → `[x]`.
@@ -181,6 +188,9 @@ Track: [T1 / T2 / N/A]
 Structure: [/erp-ui-structure | /erp-api-structure | N/A (lý do)]
 Consistency Check: [đạt / chỗ lệch và cách xử lý]
 Plane: [KINDU-xx / không theo dõi]
+
+## 🔎 Tiền lệ trên Plane
+- [KINDU-xx hoặc "không có"] · State · Cycle · Quyết định: [dùng lại / tiếp tục / tạo mới có liên kết / hủy]
 
 ## 📝 Spec
 - **Mục tiêu**: một hai câu.
