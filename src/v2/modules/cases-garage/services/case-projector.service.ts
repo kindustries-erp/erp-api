@@ -1,12 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { DataSource, EntityManager, In } from 'typeorm';
+import { DataSource, EntityManager, FindOptionsWhere, In } from 'typeorm';
 import { KgaraCase } from '@/kgara-api-core/entities/kgara_case.entity';
 import { KgaraCaseService } from '@/kgara-api-core/entities/kgara_case_service.entity';
+import { KgaraGrossProfit } from '@/kgara-api-core/entities/kgara_gross_profit.entity';
 import type { GarageCaseProjectorPort } from '@/kgara-api-core/hub/case-projector.port';
 import { BranchManagementExternalLink } from '@/v2/modules/branches-management/entities/branch-management-external-link.entity';
 import { CaseGarage } from '../entities/case-garage.entity';
 import { CaseOrigin } from '../entities/case-garage.enums';
 import { CaseServiceGarage } from '../entities/case-service-garage.entity';
+import { resolveKgaraCaseMoney } from '../helpers/kgara-case-money';
 import {
   kgaraCaseToCaseGarage,
   kgaraServiceToCaseService,
@@ -45,6 +47,14 @@ export class CaseProjectorService implements GarageCaseProjectorPort {
 
       const mapped = kgaraCaseToCaseGarage(v1);
       mapped.branchId = await this.resolveBranchId(m, v1);
+      // Doanh thu/chi phí/lợi nhuận theo quy tắc V1: lợi nhuận gộp trước, cột vụ việc sau.
+      const money = resolveKgaraCaseMoney(
+        v1,
+        await this.findGrossProfit(m, v1),
+      );
+      mapped.revenue = String(money.revenue);
+      mapped.cost = String(money.cost);
+      mapped.profit = String(money.profit);
       if (existing) {
         const { id: _id, createdAt: _c, updatedAt: _u, ...patch } = mapped;
         await m.update(CaseGarage, { id: caseId }, patch as never);
@@ -54,6 +64,18 @@ export class CaseProjectorService implements GarageCaseProjectorPort {
       await this.projectLines(m, v1);
       return existing ? 'updated' : 'created';
     });
+  }
+
+  /** Lợi nhuận gộp V1 của vụ việc, nối theo mã hồ sơ hoặc số chứng từ (cùng điều kiện với V1). */
+  private async findGrossProfit(
+    m: EntityManager,
+    v1: KgaraCase,
+  ): Promise<KgaraGrossProfit | null> {
+    const where: FindOptionsWhere<KgaraGrossProfit>[] = [];
+    if (v1.hdPhieuDichVuId) where.push({ hdPhieuDichVuId: v1.hdPhieuDichVuId });
+    if (v1.soChungTu) where.push({ vuViecCode: v1.soChungTu });
+    if (where.length === 0) return null;
+    return m.findOne(KgaraGrossProfit, { where });
   }
 
   /** Liên kết chi nhánh KGara → chi nhánh ERP; chưa có liên kết thì để null, không đoán. */

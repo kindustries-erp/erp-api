@@ -303,3 +303,20 @@ Resource RBAC: `garage`
 > **Bảng màu chart Excel (2026-10-17)**: `CHART_PALETTE` (`src/common/xlsx-charts/xlsx-chart.types.ts`) đổi sang tông chart Dòng tiền web: `059669, EA580C, 475569, E11D48, 7C3AED, 0D9488, CA8A04` (+3 màu dự phòng). Đường `% Lợi nhuận gộp` ở sheet Báo cáo lợi nhuận dùng slot teal `[5]`. Mọi sheet có chart dùng chung bảng này.
 
 > **Phễu chuyển đổi (2026-10-17)**: `conversionFunnel` / `conversionFunnelByMonth` (`garage-dashboard-stats.service.ts`) có thêm `quotation {count, amount, rate}` và `byClassification.*.quotationCount/quotationAmount`. Báo giá = phiếu chưa hoàn thành, chưa hủy và thỏa `quotationStatusSql(alias)` (`helpers/kgara-case-filter.helper.ts`, cùng điều kiện tab Báo giá của danh sách vụ việc); `inProgress*` chỉ còn phiếu chưa hoàn thành không phải báo giá.
+
+## 8. Đếm theo XE (biển số), không đếm theo phiếu (2026-11-20)
+
+Một xe có thể có nhiều lệnh, nên mọi con số "xe" của dashboard là **số biển số khác nhau**, không phải số phiếu.
+
+- **Khóa xe** (một nguồn quy tắc): `src/common/utils/vehicle-count-sql.ts`. SQL `vehicleKeySql(alias, plateColumn)` (cột whitelist `bien_so_xe` | `license_plate`), `countVehiclesSql(keySql, cond?)`; bản TS `vehicleKey(plate, id)`, `countDistinctVehicles(items)`. Biển chuẩn hóa bỏ ký tự ngoài `A-Z0-9` và viết hoa (`51A-123.45` = `51a12345`). Phiếu thiếu biển = 1 xe riêng (khóa = id phiếu).
+- **Mỗi giai đoạn đếm xe riêng**: xe có hai lệnh ở hai giai đoạn xuất hiện ở cả hai thẻ, nên **tổng các giai đoạn có thể lớn hơn tổng xe**. Tổng toàn kỳ và tổng theo tháng là truy vấn `COUNT(DISTINCT)` riêng, không cộng dồn từ các dòng nhỏ.
+- **Hợp đồng V1 (giữ tên field, đổi nghĩa sang xe)**: `count`, `totalCount`, `*Count` của `/checkpoint-kpis`, `/checkpoint-cases` (`summary`, `classificationSummary`) và `/stats` (`conversionFunnel*`, `statusDistribution*`, `classificationDistribution*`) đều là số xe. Thêm `totalCases` (số lệnh) ở KPI kỳ và `summary.totalCases` của `/checkpoint-cases`. Tiền vẫn cộng theo lệnh.
+- **Hai cách đếm trong `/checkpoint-kpis` (dễ nhầm)**:
+  - `month.stages.totalIntake` = số xe khác nhau trong cửa sổ `COALESCE(ngày hoàn thành, ngày phát sinh, ngày tạo)`. **Đây là số hiển thị ở thẻ "XE THÁNG NÀY"**, cùng cửa sổ với 4 thẻ giai đoạn.
+  - `month.totalCount`/`totalCases` = xe/lệnh **đã hoàn thành** trong kỳ (theo ngày hoàn thành, không hủy). Cùng cửa sổ với tiền (`totalTienCoThue`, `totalRevenue`). Không hiển thị trên thẻ.
+- **Chưa đổi**: các field `caseCount*` của xu hướng tháng trong `garage-dashboard-stats.service.ts` vẫn đếm phiếu (ngoài phạm vi).
+- **SQL tách file** (mỗi file dưới ngưỡng): `helpers/garage-checkpoint-stages.sql.ts`, `helpers/garage-dashboard-funnel.sql.ts`.
+- **Excel bảng kê dashboard**: KPI "SỐ XE (N lệnh)" thay "SỐ PHIẾU DỊCH VỤ" (`countVehicles` trong `garage-cases-dashboard-data.helper.ts`, giá trị tĩnh vì Excel không có COUNT DISTINCT gọn); 10 thẻ KPI và layout không đổi. Sheet 1 vẫn mỗi dòng một lệnh.
+- **Module V2 `cases-dashboard-garage`** (`src/v2/modules/cases-dashboard-garage/`, route `api/v2/cases-dashboard-garage`, RBAC `ErpResource.GARAGE` READ, đọc `cases_garage`, không bảng mới): `GET /period-kpis?date` (tháng/tuần/ngày + dự thu), `GET /funnel?date_from&date_to` (toàn kỳ, theo tháng, theo phân loại), `GET /cases?date_from&date_to&stage&classification&page&pageSize` (drill-down phân trang). Response không bọc `data`. Giai đoạn lấy từ `CaseStatus`, không ILIKE như V1. Bao gồm cả xe `NATIVE`, nên số xe V2 có thể lớn hơn V1 đúng bằng số xe NATIVE.
+  - `totalVehicles` = xe trong cửa sổ ngày (như `totalIntake` của V1), bỏ lệnh hủy. `totalCases` và tiền = lệnh hoàn thành trong kỳ (như `totalCount` của V1).
+- **Smoke đối chiếu V1 và V2** (chỉ đọc): `bun run test:smoke:garage-dashboard` (KPI kỳ, giai đoạn, phễu tháng). Chênh lệch số xe/tiền do NATIVE được ghi KỲ VỌNG; V2 nhỏ hơn V1 là LỖI.

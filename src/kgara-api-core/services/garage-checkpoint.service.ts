@@ -4,6 +4,18 @@ import { Repository } from 'typeorm';
 import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
 import { quotationStatusSql } from '../helpers/kgara-case-filter.helper';
+import { buildCheckpointStageSelects } from '../helpers/garage-checkpoint-stages.sql';
+import {
+  countVehiclesSql,
+  vehicleKeySql,
+} from '@/common/utils/vehicle-count-sql';
+
+/** Số XE (biển số đã chuẩn hóa) của nhóm phiếu; số phiếu lấy riêng qua alias `totalCases`. */
+const VEHICLE_COUNT_SQL = countVehiclesSql(vehicleKeySql('c', 'bien_so_xe'));
+
+/** Số XE thỏa điều kiện (distinct biển số của các phiếu khớp điều kiện). */
+const vehiclesWhen = (cond: string) =>
+  countVehiclesSql(vehicleKeySql('c', 'bien_so_xe'), cond);
 import {
   startOfMonth,
   endOfMonth,
@@ -103,7 +115,8 @@ export class GarageCheckpointService {
       .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'tienCoThue')
       .addSelect('SUM(COALESCE(c.tien_da_thanh_toan, 0))', 'paid')
       .addSelect('SUM(COALESCE(c.tien_con_phai_thanh_toan, 0))', 'receivable')
-      .addSelect('COUNT(c.id)', 'count')
+      .addSelect(VEHICLE_COUNT_SQL, 'count')
+      .addSelect('COUNT(c.id)', 'totalCases')
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('(c.exclude_from_reports IS NOT TRUE)')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
@@ -198,7 +211,8 @@ export class GarageCheckpointService {
       .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'tienCoThue')
       .addSelect('SUM(COALESCE(c.tien_da_thanh_toan, 0))', 'paid')
       .addSelect('SUM(COALESCE(c.tien_con_phai_thanh_toan, 0))', 'receivable')
-      .addSelect('COUNT(c.id)', 'count')
+      .addSelect(VEHICLE_COUNT_SQL, 'count')
+      .addSelect('COUNT(c.id)', 'totalCases')
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('(c.exclude_from_reports IS NOT TRUE)')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
@@ -282,7 +296,8 @@ export class GarageCheckpointService {
       .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'tienCoThue')
       .addSelect('SUM(COALESCE(c.tien_da_thanh_toan, 0))', 'paid')
       .addSelect('SUM(COALESCE(c.tien_con_phai_thanh_toan, 0))', 'receivable')
-      .addSelect('COUNT(c.id)', 'count')
+      .addSelect(VEHICLE_COUNT_SQL, 'count')
+      .addSelect('COUNT(c.id)', 'totalCases')
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('(c.exclude_from_reports IS NOT TRUE)')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
@@ -306,31 +321,41 @@ export class GarageCheckpointService {
         END`,
         'classificationKey',
       )
-      .addSelect('COUNT(c.id)', 'count')
+      .addSelect(VEHICLE_COUNT_SQL, 'count')
       .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'amount')
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('(c.exclude_from_reports IS NOT TRUE)')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
       .andWhere('c.ngay_hoan_thanh_cong_viec IS NULL');
 
+    const inProgressDayCond =
+      'COALESCE(c.ngay_phat_sinh, c.created_at) >= :curDayStart AND COALESCE(c.ngay_phat_sinh, c.created_at) <= :curDayEnd';
+    const inProgressDayParams = { curDayStart, curDayEnd };
+
     // Pipeline tháng này (tất cả xe đang làm)
     const inProgressMonthRaw = await inProgressCasesQb
       .clone()
       .groupBy('1')
       .getRawMany();
+    // Tổng số xe khác nhau (một xe có nhiều lệnh khác phân loại không được cộng hai lần)
+    const inProgressMonthTotalRes = await inProgressCasesQb
+      .clone()
+      .select(VEHICLE_COUNT_SQL, 'count')
+      .getRawOne();
 
     // Pipeline hôm nay (xe đang làm phát sinh trong ngày)
     const inProgressTodayRaw = await inProgressCasesQb
       .clone()
-      .andWhere(
-        'COALESCE(c.ngay_phat_sinh, c.created_at) >= :curDayStart AND COALESCE(c.ngay_phat_sinh, c.created_at) <= :curDayEnd',
-        { curDayStart, curDayEnd },
-      )
+      .andWhere(inProgressDayCond, inProgressDayParams)
       .groupBy('1')
       .getRawMany();
+    const inProgressTodayTotalRes = await inProgressCasesQb
+      .clone()
+      .select(VEHICLE_COUNT_SQL, 'count')
+      .andWhere(inProgressDayCond, inProgressDayParams)
+      .getRawOne();
 
-    const formatPipeline = (rawItems: any[]) => {
-      let totalCount = 0;
+    const formatPipeline = (rawItems: any[], totalVehicles: number) => {
       let totalAmount = 0;
       const byClassification: Record<
         string,
@@ -346,7 +371,6 @@ export class GarageCheckpointService {
         const key = item.classificationKey || 'KHAC';
         const cnt = Number(item.count) || 0;
         const amt = Number(item.amount) || 0;
-        totalCount += cnt;
         totalAmount += amt;
         if (byClassification[key]) {
           byClassification[key].count += cnt;
@@ -355,14 +379,20 @@ export class GarageCheckpointService {
       }
 
       return {
-        totalCount,
+        totalCount: totalVehicles,
         totalAmount,
         byClassification,
       };
     };
 
-    const projectedToday = formatPipeline(inProgressTodayRaw);
-    const projectedMonth = formatPipeline(inProgressMonthRaw);
+    const projectedToday = formatPipeline(
+      inProgressTodayRaw,
+      Number(inProgressTodayTotalRes?.count) || 0,
+    );
+    const projectedMonth = formatPipeline(
+      inProgressMonthRaw,
+      Number(inProgressMonthTotalRes?.count) || 0,
+    );
 
     /**
      * 5. Helper truy vấn số lượng xe theo các giai đoạn tiếp nhận và cơ cấu phân loại trong khoảng thời gian [startDate, endDate]:
@@ -376,139 +406,13 @@ export class GarageCheckpointService {
      * - byStage: Chi tiết cơ cấu phân loại cho từng giai đoạn (intake, quotation, inProgress, completed)
      */
     const getPeriodStages = async (startDate: string, endDate: string) => {
-      const openCase =
-        '(c.ngay_hoan_thanh_cong_viec IS NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9))';
-      const quotation = quotationStatusSql('c');
-      const inProgress = `(${openCase} AND NOT (${quotation}))`;
-      const completed =
-        '(c.ngay_hoan_thanh_cong_viec IS NOT NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9))';
-      const intake = `((c.tinh_trang_dich_vu = 0 OR c.ten_tinh_trang_dich_vu ILIKE '%tiếp nhận%') AND ${openCase})`;
-
-      const res = await this.caseRepo
+      const selects = buildCheckpointStageSelects('bien_so_xe');
+      const [first, ...rest] = selects;
+      const qb = this.caseRepo
         .createQueryBuilder('c')
-        .select('COUNT(c.id)', 'totalIntake')
-        .addSelect(`COUNT(CASE WHEN ${intake} THEN 1 END)`, 'intakeCount')
-        .addSelect(
-          `COUNT(CASE WHEN ${openCase} AND ${quotation} THEN 1 END)`,
-          'quotationCount',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN ${inProgress} THEN 1 END)`,
-          'inProgressCount',
-        )
-        .addSelect(`COUNT(CASE WHEN ${completed} THEN 1 END)`, 'completedCount')
-        .addSelect(
-          `COUNT(CASE WHEN c.tinh_trang_dich_vu = 9 THEN 1 END)`,
-          'cancelledCount',
-        )
-
-        // Tổng tiền phát sinh (tien_co_thue) theo từng giai đoạn
-        .addSelect(
-          `SUM(CASE WHEN ${intake} THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)`,
-          'intakeAmount',
-        )
-        .addSelect(
-          `SUM(CASE WHEN ${openCase} AND ${quotation} THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)`,
-          'quotationAmount',
-        )
-        .addSelect(
-          `SUM(CASE WHEN ${inProgress} THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)`,
-          'inProgressAmount',
-        )
-        .addSelect(
-          `SUM(CASE WHEN ${completed} THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)`,
-          'completedAmount',
-        )
-
-        // Phân loại xe tổng thể trong kỳ
-        .addSelect(
-          `COUNT(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' THEN 1 END)`,
-          'totalSuaChua',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN c.classification = 'KY_GUI_NOI_BO' THEN 1 END)`,
-          'totalKyGui',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN 1 END)`,
-          'totalOj',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN c.classification IS NULL OR c.classification NOT IN ('SUA_CHUA_CHUNG', 'KY_GUI_NOI_BO', 'OJ', 'OJ_NGOAI') THEN 1 END)`,
-          'totalKhac',
-        )
-
-        // Phân loại xe cho giai đoạn intake
-        .addSelect(
-          `COUNT(CASE WHEN ${intake} AND c.classification = 'SUA_CHUA_CHUNG' THEN 1 END)`,
-          'intakeSuaChua',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN ${intake} AND c.classification = 'KY_GUI_NOI_BO' THEN 1 END)`,
-          'intakeKyGui',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN ${intake} AND c.classification IN ('OJ', 'OJ_NGOAI') THEN 1 END)`,
-          'intakeOj',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN ${intake} AND (c.classification IS NULL OR c.classification NOT IN ('SUA_CHUA_CHUNG', 'KY_GUI_NOI_BO', 'OJ', 'OJ_NGOAI')) THEN 1 END)`,
-          'intakeKhac',
-        )
-
-        // Phân loại xe cho giai đoạn quotation
-        .addSelect(
-          `COUNT(CASE WHEN ${openCase} AND ${quotation} AND c.classification = 'SUA_CHUA_CHUNG' THEN 1 END)`,
-          'quotationSuaChua',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN ${openCase} AND ${quotation} AND c.classification = 'KY_GUI_NOI_BO' THEN 1 END)`,
-          'quotationKyGui',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN ${openCase} AND ${quotation} AND c.classification IN ('OJ', 'OJ_NGOAI') THEN 1 END)`,
-          'quotationOj',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN ${openCase} AND ${quotation} AND (c.classification IS NULL OR c.classification NOT IN ('SUA_CHUA_CHUNG', 'KY_GUI_NOI_BO', 'OJ', 'OJ_NGOAI')) THEN 1 END)`,
-          'quotationKhac',
-        )
-
-        // Phân loại xe cho giai đoạn in_progress
-        .addSelect(
-          `COUNT(CASE WHEN ${inProgress} AND c.classification = 'SUA_CHUA_CHUNG' THEN 1 END)`,
-          'inProgressSuaChua',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN ${inProgress} AND c.classification = 'KY_GUI_NOI_BO' THEN 1 END)`,
-          'inProgressKyGui',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN ${inProgress} AND c.classification IN ('OJ', 'OJ_NGOAI') THEN 1 END)`,
-          'inProgressOj',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN ${inProgress} AND (c.classification IS NULL OR c.classification NOT IN ('SUA_CHUA_CHUNG', 'KY_GUI_NOI_BO', 'OJ', 'OJ_NGOAI')) THEN 1 END)`,
-          'inProgressKhac',
-        )
-
-        // Phân loại xe cho giai đoạn completed
-        .addSelect(
-          `COUNT(CASE WHEN ${completed} AND c.classification = 'SUA_CHUA_CHUNG' THEN 1 END)`,
-          'completedSuaChua',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN ${completed} AND c.classification = 'KY_GUI_NOI_BO' THEN 1 END)`,
-          'completedKyGui',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN ${completed} AND c.classification IN ('OJ', 'OJ_NGOAI') THEN 1 END)`,
-          'completedOj',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN ${completed} AND (c.classification IS NULL OR c.classification NOT IN ('SUA_CHUA_CHUNG', 'KY_GUI_NOI_BO', 'OJ', 'OJ_NGOAI')) THEN 1 END)`,
-          'completedKhac',
-        )
+        .select(first.expr, first.alias);
+      for (const sel of rest) qb.addSelect(sel.expr, sel.alias);
+      const res = await qb
         .where('c.kgara_deleted_at IS NULL')
         .andWhere('(c.exclude_from_reports IS NOT TRUE)')
         .andWhere(
@@ -518,6 +422,7 @@ export class GarageCheckpointService {
         .getRawOne();
 
       return {
+        totalCases: Number(res?.totalCases) || 0,
         totalIntake: Number(res?.totalIntake) || 0,
         intake: Number(res?.intakeCount) || 0,
         intakeAmount: Number(res?.intakeAmount) || 0,
@@ -604,6 +509,7 @@ export class GarageCheckpointService {
         totalReceivable: mTotalReceivable,
         collectionRate: mCollectionRate,
         totalCount: Number(curMonthRes?.count) || 0,
+        totalCases: Number(curMonthRes?.totalCases) || 0,
         stages: monthStages,
         revenueChart: monthRevenueChart,
         costChart: monthCostChart,
@@ -622,6 +528,7 @@ export class GarageCheckpointService {
         totalReceivable: wTotalReceivable,
         collectionRate: wCollectionRate,
         totalCount: Number(curWeekRes?.count) || 0,
+        totalCases: Number(curWeekRes?.totalCases) || 0,
         stages: weekStages,
         revenueChart: weekRevenueChart,
         costChart: weekCostChart,
@@ -640,6 +547,7 @@ export class GarageCheckpointService {
         totalReceivable: dTotalReceivable,
         collectionRate: dCollectionRate,
         totalCount: Number(curDayRes?.count) || 0,
+        totalCases: Number(curDayRes?.totalCases) || 0,
         stages: dayStages,
         revenueChart: dayRevenueChart,
         costChart: dayCostChart,
@@ -692,7 +600,8 @@ export class GarageCheckpointService {
         'gp',
         'gp.hd_phieu_dich_vu_id = c.hd_phieu_dich_vu_id OR gp.vu_viec_code = c.so_chung_tu',
       )
-      .select('COUNT(c.id)', 'totalCount')
+      .select(VEHICLE_COUNT_SQL, 'totalCount')
+      .addSelect('COUNT(DISTINCT c.id)', 'totalCases')
       .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'totalTienCoThue')
       .addSelect(
         'SUM(COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0))',
@@ -709,33 +618,33 @@ export class GarageCheckpointService {
         'totalRemaining',
       )
       .addSelect(
-        'COUNT(CASE WHEN COALESCE(c.tien_con_phai_thanh_toan, 0) <= 0 AND COALESCE(c.tien_da_thanh_toan, 0) > 0 THEN 1 END)',
+        vehiclesWhen(
+          'COALESCE(c.tien_con_phai_thanh_toan, 0) <= 0 AND COALESCE(c.tien_da_thanh_toan, 0) > 0',
+        ),
         'paidCount',
       )
       .addSelect(
-        'COUNT(CASE WHEN COALESCE(c.tien_con_phai_thanh_toan, 0) > 0 THEN 1 END)',
+        vehiclesWhen('COALESCE(c.tien_con_phai_thanh_toan, 0) > 0'),
         'remainingCount',
       )
       .addSelect(
-        'COUNT(CASE WHEN COALESCE(c.tien_da_thanh_toan, 0) <= 0 AND COALESCE(c.tien_co_thue, 0) > 0 THEN 1 END)',
+        vehiclesWhen(
+          'COALESCE(c.tien_da_thanh_toan, 0) <= 0 AND COALESCE(c.tien_co_thue, 0) > 0',
+        ),
         'unpaidCount',
       )
+      .addSelect(vehiclesWhen(`${openCase} AND ${quotation}`), 'quotationCount')
       .addSelect(
-        `COUNT(CASE WHEN ${openCase} AND ${quotation} THEN 1 END)`,
-        'quotationCount',
-      )
-      .addSelect(
-        `COUNT(CASE WHEN ${openCase} AND NOT (${quotation}) THEN 1 END)`,
+        vehiclesWhen(`${openCase} AND NOT (${quotation})`),
         'inProgressCount',
       )
       .addSelect(
-        `COUNT(CASE WHEN c.ngay_hoan_thanh_cong_viec IS NOT NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9) THEN 1 END)`,
+        vehiclesWhen(
+          'c.ngay_hoan_thanh_cong_viec IS NOT NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)',
+        ),
         'completedCount',
       )
-      .addSelect(
-        `COUNT(CASE WHEN c.tinh_trang_dich_vu = 9 THEN 1 END)`,
-        'cancelledCount',
-      )
+      .addSelect(vehiclesWhen('c.tinh_trang_dich_vu = 9'), 'cancelledCount')
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('(c.exclude_from_reports IS NOT TRUE)');
 
@@ -824,7 +733,7 @@ export class GarageCheckpointService {
         END`,
         'classificationKey',
       )
-      .addSelect('COUNT(c.id)', 'count')
+      .addSelect(VEHICLE_COUNT_SQL, 'count')
       .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'amount')
       .addSelect('SUM(COALESCE(c.tien_da_thanh_toan, 0))', 'paid')
       .addSelect('SUM(COALESCE(c.tien_con_phai_thanh_toan, 0))', 'remaining')
@@ -893,6 +802,7 @@ export class GarageCheckpointService {
 
     const summary = {
       totalCount: Number(summaryRaw?.totalCount) || 0,
+      totalCases: Number(summaryRaw?.totalCases) || 0,
       totalTienCoThue,
       totalRevenue: Number(summaryRaw?.totalRevenue) || 0,
       totalCost: Number(summaryRaw?.totalCost) || 0,
