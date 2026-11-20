@@ -42,6 +42,33 @@ export const CLASS_SQL: Record<CaseDashboardClass, string> = {
   KHAC: "(c.classification IS NULL OR UPPER(TRIM(c.classification)) NOT IN ('SUA_CHUA_CHUNG', 'KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'OJ', 'OJ_NGOAI'))",
 };
 
+/** Bộ lọc dùng chung của các truy vấn drill-down (theo lệnh và theo xe). */
+export interface CaseDrillFilters {
+  range: { start: Date; end: Date };
+  stage?: CaseDashboardStage;
+  classification?: CaseDashboardClass;
+}
+
+/** Áp lọc hợp lệ, khoảng ngày kỳ, giai đoạn và phân loại lên query builder `cases_garage` (alias `c`). */
+export function applyCaseFilters(
+  qb: SelectQueryBuilder<CaseGarage>,
+  filters: CaseDrillFilters,
+): SelectQueryBuilder<CaseGarage> {
+  qb.where(BASE_FILTER).andWhere(
+    `${PERIOD_DATE} >= :start AND ${PERIOD_DATE} <= :end`,
+    { start: filters.range.start, end: filters.range.end },
+  );
+  if (filters.stage) {
+    qb.andWhere('c.status = :status', {
+      status: CASE_DASHBOARD_STAGE_STATUS[filters.stage],
+    });
+  }
+  if (filters.classification) {
+    qb.andWhere(CLASS_SQL[filters.classification]);
+  }
+  return qb;
+}
+
 export interface SelectPart {
   alias: string;
   expr: string;

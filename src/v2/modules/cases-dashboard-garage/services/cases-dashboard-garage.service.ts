@@ -11,6 +11,7 @@ import {
 } from '../helpers/case-dashboard-range';
 import { CaseDashboardCasesQueryService } from './case-dashboard-cases-query.service';
 import { CaseDashboardFunnelQueryService } from './case-dashboard-funnel-query.service';
+import { CaseDashboardVehiclesQueryService } from './case-dashboard-vehicles-query.service';
 import {
   CaseDashboardKpiQueryService,
   type CaseDashboardPeriodKpis,
@@ -35,6 +36,7 @@ export class CasesDashboardGarageService {
     private readonly kpiQuery: CaseDashboardKpiQueryService,
     private readonly funnelQuery: CaseDashboardFunnelQueryService,
     private readonly casesQuery: CaseDashboardCasesQueryService,
+    private readonly vehiclesQuery: CaseDashboardVehiclesQueryService,
   ) {}
 
   /** KPI tháng/tuần/ngày và dự thu, quanh ngày gốc (mặc định hôm nay). */
@@ -57,12 +59,21 @@ export class CasesDashboardGarageService {
 
   /** Drill-down danh sách lệnh, phân trang (mặc định trang 1, 20 dòng). */
   listCases(input: CaseDashboardCasesInput, now: Date = new Date()) {
-    return this.casesQuery.listCases({
+    return this.casesQuery.listCases(this.toDrillParams(input, now));
+  }
+
+  /** Drill-down theo xe: mỗi dòng một xe kèm các lệnh, phân trang và tổng theo xe. */
+  listVehicles(input: CaseDashboardCasesInput, now: Date = new Date()) {
+    return this.vehiclesQuery.listVehicles(this.toDrillParams(input, now));
+  }
+
+  private toDrillParams(input: CaseDashboardCasesInput, now: Date) {
+    return {
       range: resolveDayRange(input.dateFrom, input.dateTo, now),
       stage: input.stage,
       classification: input.classification,
       page: input.page ?? 1,
       pageSize: input.pageSize ?? 20,
-    });
+    };
   }
 }

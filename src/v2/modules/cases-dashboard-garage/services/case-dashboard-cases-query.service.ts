@@ -8,13 +8,8 @@ import type {
   CaseDashboardClass,
   CaseDashboardStage,
 } from '../dto/case-dashboard.types';
-import { CASE_DASHBOARD_STAGE_STATUS } from '../dto/case-dashboard.types';
 import { toCaseDashboardItemDto } from '../helpers/case-dashboard.mapper';
-import {
-  BASE_FILTER,
-  CLASS_SQL,
-  PERIOD_DATE,
-} from '../helpers/case-dashboard.sql';
+import { PERIOD_DATE, applyCaseFilters } from '../helpers/case-dashboard.sql';
 import type { CaseDashboardDateRange } from './case-dashboard-kpi-query.service';
 
 export interface CaseDashboardCasesParams {
@@ -54,22 +49,7 @@ export class CaseDashboardCasesQueryService {
     params: CaseDashboardCasesParams,
   ): Promise<ReturnType<typeof toPagedList<CaseDashboardCaseItemDto>>> {
     const { page, pageSize } = normalizePaging(params.page, params.pageSize);
-    const qb = this.cases
-      .createQueryBuilder('c')
-      .where(BASE_FILTER)
-      .andWhere(`${PERIOD_DATE} >= :start AND ${PERIOD_DATE} <= :end`, {
-        start: params.range.start,
-        end: params.range.end,
-      });
-
-    if (params.stage) {
-      qb.andWhere('c.status = :status', {
-        status: CASE_DASHBOARD_STAGE_STATUS[params.stage],
-      });
-    }
-    if (params.classification) {
-      qb.andWhere(CLASS_SQL[params.classification]);
-    }
+    const qb = applyCaseFilters(this.cases.createQueryBuilder('c'), params);
 
     // Không dùng skip/take: không có join nên offset/limit an toàn và tránh subquery DISTINCT.
     qb.orderBy(PERIOD_DATE, 'DESC')

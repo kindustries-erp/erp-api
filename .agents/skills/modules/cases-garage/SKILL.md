@@ -39,3 +39,7 @@ Dòng: `noi_dung_chi_tiet`→`description`, `san_pham_code/name`, `loai_san_pham
 - Công nợ, thu chi, cấn trừ, hóa đơn liên kết vẫn ở V1; `paidAmount` NATIVE chưa nối. Projector không có `raw_data` nên list bỏ tách phải thu bảo hiểm/khách (cần khi cutover công nợ).
 - **Web follow-up (breaking đã báo)**: tên field response đổi từ tiếng Việt sang EN (`soChungTu`→`caseCode`, `bienSoXe`→`licensePlate`...); `phaiThuKhachHang`/`phaiThuBaoHiem` đã bỏ. Web chưa gọi `api/v2/cases-garage`; type `GarageCaseVehicleFields` (`erp-web/src/v2/core/garage-cases/vehicle/`) còn dùng tên V1, phải sửa khi nối Web.
 - Smoke: `bun run test:smoke:cases-garage-v2` (chi nhánh giả `smoke-<tag>`, xóa mềm cuối chạy).
+
+## 7. Liên quan: báo cáo theo xe
+`cases_garage` mỗi dòng là một phiếu (không có khóa xe). Báo cáo/drill-down theo XE nằm ở module `cases-dashboard-garage` (`GET api/v2/cases-dashboard-garage/vehicles`, khóa xe = biển `license_plate` chuẩn hóa `[A-Z0-9]`, phiếu không biển khóa theo id). Danh sách phiếu `cases-garage` vẫn theo phiếu; đừng dùng `COUNT(id)` làm "số xe".
+

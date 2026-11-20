@@ -103,6 +103,22 @@ export interface CaseDashboardCaseItemDto {
   amount: number;
 }
 
+/**
+ * Một dòng drill-down theo XE: gom các lệnh cùng khóa xe trong kỳ/bộ lọc.
+ * `cases` là các lệnh của xe (mới nhất trước), `amount` cộng theo lệnh.
+ */
+export interface CaseDashboardVehicleItemDto {
+  vehicleKey: string;
+  licensePlate: string | null;
+  customerName: string | null;
+  caseCount: number;
+  caseCodes: string[];
+  amount: number;
+  /** Mốc mới nhất trong các lệnh (hoàn thành, nếu không có thì tiếp nhận). */
+  latestAt: string | null;
+  cases: CaseDashboardCaseItemDto[];
+}
+
 /** Số thô từ truy vấn (pg có thể trả chuỗi cho numeric/bigint). */
 export interface CaseDashboardCountRaw {
   vehicles?: unknown;

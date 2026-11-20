@@ -8,16 +8,44 @@ describe('CasesDashboardGarageService (facade dashboard garage V2)', () => {
   let kpi: { getPeriodKpis: jest.Mock };
   let funnel: { getFunnel: jest.Mock };
   let cases: { listCases: jest.Mock };
+  let vehicles: { listVehicles: jest.Mock };
 
   beforeEach(() => {
     kpi = { getPeriodKpis: jest.fn().mockResolvedValue({ ok: 'kpi' }) };
     funnel = { getFunnel: jest.fn().mockResolvedValue({ ok: 'funnel' }) };
     cases = { listCases: jest.fn().mockResolvedValue({ ok: 'cases' }) };
+    vehicles = {
+      listVehicles: jest.fn().mockResolvedValue({ ok: 'vehicles' }),
+    };
     service = new CasesDashboardGarageService(
       kpi as any,
       funnel as any,
       cases as any,
+      vehicles as any,
     );
+  });
+
+  describe('listVehicles', () => {
+    it('quy đổi tham số giống listCases rồi gọi query theo xe', async () => {
+      await expect(
+        service.listVehicles(
+          { dateFrom: '2026-11-01', dateTo: '2026-11-30', stage: 'quotation' },
+          NOW,
+        ),
+      ).resolves.toEqual({ ok: 'vehicles' });
+
+      expect(vehicles.listVehicles).toHaveBeenCalledWith({
+        range: {
+          start: new Date(2026, 10, 1),
+          end: new Date(2026, 10, 30, 23, 59, 59, 999),
+        },
+        stage: 'quotation',
+        classification: undefined,
+        page: 1,
+        pageSize: 20,
+      });
+      expect(cases.listCases).not.toHaveBeenCalled();
+    });
   });
 
   describe('getPeriodKpis', () => {

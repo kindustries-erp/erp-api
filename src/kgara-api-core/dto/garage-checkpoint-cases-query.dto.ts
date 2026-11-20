@@ -62,6 +62,16 @@ export class GarageCheckpointCasesQueryDto {
   @IsBoolean()
   is_funnel?: boolean;
 
+  @ApiPropertyOptional({
+    enum: ['case', 'vehicle'],
+    default: 'case',
+    description:
+      'case: mỗi dòng một lệnh (mặc định). vehicle: mỗi dòng một xe kèm các lệnh, total và phân trang theo xe.',
+  })
+  @IsOptional()
+  @IsIn(['case', 'vehicle'])
+  group_by?: 'case' | 'vehicle';
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

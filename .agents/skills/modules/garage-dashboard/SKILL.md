@@ -320,3 +320,13 @@ Một xe có thể có nhiều lệnh, nên mọi con số "xe" của dashboard 
 - **Module V2 `cases-dashboard-garage`** (`src/v2/modules/cases-dashboard-garage/`, route `api/v2/cases-dashboard-garage`, RBAC `ErpResource.GARAGE` READ, đọc `cases_garage`, không bảng mới): `GET /period-kpis?date` (tháng/tuần/ngày + dự thu), `GET /funnel?date_from&date_to` (toàn kỳ, theo tháng, theo phân loại), `GET /cases?date_from&date_to&stage&classification&page&pageSize` (drill-down phân trang). Response không bọc `data`. Giai đoạn lấy từ `CaseStatus`, không ILIKE như V1. Bao gồm cả xe `NATIVE`, nên số xe V2 có thể lớn hơn V1 đúng bằng số xe NATIVE.
   - `totalVehicles` = xe trong cửa sổ ngày (như `totalIntake` của V1), bỏ lệnh hủy. `totalCases` và tiền = lệnh hoàn thành trong kỳ (như `totalCount` của V1).
 - **Smoke đối chiếu V1 và V2** (chỉ đọc): `bun run test:smoke:garage-dashboard` (KPI kỳ, giai đoạn, phễu tháng). Chênh lệch số xe/tiền do NATIVE được ghi KỲ VỌNG; V2 nhỏ hơn V1 là LỖI.
+
+### 8.1. Drill-down theo XE (2026-11-20, Phase 5)
+
+- **V1 `GET /checkpoint-cases?group_by=case|vehicle`** (mặc định `case`, hợp đồng cũ không đổi). `group_by=vehicle`: mỗi item một xe `{vehicleKey, bienSoXe, khachHangName, classification, caseCount, soChungTus[], doanhThu, chiPhi, loiNhuan, tienCoThue, tienDaThanhToan, tienConPhaiThanhToan, hasInvoice, ngayHoanThanhCongViec, ngayPhatSinh, cases[]}`; `total`/`page`/`totalPages` tính theo xe; `summary`/`classificationSummary` giữ nguyên; response có `groupBy`. Sort theo xe: cột tiền = SUM, cột ngày = MAX, `soChungTu` = MIN, mặc định = mốc kỳ mới nhất (whitelist, không nối input vào SQL). Mỗi lệnh ở dạng theo-lệnh có thêm `vehicleKey`.
+- File: `kgara-api-core/helpers/garage-checkpoint-case-filters.ts` (bộ lọc dùng chung), `garage-checkpoint-case-item.mapper.ts`, `garage-checkpoint-vehicles.query.ts` (3 truy vấn: COUNT DISTINCT khóa xe, trang khóa xe GROUP BY, lệnh của các xe trong trang) + spec mỗi file; spec service `services/__tests__/garage-checkpoint-cases-group.spec.ts`.
+- **V2 `GET api/v2/cases-dashboard-garage/vehicles`** (cùng bộ lọc với `/cases`: `date_from`, `date_to`, `stage`, `classification`, `page`, `pageSize`): list `{items, pagination}`, item `{vehicleKey, licensePlate, customerName, caseCount, caseCodes[], amount, latestAt, cases[]}`; `pagination.total` = số xe. `/cases` vẫn mỗi dòng một lệnh.
+- Lưu ý: biển viết khác dấu (`51D88801` và `51D-888.01`) gộp một xe; phiếu không biển là một xe riêng (khóa = id).
+- **QC**: smoke `bun run test:smoke:garage-dashboard` kiểm số hàng drill-down = số xe của thẻ cùng giai đoạn (V1 4 giai đoạn, V2 3 giai đoạn), mỗi khóa xe một hàng, Σ `caseCount` = Σ lệnh lồng.
+- Excel dashboard: Sheet 1 giữ mỗi dòng một lệnh; KPI "SỐ XE (N lệnh)" đếm xe distinct (xem 2.6.2).
+

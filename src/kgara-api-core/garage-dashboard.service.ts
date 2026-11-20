@@ -54,6 +54,7 @@ export class GarageDashboardService {
     sortOrder: 'ASC' | 'DESC' = 'DESC',
     status?: string,
     isFunnel?: boolean,
+    groupBy?: 'case' | 'vehicle',
   ) {
     return this.checkpointService.getCheckpointCases(
       dateFrom,
@@ -67,6 +68,7 @@ export class GarageDashboardService {
       sortOrder,
       status,
       isFunnel,
+      groupBy,
     );
   }
 

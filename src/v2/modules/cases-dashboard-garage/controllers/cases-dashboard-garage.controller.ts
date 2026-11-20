@@ -13,6 +13,16 @@ import { CasesDashboardGarageService } from '../services/cases-dashboard-garage.
 
 const DASHBOARD_READ = { resource: ErpResource.GARAGE, action: ErpAction.READ };
 
+/** Tham số HTTP của drill-down (lệnh/xe) sang input của facade. */
+const toDrillInput = (q: CaseDashboardCasesQueryDto) => ({
+  dateFrom: q.date_from,
+  dateTo: q.date_to,
+  stage: q.stage,
+  classification: q.classification,
+  page: q.page,
+  pageSize: q.pageSize,
+});
+
 /**
  * Dashboard garage V2 (chỉ đọc `cases_garage`). Mọi số XE là số biển khác nhau;
  * số lệnh và tiền cộng theo lệnh.
@@ -42,13 +52,15 @@ export class CasesDashboardGarageController {
   @ApiOperation({ summary: 'Danh sách lệnh (drill-down) của dashboard' })
   @Get('cases')
   cases(@Query() q: CaseDashboardCasesQueryDto) {
-    return this.dashboard.listCases({
-      dateFrom: q.date_from,
-      dateTo: q.date_to,
-      stage: q.stage,
-      classification: q.classification,
-      page: q.page,
-      pageSize: q.pageSize,
-    });
+    return this.dashboard.listCases(toDrillInput(q));
+  }
+
+  @RequirePermissions(DASHBOARD_READ)
+  @ApiOperation({
+    summary: 'Danh sách xe (drill-down theo xe) của dashboard, kèm các lệnh',
+  })
+  @Get('vehicles')
+  vehicles(@Query() q: CaseDashboardCasesQueryDto) {
+    return this.dashboard.listVehicles(toDrillInput(q));
   }
 }

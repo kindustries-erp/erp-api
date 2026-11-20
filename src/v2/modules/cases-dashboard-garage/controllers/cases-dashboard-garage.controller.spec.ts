@@ -8,6 +8,7 @@ describe('CasesDashboardGarageController (v2 dashboard garage)', () => {
     getPeriodKpis: jest.Mock;
     getFunnel: jest.Mock;
     listCases: jest.Mock;
+    listVehicles: jest.Mock;
   };
 
   beforeEach(() => {
@@ -15,12 +16,18 @@ describe('CasesDashboardGarageController (v2 dashboard garage)', () => {
       getPeriodKpis: jest.fn().mockResolvedValue({ kpi: true }),
       getFunnel: jest.fn().mockResolvedValue({ funnel: true }),
       listCases: jest.fn().mockResolvedValue({ items: [] }),
+      listVehicles: jest.fn().mockResolvedValue({ items: [] }),
     };
     controller = new CasesDashboardGarageController(facade as any);
   });
 
   it('mọi route yêu cầu quyền GARAGE READ', () => {
-    for (const method of ['periodKpis', 'funnel', 'cases'] as const) {
+    for (const method of [
+      'periodKpis',
+      'funnel',
+      'cases',
+      'vehicles',
+    ] as const) {
       const perms = Reflect.getMetadata(
         RBAC_PERMISSIONS_KEY,
         controller[method],
@@ -43,6 +50,24 @@ describe('CasesDashboardGarageController (v2 dashboard garage)', () => {
   it('funnel chuyển date_from/date_to xuống facade', async () => {
     await controller.funnel({ date_from: '2026-11-01', date_to: '2026-11-05' });
     expect(facade.getFunnel).toHaveBeenCalledWith('2026-11-01', '2026-11-05');
+  });
+
+  it('vehicles map tham số HTTP sang input của facade (cùng bộ lọc với cases)', async () => {
+    await controller.vehicles({
+      date_from: '2026-11-01',
+      date_to: '2026-11-30',
+      stage: 'quotation',
+      page: 1,
+      pageSize: 10,
+    });
+    expect(facade.listVehicles).toHaveBeenCalledWith({
+      dateFrom: '2026-11-01',
+      dateTo: '2026-11-30',
+      stage: 'quotation',
+      classification: undefined,
+      page: 1,
+      pageSize: 10,
+    });
   });
 
   it('cases map tham số HTTP sang input của facade', async () => {

@@ -94,6 +94,7 @@ describe('GarageDashboardController — checkpoint-cases', () => {
       'DESC', // sort_order mặc định
       undefined, // status
       undefined, // is_funnel
+      undefined, // group_by mặc định (theo lệnh)
     );
   });
 
@@ -120,6 +121,7 @@ describe('GarageDashboardController — checkpoint-cases', () => {
       undefined,
       'ngayHoanThanhCongViec',
       'ASC',
+      undefined,
       undefined,
       undefined,
     );
@@ -149,6 +151,32 @@ describe('GarageDashboardController — checkpoint-cases', () => {
       'DESC',
       'quotation',
       true,
+      undefined,
     );
+  });
+
+  it('group_by=vehicle được chuyển xuống service; mặc định không truyền', async () => {
+    await request(app.getHttpServer())
+      .get(PATH)
+      .query({
+        date_from: '2026-11-01',
+        date_to: '2026-11-30',
+        group_by: 'vehicle',
+      })
+      .expect(200);
+
+    const args = dashboardService.getCheckpointCases.mock.calls.at(-1);
+    expect(args?.[11]).toBe('vehicle');
+  });
+
+  it('group_by sai giá trị → 400', async () => {
+    await request(app.getHttpServer())
+      .get(PATH)
+      .query({
+        date_from: '2026-11-01',
+        date_to: '2026-11-30',
+        group_by: 'khac',
+      })
+      .expect(400);
   });
 });

@@ -5,6 +5,7 @@ import { CasesDashboardGarageController } from './controllers/cases-dashboard-ga
 import { CaseDashboardCasesQueryService } from './services/case-dashboard-cases-query.service';
 import { CaseDashboardFunnelQueryService } from './services/case-dashboard-funnel-query.service';
 import { CaseDashboardKpiQueryService } from './services/case-dashboard-kpi-query.service';
+import { CaseDashboardVehiclesQueryService } from './services/case-dashboard-vehicles-query.service';
 import { CasesDashboardGarageService } from './services/cases-dashboard-garage.service';
 
 /**
@@ -18,6 +19,7 @@ import { CasesDashboardGarageService } from './services/cases-dashboard-garage.s
     CaseDashboardKpiQueryService,
     CaseDashboardFunnelQueryService,
     CaseDashboardCasesQueryService,
+    CaseDashboardVehiclesQueryService,
     CasesDashboardGarageService,
   ],
   exports: [CasesDashboardGarageService],
