@@ -1,3 +1,4 @@
+import { normalizedPlateSql } from '@/common/utils/license-plate';
 import {
   GARAGE_FUNNEL_CLASSIFICATION_KEY_SQL,
   GARAGE_FUNNEL_MONTH_SQL,
@@ -39,9 +40,7 @@ describe('buildGarageFunnelSelects (phễu dashboard garage, đếm XE)', () => 
     ]) {
       const expr = byAlias(alias);
       expect(expr).toContain('COUNT(DISTINCT');
-      expect(expr).toContain(
-        "REGEXP_REPLACE(UPPER(c.bien_so_xe), '[^A-Z0-9]', '', 'g')",
-      );
+      expect(expr).toContain(normalizedPlateSql('c.bien_so_xe'));
     }
   });
 

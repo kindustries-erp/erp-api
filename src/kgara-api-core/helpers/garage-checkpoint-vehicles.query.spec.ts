@@ -120,6 +120,22 @@ describe('listCheckpointVehicles (checkpoint-cases gom theo xe)', () => {
     expect(captures[1].limit).toBe(20);
   });
 
+  it('kẹp pageSize ở 500 và page tối thiểu 1 ở tầng truy vấn', async () => {
+    await run({ page: 0, pageSize: 100000 });
+
+    expect(captures[1].limit).toBe(500);
+    expect(captures[1].offset).toBe(0);
+  });
+
+  it('pageSize 0 kẹp về 1; không hợp lệ (NaN) rơi về mặc định 20', async () => {
+    await run({ pageSize: 0 });
+    expect(captures[1].limit).toBe(1);
+
+    captures = [];
+    await run({ pageSize: Number.NaN });
+    expect(captures[1].limit).toBe(20);
+  });
+
   it('sắp theo mốc kỳ mới nhất của xe mặc định, và theo tổng khi sort cột tiền', async () => {
     await run();
     expect(captures[1].selects.join(' ')).toContain('MAX(COALESCE(');

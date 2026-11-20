@@ -7,26 +7,23 @@ describe('CasesDashboardGarageService (facade dashboard garage V2)', () => {
   let service: CasesDashboardGarageService;
   let kpi: { getPeriodKpis: jest.Mock };
   let funnel: { getFunnel: jest.Mock };
-  let cases: { listCases: jest.Mock };
   let vehicles: { listVehicles: jest.Mock };
 
   beforeEach(() => {
     kpi = { getPeriodKpis: jest.fn().mockResolvedValue({ ok: 'kpi' }) };
     funnel = { getFunnel: jest.fn().mockResolvedValue({ ok: 'funnel' }) };
-    cases = { listCases: jest.fn().mockResolvedValue({ ok: 'cases' }) };
     vehicles = {
       listVehicles: jest.fn().mockResolvedValue({ ok: 'vehicles' }),
     };
     service = new CasesDashboardGarageService(
       kpi as any,
       funnel as any,
-      cases as any,
       vehicles as any,
     );
   });
 
   describe('listVehicles', () => {
-    it('quy đổi tham số giống listCases rồi gọi query theo xe', async () => {
+    it('quy đổi tham số HTTP (ngày, giai đoạn) rồi gọi query theo xe, mặc định trang 1 và 20 dòng', async () => {
       await expect(
         service.listVehicles(
           { dateFrom: '2026-11-01', dateTo: '2026-11-30', stage: 'quotation' },
@@ -44,7 +41,6 @@ describe('CasesDashboardGarageService (facade dashboard garage V2)', () => {
         page: 1,
         pageSize: 20,
       });
-      expect(cases.listCases).not.toHaveBeenCalled();
     });
   });
 
@@ -71,6 +67,69 @@ describe('CasesDashboardGarageService (facade dashboard garage V2)', () => {
       expect(() => service.getPeriodKpis('20/11/2026', NOW)).toThrow(
         BadRequestException,
       );
+    });
+  });
+
+  describe('getOverview', () => {
+    it('trả {period, funnel} từ hai query service, mỗi bên gọi đúng một lần', async () => {
+      await expect(
+        service.getOverview('2026-11-18', '2026-11-01', '2026-11-05', NOW),
+      ).resolves.toEqual({ period: { ok: 'kpi' }, funnel: { ok: 'funnel' } });
+
+      expect(kpi.getPeriodKpis).toHaveBeenCalledTimes(1);
+      expect(funnel.getFunnel).toHaveBeenCalledTimes(1);
+      const ranges = kpi.getPeriodKpis.mock.calls[0][0];
+      expect(ranges.week.start).toEqual(new Date(2026, 10, 16));
+      const range = funnel.getFunnel.mock.calls[0][0];
+      expect(range.end).toEqual(new Date(2026, 10, 5, 23, 59, 59, 999));
+    });
+
+    it('không truyền tham số nào thì mặc định hôm nay và tháng hiện tại', async () => {
+      await service.getOverview(undefined, undefined, undefined, NOW);
+
+      expect(kpi.getPeriodKpis.mock.calls[0][0].day.start).toEqual(
+        new Date(2026, 10, 20),
+      );
+      expect(funnel.getFunnel.mock.calls[0][0].start).toEqual(
+        new Date(2026, 10, 1),
+      );
+    });
+
+    it('chạy hai truy vấn song song (cùng bắt đầu trước khi bên nào xong)', async () => {
+      const order: string[] = [];
+      let releaseKpi: (v: unknown) => void = () => undefined;
+      kpi.getPeriodKpis.mockImplementation(() => {
+        order.push('kpi:start');
+        return new Promise((resolve) => {
+          releaseKpi = resolve;
+        });
+      });
+      funnel.getFunnel.mockImplementation(() => {
+        order.push('funnel:start');
+        return Promise.resolve({ ok: 'funnel' });
+      });
+
+      const pending = service.getOverview(undefined, undefined, undefined, NOW);
+      await Promise.resolve();
+      expect(order).toEqual(['kpi:start', 'funnel:start']);
+
+      releaseKpi({ ok: 'kpi' });
+      await expect(pending).resolves.toEqual({
+        period: { ok: 'kpi' },
+        funnel: { ok: 'funnel' },
+      });
+    });
+
+    it('tham số sai thì ném BadRequest và không chạy truy vấn nào', async () => {
+      await expect(
+        service.getOverview('20/11/2026', undefined, undefined, NOW),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.getOverview(undefined, '2026-11-10', '2026-11-01', NOW),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(kpi.getPeriodKpis).not.toHaveBeenCalled();
+      expect(funnel.getFunnel).not.toHaveBeenCalled();
     });
   });
 
@@ -104,37 +163,6 @@ describe('CasesDashboardGarageService (facade dashboard garage V2)', () => {
         BadRequestException,
       );
       expect(funnel.getFunnel).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('listCases', () => {
-    it('mặc định trang 1, 20 dòng và chuyển lọc giai đoạn/phân loại xuống query', async () => {
-      await service.listCases(
-        {
-          dateFrom: '2026-11-01',
-          dateTo: '2026-11-30',
-          stage: 'quotation',
-          classification: 'KHAC',
-        },
-        NOW,
-      );
-
-      expect(cases.listCases).toHaveBeenCalledWith({
-        range: {
-          start: new Date(2026, 10, 1),
-          end: new Date(2026, 10, 30, 23, 59, 59, 999),
-        },
-        stage: 'quotation',
-        classification: 'KHAC',
-        page: 1,
-        pageSize: 20,
-      });
-    });
-
-    it('trả về đúng kết quả từ query service', async () => {
-      await expect(service.listCases({}, NOW)).resolves.toEqual({
-        ok: 'cases',
-      });
     });
   });
 });

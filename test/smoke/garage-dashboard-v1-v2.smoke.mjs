@@ -1,10 +1,12 @@
 // Smoke ĐỌC-ONLY đối chiếu dashboard garage V1 và V2 cùng một kỳ. Không ghi DB.
 // Phạm vi:
-//  (1) KPI kỳ (tháng/tuần/ngày): V1 `/api/v1/greenway/dashboard/checkpoint-kpis` so với V2 `/api/v2/cases-dashboard-garage/period-kpis`.
-//  (2) Giai đoạn tháng hiện tại: V1 `checkpoint-kpis.month.stages` so với V2 `period-kpis.month.stages`.
-//  (3) Phễu tháng hiện tại: V1 `/api/v1/greenway/dashboard/stats` (conversionFunnelByMonth) so với V2 `/api/v2/cases-dashboard-garage/funnel`.
-//  (4) Drill-down theo XE: V1 `checkpoint-cases?group_by=vehicle` và V2 `/vehicles` có số hàng (total) = số xe của thẻ cùng giai đoạn,
+//  V2 chỉ có 2 endpoint: `GET /api/v2/cases-dashboard-garage/overview` ({period, funnel}) và `GET /api/v2/cases-dashboard-garage` (danh sách xe).
+//  (1) KPI kỳ (tháng/tuần/ngày): V1 `/api/v1/greenway/dashboard/checkpoint-kpis` so với V2 `overview.period`.
+//  (2) Giai đoạn tháng hiện tại: V1 `checkpoint-kpis.month.stages` so với V2 `overview.period.month.stages`.
+//  (3) Phễu tháng hiện tại: V1 `/api/v1/greenway/dashboard/stats` (conversionFunnelByMonth) so với V2 `overview.funnel`.
+//  (4) Drill-down theo XE: V1 `checkpoint-cases?group_by=vehicle` và V2 `GET /` có số hàng (total) = số xe của thẻ cùng giai đoạn,
 //      mỗi khóa xe xuất hiện đúng một hàng, và tổng `caseCount` các hàng = số lệnh (khi gọn một trang).
+//  (5) Tìm biển số chuẩn hóa: `checkpoint-cases?search=<biển viết thường, bỏ - . khoảng trắng>` trả đúng xe có biển đó.
 // Quy tắc so khớp (hướng 2):
 //  - Số lệnh, tiền, doanh thu: phải bằng nhau tuyệt đối.
 //  - Số xe, và số xe + tiền của giai đoạn/phễu: V2 có thể lớn hơn V1 do xe NATIVE (tạo trực tiếp trên V2).
@@ -48,13 +50,17 @@ const monthFrom = `${ym}-01`;
 const monthTo = `${ym}-${String(lastDay).padStart(2, '0')}`;
 
 const v1 = await get('/api/v1/greenway/dashboard/checkpoint-kpis');
-const v2 = await get('/api/v2/cases-dashboard-garage/period-kpis');
+const v2Overview = await get(
+  `/api/v2/cases-dashboard-garage/overview?date_from=${monthFrom}&date_to=${monthTo}`,
+);
+const v2 = { status: v2Overview.status, data: v2Overview.data?.period };
 const v1Stats = await get(
   `/api/v1/greenway/dashboard/stats?date_from=${monthFrom}&date_to=${monthTo}`,
 );
-const v2Funnel = await get(
-  `/api/v2/cases-dashboard-garage/funnel?date_from=${monthFrom}&date_to=${monthTo}`,
-);
+const v2Funnel = {
+  status: v2Overview.status,
+  data: v2Overview.data?.funnel,
+};
 if (
   v1.status !== 200 ||
   v2.status !== 200 ||
@@ -201,7 +207,7 @@ for (const [label, extra, expected] of [
 }
 const v2Drill = async (extra = '') =>
   get(
-    `/api/v2/cases-dashboard-garage/vehicles?date_from=${monthFrom}&date_to=${monthTo}&pageSize=100${extra}`,
+    `/api/v2/cases-dashboard-garage?date_from=${monthFrom}&date_to=${monthTo}&pageSize=100${extra}`,
   );
 for (const [label, extra, expected] of [
   ['Tổng tiếp nhận', '', v2Overall.totalVehicles],
@@ -227,6 +233,34 @@ for (const [label, extra, expected] of [
     keys.size === items.length,
     `${keys.size}/${items.length}`,
   );
+}
+
+// (5) Tìm biển số chuẩn hóa trên V1: từ khóa không dấu gạch/chấm, viết thường vẫn ra đúng xe.
+const probe = await v1Drill('is_funnel=true');
+const withPlate = (probe.data?.items ?? []).find(
+  (x) => x.bienSoXe && /[^A-Za-z0-9]/.test(x.bienSoXe),
+);
+if (withPlate) {
+  const kw = withPlate.bienSoXe.replace(/[^A-Za-z0-9]/g, '').toLowerCase();
+  const found = await get(
+    `/api/v1/greenway/dashboard/checkpoint-cases?date_from=${monthFrom}&date_to=${monthTo}&pageSize=100&group_by=vehicle&is_funnel=true&search=${encodeURIComponent(kw)}`,
+  );
+  const hit = (found.data?.items ?? []).some(
+    (x) => x.vehicleKey === withPlate.vehicleKey,
+  );
+  drillCheck(
+    'V1 tìm biển',
+    `search "${kw}" ra xe ${withPlate.bienSoXe}`,
+    found.status === 200 && hit,
+    `status ${found.status}, ${found.data?.total ?? 0} xe`,
+  );
+} else {
+  drillRows.push({
+    phạm_vi: 'V1 tìm biển',
+    kiểm: 'không có biển có dấu câu trong kỳ để thử',
+    kết_quả: 'BỎ QUA',
+    chi_tiết: '',
+  });
 }
 
 console.table(rows);

@@ -1,6 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Brackets, DataSource } from 'typeorm';
+import {
+  normalizePlate,
+  normalizedPlateSql,
+} from '@/common/utils/license-plate';
 import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
@@ -555,7 +559,10 @@ export class KgaraCaseListQueryService {
       applyCaseOptionFilters(query, column, filtersStr);
 
       if (search) {
-        const cleanSearch = search.replace(/[^a-zA-Z0-9;]/g, '');
+        const cleanSearch = search
+          .split(';')
+          .map((part) => normalizePlate(part))
+          .join(';');
         query.andWhere(
           new Brackets((sqb) => {
             applyMultiKeywordMultiFieldFilter(
@@ -572,8 +579,8 @@ export class KgaraCaseListQueryService {
                 new Brackets((innerSqb) => {
                   applyMultiKeywordFilter(
                     innerSqb,
-                    "REGEXP_REPLACE(LOWER(\"case\".\"bien_so_xe\"), '[^a-z0-9]', '', 'g')",
-                    cleanSearch.toLowerCase(),
+                    normalizedPlateSql('"case"."bien_so_xe"'),
+                    cleanSearch,
                     'opt_case_search_clean',
                   );
                 }),

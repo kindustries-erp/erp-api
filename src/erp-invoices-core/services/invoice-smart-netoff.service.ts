@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
+import { normalizePlate } from '@/common/utils/license-plate';
 import { ErpInvoice } from '../entities/erp_invoice.entity';
 import { ErpInvoiceVoucherNetOff } from '../entities/erp_invoice_voucher_netoff.entity';
 
@@ -120,11 +121,6 @@ export const STOP_WORDS = new Set([
   'tap',
   'doan',
 ]);
-
-export function cleanLicensePlate(str?: string | null): string {
-  if (!str) return '';
-  return str.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-}
 
 export function extractPartnerKeywords(
   name: string | undefined | null,
@@ -318,7 +314,7 @@ export class InvoiceSmartNetoffService {
       ).trim(),
       serialNo: (invoice.serialNo || '').trim(),
       rawPlate: (invoice.licensePlate || '').trim(),
-      compactPlate: cleanLicensePlate((invoice.licensePlate || '').trim()),
+      compactPlate: normalizePlate((invoice.licensePlate || '').trim()),
       settlementOrder: (invoice.settlementOrder || '').trim(),
       taxCode: taxCode && taxCode.length >= 5 ? taxCode : '',
       partner: classifyPartnerKeywords(extractPartnerKeywords(partnerName)),
@@ -535,7 +531,7 @@ export class InvoiceSmartNetoffService {
     const plateHit =
       (ctx.rawPlate.length >= 4 && matchesWord(desc, ctx.rawPlate)) ||
       (ctx.compactPlate.length >= 4 &&
-        cleanLicensePlate(desc).includes(ctx.compactPlate));
+        normalizePlate(desc).includes(ctx.compactPlate));
     const settlementHit =
       ctx.settlementOrder.length >= 4 && matchesWord(desc, ctx.settlementOrder);
     const codeMatch = invoiceNoMatch || plateHit || settlementHit;

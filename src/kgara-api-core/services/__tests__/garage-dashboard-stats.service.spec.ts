@@ -1,3 +1,4 @@
+import { normalizedPlateSql } from '@/common/utils/license-plate';
 import { GarageDashboardStatsService } from '../garage-dashboard-stats.service';
 
 type FakeQb = {
@@ -174,9 +175,7 @@ describe('GarageDashboardStatsService (đếm XE, tổng toàn kỳ distinct)', 
     expect(countExprs.length).toBeGreaterThan(0);
     for (const { expr } of countExprs) {
       expect(expr).toContain('COUNT(DISTINCT');
-      expect(expr).toContain(
-        "REGEXP_REPLACE(UPPER(c.bien_so_xe), '[^A-Z0-9]', '', 'g')",
-      );
+      expect(expr).toContain(normalizedPlateSql('c.bien_so_xe'));
     }
   });
 });

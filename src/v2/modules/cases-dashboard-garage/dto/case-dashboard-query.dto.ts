@@ -9,16 +9,6 @@ import {
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const DAY_MESSAGE = 'Ngày phải có dạng YYYY-MM-DD.';
 
-/** Ngày gốc để tính KPI tháng/tuần/ngày (mặc định hôm nay). */
-export class CaseDashboardPeriodQueryDto {
-  @ApiPropertyOptional({
-    description: 'Ngày gốc (YYYY-MM-DD), mặc định hôm nay',
-  })
-  @IsOptional()
-  @Matches(DAY_PATTERN, { message: DAY_MESSAGE })
-  date?: string;
-}
-
 /** Khoảng ngày cho phễu. Thiếu cả hai thì mặc định tháng hiện tại. */
 export class CaseDashboardRangeQueryDto {
   @ApiPropertyOptional({ description: 'Từ ngày (YYYY-MM-DD)' })
@@ -32,8 +22,19 @@ export class CaseDashboardRangeQueryDto {
   date_to?: string;
 }
 
-/** Drill-down danh sách lệnh: khoảng ngày, giai đoạn/phân loại tùy chọn, phân trang. */
-export class CaseDashboardCasesQueryDto extends CaseDashboardRangeQueryDto {
+/** `GET /overview`: ngày gốc cho KPI kỳ và khoảng ngày cho phễu (đều tùy chọn). */
+export class CaseDashboardOverviewQueryDto extends CaseDashboardRangeQueryDto {
+  @ApiPropertyOptional({
+    description:
+      'Ngày gốc cho KPI tháng/tuần/ngày (YYYY-MM-DD), mặc định hôm nay',
+  })
+  @IsOptional()
+  @Matches(DAY_PATTERN, { message: DAY_MESSAGE })
+  date?: string;
+}
+
+/** `GET /`: danh sách xe (drill-down): khoảng ngày, giai đoạn/phân loại tùy chọn, phân trang theo xe. */
+export class CaseDashboardListQueryDto extends CaseDashboardRangeQueryDto {
   @ApiPropertyOptional({ enum: CASE_DASHBOARD_STAGES })
   @IsOptional()
   @IsIn([...CASE_DASHBOARD_STAGES])

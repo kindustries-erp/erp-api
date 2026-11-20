@@ -1,9 +1,11 @@
+import { normalizePlate, normalizedPlateSql } from './license-plate';
+
 /**
  * Đếm XE (theo biển số đã chuẩn hóa) thay vì đếm PHIẾU.
  *
- * Quy tắc chuẩn hóa biển: viết hoa, bỏ mọi ký tự ngoài A–Z và 0–9
- * (`30G-258.46` và `30g25846` cùng là một xe). Phiếu không có biển (NULL/rỗng)
- * là một xe riêng, khóa theo id phiếu, nên không bị gộp vào xe khác.
+ * Quy tắc chuẩn hóa biển dùng chung ở `license-plate.ts` (bỏ dấu, Đ → D, viết hoa,
+ * chỉ giữ A–Z và 0–9: `30G-258.46` và `30g25846` cùng là một xe). Phiếu không có biển
+ * (NULL/rỗng) là một xe riêng, khóa theo id phiếu, nên không bị gộp vào xe khác.
  */
 
 /** Cột biển số được phép: whitelist cố định, không nhận chuỗi từ người dùng. */
@@ -29,11 +31,8 @@ export function vehicleKeySql(
   if (!PLATE_COLUMNS.includes(plateColumn)) {
     throw new Error(`vehicleKeySql: cột biển không được phép: ${plateColumn}`);
   }
-  const plate = `${alias}.${plateColumn}`;
-  return (
-    `COALESCE(NULLIF(REGEXP_REPLACE(UPPER(${plate}), '[^A-Z0-9]', '', 'g'), ''), ` +
-    `${alias}.id::text)`
-  );
+  const normalized = normalizedPlateSql(`${alias}.${plateColumn}`);
+  return `COALESCE(NULLIF(${normalized}, ''), ${alias}.id::text)`;
 }
 
 /**
@@ -50,7 +49,7 @@ export function vehicleKey(
   plate: string | null | undefined,
   caseId: string,
 ): string {
-  const normalized = (plate ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const normalized = normalizePlate(plate);
   return normalized.length > 0 ? normalized : caseId;
 }
 

@@ -1,4 +1,8 @@
 import type { ObjectLiteral, SelectQueryBuilder } from 'typeorm';
+import {
+  normalizePlate,
+  normalizedPlateSql,
+} from '@/common/utils/license-plate';
 import { quotationStatusSql } from './kgara-case-filter.helper';
 
 /** Phiếu còn mở: chưa hoàn thành và chưa hủy (tinh_trang_dich_vu = 9). */
@@ -78,9 +82,17 @@ export function applyCheckpointCaseFilters<T extends ObjectLiteral>(
   }
 
   if (f.search && f.search.trim()) {
+    // Biển số so khớp theo dạng chuẩn hóa (bỏ - . khoảng trắng, dấu, hoa/thường).
+    const plateKw = normalizePlate(f.search);
+    const plateCond = plateKw
+      ? ` OR ${normalizedPlateSql('c.bien_so_xe')} LIKE :searchPlate`
+      : '';
     qb.andWhere(
-      '(c.so_chung_tu ILIKE :search OR c.bien_so_xe ILIKE :search OR c.khach_hang_name ILIKE :search OR c.khach_hang_code ILIKE :search)',
-      { search: `%${f.search.trim()}%` },
+      `(c.so_chung_tu ILIKE :search OR c.bien_so_xe ILIKE :search OR c.khach_hang_name ILIKE :search OR c.khach_hang_code ILIKE :search${plateCond})`,
+      {
+        search: `%${f.search.trim()}%`,
+        ...(plateKw ? { searchPlate: `%${plateKw}%` } : {}),
+      },
     );
   }
 

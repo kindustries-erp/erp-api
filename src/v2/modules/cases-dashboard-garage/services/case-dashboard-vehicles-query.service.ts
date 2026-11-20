@@ -13,19 +13,19 @@ import {
   toVehicleItemDto,
 } from '../helpers/case-dashboard-vehicle.mapper';
 import {
+  normalizePaging,
+  type CaseDashboardListParams,
+} from '../helpers/case-dashboard-paging';
+import {
   PERIOD_DATE,
   VEHICLE_KEY,
   applyCaseFilters,
 } from '../helpers/case-dashboard.sql';
-import {
-  normalizePaging,
-  type CaseDashboardCasesParams,
-} from './case-dashboard-cases-query.service';
 
 /**
  * Drill-down theo XE của dashboard garage V2 (đọc `cases_garage`).
  * Mỗi dòng là một xe (khóa biển số chuẩn hóa) kèm các lệnh của xe; phân trang và `total` tính theo xe.
- * Cùng bộ lọc với `listCases`, nên số xe khớp thẻ KPI/giai đoạn. Chỉ đọc, không ghi.
+ * Cùng bộ lọc với thẻ KPI/phễu (`applyCaseFilters`), nên số xe khớp thẻ. Chỉ đọc, không ghi.
  */
 @Injectable()
 export class CaseDashboardVehiclesQueryService {
@@ -35,7 +35,7 @@ export class CaseDashboardVehiclesQueryService {
   ) {}
 
   async listVehicles(
-    params: CaseDashboardCasesParams,
+    params: CaseDashboardListParams,
   ): Promise<ReturnType<typeof toPagedList<CaseDashboardVehicleItemDto>>> {
     const { page, pageSize } = normalizePaging(params.page, params.pageSize);
     const filtered = () =>

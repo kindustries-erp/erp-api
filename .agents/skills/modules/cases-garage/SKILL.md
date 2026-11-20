@@ -41,5 +41,5 @@ Dòng: `noi_dung_chi_tiet`→`description`, `san_pham_code/name`, `loai_san_pham
 - Smoke: `bun run test:smoke:cases-garage-v2` (chi nhánh giả `smoke-<tag>`, xóa mềm cuối chạy).
 
 ## 7. Liên quan: báo cáo theo xe
-`cases_garage` mỗi dòng là một phiếu (không có khóa xe). Báo cáo/drill-down theo XE nằm ở module `cases-dashboard-garage` (`GET api/v2/cases-dashboard-garage/vehicles`, khóa xe = biển `license_plate` chuẩn hóa `[A-Z0-9]`, phiếu không biển khóa theo id). Danh sách phiếu `cases-garage` vẫn theo phiếu; đừng dùng `COUNT(id)` làm "số xe".
+`cases_garage` mỗi dòng là một phiếu (không có khóa xe). Báo cáo/drill-down theo XE nằm ở module `cases-dashboard-garage` (`GET api/v2/cases-dashboard-garage`, mỗi dòng một xe; tổng/phễu ở `GET …/overview`; khóa xe = `normalizedPlateSql('license_plate')` trong `src/common/utils/license-plate.ts`: bỏ dấu tiếng Việt, Đ thành D, chỉ giữ `A-Z0-9`; phiếu không biển khóa theo id). Danh sách phiếu `cases-garage` vẫn theo phiếu; đừng dùng `COUNT(id)` làm "số xe".
 

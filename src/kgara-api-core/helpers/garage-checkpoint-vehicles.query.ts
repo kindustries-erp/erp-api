@@ -1,18 +1,19 @@
 import type { Repository } from 'typeorm';
 import { vehicleKeySql } from '@/common/utils/vehicle-count-sql';
-import { KgaraCase } from '../entities/kgara_case.entity';
-import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
+import { CHECKPOINT_CASES_MAX_PAGE_SIZE } from '@/kgara-api-core/dto/garage-checkpoint-cases-query.dto';
+import { KgaraCase } from '@/kgara-api-core/entities/kgara_case.entity';
+import { KgaraGrossProfit } from '@/kgara-api-core/entities/kgara_gross_profit.entity';
 import {
   FUNNEL_PERIOD_DATE_SQL,
   applyCheckpointCaseFilters,
   type CheckpointCaseFilters,
-} from './garage-checkpoint-case-filters';
+} from '@/kgara-api-core/helpers/garage-checkpoint-case-filters';
 import {
   groupCheckpointCasesByVehicle,
   toCheckpointCaseItem,
   toCheckpointVehicleItem,
   type CheckpointVehicleItem,
-} from './garage-checkpoint-case-item.mapper';
+} from '@/kgara-api-core/helpers/garage-checkpoint-case-item.mapper';
 
 const VEHICLE_KEY = vehicleKeySql('c', 'bien_so_xe');
 
@@ -28,6 +29,7 @@ const VEHICLE_SORT_SQL: Record<string, string> = {
   ngayPhatSinh: 'MAX(c.ngay_phat_sinh)',
   soChungTu: 'MIN(c.so_chung_tu)',
 };
+const DEFAULT_CHECKPOINT_PAGE_SIZE = 20;
 const DEFAULT_SORT_SQL = `MAX(${FUNNEL_PERIOD_DATE_SQL})`;
 
 export interface CheckpointVehiclesParams {
@@ -52,7 +54,17 @@ export async function listCheckpointVehicles(
   caseRepo: Repository<KgaraCase>,
   params: CheckpointVehiclesParams,
 ): Promise<CheckpointVehiclesResult> {
-  const { page, pageSize, filters } = params;
+  const { filters } = params;
+  // Chặn ở tầng truy vấn để lời gọi nội bộ không tải vô hạn (DTO đã chặn ở biên API).
+  const page = Number.isFinite(params.page)
+    ? Math.max(1, Math.floor(params.page))
+    : 1;
+  const pageSize = Number.isFinite(params.pageSize)
+    ? Math.min(
+        CHECKPOINT_CASES_MAX_PAGE_SIZE,
+        Math.max(1, Math.floor(params.pageSize)),
+      )
+    : DEFAULT_CHECKPOINT_PAGE_SIZE;
   const filtered = () =>
     applyCheckpointCaseFilters(
       caseRepo

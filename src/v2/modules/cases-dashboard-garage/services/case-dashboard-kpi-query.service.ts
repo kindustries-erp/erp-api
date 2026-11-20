@@ -13,6 +13,7 @@ import {
   CASE_DASHBOARD_STAGE_STATUS,
   type CaseDashboardClass,
   type CaseDashboardPeriodKpiDto,
+  type CaseDashboardPeriodKpis,
   type CaseDashboardPeriodRaw,
   type CaseDashboardProjectedDto,
   type CaseDashboardProjectedRaw,
@@ -44,14 +45,6 @@ export interface CaseDashboardPeriodRanges {
   month: CaseDashboardDateRange;
   week: CaseDashboardDateRange;
   day: CaseDashboardDateRange;
-}
-
-export interface CaseDashboardPeriodKpis {
-  month: CaseDashboardPeriodKpiDto;
-  week: CaseDashboardPeriodKpiDto;
-  day: CaseDashboardPeriodKpiDto;
-  projectedToday: CaseDashboardProjectedDto;
-  projectedMonth: CaseDashboardProjectedDto;
 }
 
 /** Lệnh đang làm (dự thu): chưa hoàn thành và chưa hủy. */

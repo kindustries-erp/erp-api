@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CaseGarage } from '../cases-garage/entities/case-garage.entity';
 import { CasesDashboardGarageController } from './controllers/cases-dashboard-garage.controller';
-import { CaseDashboardCasesQueryService } from './services/case-dashboard-cases-query.service';
 import { CaseDashboardFunnelQueryService } from './services/case-dashboard-funnel-query.service';
 import { CaseDashboardKpiQueryService } from './services/case-dashboard-kpi-query.service';
 import { CaseDashboardVehiclesQueryService } from './services/case-dashboard-vehicles-query.service';
@@ -18,7 +17,6 @@ import { CasesDashboardGarageService } from './services/cases-dashboard-garage.s
   providers: [
     CaseDashboardKpiQueryService,
     CaseDashboardFunnelQueryService,
-    CaseDashboardCasesQueryService,
     CaseDashboardVehiclesQueryService,
     CasesDashboardGarageService,
   ],

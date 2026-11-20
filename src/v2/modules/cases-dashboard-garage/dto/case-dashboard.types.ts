@@ -173,3 +173,18 @@ export interface CaseDashboardProjectedRaw {
     Record<CaseDashboardClass, { vehicles?: unknown; amount?: unknown }>
   >;
 }
+
+/** KPI tháng/tuần/ngày và dự thu quanh một ngày gốc. */
+export interface CaseDashboardPeriodKpis {
+  month: CaseDashboardPeriodKpiDto;
+  week: CaseDashboardPeriodKpiDto;
+  day: CaseDashboardPeriodKpiDto;
+  projectedToday: CaseDashboardProjectedDto;
+  projectedMonth: CaseDashboardProjectedDto;
+}
+
+/** Phản hồi `GET /overview`: KPI kỳ và phễu trong một lần gọi (dữ liệu không đổi khi đổi trang drill-down). */
+export interface CaseDashboardOverviewDto {
+  period: CaseDashboardPeriodKpis;
+  funnel: CaseDashboardFunnelDto;
+}

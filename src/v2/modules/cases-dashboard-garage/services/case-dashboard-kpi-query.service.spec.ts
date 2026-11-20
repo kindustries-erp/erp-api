@@ -1,3 +1,4 @@
+import { normalizedPlateSql } from '@/common/utils/license-plate';
 import { CaseDashboardKpiQueryService } from './case-dashboard-kpi-query.service';
 
 type FakeQb = {
@@ -129,7 +130,7 @@ describe('CaseDashboardKpiQueryService (KPI V2 đếm XE)', () => {
     );
     expect(totalVehicles?.expr).toContain('COUNT(DISTINCT');
     expect(totalVehicles?.expr).toContain(
-      "REGEXP_REPLACE(UPPER(c.license_plate), '[^A-Z0-9]', '', 'g')",
+      normalizedPlateSql('c.license_plate'),
     );
     const cases = periodQb.selects.find((s) => s.alias === 'totalCases');
     // Tổng kỳ đếm lệnh hoàn thành trong khoảng và không hủy (quy tắc V1), không đếm mọi lệnh trong cửa sổ.

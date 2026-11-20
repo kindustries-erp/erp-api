@@ -74,9 +74,26 @@ describe('applyCheckpointCaseFilters', () => {
     });
 
     expect(sql).toContain('c.bien_so_xe ILIKE :search');
-    expect(params).toContainEqual({ search: '%51b%' });
+    expect(params).toContainEqual({ search: '%51b%', searchPlate: '%51B%' });
+    expect(sql).toContain('LIKE :searchPlate');
     expect(sql).toContain('COALESCE(c.tien_con_phai_thanh_toan, 0) > 0');
     expect(sql).toContain("IN ('OJ', 'OJ_NGOAI')");
+  });
+
+  it('search biển số chuẩn hóa: bỏ dấu gạch/chấm, hoa thường', () => {
+    const { params } = run({ search: '51b-756.95' });
+
+    expect(params).toContainEqual({
+      search: '%51b-756.95%',
+      searchPlate: '%51B75695%',
+    });
+  });
+
+  it('search chỉ gồm ký tự rác thì không thêm điều kiện biển chuẩn hóa', () => {
+    const { sql, params } = run({ search: '..-' });
+
+    expect(sql).not.toContain(':searchPlate');
+    expect(params).toContainEqual({ search: '%..-%' });
   });
 
   it('không thêm điều kiện phân loại khi ALL hoặc mã lạ', () => {

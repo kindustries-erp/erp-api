@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import type { Repository } from 'typeorm';
+import {
+  normalizePlate,
+  normalizedPlateSql,
+} from '@/common/utils/license-plate';
 import { toMoney } from '@/v2/core/debts-core';
 import type {
   CashflowDashboardGarage,
@@ -14,9 +18,6 @@ const NEARBY_DAYS = 7;
 const MAX_ITEMS = 5;
 const PENDING_STATUSES = ['EXPECTED', 'PENDING', 'APPROVED'];
 const EMPTY: CashflowDuplicateGroup = { items: [], total: 0 };
-
-export const normalizePlate = (plate?: string): string =>
-  (plate ?? '').replace(/[^0-9a-zA-Z]/g, '').toUpperCase();
 
 export function shiftDate(isoDate: string, days: number): string {
   const d = new Date(`${isoDate}T00:00:00Z`);
@@ -140,7 +141,7 @@ export class CashflowVoucherGarageInsightService {
       plate
         ? run(
             base().andWhere(
-              "UPPER(REGEXP_REPLACE(COALESCE(v.license_plate, ''), '[^0-9a-zA-Z]', '', 'g')) = :plate",
+              `${normalizedPlateSql('v.license_plate')} = :plate`,
               { plate },
             ),
           )

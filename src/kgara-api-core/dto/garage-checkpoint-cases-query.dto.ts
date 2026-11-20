@@ -7,8 +7,12 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  Max,
   Min,
 } from 'class-validator';
+
+/** Số dòng tối đa mỗi trang (web tải 500 xe một lần cho drawer). */
+export const CHECKPOINT_CASES_MAX_PAGE_SIZE = 500;
 
 /** Query của GET /greenway/dashboard/checkpoint-cases (tên snake_case giữ theo frontend). */
 export class GarageCheckpointCasesQueryDto {
@@ -27,11 +31,15 @@ export class GarageCheckpointCasesQueryDto {
   @Min(1)
   page?: number;
 
-  @ApiPropertyOptional({ default: 20 })
+  @ApiPropertyOptional({
+    default: 20,
+    maximum: CHECKPOINT_CASES_MAX_PAGE_SIZE,
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(CHECKPOINT_CASES_MAX_PAGE_SIZE)
   pageSize?: number;
 
   @ApiPropertyOptional()

@@ -1,3 +1,4 @@
+import { normalizedPlateSql } from '@/common/utils/license-plate';
 import { GarageCheckpointService } from '../garage-checkpoint.service';
 
 function createMockQueryBuilder() {
@@ -108,9 +109,7 @@ describe('GarageCheckpointService - getCheckpointCases summary đếm XE', () =>
     expect(vehicleSelects.length).toBeGreaterThanOrEqual(8);
     for (const s of vehicleSelects) {
       if (s === 'COUNT(DISTINCT c.id)') continue;
-      expect(s).toContain(
-        "REGEXP_REPLACE(UPPER(c.bien_so_xe), '[^A-Z0-9]', '', 'g')",
-      );
+      expect(s).toContain(normalizedPlateSql('c.bien_so_xe'));
     }
     expect(selects).toContain('COUNT(DISTINCT c.id)');
     expect(selects.some((s) => s.includes('COUNT(CASE WHEN'))).toBe(false);

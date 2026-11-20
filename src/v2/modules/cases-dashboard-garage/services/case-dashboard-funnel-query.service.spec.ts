@@ -1,3 +1,4 @@
+import { normalizedPlateSql } from '@/common/utils/license-plate';
 import { CaseDashboardFunnelQueryService } from './case-dashboard-funnel-query.service';
 
 type FakeQb = {
@@ -163,7 +164,7 @@ describe('CaseDashboardFunnelQueryService (phễu V2 đếm XE)', () => {
     );
     expect(overallQb.exprs.totalVehicles).toContain('COUNT(DISTINCT');
     expect(overallQb.exprs.totalVehicles).toContain(
-      "REGEXP_REPLACE(UPPER(c.license_plate), '[^A-Z0-9]', '', 'g')",
+      normalizedPlateSql('c.license_plate'),
     );
     expect(overallQb.exprs.totalCases).toBe('COUNT(c.id)');
   });
