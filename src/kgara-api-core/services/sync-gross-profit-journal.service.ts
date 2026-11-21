@@ -59,6 +59,12 @@ export class SyncGrossProfitJournalService {
       throw err;
     }
 
+    if (response?.status === 404) {
+      this.logger.log(
+        `No journal for branch ${branchExternalId} ${from}..${to} (404 in body, treated as empty)`,
+      );
+      return result;
+    }
     if (response?.status && response.status !== 200) {
       throw new Error(
         `Kgara journal ${from}..${to} trả lỗi ${response.status}: ${response.message ?? ''}`,
