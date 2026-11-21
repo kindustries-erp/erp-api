@@ -1,3 +1,5 @@
+import { journalItemCostAmount } from './kgara-case-financial-parser.helper';
+
 export interface JournalItemCost {
   TaiKhoanNoCode?: string | null;
   TaiKhoanCoCode?: string | null;
@@ -11,6 +13,8 @@ export interface CaseCostBreakdown {
   warehousePartsCost: number;
   externalCost: number;
   commissionCost: number;
+  /** TK 521: giảm trừ doanh thu, không nằm trong `otherCost`, `totalCost`, `unallocatedCost`. */
+  discountCost: number;
   otherCost: number;
   totalCost: number;
   allocatedPartsCost: number;
@@ -96,6 +100,58 @@ export class KgaraCostEnricherHelper {
     return { unit, total };
   }
 
+  /** Tổng chi phí xuất kho (TK nợ 1541) của journal, cùng quy tắc với enrichCaseLines. */
+  static sumWarehouseCost(journalItems?: JournalItemCost[] | null): number {
+    if (!Array.isArray(journalItems)) return 0;
+    let sum = 0;
+    for (const item of journalItems) {
+      const amount = Number(item.ChiPhi ?? item.GiaTriTien ?? 0);
+      if (amount <= 0) continue;
+      if (String(item.TaiKhoanNoCode || '').trim() === '1541') sum += amount;
+    }
+    return sum;
+  }
+
+  static isManualLine(line: Record<string, any>): boolean {
+    return (
+      String(line.CostAllocationType ?? line.costAllocationType ?? '') ===
+      'MANUAL_ERP'
+    );
+  }
+
+  /**
+   * Khi payload KGara mới thay rawData, giữ lại giá vốn nhập tay (MANUAL_ERP) của dòng cũ
+   * (khớp theo id chi tiết) để không bị ghi đè bởi giá vốn xuất kho.
+   */
+  static carryOverManualLines(
+    previousLines: Array<Record<string, any>> | null | undefined,
+    newLines: Array<Record<string, any>> | null | undefined,
+  ): void {
+    if (!Array.isArray(previousLines) || !Array.isArray(newLines)) return;
+    const idOf = (l: Record<string, any>) =>
+      l.HdPhieuDichVuChiTietID ||
+      l.HdPhieuDichVuChiTietId ||
+      l.hdPhieuDichVuChiTietId ||
+      l.ID ||
+      l.Id;
+    const manualById = new Map<string, Record<string, any>>();
+    for (const l of previousLines) {
+      const id = idOf(l);
+      if (id && this.isManualLine(l)) manualById.set(String(id), l);
+    }
+    if (manualById.size === 0) return;
+    for (const l of newLines) {
+      const prev = manualById.get(String(idOf(l)));
+      if (!prev) continue;
+      l.GiaVonPhuTung = prev.GiaVonPhuTung ?? prev.giaVonPhuTung;
+      l.giaVonPhuTung = l.GiaVonPhuTung;
+      l.TongVon = prev.TongVon ?? prev.tongVon;
+      l.tongVon = l.TongVon;
+      l.CostAllocationType = 'MANUAL_ERP';
+      l.costAllocationType = 'MANUAL_ERP';
+    }
+  }
+
   static enrichCaseLines<T extends Record<string, any>>(
     lines: T[],
     journalItems?: JournalItemCost[] | null,
@@ -104,6 +160,7 @@ export class KgaraCostEnricherHelper {
       warehousePartsCost: 0,
       externalCost: 0,
       commissionCost: 0,
+      discountCost: 0,
       otherCost: 0,
       totalCost: 0,
       allocatedPartsCost: 0,
@@ -126,10 +183,18 @@ export class KgaraCostEnricherHelper {
     const warehouseCostsByName = new Map<string, number>();
 
     for (const item of journalItems) {
-      const amount = Number(item.ChiPhi ?? item.GiaTriTien ?? 0);
+      const tkNo = String(
+        item.TaiKhoanNoCode ||
+          (item as { TaiKhoanNo?: string }).TaiKhoanNo ||
+          '',
+      ).trim();
+      const amount = journalItemCostAmount(item, tkNo);
       if (amount <= 0) continue;
 
-      const tkNo = String(item.TaiKhoanNoCode || '').trim();
+      if (tkNo === '521') {
+        breakdown.discountCost += amount;
+        continue;
+      }
       breakdown.totalCost += amount;
 
       if (tkNo === '1541') {
@@ -167,6 +232,12 @@ export class KgaraCostEnricherHelper {
             .includes('dịch vụ'));
 
       if (!isPart) return copy as T;
+
+      // Giá vốn nhập tay trên ERP luôn thắng giá vốn xuất kho
+      if (this.isManualLine(copy)) {
+        allocatedTotal += this.resolveLineCost(copy).total;
+        return copy as T;
+      }
 
       const name1 = this.cleanName(copy.SanPhamName || copy.sanPhamName);
       const name2 = this.cleanName(copy.NoiDungChiTiet || copy.noiDungChiTiet);

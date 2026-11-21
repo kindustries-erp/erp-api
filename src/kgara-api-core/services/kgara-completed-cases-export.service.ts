@@ -25,8 +25,8 @@ import type { DateBasis } from '../helpers/garage-cases-dashboard-data.helper';
 import {
   buildSheet1CompletedCases,
   buildSheet2PnlTracking,
-  buildSheet3ItemizedServices,
 } from '../helpers/kgara-completed-cases-sheet.builder';
+import { buildItemizedSheets } from '../helpers/kgara-itemized-sheets.builder';
 
 export interface CompletedCasesExportParams {
   branchId?: string;
@@ -122,7 +122,7 @@ export class KgaraCompletedCasesExportService {
       linkedInvoiceVatMap,
     );
 
-    buildSheet3ItemizedServices(workbook, cases, serviceLinesMap);
+    buildItemizedSheets(workbook, cases, serviceLinesMap);
 
     const charts = buildCasesDashboard(dashboard, sheet1, {
       dateFrom: params.date_from,

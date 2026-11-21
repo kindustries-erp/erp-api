@@ -2,10 +2,10 @@ import {
   createSqlCapture,
   type SqlCapture,
 } from '@/common/testing/sql-capture.testing';
+import { normalizePlate } from '@/common/utils/license-plate';
 import { CashflowVoucherGarage } from '../entities/cashflow-voucher-garage.entity';
 import {
   CashflowVoucherGarageInsightService,
-  normalizePlate,
   shiftDate,
 } from './cashflow-voucher-garage-insight.service';
 

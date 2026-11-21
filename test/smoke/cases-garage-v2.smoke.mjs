@@ -1,11 +1,11 @@
 // Smoke CRUD `api/v2/cases-garage` (xe NATIVE) trên API đang chạy. Chỉ chạy trên staging/dev, KHÔNG production.
-// Env: E2E_API_URL (mặc định suy từ PORT), E2E_TAO_EMAIL (mặc định ai-test-duyet, có quyền GARAGE DELETE; ai-test-tao nhận 403 khi xóa), E2E_PASSWORD (bắt buộc).
+// Env: E2E_API_URL (mặc định suy từ PORT), E2E_TAO_EMAIL (mặc định ai-test-admin, có quyền GARAGE DELETE; ai-test-tao nhận 403 khi xóa), E2E_PASSWORD (bắt buộc).
 // Dùng chi nhánh giả `smoke-<tag>` (và `smoke-<tag>-other`) nên không đụng dữ liệu chi nhánh thật;
 // cuối script xóa mềm các xe đã tạo.
 import { resolveApiUrl } from './e2e-ports.mjs';
 
 const BASE = resolveApiUrl();
-const EMAIL = process.env.E2E_TAO_EMAIL ?? 'ai-test-duyet@example.com';
+const EMAIL = process.env.E2E_TAO_EMAIL ?? 'ai-test-admin@example.com';
 const PASSWORD = process.env.E2E_PASSWORD;
 if (!PASSWORD) {
   console.error('Thiếu E2E_PASSWORD.');

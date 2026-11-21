@@ -1,6 +1,10 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import {
+  normalizePlate,
+  normalizedPlateSql,
+} from '@/common/utils/license-plate';
 import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
 import { resolveStoredNetPayable } from '../utils/kgara-parser.util';
@@ -110,11 +114,6 @@ export function extractCustomerKeywords(
   return Array.from(new Set([...words, ...unaccentedWords]));
 }
 
-export function cleanLicensePlate(plate: string | undefined | null): string {
-  if (!plate) return '';
-  return plate.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-}
-
 @Injectable()
 export class GarageSmartSettlementService {
   private readonly logger = new Logger(GarageSmartSettlementService.name);
@@ -164,7 +163,7 @@ export class GarageSmartSettlementService {
 
     const soChungTu = (kCase.soChungTu || '').trim();
     const rawPlate = (kCase.bienSoXe || '').trim();
-    const normalizedPlate = cleanLicensePlate(rawPlate);
+    const normalizedPlate = normalizePlate(rawPlate);
     const customerKeywords = extractCustomerKeywords(kCase.khachHangName);
 
     // Build SQL text conditions
@@ -187,10 +186,10 @@ export class GarageSmartSettlementService {
 
     if (
       normalizedPlate.length > 0 &&
-      normalizedPlate !== rawPlate.toLowerCase()
+      normalizedPlate !== rawPlate.toUpperCase()
     ) {
       textConditions.push(
-        `REPLACE(REPLACE(REPLACE(LOWER(txn.description), '.', ''), '-', ''), ' ', '') ILIKE $${paramIdx}`,
+        `${normalizedPlateSql('txn.description')} ILIKE $${paramIdx}`,
       );
       queryParams.push(`%${normalizedPlate}%`);
       paramIdx++;
@@ -279,7 +278,7 @@ export class GarageSmartSettlementService {
       const amountMatch = amtDiff < 1; // Khớp tiền chính xác
 
       const desc = (raw.description || '').toLowerCase();
-      const descCleaned = cleanLicensePlate(desc);
+      const descCleaned = normalizePlate(desc);
       const corr = (raw.correspondentName || '').toLowerCase();
 
       const codeMatch =
@@ -425,7 +424,7 @@ export class GarageSmartSettlementService {
 
     // Extract prioritized matching signals
     const rawPlate = (kCase.bienSoXe || '').trim();
-    const normalizedPlate = cleanLicensePlate(rawPlate);
+    const normalizedPlate = normalizePlate(rawPlate);
     const soChungTu = (kCase.soChungTu || '').trim();
     const customerKeywords = extractCustomerKeywords(kCase.khachHangName);
 
@@ -453,10 +452,10 @@ export class GarageSmartSettlementService {
 
     if (
       normalizedPlate.length > 0 &&
-      normalizedPlate !== rawPlate.toLowerCase()
+      normalizedPlate !== rawPlate.toUpperCase()
     ) {
       textConditions.push(
-        `REPLACE(REPLACE(REPLACE(LOWER(COALESCE(inv.license_plate, '') || ' ' || COALESCE(inv.description, '')), '.', ''), '-', ''), ' ', '') ILIKE $${paramIdx}`,
+        `(${normalizedPlateSql('inv.license_plate')} ILIKE $${paramIdx} OR ${normalizedPlateSql('inv.description')} ILIKE $${paramIdx})`,
       );
       queryParams.push(`%${normalizedPlate}%`);
       paramIdx++;
@@ -549,9 +548,9 @@ export class GarageSmartSettlementService {
       const amountMatch = amtDiff < 1; // 1. Khớp tiền
 
       const desc = (raw.description || '').toLowerCase();
-      const descCleaned = cleanLicensePlate(desc);
+      const descCleaned = normalizePlate(desc);
       const licensePlate = (raw.licensePlate || '').toLowerCase();
-      const licensePlateCleaned = cleanLicensePlate(licensePlate);
+      const licensePlateCleaned = normalizePlate(licensePlate);
       const settlementOrder = (raw.settlementOrder || '').toLowerCase();
       const partner = (
         (direction === 'OUT' ? raw.buyerName : raw.sellerName) || ''

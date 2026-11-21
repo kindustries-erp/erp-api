@@ -13,11 +13,11 @@ import { UpdateBankTransactionDto } from '../dto/update-bank-transaction.dto';
 import { CreateBankTransactionDto } from '../dto/create-bank-transaction.dto';
 import { normalizeBranchColumns } from '../../common/utils/branch-ids.util';
 import { BusinessPartnersCoreService } from '@/v2/core/business-partners-core';
-import {
+import type {
   CashflowClassification,
   CashflowPurpose,
-  isPurposeAllowed,
 } from '../constants/cashflow-attributes.constants';
+import { isPurposeAllowed } from '../constants/cashflow-attributes.constants';
 
 @Injectable()
 export class TransactionAccountingService {

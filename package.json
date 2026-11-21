@@ -43,6 +43,7 @@
     "test:smoke:file-attachments-legacy": "node test/smoke/file-attachments-legacy.smoke.mjs",
     "test:smoke:file-attachments": "node test/smoke/file-attachments.smoke.mjs",
     "test:smoke:branches": "node test/smoke/branches-management.smoke.mjs",
+    "test:smoke:garage-dashboard": "node test/smoke/garage-dashboard-v1-v2.smoke.mjs",
     "test:smoke:clone": "node test/smoke/clone-procurement.smoke.mjs",
     "test:smoke:procurement": "node test/smoke/procurement.smoke.mjs",
     "test:smoke:recall-cancel": "node test/smoke/recall-cancel-notify.smoke.mjs",

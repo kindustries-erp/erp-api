@@ -4,6 +4,25 @@ import { Repository } from 'typeorm';
 import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
 import { quotationStatusSql } from '../helpers/kgara-case-filter.helper';
+import { buildCheckpointStageSelects } from '../helpers/garage-checkpoint-stages.sql';
+import {
+  OPEN_CASE_SQL,
+  applyCheckpointCaseFilters,
+  type CheckpointCaseFilters,
+} from '../helpers/garage-checkpoint-case-filters';
+import { toCheckpointCaseItem } from '../helpers/garage-checkpoint-case-item.mapper';
+import { listCheckpointVehicles } from '../helpers/garage-checkpoint-vehicles.query';
+import {
+  countVehiclesSql,
+  vehicleKeySql,
+} from '@/common/utils/vehicle-count-sql';
+
+/** Số XE (biển số đã chuẩn hóa) của nhóm phiếu; số phiếu lấy riêng qua alias `totalCases`. */
+const VEHICLE_COUNT_SQL = countVehiclesSql(vehicleKeySql('c', 'bien_so_xe'));
+
+/** Số XE thỏa điều kiện (distinct biển số của các phiếu khớp điều kiện). */
+const vehiclesWhen = (cond: string) =>
+  countVehiclesSql(vehicleKeySql('c', 'bien_so_xe'), cond);
 import {
   startOfMonth,
   endOfMonth,
@@ -103,7 +122,8 @@ export class GarageCheckpointService {
       .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'tienCoThue')
       .addSelect('SUM(COALESCE(c.tien_da_thanh_toan, 0))', 'paid')
       .addSelect('SUM(COALESCE(c.tien_con_phai_thanh_toan, 0))', 'receivable')
-      .addSelect('COUNT(c.id)', 'count')
+      .addSelect(VEHICLE_COUNT_SQL, 'count')
+      .addSelect('COUNT(c.id)', 'totalCases')
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('(c.exclude_from_reports IS NOT TRUE)')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
@@ -198,7 +218,8 @@ export class GarageCheckpointService {
       .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'tienCoThue')
       .addSelect('SUM(COALESCE(c.tien_da_thanh_toan, 0))', 'paid')
       .addSelect('SUM(COALESCE(c.tien_con_phai_thanh_toan, 0))', 'receivable')
-      .addSelect('COUNT(c.id)', 'count')
+      .addSelect(VEHICLE_COUNT_SQL, 'count')
+      .addSelect('COUNT(c.id)', 'totalCases')
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('(c.exclude_from_reports IS NOT TRUE)')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
@@ -282,7 +303,8 @@ export class GarageCheckpointService {
       .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'tienCoThue')
       .addSelect('SUM(COALESCE(c.tien_da_thanh_toan, 0))', 'paid')
       .addSelect('SUM(COALESCE(c.tien_con_phai_thanh_toan, 0))', 'receivable')
-      .addSelect('COUNT(c.id)', 'count')
+      .addSelect(VEHICLE_COUNT_SQL, 'count')
+      .addSelect('COUNT(c.id)', 'totalCases')
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('(c.exclude_from_reports IS NOT TRUE)')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
@@ -306,31 +328,41 @@ export class GarageCheckpointService {
         END`,
         'classificationKey',
       )
-      .addSelect('COUNT(c.id)', 'count')
+      .addSelect(VEHICLE_COUNT_SQL, 'count')
       .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'amount')
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('(c.exclude_from_reports IS NOT TRUE)')
       .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
       .andWhere('c.ngay_hoan_thanh_cong_viec IS NULL');
 
+    const inProgressDayCond =
+      'COALESCE(c.ngay_phat_sinh, c.created_at) >= :curDayStart AND COALESCE(c.ngay_phat_sinh, c.created_at) <= :curDayEnd';
+    const inProgressDayParams = { curDayStart, curDayEnd };
+
     // Pipeline tháng này (tất cả xe đang làm)
     const inProgressMonthRaw = await inProgressCasesQb
       .clone()
       .groupBy('1')
       .getRawMany();
+    // Tổng số xe khác nhau (một xe có nhiều lệnh khác phân loại không được cộng hai lần)
+    const inProgressMonthTotalRes = await inProgressCasesQb
+      .clone()
+      .select(VEHICLE_COUNT_SQL, 'count')
+      .getRawOne();
 
     // Pipeline hôm nay (xe đang làm phát sinh trong ngày)
     const inProgressTodayRaw = await inProgressCasesQb
       .clone()
-      .andWhere(
-        'COALESCE(c.ngay_phat_sinh, c.created_at) >= :curDayStart AND COALESCE(c.ngay_phat_sinh, c.created_at) <= :curDayEnd',
-        { curDayStart, curDayEnd },
-      )
+      .andWhere(inProgressDayCond, inProgressDayParams)
       .groupBy('1')
       .getRawMany();
+    const inProgressTodayTotalRes = await inProgressCasesQb
+      .clone()
+      .select(VEHICLE_COUNT_SQL, 'count')
+      .andWhere(inProgressDayCond, inProgressDayParams)
+      .getRawOne();
 
-    const formatPipeline = (rawItems: any[]) => {
-      let totalCount = 0;
+    const formatPipeline = (rawItems: any[], totalVehicles: number) => {
       let totalAmount = 0;
       const byClassification: Record<
         string,
@@ -346,7 +378,6 @@ export class GarageCheckpointService {
         const key = item.classificationKey || 'KHAC';
         const cnt = Number(item.count) || 0;
         const amt = Number(item.amount) || 0;
-        totalCount += cnt;
         totalAmount += amt;
         if (byClassification[key]) {
           byClassification[key].count += cnt;
@@ -355,14 +386,20 @@ export class GarageCheckpointService {
       }
 
       return {
-        totalCount,
+        totalCount: totalVehicles,
         totalAmount,
         byClassification,
       };
     };
 
-    const projectedToday = formatPipeline(inProgressTodayRaw);
-    const projectedMonth = formatPipeline(inProgressMonthRaw);
+    const projectedToday = formatPipeline(
+      inProgressTodayRaw,
+      Number(inProgressTodayTotalRes?.count) || 0,
+    );
+    const projectedMonth = formatPipeline(
+      inProgressMonthRaw,
+      Number(inProgressMonthTotalRes?.count) || 0,
+    );
 
     /**
      * 5. Helper truy vấn số lượng xe theo các giai đoạn tiếp nhận và cơ cấu phân loại trong khoảng thời gian [startDate, endDate]:
@@ -376,139 +413,13 @@ export class GarageCheckpointService {
      * - byStage: Chi tiết cơ cấu phân loại cho từng giai đoạn (intake, quotation, inProgress, completed)
      */
     const getPeriodStages = async (startDate: string, endDate: string) => {
-      const openCase =
-        '(c.ngay_hoan_thanh_cong_viec IS NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9))';
-      const quotation = quotationStatusSql('c');
-      const inProgress = `(${openCase} AND NOT (${quotation}))`;
-      const completed =
-        '(c.ngay_hoan_thanh_cong_viec IS NOT NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9))';
-      const intake = `((c.tinh_trang_dich_vu = 0 OR c.ten_tinh_trang_dich_vu ILIKE '%tiếp nhận%') AND ${openCase})`;
-
-      const res = await this.caseRepo
+      const selects = buildCheckpointStageSelects('bien_so_xe');
+      const [first, ...rest] = selects;
+      const qb = this.caseRepo
         .createQueryBuilder('c')
-        .select('COUNT(c.id)', 'totalIntake')
-        .addSelect(`COUNT(CASE WHEN ${intake} THEN 1 END)`, 'intakeCount')
-        .addSelect(
-          `COUNT(CASE WHEN ${openCase} AND ${quotation} THEN 1 END)`,
-          'quotationCount',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN ${inProgress} THEN 1 END)`,
-          'inProgressCount',
-        )
-        .addSelect(`COUNT(CASE WHEN ${completed} THEN 1 END)`, 'completedCount')
-        .addSelect(
-          `COUNT(CASE WHEN c.tinh_trang_dich_vu = 9 THEN 1 END)`,
-          'cancelledCount',
-        )
-
-        // Tổng tiền phát sinh (tien_co_thue) theo từng giai đoạn
-        .addSelect(
-          `SUM(CASE WHEN ${intake} THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)`,
-          'intakeAmount',
-        )
-        .addSelect(
-          `SUM(CASE WHEN ${openCase} AND ${quotation} THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)`,
-          'quotationAmount',
-        )
-        .addSelect(
-          `SUM(CASE WHEN ${inProgress} THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)`,
-          'inProgressAmount',
-        )
-        .addSelect(
-          `SUM(CASE WHEN ${completed} THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)`,
-          'completedAmount',
-        )
-
-        // Phân loại xe tổng thể trong kỳ
-        .addSelect(
-          `COUNT(CASE WHEN c.classification = 'SUA_CHUA_CHUNG' THEN 1 END)`,
-          'totalSuaChua',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN c.classification = 'KY_GUI_NOI_BO' THEN 1 END)`,
-          'totalKyGui',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN 1 END)`,
-          'totalOj',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN c.classification IS NULL OR c.classification NOT IN ('SUA_CHUA_CHUNG', 'KY_GUI_NOI_BO', 'OJ', 'OJ_NGOAI') THEN 1 END)`,
-          'totalKhac',
-        )
-
-        // Phân loại xe cho giai đoạn intake
-        .addSelect(
-          `COUNT(CASE WHEN ${intake} AND c.classification = 'SUA_CHUA_CHUNG' THEN 1 END)`,
-          'intakeSuaChua',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN ${intake} AND c.classification = 'KY_GUI_NOI_BO' THEN 1 END)`,
-          'intakeKyGui',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN ${intake} AND c.classification IN ('OJ', 'OJ_NGOAI') THEN 1 END)`,
-          'intakeOj',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN ${intake} AND (c.classification IS NULL OR c.classification NOT IN ('SUA_CHUA_CHUNG', 'KY_GUI_NOI_BO', 'OJ', 'OJ_NGOAI')) THEN 1 END)`,
-          'intakeKhac',
-        )
-
-        // Phân loại xe cho giai đoạn quotation
-        .addSelect(
-          `COUNT(CASE WHEN ${openCase} AND ${quotation} AND c.classification = 'SUA_CHUA_CHUNG' THEN 1 END)`,
-          'quotationSuaChua',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN ${openCase} AND ${quotation} AND c.classification = 'KY_GUI_NOI_BO' THEN 1 END)`,
-          'quotationKyGui',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN ${openCase} AND ${quotation} AND c.classification IN ('OJ', 'OJ_NGOAI') THEN 1 END)`,
-          'quotationOj',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN ${openCase} AND ${quotation} AND (c.classification IS NULL OR c.classification NOT IN ('SUA_CHUA_CHUNG', 'KY_GUI_NOI_BO', 'OJ', 'OJ_NGOAI')) THEN 1 END)`,
-          'quotationKhac',
-        )
-
-        // Phân loại xe cho giai đoạn in_progress
-        .addSelect(
-          `COUNT(CASE WHEN ${inProgress} AND c.classification = 'SUA_CHUA_CHUNG' THEN 1 END)`,
-          'inProgressSuaChua',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN ${inProgress} AND c.classification = 'KY_GUI_NOI_BO' THEN 1 END)`,
-          'inProgressKyGui',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN ${inProgress} AND c.classification IN ('OJ', 'OJ_NGOAI') THEN 1 END)`,
-          'inProgressOj',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN ${inProgress} AND (c.classification IS NULL OR c.classification NOT IN ('SUA_CHUA_CHUNG', 'KY_GUI_NOI_BO', 'OJ', 'OJ_NGOAI')) THEN 1 END)`,
-          'inProgressKhac',
-        )
-
-        // Phân loại xe cho giai đoạn completed
-        .addSelect(
-          `COUNT(CASE WHEN ${completed} AND c.classification = 'SUA_CHUA_CHUNG' THEN 1 END)`,
-          'completedSuaChua',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN ${completed} AND c.classification = 'KY_GUI_NOI_BO' THEN 1 END)`,
-          'completedKyGui',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN ${completed} AND c.classification IN ('OJ', 'OJ_NGOAI') THEN 1 END)`,
-          'completedOj',
-        )
-        .addSelect(
-          `COUNT(CASE WHEN ${completed} AND (c.classification IS NULL OR c.classification NOT IN ('SUA_CHUA_CHUNG', 'KY_GUI_NOI_BO', 'OJ', 'OJ_NGOAI')) THEN 1 END)`,
-          'completedKhac',
-        )
+        .select(first.expr, first.alias);
+      for (const sel of rest) qb.addSelect(sel.expr, sel.alias);
+      const res = await qb
         .where('c.kgara_deleted_at IS NULL')
         .andWhere('(c.exclude_from_reports IS NOT TRUE)')
         .andWhere(
@@ -518,6 +429,7 @@ export class GarageCheckpointService {
         .getRawOne();
 
       return {
+        totalCases: Number(res?.totalCases) || 0,
         totalIntake: Number(res?.totalIntake) || 0,
         intake: Number(res?.intakeCount) || 0,
         intakeAmount: Number(res?.intakeAmount) || 0,
@@ -604,6 +516,7 @@ export class GarageCheckpointService {
         totalReceivable: mTotalReceivable,
         collectionRate: mCollectionRate,
         totalCount: Number(curMonthRes?.count) || 0,
+        totalCases: Number(curMonthRes?.totalCases) || 0,
         stages: monthStages,
         revenueChart: monthRevenueChart,
         costChart: monthCostChart,
@@ -622,6 +535,7 @@ export class GarageCheckpointService {
         totalReceivable: wTotalReceivable,
         collectionRate: wCollectionRate,
         totalCount: Number(curWeekRes?.count) || 0,
+        totalCases: Number(curWeekRes?.totalCases) || 0,
         stages: weekStages,
         revenueChart: weekRevenueChart,
         costChart: weekCostChart,
@@ -640,6 +554,7 @@ export class GarageCheckpointService {
         totalReceivable: dTotalReceivable,
         collectionRate: dCollectionRate,
         totalCount: Number(curDayRes?.count) || 0,
+        totalCases: Number(curDayRes?.totalCases) || 0,
         stages: dayStages,
         revenueChart: dayRevenueChart,
         costChart: dayCostChart,
@@ -670,6 +585,7 @@ export class GarageCheckpointService {
     sortOrder: 'ASC' | 'DESC' = 'DESC',
     status?: string,
     isFunnel?: boolean,
+    groupBy: 'case' | 'vehicle' = 'case',
   ) {
     const effectiveDateTo =
       dateTo.length === 10 ? `${dateTo} 23:59:59.999` : dateTo;
@@ -679,9 +595,17 @@ export class GarageCheckpointService {
       isFunnel ||
       (status && status.toLowerCase() !== 'all'),
     );
-    const openCase =
-      '(c.ngay_hoan_thanh_cong_viec IS NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9))';
+    const openCase = OPEN_CASE_SQL;
     const quotation = quotationStatusSql('c');
+    const filters: CheckpointCaseFilters = {
+      dateFrom,
+      effectiveDateTo,
+      isFunnelMode,
+      status,
+      search,
+      paymentStatus,
+      classification,
+    };
 
     // 3.1 Truy vấn Summary Toàn Kỳ (Không bị phân trang)
     const summaryQb = this.caseRepo
@@ -692,7 +616,8 @@ export class GarageCheckpointService {
         'gp',
         'gp.hd_phieu_dich_vu_id = c.hd_phieu_dich_vu_id OR gp.vu_viec_code = c.so_chung_tu',
       )
-      .select('COUNT(c.id)', 'totalCount')
+      .select(VEHICLE_COUNT_SQL, 'totalCount')
+      .addSelect('COUNT(DISTINCT c.id)', 'totalCases')
       .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'totalTienCoThue')
       .addSelect(
         'SUM(COALESCE(gp.doanh_thu, c.doanh_thu, c.tien_co_thue, 0))',
@@ -709,105 +634,37 @@ export class GarageCheckpointService {
         'totalRemaining',
       )
       .addSelect(
-        'COUNT(CASE WHEN COALESCE(c.tien_con_phai_thanh_toan, 0) <= 0 AND COALESCE(c.tien_da_thanh_toan, 0) > 0 THEN 1 END)',
+        vehiclesWhen(
+          'COALESCE(c.tien_con_phai_thanh_toan, 0) <= 0 AND COALESCE(c.tien_da_thanh_toan, 0) > 0',
+        ),
         'paidCount',
       )
       .addSelect(
-        'COUNT(CASE WHEN COALESCE(c.tien_con_phai_thanh_toan, 0) > 0 THEN 1 END)',
+        vehiclesWhen('COALESCE(c.tien_con_phai_thanh_toan, 0) > 0'),
         'remainingCount',
       )
       .addSelect(
-        'COUNT(CASE WHEN COALESCE(c.tien_da_thanh_toan, 0) <= 0 AND COALESCE(c.tien_co_thue, 0) > 0 THEN 1 END)',
+        vehiclesWhen(
+          'COALESCE(c.tien_da_thanh_toan, 0) <= 0 AND COALESCE(c.tien_co_thue, 0) > 0',
+        ),
         'unpaidCount',
       )
+      .addSelect(vehiclesWhen(`${openCase} AND ${quotation}`), 'quotationCount')
       .addSelect(
-        `COUNT(CASE WHEN ${openCase} AND ${quotation} THEN 1 END)`,
-        'quotationCount',
-      )
-      .addSelect(
-        `COUNT(CASE WHEN ${openCase} AND NOT (${quotation}) THEN 1 END)`,
+        vehiclesWhen(`${openCase} AND NOT (${quotation})`),
         'inProgressCount',
       )
       .addSelect(
-        `COUNT(CASE WHEN c.ngay_hoan_thanh_cong_viec IS NOT NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9) THEN 1 END)`,
+        vehiclesWhen(
+          'c.ngay_hoan_thanh_cong_viec IS NOT NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)',
+        ),
         'completedCount',
       )
-      .addSelect(
-        `COUNT(CASE WHEN c.tinh_trang_dich_vu = 9 THEN 1 END)`,
-        'cancelledCount',
-      )
+      .addSelect(vehiclesWhen('c.tinh_trang_dich_vu = 9'), 'cancelledCount')
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('(c.exclude_from_reports IS NOT TRUE)');
 
-    if (isFunnelMode) {
-      summaryQb
-        .andWhere(
-          'COALESCE(c.ngay_hoan_thanh_cong_viec, c.ngay_phat_sinh, c.created_at) >= :dateFrom',
-          { dateFrom },
-        )
-        .andWhere(
-          'COALESCE(c.ngay_hoan_thanh_cong_viec, c.ngay_phat_sinh, c.created_at) <= :dateTo',
-          { dateTo: effectiveDateTo },
-        );
-
-      if (status === 'quotation') {
-        summaryQb.andWhere(`(${openCase} AND ${quotation})`);
-      } else if (status === 'in_progress') {
-        summaryQb.andWhere(`(${openCase} AND NOT (${quotation}))`);
-      } else if (status === 'completed') {
-        summaryQb.andWhere(
-          '(c.ngay_hoan_thanh_cong_viec IS NOT NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9))',
-        );
-      } else if (status === 'cancelled') {
-        summaryQb.andWhere('c.tinh_trang_dich_vu = 9');
-      }
-    } else {
-      summaryQb
-        .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
-        .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
-        .andWhere('c.ngay_hoan_thanh_cong_viec >= :dateFrom', { dateFrom })
-        .andWhere('c.ngay_hoan_thanh_cong_viec <= :dateTo', {
-          dateTo: effectiveDateTo,
-        });
-    }
-
-    if (search && search.trim()) {
-      const s = `%${search.trim()}%`;
-      summaryQb.andWhere(
-        '(c.so_chung_tu ILIKE :search OR c.bien_so_xe ILIKE :search OR c.khach_hang_name ILIKE :search OR c.khach_hang_code ILIKE :search)',
-        { search: s },
-      );
-    }
-
-    if (paymentStatus === 'remaining') {
-      summaryQb.andWhere('COALESCE(c.tien_con_phai_thanh_toan, 0) > 0');
-    } else if (paymentStatus === 'paid') {
-      summaryQb.andWhere(
-        'COALESCE(c.tien_con_phai_thanh_toan, 0) <= 0 AND COALESCE(c.tien_da_thanh_toan, 0) > 0',
-      );
-    } else if (paymentStatus === 'unpaid') {
-      summaryQb.andWhere('COALESCE(c.tien_da_thanh_toan, 0) <= 0');
-    }
-
-    if (classification && classification !== 'ALL') {
-      if (classification === 'SUA_CHUA_CHUNG') {
-        summaryQb.andWhere(
-          "COALESCE(cat.code, c.classification) = 'SUA_CHUA_CHUNG'",
-        );
-      } else if (classification === 'KY_GUI_NOI_BO') {
-        summaryQb.andWhere(
-          "COALESCE(cat.code, c.classification) IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO')",
-        );
-      } else if (classification === 'OJ_NGOAI') {
-        summaryQb.andWhere(
-          "COALESCE(cat.code, c.classification) IN ('OJ', 'OJ_NGOAI')",
-        );
-      } else if (classification === 'KHAC') {
-        summaryQb.andWhere(
-          "(COALESCE(cat.code, c.classification) IS NULL OR COALESCE(cat.code, c.classification) NOT IN ('SUA_CHUA_CHUNG', 'KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'OJ', 'OJ_NGOAI'))",
-        );
-      }
-    }
+    applyCheckpointCaseFilters(summaryQb, filters);
 
     const summaryRaw = await summaryQb.getRawOne();
 
@@ -824,7 +681,7 @@ export class GarageCheckpointService {
         END`,
         'classificationKey',
       )
-      .addSelect('COUNT(c.id)', 'count')
+      .addSelect(VEHICLE_COUNT_SQL, 'count')
       .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'amount')
       .addSelect('SUM(COALESCE(c.tien_da_thanh_toan, 0))', 'paid')
       .addSelect('SUM(COALESCE(c.tien_con_phai_thanh_toan, 0))', 'remaining')
@@ -893,6 +750,7 @@ export class GarageCheckpointService {
 
     const summary = {
       totalCount: Number(summaryRaw?.totalCount) || 0,
+      totalCases: Number(summaryRaw?.totalCases) || 0,
       totalTienCoThue,
       totalRevenue: Number(summaryRaw?.totalRevenue) || 0,
       totalCost: Number(summaryRaw?.totalCost) || 0,
@@ -912,6 +770,27 @@ export class GarageCheckpointService {
       },
     };
 
+    // 3.3a Danh sách gom theo XE: phân trang và total theo xe, mỗi dòng kèm các lệnh của xe
+    if (groupBy === 'vehicle') {
+      const { items, total } = await listCheckpointVehicles(this.caseRepo, {
+        filters,
+        page,
+        pageSize,
+        sortBy,
+        sortOrder,
+      });
+      return {
+        items,
+        total,
+        page,
+        pageSize,
+        totalPages: Math.ceil(total / pageSize),
+        summary,
+        classificationSummary,
+        groupBy: 'vehicle' as const,
+      };
+    }
+
     // 3.3 Truy vấn Danh sách Phan trang có Bộ lọc
     const qb = this.caseRepo
       .createQueryBuilder('c')
@@ -925,73 +804,7 @@ export class GarageCheckpointService {
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('(c.exclude_from_reports IS NOT TRUE)');
 
-    if (isFunnelMode) {
-      qb.andWhere(
-        'COALESCE(c.ngay_hoan_thanh_cong_viec, c.ngay_phat_sinh, c.created_at) >= :dateFrom',
-        { dateFrom },
-      ).andWhere(
-        'COALESCE(c.ngay_hoan_thanh_cong_viec, c.ngay_phat_sinh, c.created_at) <= :dateTo',
-        { dateTo: effectiveDateTo },
-      );
-
-      if (status === 'quotation') {
-        qb.andWhere(`(${openCase} AND ${quotation})`);
-      } else if (status === 'in_progress') {
-        qb.andWhere(`(${openCase} AND NOT (${quotation}))`);
-      } else if (status === 'completed') {
-        qb.andWhere(
-          '(c.ngay_hoan_thanh_cong_viec IS NOT NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9))',
-        );
-      } else if (status === 'cancelled') {
-        qb.andWhere('c.tinh_trang_dich_vu = 9');
-      }
-    } else {
-      qb.andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
-        .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
-        .andWhere('c.ngay_hoan_thanh_cong_viec >= :dateFrom', { dateFrom })
-        .andWhere('c.ngay_hoan_thanh_cong_viec <= :dateTo', {
-          dateTo: effectiveDateTo,
-        });
-    }
-
-    // Filter by search keyword
-    if (search && search.trim()) {
-      const s = `%${search.trim()}%`;
-      qb.andWhere(
-        '(c.so_chung_tu ILIKE :search OR c.bien_so_xe ILIKE :search OR c.khach_hang_name ILIKE :search OR c.khach_hang_code ILIKE :search)',
-        { search: s },
-      );
-    }
-
-    // Filter by payment status
-    if (paymentStatus === 'remaining') {
-      qb.andWhere('COALESCE(c.tien_con_phai_thanh_toan, 0) > 0');
-    } else if (paymentStatus === 'paid') {
-      qb.andWhere(
-        'COALESCE(c.tien_con_phai_thanh_toan, 0) <= 0 AND COALESCE(c.tien_da_thanh_toan, 0) > 0',
-      );
-    } else if (paymentStatus === 'unpaid') {
-      qb.andWhere('COALESCE(c.tien_da_thanh_toan, 0) <= 0');
-    }
-
-    // Filter by classification
-    if (classification && classification !== 'ALL') {
-      if (classification === 'SUA_CHUA_CHUNG') {
-        qb.andWhere("COALESCE(cat.code, c.classification) = 'SUA_CHUA_CHUNG'");
-      } else if (classification === 'KY_GUI_NOI_BO') {
-        qb.andWhere(
-          "COALESCE(cat.code, c.classification) IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO')",
-        );
-      } else if (classification === 'OJ_NGOAI') {
-        qb.andWhere(
-          "COALESCE(cat.code, c.classification) IN ('OJ', 'OJ_NGOAI')",
-        );
-      } else if (classification === 'KHAC') {
-        qb.andWhere(
-          "(COALESCE(cat.code, c.classification) IS NULL OR COALESCE(cat.code, c.classification) NOT IN ('SUA_CHUA_CHUNG', 'KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO', 'OJ', 'OJ_NGOAI'))",
-        );
-      }
-    }
+    applyCheckpointCaseFilters(qb, filters);
 
     // Dynamic sorting
     if (sortBy === 'tienCoThue') {
@@ -1021,56 +834,14 @@ export class GarageCheckpointService {
     const [items, total] = await qb.getManyAndCount();
 
     return {
-      items: items.map((c: any) => {
-        const gp = c.grossProfit;
-        const rev = Number(gp?.doanhThu ?? c.doanhThu ?? c.tienCoThue ?? 0);
-        const cost = Number(gp?.chiPhi ?? c.chiPhi ?? 0);
-        const profit = Number(gp?.loiNhuan ?? c.loiNhuan ?? rev - cost);
-        const rawData = c.rawData || {};
-        const tienThueKH = Number(rawData.TienThueKH ?? 0);
-
-        const rawClass = (c.classification || c.category?.code || '')
-          .trim()
-          .toUpperCase();
-        let normalizedClass = 'KHAC';
-        if (rawClass === 'SUA_CHUA_CHUNG') {
-          normalizedClass = 'SUA_CHUA_CHUNG';
-        } else if (['KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO'].includes(rawClass)) {
-          normalizedClass = 'KY_GUI_NOI_BO';
-        } else if (
-          ['OJ', 'OJ_NGOAI'].includes(rawClass) ||
-          c.accountKey === 'OJ' ||
-          (c.soChungTu && String(c.soChungTu).startsWith('GN-'))
-        ) {
-          normalizedClass = 'OJ_NGOAI';
-        }
-
-        return {
-          id: c.id,
-          soChungTu: c.soChungTu,
-          bienSoXe: c.bienSoXe,
-          khachHangCode: c.khachHangCode,
-          khachHangName: c.khachHangName,
-          tinhTrangDichVu: c.tinhTrangDichVu,
-          tenTinhTrangDichVu: c.tenTinhTrangDichVu,
-          classification: normalizedClass,
-          doanhThu: rev,
-          chiPhi: cost,
-          loiNhuan: profit,
-          tienCoThue: Number(c.tienCoThue ?? 0),
-          tienDaThanhToan: Number(c.tienDaThanhToan ?? 0),
-          tienConPhaiThanhToan: Number(c.tienConPhaiThanhToan ?? 0),
-          hasInvoice: tienThueKH > 0,
-          ngayHoanThanhCongViec: c.ngayHoanThanhCongViec,
-          ngayPhatSinh: c.ngayPhatSinh || c.createdAt,
-        };
-      }),
+      items: items.map(toCheckpointCaseItem),
       total,
       page,
       pageSize,
       totalPages: Math.ceil(total / pageSize),
       summary,
       classificationSummary,
+      groupBy: 'case' as const,
     };
   }
 }

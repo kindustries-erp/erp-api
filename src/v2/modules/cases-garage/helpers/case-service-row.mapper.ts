@@ -1,4 +1,5 @@
 import { toMoney } from '@/v2/core/debts-core';
+import { vnDateSql } from '@/v2/core/base-core/helpers/vn-time.util';
 import type { CaseServiceRow } from '../dto/case-service-row.types';
 import type { CaseOrigin } from '../entities/case-garage.enums';
 
@@ -39,8 +40,8 @@ export const CASE_SERVICE_SELECT: string[] = [
   'c.classification AS "classification"',
   'c.branch_external_id AS "branchExternalId"',
   'COALESCE(b.name, b.code, c.branch_external_id) AS "branchName"',
-  `TO_CHAR(COALESCE(c.received_at, c.issued_at), 'YYYY-MM-DD') AS "caseDate"`,
-  `TO_CHAR(c.completed_at, 'YYYY-MM-DD') AS "completedDate"`,
+  `${vnDateSql('COALESCE(c.received_at, c.issued_at)')} AS "caseDate"`,
+  `${vnDateSql('c.completed_at')} AS "completedDate"`,
 ];
 
 export function toCaseServiceRow(r: Raw): CaseServiceRow {

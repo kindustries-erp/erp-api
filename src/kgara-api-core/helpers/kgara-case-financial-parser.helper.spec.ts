@@ -94,7 +94,42 @@ describe('KgaraCaseFinancialParserHelper', () => {
       expect(breakdown.outsourceCost).toBe(220000);
       expect(breakdown.discountCost).toBe(225000);
       expect(breakdown.warehousePartsCost).toBe(0);
-      expect(breakdown.totalCost).toBe(645000);
+      // 521 là giảm trừ doanh thu: tách khỏi totalCost
+      expect(breakdown.totalCost).toBe(420000);
+    });
+
+    it('không tính hàng doanh thu (Nợ 131, ChiPhi=0, GiaTriTien>0) vào otherCost', () => {
+      const breakdown =
+        KgaraCaseFinancialParserHelper.parseJournalCostBreakdown([
+          { TaiKhoanNoCode: '1541', ChiPhi: 500000, GiaTriTien: 500000 },
+          { TaiKhoanNoCode: '131', ChiPhi: 0, GiaTriTien: 2000000 },
+          { TaiKhoanNoCode: '131', ChiPhi: 0, GiaTriTien: 300000 },
+        ]);
+      expect(breakdown.otherCost).toBe(0);
+      expect(breakdown.warehousePartsCost).toBe(500000);
+      expect(breakdown.totalCost).toBe(500000);
+    });
+
+    it('dùng GiaTriTien dự phòng cho TK chi phí khi ChiPhi vắng, nhưng không cho TK khác', () => {
+      const breakdown =
+        KgaraCaseFinancialParserHelper.parseJournalCostBreakdown([
+          { TaiKhoanNoCode: '1542', GiaTriTien: 100000 },
+          { TaiKhoanNoCode: '521', GiaTriTien: 50000 },
+          { TaiKhoanNoCode: '131', GiaTriTien: 999999 },
+        ]);
+      expect(breakdown.outsourceCost).toBe(100000);
+      expect(breakdown.discountCost).toBe(50000);
+      expect(breakdown.otherCost).toBe(0);
+      expect(breakdown.totalCost).toBe(100000);
+    });
+
+    it('tính TK khác khi có ChiPhi > 0', () => {
+      const breakdown =
+        KgaraCaseFinancialParserHelper.parseJournalCostBreakdown([
+          { TaiKhoanNoCode: '6427', ChiPhi: 70000 },
+        ]);
+      expect(breakdown.otherCost).toBe(70000);
+      expect(breakdown.totalCost).toBe(70000);
     });
   });
 

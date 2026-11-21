@@ -205,3 +205,13 @@ export function topCustomersByRevenue(
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, limit);
 }
+
+/**
+ * Số XE khác nhau trong danh sách phiếu (khóa `vehicleKey`).
+ * Một xe có nhiều lệnh chỉ đếm một lần; phiếu không biển là một xe riêng.
+ */
+export function countVehicles(
+  rows: ReadonlyArray<Pick<CaseDashboardRow, 'vehicleKey'>>,
+): number {
+  return new Set(rows.map((r) => r.vehicleKey)).size;
+}

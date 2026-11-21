@@ -1,6 +1,7 @@
 import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraAccountKey } from '../enums/kgara-account.enum';
 import { SyncCaseService } from './sync-case.service';
+import { buildDetailSnapshot } from '../utils/kgara-detail-snapshot.util';
 
 const BRANCH = '0b4d6d3a-55df-492b-abaf-377d84b61d05';
 const OJ_GUID = 'uuid-oj-1';
@@ -57,6 +58,13 @@ function buildService() {
       .mockResolvedValue({ deletedCount: 0, withLinkedInvoices: [] }),
   };
 
+  const syncGrossProfit = {
+    persistItem: jest.fn(async () => undefined),
+  };
+  const finalizer = {
+    finalizeCase: jest.fn(async () => true),
+  };
+
   const service = new SyncCaseService(
     branchRepo as any,
     caseRepo as any,
@@ -67,12 +75,19 @@ function buildService() {
     client as any,
     syncRunLogger as any,
     syncDeletion as any,
-    {} as any,
+    syncGrossProfit as any,
+    undefined,
+    undefined,
+    undefined,
+    finalizer as any,
   );
 
   return {
     service,
     client,
+    grossProfitRepo,
+    syncGrossProfit,
+    finalizer,
     branchRepo,
     caseRepo,
     caseServiceRepo,
@@ -81,6 +96,123 @@ function buildService() {
     lineManager,
   };
 }
+
+describe('SyncCaseService syncCaseDetailsBatch stale', () => {
+  it('stale: chỉ sync lại phiếu đã đổi list-level, bỏ qua phiếu còn mới (AC-9)', async () => {
+    const ctx = buildService();
+    const mk = (id: string, tinhTrang: number, snapStatus: number) => {
+      const base = {
+        hdPhieuDichVuId: id,
+        branchExternalId: BRANCH,
+        accountKey: 'MAIN',
+        tinhTrangDichVu: tinhTrang,
+        tienCoThue: 1000,
+        ngayHoanThanhCongViec: null,
+      };
+      return {
+        ...base,
+        rawData: {
+          ListPhieuDichVuChiTiet: [{ HdPhieuDichVuChiTietID: `${id}-1` }],
+          __detailSnapshot: buildDetailSnapshot({
+            ...base,
+            tinhTrangDichVu: snapStatus,
+          }),
+        },
+      };
+    };
+    const fresh = mk('fresh', 3, 3);
+    const stale = mk('stale', 3, 1);
+    const qb: any = {};
+    qb.where = jest.fn(() => qb);
+    qb.andWhere = jest.fn(() => qb);
+    qb.orderBy = jest.fn(() => qb);
+    qb.addOrderBy = jest.fn(() => qb);
+    qb.getMany = jest.fn(async () => [fresh, stale]);
+    (ctx.caseRepo as any).createQueryBuilder = jest.fn(() => qb);
+    const detail = jest
+      .spyOn(ctx.service, 'syncCaseDetail')
+      .mockResolvedValue({} as any);
+
+    const res = await ctx.service.syncCaseDetailsBatch(BRANCH);
+
+    expect(detail).toHaveBeenCalledTimes(1);
+    expect(detail).toHaveBeenCalledWith(BRANCH, 'stale', 'MAIN');
+    expect(res.totalCasesProcessed).toBe(1);
+  });
+});
+
+describe('SyncCaseService giá vốn', () => {
+  it('giá vốn: sync chi tiết giữ giá vốn nhập tay, lưu snapshot và hoàn tất từ journal đã lưu (AC-4)', async () => {
+    const ctx = buildService();
+    ctx.caseRepo.findOne.mockResolvedValue({
+      id: 'case-1',
+      hdPhieuDichVuId: MAIN_GUID,
+      tinhTrangDichVu: 1,
+      rawData: {
+        ListPhieuDichVuChiTiet: [
+          {
+            HdPhieuDichVuChiTietID: 'd1',
+            GiaVonPhuTung: 700,
+            TongVon: 1400,
+            CostAllocationType: 'MANUAL_ERP',
+          },
+        ],
+      },
+    });
+    ctx.client.getCaseDetail.mockResolvedValue({
+      data: {
+        HdPhieuDichVuID: MAIN_GUID,
+        SoChungTu: 'GR-PDV2610-0001',
+        TinhTrangDichVu: 1,
+        ListPhieuDichVuChiTiet: [
+          { HdPhieuDichVuChiTietID: 'd1', GiaVonPhuTung: 0, TienCoThue: 10 },
+        ],
+      },
+      dataAsOf: '2026-11-03T00:00:00Z',
+    });
+
+    await ctx.service.syncCaseDetail(BRANCH, MAIN_GUID, KgaraAccountKey.MAIN);
+
+    expect(ctx.finalizer.finalizeCase).toHaveBeenCalledTimes(1);
+    const arg = (ctx.finalizer.finalizeCase.mock.calls as any[][])[0][0];
+    expect(arg.rawData.ListPhieuDichVuChiTiet[0]).toMatchObject({
+      GiaVonPhuTung: 700,
+      TongVon: 1400,
+      CostAllocationType: 'MANUAL_ERP',
+    });
+    expect(arg.rawData.__detailSnapshot).toEqual(
+      expect.objectContaining({ tinhTrang: 1 }),
+    );
+  });
+});
+
+describe('SyncCaseService gross profit', () => {
+  it('gross profit đi qua persistItem (giữ journal), không upsert trực tiếp', async () => {
+    const ctx = buildService();
+    const item = { VuViecID: 'V1', VuViecCode: 'GR-1', DoanhThu: 10 };
+    ctx.client.getCases.mockResolvedValue({
+      data: [],
+      pagination: { totalPages: 1 },
+    });
+    ctx.client.getGrossProfitDetail.mockResolvedValue({
+      results: { Groups: [{ Items: [item] }] },
+    });
+
+    await ctx.service.syncCasesForBranch(
+      BRANCH,
+      '2026-09-01',
+      '2026-09-30',
+      undefined,
+      KgaraAccountKey.MAIN,
+    );
+
+    expect(ctx.syncGrossProfit.persistItem).toHaveBeenCalledWith(item, BRANCH, {
+      from: '2026-09-01',
+      to: '2026-09-30',
+    });
+    expect(ctx.grossProfitRepo.upsert).not.toHaveBeenCalled();
+  });
+});
 
 describe('SyncCaseService (Kgara account scope)', () => {
   it('syncs OJ cases whose list rows have no HdPhieuDichVuID by resolving through receivables', async () => {

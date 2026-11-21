@@ -1,10 +1,19 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
 import { KgaraClientService } from '../kgara-client.service';
 import { parseSafeDate } from '../utils/kgara-parser.util';
 import { KgaraAccountKey } from '../enums/kgara-account.enum';
+import { SyncGrossProfitJournalService } from './sync-gross-profit-journal.service';
+import { KgaraCaseFinalizeService } from './kgara-case-finalize.service';
+
+export interface GrossProfitSyncStats {
+  journalCases: number;
+  enrichedCases: number;
+  projected: number;
+  failed: number;
+}
 
 @Injectable()
 export class SyncGrossProfitService {
@@ -14,14 +23,60 @@ export class SyncGrossProfitService {
     @InjectRepository(KgaraGrossProfit)
     private readonly grossProfitRepo: Repository<KgaraGrossProfit>,
     private readonly client: KgaraClientService,
+    private readonly journalSync: SyncGrossProfitJournalService,
+    @Optional()
+    private readonly finalizer?: KgaraCaseFinalizeService,
   ) {}
+
+  /**
+   * Upsert một dòng lãi gộp. Giữ nguyên rawData.journal_items đã lưu
+   * (journal là dữ liệu riêng, không được xóa khi sync lãi gộp).
+   */
+  async persistItem(
+    item: any,
+    branchExternalId: string,
+    range: { from: string; to: string },
+  ): Promise<void> {
+    const existing = await this.grossProfitRepo
+      .createQueryBuilder('gp')
+      .select("gp.raw_data -> 'journal_items'", 'journal')
+      .where('gp.hd_phieu_dich_vu_id = :id', { id: item.VuViecID })
+      .getRawOne<{ journal: unknown }>();
+
+    const rawData = existing?.journal
+      ? { ...item, journal_items: existing.journal }
+      : item;
+
+    await this.grossProfitRepo.upsert(
+      {
+        hdPhieuDichVuId: item.VuViecID,
+        branchExternalId,
+        vuViecCode: item.VuViecCode,
+        vuViecName: item.VuViecName,
+        tenKhachHang: item.TenKhachHang,
+        doanhThu: item.DoanhThu,
+        chiPhi: item.ChiPhi,
+        loiNhuan: item.LoiNhuan,
+        reportFrom: range.from,
+        reportTo: range.to,
+        rawData,
+      },
+      ['hdPhieuDichVuId'],
+    );
+  }
 
   async syncGrossProfitForBranch(
     branchExternalId: string,
     from?: string,
     to?: string,
     accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
-  ): Promise<void> {
+  ): Promise<GrossProfitSyncStats> {
+    const stats: GrossProfitSyncStats = {
+      journalCases: 0,
+      enrichedCases: 0,
+      projected: 0,
+      failed: 0,
+    };
     this.logger.log(
       `Syncing gross profit ONLY for branch ${branchExternalId} (account: ${accountKey})...`,
     );
@@ -79,31 +134,40 @@ export class SyncGrossProfitService {
             if (group.Items) {
               for (const item of group.Items) {
                 if (item.VuViecID) {
-                  await this.grossProfitRepo.upsert(
-                    {
-                      hdPhieuDichVuId: item.VuViecID,
-                      branchExternalId,
-                      vuViecCode: item.VuViecCode,
-                      vuViecName: item.VuViecName,
-                      tenKhachHang: item.TenKhachHang,
-                      doanhThu: item.DoanhThu,
-                      chiPhi: item.ChiPhi,
-                      loiNhuan: item.LoiNhuan,
-                      reportFrom: range.from,
-                      reportTo: range.to,
-                      rawData: item,
-                    },
-                    ['hdPhieuDichVuId'],
-                  );
+                  await this.persistItem(item, branchExternalId, range);
                 }
               }
             }
           }
         }
+        try {
+          await this.journalSync.syncJournalForRange(
+            branchExternalId,
+            range.from,
+            range.to,
+            accountKey,
+          );
+          if (this.finalizer) {
+            const fin = await this.finalizer.finalizePeriod(
+              branchExternalId,
+              range.from,
+              range.to,
+            );
+            stats.journalCases += fin.journalCases;
+            stats.enrichedCases += fin.enrichedCases;
+            stats.projected += fin.enrichedCases;
+            stats.failed += fin.failed;
+          }
+        } catch (journalErr: any) {
+          this.logger.warn(
+            `Journal/cost finalize failed for ${branchExternalId} ${range.from}..${range.to}: ${journalErr?.message}`,
+          );
+        }
         this.logger.log(
           `Synced gross profit for branch ${branchExternalId} from ${range.from} to ${range.to}`,
         );
       }
+      return stats;
     } catch (err: any) {
       this.logger.error(`Failed to sync gross profit: ${err.message}`);
       throw err;
