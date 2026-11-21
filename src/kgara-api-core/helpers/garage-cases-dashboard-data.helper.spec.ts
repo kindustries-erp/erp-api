@@ -6,6 +6,7 @@ import {
   classificationBreakdown,
   isoWeekParts,
   pickBasisDate,
+  countVehicles,
   spanInDays,
   topCustomersByRevenue,
 } from './garage-cases-dashboard-data.helper';
@@ -13,6 +14,7 @@ import type { CaseDashboardRow } from './kgara-completed-cases-sheet.builder';
 
 const row = (over: Partial<CaseDashboardRow> = {}): CaseDashboardRow => ({
   caseNo: 'PDV-1',
+  vehicleKey: 'V-1',
   customerName: 'Khách A',
   classification: 'Sửa chữa chung',
   receivedDate: null,
@@ -251,5 +253,21 @@ describe('buildCashSeries', () => {
       }),
     ]);
     expect(points).toHaveLength(2);
+  });
+});
+
+describe('countVehicles (đếm XE trên bảng kê)', () => {
+  it('một xe có nhiều lệnh chỉ đếm một lần; phiếu không biển là xe riêng', () => {
+    const rows = [
+      row({ caseNo: 'PDV-1', vehicleKey: '51A12345' }),
+      row({ caseNo: 'PDV-2', vehicleKey: '51A12345' }),
+      row({ caseNo: 'PDV-3', vehicleKey: '29B99999' }),
+      row({ caseNo: 'PDV-4', vehicleKey: 'case-id-4' }),
+    ];
+    expect(countVehicles(rows)).toBe(3);
+  });
+
+  it('danh sách rỗng trả 0', () => {
+    expect(countVehicles([])).toBe(0);
   });
 });

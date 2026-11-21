@@ -100,7 +100,10 @@ describe('GarageCashflowDuplicateEngine', () => {
     const plateSql = qbs[2].andWhere.mock.calls
       .map((c: any[]) => c[0])
       .join(' ');
-    expect(plateSql).toContain('regexp_replace');
+    expect(plateSql).toContain('REGEXP_REPLACE');
+    expect(plateSql).toContain(
+      'TRANSLATE(COALESCE(v.licensePlate, c.bienSoXe,',
+    );
   });
 
   it('caps items at 5 but reports real total', async () => {

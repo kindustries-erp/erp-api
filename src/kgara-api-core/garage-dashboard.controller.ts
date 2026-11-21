@@ -113,6 +113,7 @@ export class GarageDashboardController {
       query.sort_order || 'DESC',
       query.status,
       query.is_funnel,
+      query.group_by,
     );
   }
 

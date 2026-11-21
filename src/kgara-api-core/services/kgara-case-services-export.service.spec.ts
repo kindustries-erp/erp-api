@@ -1,4 +1,5 @@
 import * as ExcelJS from 'exceljs';
+import { Logger } from '@nestjs/common';
 import { KgaraCaseServicesExportService } from './kgara-case-services-export.service';
 
 const SHEET_NAME = 'Chi tiết DV & Phụ tùng';
@@ -116,5 +117,29 @@ describe('KgaraCaseServicesExportService – giá vốn từ journal', () => {
     const buffer = await service.exportCaseServicesExcel({});
 
     expect(await readColumnValues(buffer, 'Tổng vốn')).toEqual([0]);
+  });
+
+  it('ghi log warn và vẫn xuất file khi làm giàu giá vốn lỗi (AC-7)', async () => {
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    const queryService = {
+      findCaseServices: jest.fn(async () => ({ data: [{ ...partLine }] })),
+    };
+    const qb = buildQueryBuilder([]);
+    qb.getMany = jest.fn(async () => {
+      throw new Error('db down');
+    });
+    const grossProfitRepo = { createQueryBuilder: jest.fn(() => qb) };
+    const service = new KgaraCaseServicesExportService(
+      queryService as any,
+      grossProfitRepo as any,
+    );
+
+    const buffer = await service.exportCaseServicesExcel({});
+
+    expect(await readColumnValues(buffer, 'Tổng vốn')).toEqual([0]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('db down'));
+    warn.mockRestore();
   });
 });

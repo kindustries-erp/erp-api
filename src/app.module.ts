@@ -83,6 +83,7 @@ import { DebtsGarageModule } from './v2/modules/debts-garage/debts-garage.module
 import { CashflowVouchersGarageModule } from './v2/modules/cashflow-vouchers-garage/cashflow-vouchers-garage.module'; // api-v2-module:cashflow-vouchers-garage:app-imports
 import { DebtsFlowGarageModule } from './v2/modules/debts-flow-garage/debts-flow-garage.module'; // api-v2-module:debts-flow-garage:app-imports
 import { CasesGarageModule } from './v2/modules/cases-garage/cases-garage.module'; // api-v2-module:cases-garage:app-imports
+import { CasesDashboardGarageModule } from './v2/modules/cases-dashboard-garage/cases-dashboard-garage.module'; // api-v2-module:cases-dashboard-garage:app-imports
 import { UsersManagementModule } from './v2/modules/users-management/users-management.module'; // api-v2-module:users-management:app-imports
 import { AuthSessionsModule } from './v2/modules/auth-sessions/auth-sessions.module'; // api-v2-module:auth-sessions:app-imports
 // plop:api-v2-imports
@@ -226,6 +227,7 @@ import { AuthSessionsModule } from './v2/modules/auth-sessions/auth-sessions.mod
     CashflowVouchersGarageModule, // api-v2-module:cashflow-vouchers-garage:app-modules
     DebtsFlowGarageModule, // api-v2-module:debts-flow-garage:app-modules
     CasesGarageModule, // api-v2-module:cases-garage:app-modules
+    CasesDashboardGarageModule, // api-v2-module:cases-dashboard-garage:app-modules
     UsersManagementModule, // api-v2-module:users-management:app-modules
     AuthSessionsModule, // api-v2-module:auth-sessions:app-modules
     // plop:api-v2-modules

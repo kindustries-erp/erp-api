@@ -172,3 +172,64 @@ describe('KgaraCostEnricherHelper', () => {
     });
   });
 });
+
+describe('KgaraCostEnricherHelper manual cost & stale helpers', () => {
+  const journal = [
+    {
+      TaiKhoanNoCode: '1541',
+      GiaTriTien: 380000,
+      ChiPhi: 380000,
+      NoiDung: '[51M80574] - [Nhớt động cơ 5W-30]',
+    },
+    { TaiKhoanNoCode: '1542', GiaTriTien: 50000, ChiPhi: 50000 },
+  ];
+
+  it('sumWarehouseCost chỉ cộng TK 1541', () => {
+    expect(KgaraCostEnricherHelper.sumWarehouseCost(journal)).toBe(380000);
+    expect(KgaraCostEnricherHelper.sumWarehouseCost(null)).toBe(0);
+  });
+
+  it('enrichCaseLines không ghi đè dòng nhập tay MANUAL_ERP', () => {
+    const lines = [
+      {
+        LoaiSanPhamCode: 'PT',
+        SanPhamName: 'Nhớt động cơ 5W-30',
+        SoLuongHoaDon: 2,
+        GiaVonPhuTung: 999,
+        TongVon: 1998,
+        CostAllocationType: 'MANUAL_ERP',
+      },
+    ];
+
+    const res = KgaraCostEnricherHelper.enrichCaseLines(lines, journal);
+
+    expect(res.lines[0].GiaVonPhuTung).toBe(999);
+    expect(res.lines[0].TongVon).toBe(1998);
+    expect(res.lines[0].CostAllocationType).toBe('MANUAL_ERP');
+  });
+
+  it('carryOverManualLines mang giá vốn nhập tay sang payload mới theo id', () => {
+    const prev = [
+      {
+        HdPhieuDichVuChiTietID: 'L1',
+        GiaVonPhuTung: 700,
+        TongVon: 1400,
+        CostAllocationType: 'MANUAL_ERP',
+      },
+      { HdPhieuDichVuChiTietID: 'L2', GiaVonPhuTung: 5 },
+    ];
+    const next: any[] = [
+      { HdPhieuDichVuChiTietID: 'L1', GiaVonPhuTung: 0 },
+      { HdPhieuDichVuChiTietID: 'L2', GiaVonPhuTung: 0 },
+    ];
+
+    KgaraCostEnricherHelper.carryOverManualLines(prev, next);
+
+    expect(next[0]).toMatchObject({
+      GiaVonPhuTung: 700,
+      TongVon: 1400,
+      CostAllocationType: 'MANUAL_ERP',
+    });
+    expect(next[1].GiaVonPhuTung).toBe(0);
+  });
+});

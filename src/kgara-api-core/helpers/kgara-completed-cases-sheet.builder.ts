@@ -17,6 +17,7 @@ import {
 } from './kgara-excel-style.helper';
 import { resolveCaseVatAmount } from './kgara-case-financial-parser.helper';
 import { KgaraCostEnricherHelper } from './kgara-cost-enricher.helper';
+import { vehicleKey } from '@/common/utils/vehicle-count-sql';
 
 export const CLASSIFICATION_LABELS: Record<string, string> = {
   KY_GUI_NOI_BO: 'Ký gửi nội bộ',
@@ -148,6 +149,8 @@ export const SHEET1_FIRST_DATA_ROW = 5;
 /** Dữ liệu từng phiếu sau khi chuẩn hóa, dùng dựng Dashboard (cùng nguồn với Sheet 1). */
 export interface CaseDashboardRow {
   caseNo: string;
+  /** Khóa XE (biển số đã chuẩn hóa; phiếu không biển là khóa theo id phiếu). */
+  vehicleKey: string;
   customerName: string;
   classification: string;
   receivedDate: Date | null;
@@ -380,6 +383,10 @@ export function buildSheet1CompletedCases(
 
     dashboardRows.push({
       caseNo: c.soChungTu || '—',
+      vehicleKey: vehicleKey(
+        c.bienSoXe,
+        String(c.id ?? c.soChungTu ?? `row-${idx}`),
+      ),
       customerName: c.khachHangName || '—',
       classification: classLabel,
       receivedDate: toDateOrNull(c.ngayTiepNhan),

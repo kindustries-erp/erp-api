@@ -54,6 +54,14 @@ describe('GarageCheckpointCasesQueryDto', () => {
     expect(await errorsOf({ ...valid, pageSize: 'x' })).toEqual(['pageSize']);
   });
 
+  it('pageSize tối đa 500 (web tải 500 xe một lần), vượt thì bị từ chối', async () => {
+    expect(await errorsOf({ ...valid, pageSize: '500' })).toEqual([]);
+    expect(await errorsOf({ ...valid, pageSize: '501' })).toEqual(['pageSize']);
+    expect(await errorsOf({ ...valid, pageSize: '100000' })).toEqual([
+      'pageSize',
+    ]);
+  });
+
   it('tham số lạ bị từ chối (forbidNonWhitelisted)', async () => {
     expect(await errorsOf({ ...valid, foo: 'bar' })).toEqual(['foo']);
   });

@@ -90,6 +90,7 @@ describe('GarageCheckpointService - Stages & Checkpoint KPIs', () => {
 
     // Kiểm tra cấu trúc và giá trị của stages trong month
     expect(result.month.stages).toEqual({
+      totalCases: 0,
       totalIntake: 15,
       intake: 2,
       intakeAmount: 20000000,

@@ -65,7 +65,12 @@ export async function reconcileCaseLines(
         hdPhieuDichVuChiTietId: line.detailId,
         hdPhieuDichVuId: caseGuid,
       });
+    // KGara không trả giá vốn (0): giữ giá vốn đã có (xuất kho/nhập tay), không reset về 0
+    const previousCost = Number(row.giaVonPhuTung ?? 0);
     Object.assign(row, line.data, { accountKey, deletedAt: null });
+    if (previousCost > 0 && !(Number(row.giaVonPhuTung ?? 0) > 0)) {
+      row.giaVonPhuTung = previousCost;
+    }
     toSave.push(row);
   }
   if (toSave.length > 0) {
