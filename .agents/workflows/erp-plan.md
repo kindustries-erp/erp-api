@@ -26,7 +26,7 @@ graph LR
    - Lệnh trong `Verification` khi lập plan chỉ là **đặc tả văn bản**. Chỉ chạy ở Giai đoạn 5 sau khi có `OK`.
 4. **Structure Routing bắt buộc**: task chạm cấu trúc code phải theo `/erp-ui-structure` hoặc `/erp-api-structure` (xem mục 3).
 5. **Session Checkpoint**: tạm dừng và tiếp tục không mất ngữ cảnh.
-6. **Knowledge-Sync Guard**: sau khi xong task đổi schema, contract, component, store hoặc token, cập nhật Module Skill ngay. Không để tri thức lỗi thời.
+6. **Knowledge-Sync Guard**: sau khi xong task đổi schema, contract, component, store hoặc token, cập nhật Module Skill ngay. Không để tri thức lỗi thời. Bản đồ module (`references/module-map.md` của `*-truth`) là file tự sinh từ `description` trong frontmatter của Module Skill: không sửa tay; tạo module mới hoặc đổi phạm vi module thì viết hoặc sửa `description` một dòng rồi chạy `/sync-agents`.
 
 ---
 
@@ -173,6 +173,8 @@ Khi user gõ `tiếp tục`, `continue` hoặc gửi prompt mới:
 - **Nạp `E2E_PASSWORD`**: nếu shell chưa có biến này, đọc dòng `E2E_PASSWORD=` trong `erp/erp-api/.env` và nạp vào tiến trình chạy script. Không in giá trị ra log, không ghi vào repo, không hỏi lại user nếu `.env` đã có. Trước khi ghi DB, chạy `SELECT current_database();` và báo tên DB. Không chạy E2E trên DB production.
 - **Final Gate**: phụ lục repo quy định lệnh và thứ tự (thường: commit → `git pull --rebase` → push → xác nhận CI xanh trên commit cuối).
 - **Knowledge & Skill Sync**: cập nhật Module Skill tương ứng liền sau khi xong task. Nếu là module mới thì tạo skill và gắn vào `*-truth` của repo. Không để tri thức chỉ nằm trong commit.
+- **Bản đồ module tự sinh**: sau khi tạo hoặc sửa `modules/<m>/SKILL.md`, chạy `/sync-agents` (Claude Code có hook tự dựng lại). `sync-agents.sh --check` và `validate-agent-system.sh` báo `DRIFT` hoặc lỗi nếu module chưa có trong bản đồ hoặc thiếu `description`.
+- **Context nạp sẵn gọn**: mỗi rule đặt đúng một nơi, nơi khác chỉ trỏ tới. File nạp sẵn (`.agents/AGENTS.md`, `*-truth/SKILL.md`) có trần byte trong `manifest.context_budget`; nội dung dài đặt trong `references/` và chỉ để lại con trỏ. Trước khi chốt task có sửa các file này, chạy `bash .agents/scripts/validate-agent-system.sh`.
 - **Walkthrough**: tạo `walkthrough.md` gồm bằng chứng test, trạng thái đồng bộ skill và hướng dẫn kiểm thử thủ công.
 
 ---
