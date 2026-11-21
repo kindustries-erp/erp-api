@@ -29,6 +29,7 @@ describe('UsersManagementService (facade)', () => {
     query = {
       findAll: jest.fn(),
       findById: jest.fn(),
+      findVisibleById: jest.fn().mockResolvedValue(user()),
       findEmployeeMap: jest.fn().mockResolvedValue(new Map()),
       findColumnOptions: jest.fn(),
     };
@@ -79,12 +80,12 @@ describe('UsersManagementService (facade)', () => {
   });
 
   it('findOne trả { message, data }; không có thì 404', async () => {
-    query.findById.mockResolvedValueOnce(user());
+    query.findVisibleById.mockResolvedValueOnce(user());
     const res = await service.findOne('u1');
     expect(res.message).toBeDefined();
     expect(res.data.id).toBe('u1');
 
-    query.findById.mockResolvedValueOnce(null);
+    query.findVisibleById.mockResolvedValueOnce(null);
     await expect(service.findOne('x')).rejects.toBeInstanceOf(
       NotFoundException,
     );

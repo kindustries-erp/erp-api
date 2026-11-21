@@ -269,6 +269,7 @@ Source of truth for this repo (`./erp-api`).
 ### 5. E2E/Smoke Mandate
 
 - Luồng nghiệp vụ nhiều bước (PR/PO, nhân bản, duyệt, tồn kho) phải có unit/integration spec, và smoke trên API đang chạy trong `test/smoke/` khi thay đổi hành vi nghiệp vụ. Ghi vào skill `erp-e2e-api-smoke`.
+- Trước mỗi lần chạy E2E/smoke: dừng tiến trình đang nghe `PORT` trong `erp/erp-api/.env` nếu đúng là repo này (cwd `erp/erp-api`), rồi chạy lại `bun run start:dev` để đảm bảo code mới nhất. Chi tiết: skill `erp-e2e-api-smoke` mục 3.
 - Mỗi lần API test/smoke/E2E: đọc `PORT` trong `erp/erp-api/.env` và đặt `E2E_API_URL=http://localhost:<PORT>`. Web đi kèm theo: API 10001→5171, 10002→5172, 10003→5173 (bảng đầy đủ trong skill `erp-e2e-api-smoke`). Không dùng port mặc định cố định.
 - Smoke không hardcode mật khẩu hay URL; đọc qua biến môi trường (`E2E_PASSWORD` bắt buộc).
 - Mỗi lần chạy smoke/E2E: nếu shell chưa có `E2E_PASSWORD`, đọc dòng `E2E_PASSWORD=` trong `erp-api/.env` (nguồn chuẩn) và nạp vào tiến trình chạy script (xem skill `erp-e2e-api-smoke`). Không in giá trị ra log, không ghi vào repo, không hỏi lại người dùng nếu `.env` đã có.
@@ -306,7 +307,7 @@ Source of truth for this repo (`./erp-api`).
 - MUST use bun/bunx exclusively (do NOT use npm)
 - by default, work on the `DATABASE_URL` in `.env` (master; luôn đọc `.env` để xác nhận DB thực tế); use the matching `.env.<tenant>-<stage>` file (greenway/klotus) only when explicitly indicated; scripts must take the env file explicitly (a bare `.env` may point at a production DB)
 - before any DB scan or write, run `SELECT current_database();` to confirm the actual DB and report it before writing; never infer the DB from a file name
-- when debugging localhost, run `bun start:dev` on the port defined by `PORT` in `.env` and log in with the test accounts `ai-test-tao@example.com` / `ai-test-duyet@example.com` using `E2E_PASSWORD` from `.env` (đọc giá trị từ `.env`, không ghi vào repo, không dùng tài khoản admin)
+- when debugging localhost, run `bun start:dev` on the port defined by `PORT` in `.env` and log in with the test accounts `ai-test-tao@example.com` / `ai-test-admin@example.com` using `E2E_PASSWORD` from `.env` (đọc giá trị từ `.env`, không ghi vào repo, không dùng tài khoản admin)
 - reuse existing components/modules/services/DTOs/helpers/utils/functions first; extend/adapt before forking parallel patterns
 - cancel or delete actions must have modal confirm (on UI side)
 - delete operations must be soft delete with `isDeleted` flag

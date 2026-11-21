@@ -14,7 +14,7 @@ Vị trí: `src/v2/modules/cases-garage`. Entity `CaseGarage` (header, `cases_ga
 ## 2. Route (route tĩnh trước `:id`)
 Đọc (`GARAGE:READ`): `GET /`, `column-options`, `services`, `gross-profit-report`, `by-code/:code`, `:id`. Query: `page`, `pageSize` ≤ 200, `search`, `sort`, `column_filters`, `column_*`, `date_ranges`, `summary_keys`, `origin`.
 Ghi (`CasesGarageCommandsController`): `GET next-code`, `POST /` (CREATE), `PATCH :id` (UPDATE), `PATCH :id/status`, `DELETE :id` (DELETE), `POST :id/services`, `PUT :id/services/:lineId`, `PATCH :id/services/:lineId/parts-cost`, `DELETE :id/services/:lineId`.
-Chi nhánh: header `x-kgara-branch-id` bắt buộc (thiếu 400). Mọi đọc/ghi kèm `branchExternalId`; xe chi nhánh khác = 404. Role `ai-test-tao` không có `GARAGE:DELETE` (403); smoke dùng `ai-test-duyet`.
+Chi nhánh: header `x-kgara-branch-id` bắt buộc (thiếu 400). Mọi đọc/ghi kèm `branchExternalId`; xe chi nhánh khác = 404. Role `ai-test-tao` không có `GARAGE:DELETE` (403); smoke dùng `ai-test-admin`.
 
 ## 3. Quy tắc
 - Mã xe NATIVE: `VV-YYYYMMDD-NNN` (tái dùng `nextDocumentNo`). Unique `(branchExternalId, accountKey, caseCode)` khi chưa xóa (`UQ_cases_garage_case_code_active`).
@@ -47,3 +47,9 @@ Dòng: `noi_dung_chi_tiet`→`description`, `san_pham_code/name`, `loai_san_pham
 ## Giá vốn `partsCost` từ sync V1 (KINDU-1386, cập nhật 2026-11-21)
 - `partsCost` (`parts_cost`) ánh xạ từ V1 `giaVonPhuTung` (field-map `erp-local`/`both`); `CaseProjectorService.projectLines` ghi đè khi chiếu, nên sau `POST sync/gross-profit` V2 phải bằng V1 mà không cần mở drawer. Cổng chiếu được gọi từ `KgaraCaseFinalizeService.finalizePeriod` (kể cả phiếu V1 đã đúng giá vốn) và sau sync chi tiết phiếu.
 - Chi tiết luồng journal → giá vốn → V2 và quy tắc không ghi đè `journal_items`: xem `../garage-cases/SKILL.md`, mục "Giá vốn phụ tùng".
+
+## Ngày giờ theo giờ Việt Nam (KINDU-1623, cập nhật 2026-11-21)
+- V1 `kgara_cases.ngay_*` là `timestamp` không múi giờ (giờ tường VN); V2 `*_at` là `timestamptz`. Field-map dùng kind `vnLocalDateTime` cho `ngayPhatSinh→issuedAt`, `ngayTiepNhan→receivedAt`, `ngayHoanThanhCongViec→completedAt`, `ngayGiaoXeFull→deliveredAt`: dựng instant = giờ tường VN trừ 7h, không phụ thuộc `TZ` tiến trình (jest chạy được với `TZ=UTC` và `TZ=Asia/Ho_Chi_Minh`). `kgaraDeletedAt` (timestamptz) giữ nguyên instant.
+- Đọc V2: `caseDate`/`completedDate` dùng `vnDateSql` (`AT TIME ZONE 'Asia/Ho_Chi_Minh'`); lọc `from/to` dùng `vnDayBound` (đầu/cuối ngày VN); dashboard `case-dashboard-range.ts` tính ngày/tuần (thứ Hai)/tháng theo lịch VN. Tiện ích chung: `src/v2/core/base-core/helpers/vn-time.util.ts`.
+- Dữ liệu cũ trên production có hai nhóm lệch (−7h từ lần chạy máy +07; 0h từ tiến trình UTC): cần chiếu lại để về một chuẩn (rollout riêng, lưu snapshot `issued_at` trước).
+

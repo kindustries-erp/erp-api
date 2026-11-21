@@ -2,6 +2,7 @@ import type {
   TableColumnMap,
   TableSummaryColumn,
 } from '@/common/utils/table-query';
+import { vnDateSql } from '@/v2/core/base-core/helpers/vn-time.util';
 
 /** Lãi gộp KGara khớp theo mã chứng từ + chi nhánh (subquery 1 dòng, không nhân dòng của danh sách). */
 const gp = (col: string) =>
@@ -52,9 +53,7 @@ export const CASE_COLUMNS: TableColumnMap = {
   receivedAt: d(col('received_at')),
   completedAt: d(col('completed_at')),
   deliveredAt: d(col('delivered_at')),
-  caseDate: d(
-    `TO_CHAR(COALESCE("c"."received_at", "c"."issued_at"), 'YYYY-MM-DD')`,
-  ),
+  caseDate: d(vnDateSql('COALESCE("c"."received_at", "c"."issued_at")')),
   createdAt: d(col('created_at')),
   updatedAt: d(col('updated_at')),
   totalAmountWithTax: n(col('total_amount_with_tax')),
@@ -106,9 +105,7 @@ export const SERVICE_COLUMNS: TableColumnMap = {
   statusName: t(col('status_name')),
   classification: t(col('classification')),
   branchExternalId: t(col('branch_external_id')),
-  caseDate: d(
-    `TO_CHAR(COALESCE("c"."received_at", "c"."issued_at"), 'YYYY-MM-DD')`,
-  ),
+  caseDate: d(vnDateSql('COALESCE("c"."received_at", "c"."issued_at")')),
 };
 
 export const SERVICE_SUMMARY_COLUMNS: TableSummaryColumn[] = [

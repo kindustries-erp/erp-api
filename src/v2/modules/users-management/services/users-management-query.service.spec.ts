@@ -68,6 +68,39 @@ describe('UsersManagementQueryService', () => {
     expect(qb.andWhere).not.toHaveBeenCalled();
   });
 
+  it('người không phải admin@liouni.com: query loại 2 tài khoản test', async () => {
+    qb.getOne = jest.fn().mockResolvedValue(null);
+    await service.findVisibleById('u1', 'nhanvien@example.com');
+    expect(qb.andWhere).toHaveBeenCalledWith(
+      'LOWER(e.email) NOT IN (:...hiddenEmails)',
+      {
+        hiddenEmails: ['ai-test-tao@example.com', 'ai-test-admin@example.com'],
+      },
+    );
+  });
+
+  it('admin@liouni.com: không thêm điều kiện ẩn tài khoản test', async () => {
+    qb.getOne = jest.fn().mockResolvedValue(null);
+    await service.findVisibleById('u1', 'admin@liouni.com');
+    const hidden = qb.andWhere.mock.calls.some(
+      ([sql]) =>
+        typeof sql === 'string' && sql.includes('NOT IN (:...hiddenEmails)'),
+    );
+    expect(hidden).toBe(false);
+  });
+
+  it('findVisibleById: tài khoản test trả null với người không có quyền', async () => {
+    qb.getOne = jest.fn().mockResolvedValue(null);
+    await expect(
+      service.findVisibleById('u1', 'nhanvien@example.com'),
+    ).resolves.toBeNull();
+    expect(qb.andWhere).toHaveBeenCalledWith('e.id = :id', { id: 'u1' });
+    expect(qb.andWhere).toHaveBeenCalledWith(
+      'LOWER(e.email) NOT IN (:...hiddenEmails)',
+      expect.anything(),
+    );
+  });
+
   it('findById chỉ đọc dòng chưa xóa mềm', async () => {
     await service.findById('u1');
     expect(repo.findOne).toHaveBeenCalledWith({

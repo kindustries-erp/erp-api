@@ -16,7 +16,7 @@ import { ErpInvoiceVoucherNetOff } from '../../erp-invoices-core/entities/erp_in
 import { ErpChartOfAccount } from '../../accounting-core/entities/erp_chart_of_account.entity';
 import { ErpModuleCategory } from '../../module-config/entities/erp_module_category.entity';
 import { ErpBusinessPartner } from '@/v2/core/business-partners-core';
-import {
+import type {
   CashflowClassification,
   CashflowPurpose,
 } from '../constants/cashflow-attributes.constants';

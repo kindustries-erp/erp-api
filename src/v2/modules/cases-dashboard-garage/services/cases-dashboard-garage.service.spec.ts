@@ -1,7 +1,17 @@
 import { BadRequestException } from '@nestjs/common';
 import { CasesDashboardGarageService } from './cases-dashboard-garage.service';
 
-const NOW = new Date(2026, 10, 20, 10, 0, 0); // 20/11/2026 giờ máy chủ
+/** Instant của giờ tường Việt Nam (UTC+7), không phụ thuộc múi giờ tiến trình. */
+const vn = (
+  y: number,
+  m: number,
+  d: number,
+  h = 0,
+  mi = 0,
+  s = 0,
+  ms = 0,
+): Date => new Date(Date.UTC(y, m, d, h - 7, mi, s, ms));
+const NOW = vn(2026, 10, 20, 10, 0, 0); // 20/11/2026 10:00 giờ VN
 
 describe('CasesDashboardGarageService (facade dashboard garage V2)', () => {
   let service: CasesDashboardGarageService;
@@ -33,8 +43,8 @@ describe('CasesDashboardGarageService (facade dashboard garage V2)', () => {
 
       expect(vehicles.listVehicles).toHaveBeenCalledWith({
         range: {
-          start: new Date(2026, 10, 1),
-          end: new Date(2026, 10, 30, 23, 59, 59, 999),
+          start: vn(2026, 10, 1),
+          end: vn(2026, 10, 30, 23, 59, 59, 999),
         },
         stage: 'quotation',
         classification: undefined,
@@ -49,18 +59,18 @@ describe('CasesDashboardGarageService (facade dashboard garage V2)', () => {
       await service.getPeriodKpis(undefined, NOW);
 
       const ranges = kpi.getPeriodKpis.mock.calls[0][0];
-      expect(ranges.day.start).toEqual(new Date(2026, 10, 20, 0, 0, 0, 0));
-      expect(ranges.day.end).toEqual(new Date(2026, 10, 20, 23, 59, 59, 999));
+      expect(ranges.day.start).toEqual(vn(2026, 10, 20, 0, 0, 0, 0));
+      expect(ranges.day.end).toEqual(vn(2026, 10, 20, 23, 59, 59, 999));
     });
 
     it('ngày gốc tính tháng (1..30/11) và tuần bắt đầu thứ Hai (16/11..22/11)', async () => {
       await service.getPeriodKpis('2026-11-18', NOW);
 
       const ranges = kpi.getPeriodKpis.mock.calls[0][0];
-      expect(ranges.month.start).toEqual(new Date(2026, 10, 1));
-      expect(ranges.month.end).toEqual(new Date(2026, 10, 30, 23, 59, 59, 999));
-      expect(ranges.week.start).toEqual(new Date(2026, 10, 16));
-      expect(ranges.week.end).toEqual(new Date(2026, 10, 22, 23, 59, 59, 999));
+      expect(ranges.month.start).toEqual(vn(2026, 10, 1));
+      expect(ranges.month.end).toEqual(vn(2026, 10, 30, 23, 59, 59, 999));
+      expect(ranges.week.start).toEqual(vn(2026, 10, 16));
+      expect(ranges.week.end).toEqual(vn(2026, 10, 22, 23, 59, 59, 999));
     });
 
     it('ngày sai định dạng thì ném BadRequest', () => {
@@ -79,20 +89,18 @@ describe('CasesDashboardGarageService (facade dashboard garage V2)', () => {
       expect(kpi.getPeriodKpis).toHaveBeenCalledTimes(1);
       expect(funnel.getFunnel).toHaveBeenCalledTimes(1);
       const ranges = kpi.getPeriodKpis.mock.calls[0][0];
-      expect(ranges.week.start).toEqual(new Date(2026, 10, 16));
+      expect(ranges.week.start).toEqual(vn(2026, 10, 16));
       const range = funnel.getFunnel.mock.calls[0][0];
-      expect(range.end).toEqual(new Date(2026, 10, 5, 23, 59, 59, 999));
+      expect(range.end).toEqual(vn(2026, 10, 5, 23, 59, 59, 999));
     });
 
     it('không truyền tham số nào thì mặc định hôm nay và tháng hiện tại', async () => {
       await service.getOverview(undefined, undefined, undefined, NOW);
 
       expect(kpi.getPeriodKpis.mock.calls[0][0].day.start).toEqual(
-        new Date(2026, 10, 20),
+        vn(2026, 10, 20),
       );
-      expect(funnel.getFunnel.mock.calls[0][0].start).toEqual(
-        new Date(2026, 10, 1),
-      );
+      expect(funnel.getFunnel.mock.calls[0][0].start).toEqual(vn(2026, 10, 1));
     });
 
     it('chạy hai truy vấn song song (cùng bắt đầu trước khi bên nào xong)', async () => {
@@ -138,24 +146,24 @@ describe('CasesDashboardGarageService (facade dashboard garage V2)', () => {
       await service.getFunnel(undefined, undefined, NOW);
 
       const range = funnel.getFunnel.mock.calls[0][0];
-      expect(range.start).toEqual(new Date(2026, 10, 1));
-      expect(range.end).toEqual(new Date(2026, 10, 30, 23, 59, 59, 999));
+      expect(range.start).toEqual(vn(2026, 10, 1));
+      expect(range.end).toEqual(vn(2026, 10, 30, 23, 59, 59, 999));
     });
 
     it('date_to bao trọn cả ngày cuối', async () => {
       await service.getFunnel('2026-11-01', '2026-11-05', NOW);
 
       const range = funnel.getFunnel.mock.calls[0][0];
-      expect(range.start).toEqual(new Date(2026, 10, 1));
-      expect(range.end).toEqual(new Date(2026, 10, 5, 23, 59, 59, 999));
+      expect(range.start).toEqual(vn(2026, 10, 1));
+      expect(range.end).toEqual(vn(2026, 10, 5, 23, 59, 59, 999));
     });
 
     it('chỉ có date_from thì date_to lấy cùng ngày đó', async () => {
       await service.getFunnel('2026-11-03', undefined, NOW);
 
       const range = funnel.getFunnel.mock.calls[0][0];
-      expect(range.start).toEqual(new Date(2026, 10, 3));
-      expect(range.end).toEqual(new Date(2026, 10, 3, 23, 59, 59, 999));
+      expect(range.start).toEqual(vn(2026, 10, 3));
+      expect(range.end).toEqual(vn(2026, 10, 3, 23, 59, 59, 999));
     });
 
     it('date_from sau date_to thì ném BadRequest', () => {

@@ -10,10 +10,12 @@ import {
   Param,
   Body,
   Query,
+  Req,
   UseGuards,
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import type { Request } from 'express';
 import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
 import { RequirePermissions } from '@/auth/decorators/require-permissions.decorator';
@@ -26,6 +28,11 @@ import {
   UpdateCoreRolePermissionsDto,
   UpdateCoreRoleUsersDto,
 } from '../dto/rbac-core.dto';
+
+type ViewerRequest = Request & { user?: { email?: string } };
+
+const viewerOf = (request?: ViewerRequest): string | null =>
+  request?.user?.email ?? null;
 
 /** Route chuẩn v2: /api/v2/rbac-roles/.... */
 @ApiTags('RBAC Core')
@@ -44,6 +51,7 @@ export class RbacRolesController {
   @Get('column-options')
   async getRolesColumnOptions(
     @Query('column') column: string,
+    @Req() request: ViewerRequest,
     @Query('search') search?: string,
     @Query('page') page: string = '1',
     @Query('pageSize') pageSize: string = '20',
@@ -55,6 +63,7 @@ export class RbacRolesController {
       parseInt(page, 10) || 1,
       parseInt(pageSize, 10) || 20,
       filters,
+      viewerOf(request),
     );
   }
 
@@ -74,8 +83,11 @@ export class RbacRolesController {
   })
   @ApiOkResponse({ type: RoleListResponseDto })
   @Get()
-  async getRoles(@Query() query: ListCoreRolesDto) {
-    return this.rbacRolesService.getRolesPaginated(query);
+  async getRoles(
+    @Query() query: ListCoreRolesDto,
+    @Req() request: ViewerRequest,
+  ) {
+    return this.rbacRolesService.getRolesPaginated(query, viewerOf(request));
   }
 
   @RequirePermissions({
@@ -92,8 +104,11 @@ export class RbacRolesController {
     action: ErpAction.MANAGE,
   })
   @Get(':id')
-  async getRole(@Param('id', ParseUUIDPipe) id: string) {
-    return this.rbacRolesService.getRoleById(id);
+  async getRole(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: ViewerRequest,
+  ) {
+    return this.rbacRolesService.getRoleById(id, viewerOf(request));
   }
 
   @RequirePermissions({
@@ -104,7 +119,9 @@ export class RbacRolesController {
   async updateRole(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateCoreRoleDto,
+    @Req() request: ViewerRequest,
   ) {
+    await this.rbacRolesService.assertRoleVisible(id, viewerOf(request));
     return this.rbacRolesService.updateRole(id, dto);
   }
 
@@ -113,7 +130,11 @@ export class RbacRolesController {
     action: ErpAction.MANAGE,
   })
   @Delete(':id')
-  async deleteRole(@Param('id', ParseUUIDPipe) id: string) {
+  async deleteRole(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: ViewerRequest,
+  ) {
+    await this.rbacRolesService.assertRoleVisible(id, viewerOf(request));
     return this.rbacRolesService.deleteRole(id);
   }
 
@@ -122,7 +143,11 @@ export class RbacRolesController {
     action: ErpAction.MANAGE,
   })
   @Get(':roleId/permissions')
-  async getRolePermissions(@Param('roleId', ParseUUIDPipe) roleId: string) {
+  async getRolePermissions(
+    @Param('roleId', ParseUUIDPipe) roleId: string,
+    @Req() request: ViewerRequest,
+  ) {
+    await this.rbacRolesService.assertRoleVisible(roleId, viewerOf(request));
     const permissions = await this.rbacRolesService.getRolePermissions(roleId);
     return { permissions };
   }
@@ -135,7 +160,9 @@ export class RbacRolesController {
   async updateRolePermissions(
     @Param('roleId', ParseUUIDPipe) roleId: string,
     @Body() dto: UpdateCoreRolePermissionsDto,
+    @Req() request: ViewerRequest,
   ) {
+    await this.rbacRolesService.assertRoleVisible(roleId, viewerOf(request));
     return this.rbacRolesService.updateRolePermissions(roleId, dto);
   }
 
@@ -144,8 +171,15 @@ export class RbacRolesController {
     action: ErpAction.MANAGE,
   })
   @Get(':roleId/users')
-  async getRoleUsers(@Param('roleId', ParseUUIDPipe) roleId: string) {
-    const users = await this.rbacRolesService.getRoleUsers(roleId);
+  async getRoleUsers(
+    @Param('roleId', ParseUUIDPipe) roleId: string,
+    @Req() request: ViewerRequest,
+  ) {
+    await this.rbacRolesService.assertRoleVisible(roleId, viewerOf(request));
+    const users = await this.rbacRolesService.getRoleUsers(
+      roleId,
+      viewerOf(request),
+    );
     return { users };
   }
 
@@ -157,7 +191,13 @@ export class RbacRolesController {
   async updateRoleUsers(
     @Param('roleId', ParseUUIDPipe) roleId: string,
     @Body() dto: UpdateCoreRoleUsersDto,
+    @Req() request: ViewerRequest,
   ) {
-    return this.rbacRolesService.updateRoleUsers(roleId, dto);
+    await this.rbacRolesService.assertRoleVisible(roleId, viewerOf(request));
+    return this.rbacRolesService.updateRoleUsers(
+      roleId,
+      dto,
+      viewerOf(request),
+    );
   }
 }

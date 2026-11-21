@@ -67,14 +67,18 @@ describe('RbacRolesService (Facade)', () => {
     await facade.getRolesPaginated({ page: 2 } as any);
     await facade.getColumnOptions('name', 'a', 1, 20, '{}');
     await facade.getRoleById('r1');
-    expect(query.getRolesPaginated).toHaveBeenCalledWith({ page: 2 });
-    expect(query.getRoleById).toHaveBeenCalledWith('r1');
+    expect(query.getRolesPaginated).toHaveBeenCalledWith(
+      { page: 2 },
+      undefined,
+    );
+    expect(query.getRoleById).toHaveBeenCalledWith('r1', undefined);
     expect(query.getColumnOptions).toHaveBeenCalledWith(
       'name',
       'a',
       1,
       20,
       '{}',
+      undefined,
     );
   });
 
@@ -98,8 +102,12 @@ describe('RbacRolesService (Facade)', () => {
     expect(permissions.updateRolePermissions).toHaveBeenCalledWith('r1', {
       permissions: [],
     });
-    expect(users.getRoleUsers).toHaveBeenCalledWith('r1');
-    expect(users.updateRoleUsers).toHaveBeenCalledWith('r1', { userIds: [] });
+    expect(users.getRoleUsers).toHaveBeenCalledWith('r1', undefined);
+    expect(users.updateRoleUsers).toHaveBeenCalledWith(
+      'r1',
+      { userIds: [] },
+      undefined,
+    );
   });
 
   describe('getAvailableResources', () => {

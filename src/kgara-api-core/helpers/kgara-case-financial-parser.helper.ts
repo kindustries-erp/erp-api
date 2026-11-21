@@ -41,6 +41,27 @@ export interface JournalCostBreakdown {
   totalCost: number;
 }
 
+/** TK có `GiaTriTien` là số tiền chi phí/giảm trừ khi `ChiPhi` vắng (khác doanh thu 131/511). */
+const COST_TK_WITH_VALUE_FALLBACK = new Set(['1541', '1542', '1543', '521']);
+
+/**
+ * Số tiền chi phí của một dòng định khoản. Dùng `ChiPhi ?? ChiPhiVon`; `GiaTriTien` chỉ là
+ * dự phòng cho TK chi phí/giảm trừ khi cả hai vắng. Không dùng `||` vì dòng doanh thu
+ * (Nợ 131) có `ChiPhi = 0` và `GiaTriTien > 0` sẽ bị tính nhầm thành chi phí.
+ */
+export function journalItemCostAmount(item: any, tkNo: string): number {
+  const direct = item?.ChiPhi ?? item?.ChiPhiVon;
+  if (direct != null && direct !== '') {
+    const n = Number(direct);
+    return Number.isFinite(n) ? n : 0;
+  }
+  if (COST_TK_WITH_VALUE_FALLBACK.has(tkNo)) {
+    const n = Number(item?.GiaTriTien ?? 0);
+    return Number.isFinite(n) ? n : 0;
+  }
+  return 0;
+}
+
 export class KgaraCaseFinancialParserHelper {
   static parseFinancialSummary(rawData: any): KgaraCaseFinancialSummary {
     const discountAmount = Number(rawData?.TienChietKhau || 0);
@@ -151,9 +172,7 @@ export class KgaraCaseFinancialParserHelper {
 
     for (const item of journalItems) {
       const tkNo = String(item.TaiKhoanNoCode || item.TaiKhoanNo || '');
-      const costVal = Number(
-        item.ChiPhi || item.ChiPhiVon || item.GiaTriTien || 0,
-      );
+      const costVal = journalItemCostAmount(item, tkNo);
       if (tkNo === '1541') {
         warehousePartsCost += costVal;
       } else if (tkNo === '1542') {
@@ -167,12 +186,10 @@ export class KgaraCaseFinancialParserHelper {
       }
     }
 
+    // 521 là giảm trừ doanh thu, không thuộc chi phí (KGara: LoiNhuan = DoanhThu - ChiPhi,
+    // trong đó ChiPhi thô đã gồm 521; ERP tách riêng để biên tính trên doanh thu thuần).
     const totalCost =
-      warehousePartsCost +
-      outsourceCost +
-      commissionCost +
-      discountCost +
-      otherCost;
+      warehousePartsCost + outsourceCost + commissionCost + otherCost;
 
     return {
       warehousePartsCost,

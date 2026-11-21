@@ -45,7 +45,7 @@ const login = await fetch(`${BASE}/api/v2/auth-sessions/login`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
-    email: 'ai-test-duyet@example.com',
+    email: 'ai-test-admin@example.com',
     password: PASSWORD,
   }),
 });

@@ -62,7 +62,11 @@ describe('CaseListQueryService', () => {
     for (const { sql } of ordered) expect(sql).toContain('"c"."id" ASC');
     expect(cap.calls[0].sql).not.toContain('OR 1=1');
     expect(cap.calls[0].params).toEqual(
-      expect.arrayContaining(['2026-08-01 00:00:00', "%x' OR 1=1%"]),
+      expect.arrayContaining([
+        // Đầu ngày 2026-08-01 theo giờ VN (UTC+7)
+        new Date('2026-07-31T17:00:00.000Z'),
+        "%x' OR 1=1%",
+      ]),
     );
   });
 

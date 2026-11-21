@@ -52,10 +52,13 @@ describe('UsersManagementController', () => {
 
   it('chuyển query xuống facade', async () => {
     const query = {} as never;
-    await controller.findAll(query);
-    await controller.columnOptions(query);
-    expect(service.findAll).toHaveBeenCalledWith(query);
-    expect(service.findColumnOptions).toHaveBeenCalledWith(query);
+    await controller.findAll(query, request);
+    await controller.columnOptions(query, request);
+    expect(service.findAll).toHaveBeenCalledWith(query, 'admin@liouni.com');
+    expect(service.findColumnOptions).toHaveBeenCalledWith(
+      query,
+      'admin@liouni.com',
+    );
   });
 
   it('mutation truyền ngữ cảnh audit có actor từ JWT', async () => {

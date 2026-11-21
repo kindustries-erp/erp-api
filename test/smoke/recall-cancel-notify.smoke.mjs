@@ -4,14 +4,14 @@
 //   E2E_API_URL      (mặc định suy từ PORT trong erp-api/.env, xem e2e-ports.mjs)
 //   E2E_PASSWORD     (BẮT BUỘC, mật khẩu tài khoản test; không hardcode)
 //   E2E_TAO_EMAIL    (mặc định ai-test-tao@example.com)
-//   E2E_DUYET_EMAIL  (mặc định ai-test-duyet@example.com)
+//   E2E_ADMIN_EMAIL  (mặc định ai-test-admin@example.com)
 // Chạy: bun run test:smoke:recall-cancel
 import { resolveApiUrl } from './e2e-ports.mjs';
 
 const BASE = resolveApiUrl();
 const PASSWORD = process.env.E2E_PASSWORD;
 const TAO_EMAIL = process.env.E2E_TAO_EMAIL ?? 'ai-test-tao@example.com';
-const DUYET_EMAIL = process.env.E2E_DUYET_EMAIL ?? 'ai-test-duyet@example.com';
+const ADMIN_ACCOUNT_EMAIL = process.env.E2E_ADMIN_EMAIL ?? 'ai-test-admin@example.com';
 if (!PASSWORD) {
   console.error('Thiếu E2E_PASSWORD. Đặt mật khẩu tài khoản test rồi chạy lại.');
   process.exit(2);
@@ -85,7 +85,7 @@ function newNotifications(before, after, title, requestId) {
 let requestNo = '';
 const today = new Date().toISOString().slice(0, 10);
 const tao = await login(TAO_EMAIL);
-const duyet = await login(DUYET_EMAIL);
+const duyet = await login(ADMIN_ACCOUNT_EMAIL);
 console.log('tao user id:', tao.user.id, '| duyet user id:', duyet.user.id);
 
 // 1. Tạo đề nghị nháp (người tạo)

@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, SelectQueryBuilder } from 'typeorm';
 import { CoreRole } from '@/v2/core/rbac-core/entities/core-role.entity';
 import { applyMultiKeywordFilter } from '@/common/utils/query-builder.util';
 import {
@@ -23,6 +23,22 @@ import {
   mapRoleColumnToSqlField,
 } from '../helpers/role-table-filter.helper';
 import { toRoleListItem, toRoleResponse } from '../helpers/rbac-role.mapper';
+import {
+  canViewTestAccounts,
+  HIDDEN_TEST_ROLE_NAMES,
+  isHiddenTestRoleName,
+} from '@/v2/core/users-core';
+
+/** Ẩn role test khỏi danh sách và gợi ý cột với người không có quyền. */
+function applyHiddenRoleFilter(
+  qb: SelectQueryBuilder<CoreRole>,
+  viewerEmail?: string | null,
+): void {
+  if (canViewTestAccounts(viewerEmail)) return;
+  qb.andWhere('role.name NOT IN (:...hiddenRoleNames)', {
+    hiddenRoleNames: [...HIDDEN_TEST_ROLE_NAMES],
+  });
+}
 
 export interface RoleColumnOptionsResponse {
   items: { label: string; value: string }[];
@@ -37,7 +53,10 @@ export class RoleQueryService {
     private readonly roleRepository: Repository<CoreRole>,
   ) {}
 
-  async getRolesPaginated(query: ListCoreRolesDto): Promise<RoleListResponse> {
+  async getRolesPaginated(
+    query: ListCoreRolesDto,
+    viewerEmail?: string | null,
+  ): Promise<RoleListResponse> {
     const page = Math.max(1, Number(query.page) || 1);
     const pageSize = Math.max(1, Number(query.pageSize) || 20);
 
@@ -45,6 +64,7 @@ export class RoleQueryService {
       .createQueryBuilder('role')
       .leftJoinAndSelect('role.userRoles', 'ur')
       .leftJoinAndSelect('ur.user', 'user');
+    applyHiddenRoleFilter(qb, viewerEmail);
 
     applyRoleGlobalSearch(qb, query.search);
     applyRoleColumnSearch(qb, query.column_search);
@@ -70,6 +90,7 @@ export class RoleQueryService {
     page: number = 1,
     pageSize: number = 20,
     filtersStr?: string,
+    viewerEmail?: string | null,
   ): Promise<RoleColumnOptionsResponse> {
     const rawSqlField = mapRoleColumnToSqlField(column);
     if (!rawSqlField) {
@@ -77,6 +98,7 @@ export class RoleQueryService {
     }
 
     const qb = this.roleRepository.createQueryBuilder('role');
+    applyHiddenRoleFilter(qb, viewerEmail);
     applyRoleCrossColumnFilters(qb, column, filtersStr);
 
     qb.select(`${rawSqlField}`, 'value');
@@ -113,9 +135,15 @@ export class RoleQueryService {
     return { items, pagination: buildPagination(page, pageSize, total) };
   }
 
-  async getRoleById(id: string): Promise<RoleResponse> {
+  /** Role test với người không có quyền trả 404 như không tồn tại. */
+  async getRoleById(
+    id: string,
+    viewerEmail?: string | null,
+  ): Promise<RoleResponse> {
     const role = await this.roleRepository.findOne({ where: { id } });
-    if (!role) {
+    const hidden =
+      isHiddenTestRoleName(role?.name) && !canViewTestAccounts(viewerEmail);
+    if (!role || hidden) {
       throw new NotFoundException(`Role with id ${id} not found`);
     }
     return toRoleResponse(role);
