@@ -14,6 +14,12 @@ import { KgaraClientService } from '../kgara-client.service';
 import { SyncRunLoggerService } from './sync-run-logger.service';
 import { SyncDeletionService } from './sync-deletion.service';
 import { SyncGrossProfitService } from './sync-gross-profit.service';
+import { KgaraCaseFinalizeService } from './kgara-case-finalize.service';
+import { KgaraCostEnricherHelper } from '../helpers/kgara-cost-enricher.helper';
+import {
+  buildDetailSnapshot,
+  isDetailStale,
+} from '../utils/kgara-detail-snapshot.util';
 import { GarageCaseForecastService } from './garage-case-forecast.service';
 import { GarageHubService } from '../hub/garage-hub.service';
 import { notifyLedgerProjector } from '../hub/ledger-projector.port';
@@ -72,6 +78,8 @@ export class SyncCaseService {
     private readonly garageHub?: GarageHubService,
     @Optional()
     private readonly moduleRef?: ModuleRef,
+    @Optional()
+    private readonly finalizer?: KgaraCaseFinalizeService,
   ) {}
 
   /** Chiếu vụ việc vừa đồng bộ sang sổ nợ v2 (lỗi chỉ log). */
@@ -539,21 +547,10 @@ export class SyncCaseService {
               if (group.Items) {
                 for (const item of group.Items) {
                   if (item.VuViecID) {
-                    await this.grossProfitRepo.upsert(
-                      {
-                        hdPhieuDichVuId: item.VuViecID,
-                        branchExternalId,
-                        vuViecCode: item.VuViecCode,
-                        vuViecName: item.VuViecName,
-                        tenKhachHang: item.TenKhachHang,
-                        doanhThu: item.DoanhThu,
-                        chiPhi: item.ChiPhi,
-                        loiNhuan: item.LoiNhuan,
-                        reportFrom: range.from,
-                        reportTo: range.to,
-                        rawData: item,
-                      },
-                      ['hdPhieuDichVuId'],
+                    await this.syncGrossProfit.persistItem(
+                      item,
+                      branchExternalId,
+                      range,
                     );
                   }
                 }
@@ -854,7 +851,14 @@ export class SyncCaseService {
         );
       }
       gwCase.dataAsOf = parseSafeDate(response.dataAsOf);
+      const prevRawLines =
+        gwCase.rawData?.ListPhieuDichVuChiTiet ??
+        gwCase.rawData?.PhieuDichVuChiTiet;
       gwCase.rawData = caseData;
+      KgaraCostEnricherHelper.carryOverManualLines(
+        prevRawLines,
+        caseData.ListPhieuDichVuChiTiet ?? caseData.PhieuDichVuChiTiet,
+      );
       gwCase.accountKey = effectiveAccountKey;
 
       if (effectiveAccountKey === KgaraAccountKey.OJ) {
@@ -939,6 +943,7 @@ export class SyncCaseService {
         this.logger.log(`Case ${targetCaseId} was restored from soft-delete.`);
       }
 
+      gwCase.rawData.__detailSnapshot = buildDetailSnapshot(gwCase);
       await this.caseRepo.save(gwCase);
       await this.projectCaseToLedger(gwCase.id);
 
@@ -1040,6 +1045,8 @@ export class SyncCaseService {
           ),
       );
       linesCount = linesResult.upserted;
+      // Khôi phục giá vốn từ journal đã lưu (payload KGara không có giá vốn), rồi mới chiếu V2
+      await this.finalizer?.finalizeCase(gwCase);
       await this.projectCaseToV2(targetCaseId);
       if (linesResult.conflicts.length > 0) {
         this.logger.warn(
@@ -1141,7 +1148,9 @@ export class SyncCaseService {
           c.rawData?.ListPhieuDichVuChiTiet ||
           c.rawData?.PhieuDichVuChiTiet ||
           c.rawData?.HoaDonChiTiet;
-        return !Array.isArray(rawList) || rawList.length === 0;
+        return (
+          !Array.isArray(rawList) || rawList.length === 0 || isDetailStale(c)
+        );
       });
     }
 

@@ -43,3 +43,7 @@ Dòng: `noi_dung_chi_tiet`→`description`, `san_pham_code/name`, `loai_san_pham
 ## 7. Liên quan: báo cáo theo xe
 `cases_garage` mỗi dòng là một phiếu (không có khóa xe). Báo cáo/drill-down theo XE nằm ở module `cases-dashboard-garage` (`GET api/v2/cases-dashboard-garage`, mỗi dòng một xe; tổng/phễu ở `GET …/overview`; khóa xe = `normalizedPlateSql('license_plate')` trong `src/common/utils/license-plate.ts`: bỏ dấu tiếng Việt, Đ thành D, chỉ giữ `A-Z0-9`; phiếu không biển khóa theo id). Danh sách phiếu `cases-garage` vẫn theo phiếu; đừng dùng `COUNT(id)` làm "số xe".
 
+
+## Giá vốn `partsCost` từ sync V1 (KINDU-1386, cập nhật 2026-11-21)
+- `partsCost` (`parts_cost`) ánh xạ từ V1 `giaVonPhuTung` (field-map `erp-local`/`both`); `CaseProjectorService.projectLines` ghi đè khi chiếu, nên sau `POST sync/gross-profit` V2 phải bằng V1 mà không cần mở drawer. Cổng chiếu được gọi từ `KgaraCaseFinalizeService.finalizePeriod` (kể cả phiếu V1 đã đúng giá vốn) và sau sync chi tiết phiếu.
+- Chi tiết luồng journal → giá vốn → V2 và quy tắc không ghi đè `journal_items`: xem `../garage-cases/SKILL.md`, mục "Giá vốn phụ tùng".

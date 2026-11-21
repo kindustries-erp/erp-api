@@ -1,6 +1,11 @@
 import { NotFoundException } from '@nestjs/common';
 import { KgaraCaseLookupService } from './kgara-case-lookup.service';
+import { notifyCaseProjector } from '../hub/case-projector.port';
 import { EntityCustomFieldsHelper } from '../../module-config/helpers/entity-custom-fields.helper';
+
+jest.mock('../hub/case-projector.port', () => ({
+  notifyCaseProjector: jest.fn().mockResolvedValue(undefined),
+}));
 
 describe('KgaraCaseLookupService', () => {
   let service: KgaraCaseLookupService;
@@ -9,8 +14,10 @@ describe('KgaraCaseLookupService', () => {
   let grossProfitRepoMock: any;
   let clientMock: any;
   let dataSourceMock: any;
+  let caseServiceRepoMock: any;
 
   beforeEach(() => {
+    (notifyCaseProjector as jest.Mock).mockClear();
     jest
       .spyOn(EntityCustomFieldsHelper, 'enrichOne')
       .mockResolvedValue(undefined as any);
@@ -19,7 +26,7 @@ describe('KgaraCaseLookupService', () => {
       findOne: jest.fn(),
       save: jest.fn(),
     };
-    const caseServiceRepoMock = {
+    caseServiceRepoMock = {
       update: jest.fn().mockResolvedValue(undefined),
     };
     settlementRepoMock = {
@@ -36,7 +43,7 @@ describe('KgaraCaseLookupService', () => {
 
     service = new KgaraCaseLookupService(
       caseRepoMock,
-      caseServiceRepoMock as any,
+      caseServiceRepoMock,
       settlementRepoMock,
       grossProfitRepoMock,
       clientMock,
@@ -191,6 +198,113 @@ describe('KgaraCaseLookupService', () => {
       expect(mockCase.rawData.ListPhieuDichVuChiTiet[0].TongVon).toBe(380000);
       expect(mockCase.rawData.costEnriched).toBe(true);
       expect(caseRepoMock.save).toHaveBeenCalledWith(mockCase);
+    });
+
+    const makeCase = (rawExtra: Record<string, any> = {}) => ({
+      id: 'case-9',
+      soChungTu: 'GR-PDV2609-0009',
+      hdPhieuDichVuId: 'ext-9',
+      branchExternalId: 'branch-1',
+      rawData: {
+        ListPhieuDichVuChiTiet: [
+          {
+            HdPhieuDichVuChiTietID: 'line-1',
+            LoaiSanPhamCode: 'PT',
+            SanPhamName: 'Nhớt động cơ 5W-30',
+            SoLuongHoaDon: 2,
+            GiaVonPhuTung: 0,
+          },
+        ],
+        ...rawExtra,
+      } as any,
+    });
+    const journal1541 = (amount: number) => ({
+      rawData: {
+        journal_items: [
+          {
+            TaiKhoanNoCode: '1541',
+            GiaTriTien: amount,
+            ChiPhi: amount,
+            NoiDung: '[51M80574] - [Nhớt động cơ 5W-30]',
+          },
+        ],
+      },
+    });
+
+    it('chiếu lại V2 sau khi làm giàu giá vốn (AC-5)', async () => {
+      const mockCase = makeCase();
+      grossProfitRepoMock.findOne.mockResolvedValue(journal1541(380000));
+
+      const res = await service.enrichCostForCase(mockCase as any);
+
+      expect(res).toBe(true);
+      expect(notifyCaseProjector).toHaveBeenCalledWith(
+        undefined,
+        expect.anything(),
+        'case-9',
+      );
+      expect(caseServiceRepoMock.update).toHaveBeenCalledWith(
+        { hdPhieuDichVuChiTietId: 'line-1' },
+        { giaVonPhuTung: 190000 },
+      );
+    });
+
+    it('phiếu đã làm giàu và journal không đổi thì bỏ qua (AC-6)', async () => {
+      const mockCase = makeCase({
+        costEnriched: true,
+        costBreakdown: { warehousePartsCost: 380000 },
+      });
+      grossProfitRepoMock.findOne.mockResolvedValue(journal1541(380000));
+
+      const res = await service.enrichCostForCase(mockCase as any);
+
+      expect(res).toBe(false);
+      expect(caseRepoMock.save).not.toHaveBeenCalled();
+      expect(notifyCaseProjector).not.toHaveBeenCalled();
+    });
+
+    it('phiếu đã làm giàu nhưng xuất kho hạch toán thêm thì làm mới (AC-6)', async () => {
+      const mockCase = makeCase({
+        costEnriched: true,
+        costBreakdown: { warehousePartsCost: 0 },
+      });
+      grossProfitRepoMock.findOne.mockResolvedValue(journal1541(380000));
+
+      const res = await service.enrichCostForCase(mockCase as any);
+
+      expect(res).toBe(true);
+      expect(mockCase.rawData.ListPhieuDichVuChiTiet[0].GiaVonPhuTung).toBe(
+        190000,
+      );
+      expect(mockCase.rawData.costBreakdown.warehousePartsCost).toBe(380000);
+    });
+
+    it('skipRemote không gọi KGara khi chưa có journal đã lưu', async () => {
+      const mockCase = makeCase();
+      grossProfitRepoMock.findOne.mockResolvedValue({ rawData: {} });
+
+      const res = await service.enrichCostForCase(mockCase as any, {
+        skipRemote: true,
+      });
+
+      expect(res).toBe(false);
+      expect(clientMock.getGrossProfitJournal).not.toHaveBeenCalled();
+    });
+
+    it('force làm lại dù đã làm giàu', async () => {
+      const mockCase = makeCase({
+        costEnriched: true,
+        costBreakdown: { warehousePartsCost: 380000 },
+      });
+      grossProfitRepoMock.findOne.mockResolvedValue(journal1541(380000));
+
+      const res = await service.enrichCostForCase(mockCase as any, {
+        force: true,
+        notifyProjector: false,
+      });
+
+      expect(res).toBe(true);
+      expect(notifyCaseProjector).not.toHaveBeenCalled();
     });
 
     it('should allow manual updating of line costs on ERP', async () => {

@@ -53,6 +53,8 @@ import { KgaraCaseServicesExportService } from './services/kgara-case-services-e
 import { SyncRunLoggerService } from './services/sync-run-logger.service';
 import { SyncDeletionService } from './services/sync-deletion.service';
 import { SyncGrossProfitService } from './services/sync-gross-profit.service';
+import { SyncGrossProfitJournalService } from './services/sync-gross-profit-journal.service';
+import { KgaraCaseFinalizeService } from './services/kgara-case-finalize.service';
 import { SyncDebtService } from './services/sync-debt.service';
 import { SyncCaseService } from './services/sync-case.service';
 import { GarageCaseForecastService } from './services/garage-case-forecast.service';
@@ -150,6 +152,8 @@ import { GarageOpexExportController } from './controllers/garage-opex-export.con
     SyncRunLoggerService,
     SyncDeletionService,
     SyncGrossProfitService,
+    SyncGrossProfitJournalService,
+    KgaraCaseFinalizeService,
     SyncDebtService,
     SyncCaseService,
     GarageCaseForecastService,
@@ -217,6 +221,8 @@ import { GarageOpexExportController } from './controllers/garage-opex-export.con
     SyncRunLoggerService,
     SyncDeletionService,
     SyncGrossProfitService,
+    SyncGrossProfitJournalService,
+    KgaraCaseFinalizeService,
     SyncDebtService,
     SyncCaseService,
     GarageCaseForecastService,

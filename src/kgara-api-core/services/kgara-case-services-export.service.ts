@@ -1,4 +1,4 @@
-import { Injectable, Optional } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as ExcelJS from 'exceljs';
@@ -24,6 +24,8 @@ export interface CaseServicesExportParams {
 
 @Injectable()
 export class KgaraCaseServicesExportService {
+  private readonly logger = new Logger(KgaraCaseServicesExportService.name);
+
   constructor(
     private readonly caseServicesQueryService: KgaraCaseServicesQueryService,
     @Optional()
@@ -76,7 +78,10 @@ export class KgaraCaseServicesExportService {
         });
       }
       return out;
-    } catch {
+    } catch (err: any) {
+      this.logger.warn(
+        `Làm giàu giá vốn từ journal thất bại cho ${codes.length} phiếu, xuất giá vốn như đã lưu: ${err?.message || err}`,
+      );
       return items;
     }
   }

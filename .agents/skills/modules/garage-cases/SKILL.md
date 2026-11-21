@@ -1030,3 +1030,15 @@ Nhằm tinh gọn tối đa thanh công cụ (Toolbar) và đồng bộ trải n
 
 ### Xuất Excel: cột xe và đối tượng thanh toán (KINDU-1460)
 - `COMPLETED_CASES_OPTIONAL_COLUMNS` có thêm `soKhung`, `hangXe`, `dongXe`, `namSanXuat`, `doiTuongThanhToan` (chỉ sheet "Bảng kê phiếu kết thúc", chọn qua `selectedColumns`; không thuộc 30 cột mặc định). Builder dùng `pickNameOrCode` (tên, thiếu thì mã, rỗng `—`); sheet lãi lỗ và chi tiết không đổi.
+
+## Giá vốn phụ tùng: journal → giá vốn từng dòng → V2 (KINDU-1386, cập nhật 2026-11-21)
+- **Nguồn**: journal TK 1541 của KGara (`gross-profit-detail/journal`). Gọi KHÔNG kèm `vuViecID` thì trả đủ mọi vụ việc của khoảng ngày; journal không có `VuViecID`, ghép theo `VuViecCode` + chi nhánh. Body lỗi của KGara (`status` != 200, ví dụ sai header chi nhánh) phải ném lỗi, không coi là rỗng.
+- **Header chi nhánh** cho V1, V2 và sync (gọi KGara) là `externalId` của chi nhánh, không phải id nội bộ. `POST sync/gross-profit` với chi nhánh nhiều tài khoản cần `account` (MAIN/OJ).
+- **Luồng sync**: `SyncGrossProfitService.syncGrossProfitForBranch` (từng tháng) → `persistItem` (upsert lãi gộp, GIỮ `raw_data.journal_items`) → `SyncGrossProfitJournalService.syncJournalForRange` (merge `journal_items` bằng `raw_data || jsonb_build_object(...)`, không thay cả `raw_data`) → `KgaraCaseFinalizeService.finalizePeriod` (làm giàu giá vốn từng dòng + chiếu V2). Response `sync/gross-profit`: `{ journalCases, enrichedCases, projected, failed }`.
+- **Quy tắc không ghi đè**: mọi chỗ upsert `kgara_gross_profit` phải đi qua `persistItem`; không được `rawData: item`. `kgara_gross_profit.hd_phieu_dich_vu_id` KHÔNG trùng `kgara_cases.hd_phieu_dich_vu_id`: ghép theo `vu_viec_code` ↔ `so_chung_tu`. `report_from/report_to` lưu giờ VN nên lệch 1 ngày khi so với ngày thuần (finalize nới ±1 ngày).
+- **`KgaraCaseFinalizeService`**: `finalizeCase` (sau sync chi tiết 1 phiếu, dùng journal đã lưu, không gọi KGara) và `finalizePeriod`. `enrichCostForCase(c, {force, skipRemote, notifyProjector})`: làm mới khi tổng TK 1541 trong journal khác `costBreakdown.warehousePartsCost`; khi V1 đã đúng nhưng `notifyProjector: true` vẫn chiếu lại V2 (V2 có thể chưa từng được chiếu).
+- **Giá vốn thủ công** (`CostAllocationType = 'MANUAL_ERP'`): `enrichCaseLines` bỏ qua dòng này; `carryOverManualLines` giữ lại khi payload KGara thay `rawData`; `reconcileCaseLines` không để giá vốn > 0 bị đưa về 0.
+- **Phiếu cũ**: `rawData.__detailSnapshot {tinhTrang, tienCoThue, ngayHoanThanh}` so với cột list; lệch thì `syncCaseDetailsBatch` làm mới (phiếu chưa có snapshot không bị coi là cũ).
+- **Export** (`kgara-case-services-export.service.ts`): lỗi làm giàu được log warn, không nuốt im lặng.
+- **Smoke**: `test/smoke/garage-cost-export.smoke.mjs` (chỉ staging; từ chối DB có "prod"): sync tháng → export > 0, V2 `partsCost` > 0, V1 = V2, không đổi sau mở drawer, vẫn > 0 sau sync lại chi tiết.
+- **Ngoài phạm vi (Story riêng)**: chiết khấu TK 521 đang cộng vào giá vốn; lỗi `||` ở `parseJournalCostBreakdown`; V2 `issuedAt` lệch 7 giờ.
