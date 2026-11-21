@@ -270,3 +270,13 @@ bun run test:find -- src/users src/users-admin
 - [x] YAML frontmatter có `name: erp-users` và `description` rõ ràng.
 - [x] Thư mục module được tự động quản lý qua `.agents/skills.json` của workspace.
 - [x] Đã cập nhật tham chiếu trong `erp-api/.agents/skills/erp-api-truth/SKILL.md`.
+
+---
+
+## Tài khoản và role test (ẩn với người khác admin)
+
+- Nguồn duy nhất: `src/v2/core/users-core/helpers/test-account-visibility.helper.ts`.
+- Email ẩn: `ai-test-tao@example.com`, `ai-test-admin@example.com`. Role ẩn theo tên: `Test Admin`, `Test Tạo`, `E2E Loans Test`.
+- Chỉ `admin@liouni.com` thấy. Với người khác: danh sách, filter, tổng số, column-options bỏ qua; gọi theo `id` trả 404.
+- `rbac-roles` `PATCH :roleId/users` với người không có quyền giữ nguyên gán role của tài khoản test (không gỡ, không gán thêm). Test: `services/role-users.service.spec.ts`.
+- Đăng nhập E2E vẫn dùng bình thường; ẩn chỉ áp ở đọc và thao tác quản trị.

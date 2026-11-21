@@ -11,12 +11,12 @@
 //  - Số lệnh, tiền, doanh thu: phải bằng nhau tuyệt đối.
 //  - Số xe, và số xe + tiền của giai đoạn/phễu: V2 có thể lớn hơn V1 do xe NATIVE (tạo trực tiếp trên V2).
 //    Chênh lệch dương được ghi là KỲ VỌNG (NATIVE); V2 nhỏ hơn V1 hoặc tiền lệch khi số xe bằng nhau là LỖI.
-// Env: E2E_API_URL (mặc định suy từ PORT), E2E_TAO_EMAIL (mặc định ai-test-duyet), E2E_PASSWORD (bắt buộc).
+// Env: E2E_API_URL (mặc định suy từ PORT), E2E_TAO_EMAIL (mặc định ai-test-admin), E2E_PASSWORD (bắt buộc).
 // Exit 0 khi không có LỖI.
 import { resolveApiUrl } from './e2e-ports.mjs';
 
 const BASE = resolveApiUrl();
-const EMAIL = process.env.E2E_TAO_EMAIL ?? 'ai-test-duyet@example.com';
+const EMAIL = process.env.E2E_TAO_EMAIL ?? 'ai-test-admin@example.com';
 const PASSWORD = process.env.E2E_PASSWORD;
 if (!PASSWORD) {
   console.error('Thiếu E2E_PASSWORD.');

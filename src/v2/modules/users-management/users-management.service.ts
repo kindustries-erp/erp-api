@@ -19,8 +19,8 @@ export class UsersManagementService {
     private readonly command: UsersManagementCommandService,
   ) {}
 
-  async findAll(dto: QueryUserDto) {
-    const page = await this.query.findAll(dto);
+  async findAll(dto: QueryUserDto, viewerEmail?: string | null) {
+    const page = await this.query.findAll(dto, viewerEmail);
     const employees = await this.query.findEmployeeMap(
       page.items.map((item) => item.employeeId),
     );
@@ -38,12 +38,12 @@ export class UsersManagementService {
     );
   }
 
-  findColumnOptions(dto: ColumnOptionsQueryDto) {
-    return this.query.findColumnOptions(dto);
+  findColumnOptions(dto: ColumnOptionsQueryDto, viewerEmail?: string | null) {
+    return this.query.findColumnOptions(dto, viewerEmail);
   }
 
-  async findOne(id: string) {
-    const entity = await this.query.findById(id);
+  async findOne(id: string, viewerEmail?: string | null) {
+    const entity = await this.query.findVisibleById(id, viewerEmail);
     if (!entity) throw new NotFoundException('Không tìm thấy tài khoản');
     const employees = await this.query.findEmployeeMap([entity.employeeId]);
     return {
@@ -63,6 +63,7 @@ export class UsersManagementService {
   }
 
   async update(id: string, dto: UpdateUserDto, ctx: UserAuditContext) {
+    await this.assertVisible(id, ctx.actorEmail);
     return {
       message: 'Cập nhật tài khoản thành công',
       data: await this.command.update(id, dto, ctx),
@@ -70,6 +71,7 @@ export class UsersManagementService {
   }
 
   async activate(id: string, ctx: UserAuditContext) {
+    await this.assertVisible(id, ctx.actorEmail);
     return {
       message: 'Kích hoạt tài khoản thành công',
       data: await this.command.activate(id, ctx),
@@ -77,6 +79,7 @@ export class UsersManagementService {
   }
 
   async deactivate(id: string, ctx: UserAuditContext) {
+    await this.assertVisible(id, ctx.actorEmail);
     return {
       message: 'Vô hiệu hóa tài khoản thành công',
       data: await this.command.deactivate(id, ctx),
@@ -88,11 +91,13 @@ export class UsersManagementService {
     dto: ResetPasswordDto,
     ctx: UserAuditContext,
   ) {
+    await this.assertVisible(id, ctx.actorEmail);
     await this.command.resetPassword(id, dto, ctx);
     return { message: 'Đặt lại mật khẩu thành công' };
   }
 
   async linkEmployee(id: string, dto: LinkEmployeeDto, ctx: UserAuditContext) {
+    await this.assertVisible(id, ctx.actorEmail);
     return {
       message: 'Liên kết nhân viên thành công',
       data: await this.command.linkEmployee(id, dto.employeeId, ctx),
@@ -100,9 +105,16 @@ export class UsersManagementService {
   }
 
   async unlinkEmployee(id: string, ctx: UserAuditContext) {
+    await this.assertVisible(id, ctx.actorEmail);
     return {
       message: 'Gỡ liên kết nhân viên thành công',
       data: await this.command.unlinkEmployee(id, ctx),
     };
+  }
+
+  /** Tài khoản test với người không có quyền: trả 404 như thể không tồn tại. */
+  private async assertVisible(id: string, viewerEmail?: string | null) {
+    const entity = await this.query.findVisibleById(id, viewerEmail);
+    if (!entity) throw new NotFoundException('Không tìm thấy tài khoản');
   }
 }

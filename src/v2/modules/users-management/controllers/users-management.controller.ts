@@ -38,21 +38,27 @@ export class UsersManagementController {
 
   @ApiOperation({ summary: 'Danh sách tài khoản (phân trang, lọc, sắp xếp)' })
   @Get()
-  findAll(@Query() query: QueryUserDto) {
-    return this.service.findAll(query);
+  findAll(@Query() query: QueryUserDto, @Req() request: UserRequest) {
+    return this.service.findAll(query, buildAuditContext(request).actorEmail);
   }
 
   // Đặt trước `:id` để `column-options` không bị hiểu thành id
   @ApiOperation({ summary: 'Gợi ý giá trị cột, áp dụng bộ lọc các cột khác' })
   @Get('column-options')
-  columnOptions(@Query() query: ColumnOptionsQueryDto) {
-    return this.service.findColumnOptions(query);
+  columnOptions(
+    @Query() query: ColumnOptionsQueryDto,
+    @Req() request: UserRequest,
+  ) {
+    return this.service.findColumnOptions(
+      query,
+      buildAuditContext(request).actorEmail,
+    );
   }
 
   @ApiOperation({ summary: 'Chi tiết tài khoản' })
   @Get(':id')
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.service.findOne(id);
+  findOne(@Param('id', ParseUUIDPipe) id: string, @Req() request: UserRequest) {
+    return this.service.findOne(id, buildAuditContext(request).actorEmail);
   }
 
   @ApiOperation({ summary: 'Tạo tài khoản' })

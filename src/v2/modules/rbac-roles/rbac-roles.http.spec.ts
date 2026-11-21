@@ -24,6 +24,9 @@ const VALID_UUID = '11111111-2222-4333-8444-555555555555';
 describe('RbacRolesController HTTP (UUID params)', () => {
   let app: INestApplication;
   const facade = {
+    assertRoleVisible: jest.fn<(...args: any[]) => Promise<any>>(
+      async () => undefined,
+    ),
     getAvailableResources: jest.fn<(...args: any[]) => Promise<any>>(
       async () => [],
     ),

@@ -34,12 +34,20 @@ export class RbacRolesService {
     private readonly usersService: RoleUsersService,
   ) {}
 
-  getRolesPaginated(query: ListCoreRolesDto): Promise<RoleListResponse> {
-    return this.queryService.getRolesPaginated(query);
+  getRolesPaginated(
+    query: ListCoreRolesDto,
+    viewerEmail?: string | null,
+  ): Promise<RoleListResponse> {
+    return this.queryService.getRolesPaginated(query, viewerEmail);
   }
 
-  getRoleById(id: string): Promise<RoleResponse> {
-    return this.queryService.getRoleById(id);
+  getRoleById(id: string, viewerEmail?: string | null): Promise<RoleResponse> {
+    return this.queryService.getRoleById(id, viewerEmail);
+  }
+
+  /** Role test với người không có quyền: ném 404 trước khi thao tác theo id. */
+  async assertRoleVisible(id: string, viewerEmail?: string | null) {
+    await this.queryService.getRoleById(id, viewerEmail);
   }
 
   getColumnOptions(
@@ -48,6 +56,7 @@ export class RbacRolesService {
     page?: number,
     pageSize?: number,
     filtersStr?: string,
+    viewerEmail?: string | null,
   ): Promise<RoleColumnOptionsResponse> {
     return this.queryService.getColumnOptions(
       column,
@@ -55,6 +64,7 @@ export class RbacRolesService {
       page,
       pageSize,
       filtersStr,
+      viewerEmail,
     );
   }
 
@@ -81,15 +91,19 @@ export class RbacRolesService {
     return this.permissionsService.updateRolePermissions(roleId, dto);
   }
 
-  getRoleUsers(roleId: string): Promise<RoleUserResponse[]> {
-    return this.usersService.getRoleUsers(roleId);
+  getRoleUsers(
+    roleId: string,
+    viewerEmail?: string | null,
+  ): Promise<RoleUserResponse[]> {
+    return this.usersService.getRoleUsers(roleId, viewerEmail);
   }
 
   updateRoleUsers(
     roleId: string,
     dto: UpdateCoreRoleUsersDto,
+    viewerEmail?: string | null,
   ): Promise<{ success: boolean }> {
-    return this.usersService.updateRoleUsers(roleId, dto);
+    return this.usersService.updateRoleUsers(roleId, dto, viewerEmail);
   }
 
   getAvailableResources(): Promise<AvailableRbacResource[]> {

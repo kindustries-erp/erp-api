@@ -30,7 +30,7 @@ Unit test (`bunx jest --forceExit`, hoặc scope hẹp `bunx jest --forceExit pr
 Cặp port không phụ thuộc workspace `repos-dev-0X`; chỉ phụ thuộc giá trị `PORT` trong `erp/erp-api/.env`.
 
   - `PORT` ngoài ba giá trị trên: dừng và hỏi người dùng trước khi chạy.
-- `E2E_TAO_EMAIL` (mặc định `ai-test-tao@example.com`), `E2E_DUYET_EMAIL` (mặc định `ai-test-duyet@example.com`).
+- `E2E_TAO_EMAIL` (mặc định `ai-test-tao@example.com`), `E2E_ADMIN_EMAIL` (mặc định `ai-test-admin@example.com`).
 
 Ví dụ (từ `erp-api/`, lấy mật khẩu từ `.env`, không in ra):
 `E2E_PASSWORD="$(sed -n 's/^E2E_PASSWORD=//p' .env | head -1 | tr -d "\"'")" bun run test:smoke:clone`.
@@ -39,9 +39,10 @@ Trước khi chạy: xác nhận `DATABASE_URL` trong `.env` không phải produ
 ## 3. Điều kiện trước khi chạy smoke
 
 1. API chạy đúng `PORT` trong `.env`, và `E2E_API_URL` khớp `PORT` đó. Không chạy smoke trên DB production.
-   - Kiểm cổng trước: nếu `http://localhost:<PORT>` không có tiến trình nghe (curl báo connection refused), tự chạy nền `bun start:dev` trong `erp/erp-api` (`run_in_background`) và chờ cổng nghe, tối đa khoảng 120 giây.
+   - Luôn chạy code mới nhất: trước mỗi lần chạy smoke, tìm tiến trình đang nghe `PORT` (`ss -ltnp`). Nếu có, kiểm `readlink /proc/<pid>/cwd` phải là `erp/erp-api`, rồi dừng PID đó. Nếu cổng bị tiến trình của repo khác chiếm thì dừng và báo người dùng.
+   - Sau khi cổng trống, chạy nền `bun run start:dev` trong `erp/erp-api` (`run_in_background`), chờ cổng nghe và log `Server đang chạy` (tối đa khoảng 120 giây).
    - Web (chỉ khi cần E2E UI): nếu `E2E_WEB_URL` (bảng ở mục 2) chưa nghe, tự chạy nền `bun run dev` trong `erp/erp-web` và chờ trả HTTP 200.
-   - Không kill tiến trình đang chạy của phiên khác. Nếu cổng bị chiếm bởi tiến trình lạ thì dừng và báo người dùng.
+   - Chỉ dừng tiến trình có cwd là repo này (xem trên). Không dừng tiến trình của repo khác.
 2. Trước khi ghi DB: `SELECT current_database();`, báo tên DB cho người dùng. Không suy ra DB từ tên file env.
 3. Smoke tạo dữ liệu mới (tên có tag, số chứng từ mới). Dữ liệu này không tự dọn, nên ghi rõ trong báo cáo nếu người dùng cần dọn.
 

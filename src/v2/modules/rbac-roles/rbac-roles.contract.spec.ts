@@ -148,11 +148,12 @@ describe('RBAC Roles API contract (v2)', () => {
         updateRolePermissions: jest.fn(async () => ({ success: true })),
         updateRoleUsers: jest.fn(async () => ({ success: true })),
         deleteRole: jest.fn(async () => ({ success: true })),
+        assertRoleVisible: jest.fn(async () => undefined),
       }) as any;
 
     it('GET :roleId/permissions → { permissions }', async () => {
       await expect(
-        new RbacRolesController(stub()).getRolePermissions('r1'),
+        new RbacRolesController(stub()).getRolePermissions('r1', {} as any),
       ).resolves.toEqual({
         permissions: [{ resource: 'x' }],
       });
@@ -160,7 +161,7 @@ describe('RBAC Roles API contract (v2)', () => {
 
     it('GET :roleId/users → { users: [{id, email}] }', async () => {
       await expect(
-        new RbacRolesController(stub()).getRoleUsers('r1'),
+        new RbacRolesController(stub()).getRoleUsers('r1', {} as any),
       ).resolves.toEqual({
         users: [{ id: 'u1', email: 'a@b.c' }],
       });
@@ -177,12 +178,14 @@ describe('RBAC Roles API contract (v2)', () => {
     it('PATCH permissions/users và DELETE :id → { success: true }', async () => {
       const ctrl = new RbacRolesController(stub());
       await expect(
-        ctrl.updateRolePermissions('r1', { permissions: [] }),
+        ctrl.updateRolePermissions('r1', { permissions: [] }, {} as any),
       ).resolves.toEqual({ success: true });
       await expect(
-        ctrl.updateRoleUsers('r1', { userIds: [] }),
+        ctrl.updateRoleUsers('r1', { userIds: [] }, {} as any),
       ).resolves.toEqual({ success: true });
-      await expect(ctrl.deleteRole('r1')).resolves.toEqual({ success: true });
+      await expect(ctrl.deleteRole('r1', {} as any)).resolves.toEqual({
+        success: true,
+      });
     });
   });
 
@@ -305,7 +308,11 @@ describe('RBAC Roles API contract (v2)', () => {
 
     it('updateRoleUsers thay toàn bộ người dùng của role', async () => {
       const { facade, userRoleRepository } = makeFacade();
-      await facade.updateRoleUsers('r1', { userIds: ['u1', 'u2'] });
+      await facade.updateRoleUsers(
+        'r1',
+        { userIds: ['u1', 'u2'] },
+        'admin@liouni.com',
+      );
       expect(userRoleRepository.delete).toHaveBeenCalledWith({ roleId: 'r1' });
       expect(userRoleRepository.save).toHaveBeenCalledTimes(1);
     });

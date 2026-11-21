@@ -14,7 +14,7 @@ Vị trí: `src/v2/modules/cases-garage`. Entity `CaseGarage` (header, `cases_ga
 ## 2. Route (route tĩnh trước `:id`)
 Đọc (`GARAGE:READ`): `GET /`, `column-options`, `services`, `gross-profit-report`, `by-code/:code`, `:id`. Query: `page`, `pageSize` ≤ 200, `search`, `sort`, `column_filters`, `column_*`, `date_ranges`, `summary_keys`, `origin`.
 Ghi (`CasesGarageCommandsController`): `GET next-code`, `POST /` (CREATE), `PATCH :id` (UPDATE), `PATCH :id/status`, `DELETE :id` (DELETE), `POST :id/services`, `PUT :id/services/:lineId`, `PATCH :id/services/:lineId/parts-cost`, `DELETE :id/services/:lineId`.
-Chi nhánh: header `x-kgara-branch-id` bắt buộc (thiếu 400). Mọi đọc/ghi kèm `branchExternalId`; xe chi nhánh khác = 404. Role `ai-test-tao` không có `GARAGE:DELETE` (403); smoke dùng `ai-test-duyet`.
+Chi nhánh: header `x-kgara-branch-id` bắt buộc (thiếu 400). Mọi đọc/ghi kèm `branchExternalId`; xe chi nhánh khác = 404. Role `ai-test-tao` không có `GARAGE:DELETE` (403); smoke dùng `ai-test-admin`.
 
 ## 3. Quy tắc
 - Mã xe NATIVE: `VV-YYYYMMDD-NNN` (tái dùng `nextDocumentNo`). Unique `(branchExternalId, accountKey, caseCode)` khi chưa xóa (`UQ_cases_garage_case_code_active`).
