@@ -695,15 +695,25 @@ export function buildSheet2PnlTracking(
   applyColumnGroupStyles(sheet, CASE_PNL_COLUMNS, 5, CASE_PNL_COLUMN_GROUPS);
 }
 
+/** Tùy chọn tách sheet chi tiết: tên sheet và bộ lọc dòng (mặc định: tất cả dòng, sheet 3 gốc). */
+export interface ItemizedSheetOptions {
+  sheetName?: string;
+  includeLine?: (caseRow: any, line: any) => boolean;
+}
+
 /**
- * Sheet 3: Chi tiết DV & Phụ tùng
+ * Sheet 3: Chi tiết DV & Phụ tùng. Việc tách theo công/OJ do `kgara-itemized-sheets.builder.ts`
+ * điều phối bằng `options`.
  */
 export function buildSheet3ItemizedServices(
   workbook: ExcelJS.Workbook,
   cases: any[],
   serviceLinesMap: Map<string, any[]>,
+  options: ItemizedSheetOptions = {},
 ): void {
-  const sheet = workbook.addWorksheet('Chi tiết DV & Phụ tùng');
+  const sheet = workbook.addWorksheet(
+    options.sheetName ?? 'Chi tiết DV & Phụ tùng',
+  );
   initSheetStructure(sheet, COMPLETED_CASE_SERVICES_COLUMNS);
 
   const sums = {
@@ -722,6 +732,7 @@ export function buildSheet3ItemizedServices(
     if (!c.hdPhieuDichVuId) continue;
     const lines = serviceLinesMap.get(c.hdPhieuDichVuId) || [];
     for (const line of lines) {
+      if (options.includeLine && !options.includeLine(c, line)) continue;
       lineIdx++;
       const loaiCode = line.loaiSanPhamCode || line.LoaiSanPhamCode || '';
       const pt = Number(line.tienPhuTung ?? line.TienPhuTung ?? 0);

@@ -1,3 +1,5 @@
+import { journalItemCostAmount } from './kgara-case-financial-parser.helper';
+
 export interface JournalItemCost {
   TaiKhoanNoCode?: string | null;
   TaiKhoanCoCode?: string | null;
@@ -11,6 +13,8 @@ export interface CaseCostBreakdown {
   warehousePartsCost: number;
   externalCost: number;
   commissionCost: number;
+  /** TK 521: giảm trừ doanh thu, không nằm trong `otherCost`, `totalCost`, `unallocatedCost`. */
+  discountCost: number;
   otherCost: number;
   totalCost: number;
   allocatedPartsCost: number;
@@ -156,6 +160,7 @@ export class KgaraCostEnricherHelper {
       warehousePartsCost: 0,
       externalCost: 0,
       commissionCost: 0,
+      discountCost: 0,
       otherCost: 0,
       totalCost: 0,
       allocatedPartsCost: 0,
@@ -178,10 +183,18 @@ export class KgaraCostEnricherHelper {
     const warehouseCostsByName = new Map<string, number>();
 
     for (const item of journalItems) {
-      const amount = Number(item.ChiPhi ?? item.GiaTriTien ?? 0);
+      const tkNo = String(
+        item.TaiKhoanNoCode ||
+          (item as { TaiKhoanNo?: string }).TaiKhoanNo ||
+          '',
+      ).trim();
+      const amount = journalItemCostAmount(item, tkNo);
       if (amount <= 0) continue;
 
-      const tkNo = String(item.TaiKhoanNoCode || '').trim();
+      if (tkNo === '521') {
+        breakdown.discountCost += amount;
+        continue;
+      }
       breakdown.totalCost += amount;
 
       if (tkNo === '1541') {

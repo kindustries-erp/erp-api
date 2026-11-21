@@ -80,8 +80,9 @@ describe('CaseServicesQueryService', () => {
     expect(params).toEqual(
       expect.arrayContaining([
         'DV',
-        '2026-08-01 00:00:00',
-        '2026-08-31 23:59:59.999',
+        // Ranh giới ngày VN (UTC+7): đầu 2026-08-01 và cuối 2026-08-31
+        new Date('2026-07-31T17:00:00.000Z'),
+        new Date('2026-08-31T16:59:59.999Z'),
         "%x' OR 1=1%",
       ]),
     );

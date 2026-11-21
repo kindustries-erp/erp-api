@@ -249,11 +249,15 @@ export class KgaraCaseLookupService {
     const rev = Number(grossProfit.doanhThu) || 0;
     const cost = Number(grossProfit.chiPhi) || 0;
     const profit = Number(grossProfit.loiNhuan) || rev - cost;
-    const margin = rev > 0 ? Number(((profit / rev) * 100).toFixed(1)) : 0;
-
     const journalItems = (grossProfit.rawData as any)?.journal_items || [];
     const costBreakdown =
       KgaraCaseFinancialParserHelper.parseJournalCostBreakdown(journalItems);
+
+    // Chiết khấu (TK 521) là giảm trừ doanh thu: biên tính trên doanh thu thuần.
+    // ChiPhi/LoiNhuan giữ số thô của KGara (ChiPhi thô đã gồm 521).
+    const netRevenue = rev - costBreakdown.discountCost;
+    const margin =
+      netRevenue > 0 ? Number(((profit / netRevenue) * 100).toFixed(1)) : 0;
 
     return {
       id: grossProfit.id,
@@ -262,13 +266,15 @@ export class KgaraCaseLookupService {
       DoanhThu: rev,
       ChiPhi: cost,
       LoiNhuan: profit,
-      BienLoiNhuan: margin,
       VuViecCode: grossProfit.vuViecCode,
       VuViecName: grossProfit.vuViecName,
       TenKhachHang: grossProfit.tenKhachHang,
       VuViecID: grossProfit.hdPhieuDichVuId,
-      costBreakdown,
       ...(grossProfit.rawData as object),
+      // Đặt sau rawData để payload KGara không ghi đè số đã tính lại (doanh thu thuần, biên, cơ cấu chi phí).
+      DoanhThuThuan: netRevenue,
+      BienLoiNhuan: margin,
+      costBreakdown,
     };
   }
 

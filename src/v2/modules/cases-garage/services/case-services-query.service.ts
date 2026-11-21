@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { vnDayBound } from '@/v2/core/base-core/helpers/vn-time.util';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository, SelectQueryBuilder } from 'typeorm';
 import { buildPagination } from '@/common/utils/paginated-result';
@@ -132,11 +133,11 @@ export class CaseServicesQueryService {
     }
     const dateExpr = 'COALESCE("c"."received_at", "c"."issued_at")';
     if (f.from) {
-      const v = f.from.includes('T') ? f.from : `${f.from} 00:00:00`;
+      const v = vnDayBound(f.from, 'start');
       qb.andWhere(`${dateExpr} >= :fromDate`, { fromDate: v });
     }
     if (f.to) {
-      const v = f.to.includes('T') ? f.to : `${f.to} 23:59:59.999`;
+      const v = vnDayBound(f.to, 'end');
       qb.andWhere(`${dateExpr} <= :toDate`, { toDate: v });
     }
     const q = f.search?.trim();

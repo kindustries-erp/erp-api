@@ -189,6 +189,21 @@ describe('KgaraCostEnricherHelper manual cost & stale helpers', () => {
     expect(KgaraCostEnricherHelper.sumWarehouseCost(null)).toBe(0);
   });
 
+  it('enrichCaseLines tách TK 521 thành discountCost, không vào otherCost/totalCost/unallocatedCost', () => {
+    const result = KgaraCostEnricherHelper.enrichCaseLines(
+      [{ SanPhamName: 'Nhớt động cơ 5W-30', LoaiSanPhamCode: 'PT' }],
+      [
+        ...journal,
+        { TaiKhoanNoCode: '521', GiaTriTien: 90000, ChiPhi: 90000 },
+        { TaiKhoanNoCode: '131', GiaTriTien: 5000000, ChiPhi: 0 },
+      ],
+    );
+    expect(result.costBreakdown.discountCost).toBe(90000);
+    expect(result.costBreakdown.otherCost).toBe(0);
+    expect(result.costBreakdown.totalCost).toBe(430000);
+    expect(result.costBreakdown.unallocatedCost).toBe(50000);
+  });
+
   it('enrichCaseLines không ghi đè dòng nhập tay MANUAL_ERP', () => {
     const lines = [
       {

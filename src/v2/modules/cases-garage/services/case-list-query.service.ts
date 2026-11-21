@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { vnDayBound } from '@/v2/core/base-core/helpers/vn-time.util';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, In, Repository, SelectQueryBuilder } from 'typeorm';
 import { buildPagination } from '@/common/utils/paginated-result';
@@ -148,11 +149,11 @@ export class CaseListQueryService {
     if (!f.includeDeleted) qb.andWhere('"c"."external_deleted_at" IS NULL');
     if (f.origin) qb.andWhere('"c"."origin" = :origin', { origin: f.origin });
     if (f.from) {
-      const v = f.from.includes('T') ? f.from : `${f.from} 00:00:00`;
+      const v = vnDayBound(f.from, 'start');
       qb.andWhere('"c"."issued_at" >= :fromDate', { fromDate: v });
     }
     if (f.to) {
-      const v = f.to.includes('T') ? f.to : `${f.to} 23:59:59.999`;
+      const v = vnDayBound(f.to, 'end');
       qb.andWhere('"c"."issued_at" <= :toDate', { toDate: v });
     }
     const q = f.search?.trim();

@@ -155,6 +155,40 @@ describe('KgaraCaseLookupService', () => {
       expect(result.LoiNhuan).toBe(2000000);
       expect(result.BienLoiNhuan).toBe(40);
     });
+
+    it('chiết khấu 521 là giảm trừ doanh thu: DoanhThu - discountCost - totalCost = LoiNhuan, biên theo doanh thu thuần', async () => {
+      grossProfitRepoMock.findOne.mockResolvedValue({
+        id: 'gp-2',
+        doanhThu: '10000000',
+        // KGara: ChiPhi thô = giá vốn trực tiếp (6.000.000) + 521 (1.000.000)
+        chiPhi: '7000000',
+        loiNhuan: '3000000',
+        vuViecCode: 'GR-PDV2610-0001',
+        hdPhieuDichVuId: 'ext-1',
+        rawData: {
+          journal_items: [
+            { TaiKhoanNoCode: '1541', ChiPhi: 6000000, GiaTriTien: 6000000 },
+            { TaiKhoanNoCode: '521', ChiPhi: 1000000, GiaTriTien: 1000000 },
+            { TaiKhoanNoCode: '131', ChiPhi: 0, GiaTriTien: 10000000 },
+          ],
+        },
+      });
+
+      const result = await service.findGrossProfitByCodeOrId('GR-PDV2610-0001');
+      const b = result.costBreakdown;
+
+      expect(b.discountCost).toBe(1000000);
+      expect(b.otherCost).toBe(0);
+      expect(b.totalCost).toBe(6000000);
+      expect(result.DoanhThu - b.discountCost - b.totalCost).toBe(
+        result.LoiNhuan,
+      );
+      expect(result.DoanhThuThuan).toBe(9000000);
+      expect(result.BienLoiNhuan).toBe(33.3);
+      // Số thô KGara giữ nguyên
+      expect(result.ChiPhi).toBe(7000000);
+      expect(result.LoiNhuan).toBe(3000000);
+    });
   });
 
   describe('enrichCostForCase and updateCaseLinesCost', () => {

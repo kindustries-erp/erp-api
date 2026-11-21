@@ -1,7 +1,5 @@
-import {
-  CashflowClassification,
-  isPurposeAllowed,
-} from '../constants/cashflow-attributes.constants';
+import type { CashflowClassification } from '../constants/cashflow-attributes.constants';
+import { isPurposeAllowed } from '../constants/cashflow-attributes.constants';
 
 export const INSURANCE_NOTE = 'Bảo hiểm';
 

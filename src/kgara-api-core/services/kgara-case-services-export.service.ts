@@ -6,6 +6,11 @@ import { KgaraCaseServicesQueryService } from './kgara-case-services-query.servi
 import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
 import { KgaraCostEnricherHelper } from '../helpers/kgara-cost-enricher.helper';
 import {
+  ITEMIZED_SHEET_NAMES,
+  itemizedSheetKeyOf,
+  type ItemizedSheetKey,
+} from '../helpers/kgara-itemized-sheets.builder';
+import {
   initSheetStructure,
   applyStandardExcelReportLayout,
   borderThin,
@@ -104,7 +109,31 @@ export class KgaraCaseServicesExportService {
     workbook.creator = 'ERP';
     workbook.created = new Date();
 
-    const sheet = workbook.addWorksheet('Chi tiết DV & Phụ tùng');
+    // Tách công khỏi DV/PT (theo ĐVT) và OJ khỏi MAIN; mỗi dòng đúng một sheet.
+    const groups = new Map<ItemizedSheetKey, any[]>();
+    for (const item of items) {
+      const key = itemizedSheetKeyOf({ accountKey: item.accountKey }, item);
+      const list = groups.get(key) ?? [];
+      list.push(item);
+      groups.set(key, list);
+    }
+    (Object.keys(ITEMIZED_SHEET_NAMES) as ItemizedSheetKey[]).forEach((key) => {
+      const list = groups.get(key) ?? [];
+      if (key !== 'main' && list.length === 0) return;
+      this.addServicesSheet(workbook, ITEMIZED_SHEET_NAMES[key], list);
+    });
+
+    const uint8Array = await workbook.xlsx.writeBuffer();
+    return Buffer.from(uint8Array);
+  }
+
+  /** Một sheet chi tiết hạng mục (24 cột chuẩn hóa) cho một nhóm dòng, có tổng riêng. */
+  private addServicesSheet(
+    workbook: ExcelJS.Workbook,
+    sheetName: string,
+    items: any[],
+  ): void {
+    const sheet = workbook.addWorksheet(sheetName);
     initSheetStructure(sheet, CASE_SERVICES_EXPORT_COLUMNS);
 
     const sums = {
@@ -201,8 +230,5 @@ export class KgaraCaseServicesExportService {
       9,
       sums,
     );
-
-    const uint8Array = await workbook.xlsx.writeBuffer();
-    return Buffer.from(uint8Array);
   }
 }
