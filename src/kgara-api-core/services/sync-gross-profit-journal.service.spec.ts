@@ -132,4 +132,21 @@ describe('SyncGrossProfitJournalService', () => {
       service.syncJournalForRange('BR', '2026-09-01', '2026-09-30'),
     ).rejects.toThrow('500');
   });
+
+  it('coi 404 trong body là journal rỗng, không ném lỗi', async () => {
+    const { service, client } = build(null);
+    client.getGrossProfitJournal.mockResolvedValueOnce({
+      status: 404,
+      message: 'Not Found: Không có dữ liệu trong khoảng thời gian này.',
+      results: null,
+    });
+
+    const res = await service.syncJournalForRange(
+      'BR',
+      '2026-09-01',
+      '2026-09-30',
+    );
+
+    expect(res).toEqual({ vuViecs: 0, updated: 0, noItems: 0, notStored: 0 });
+  });
 });
