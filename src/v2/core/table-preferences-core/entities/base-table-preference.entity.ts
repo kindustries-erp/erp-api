@@ -1,12 +1,11 @@
-import { Column, Entity, Index } from 'typeorm';
+import { Column } from 'typeorm';
 import { CoreSoftDeletableEntity } from '@/v2/core/base-core';
 
-/** Cấu hình V2 của một bảng dữ liệu cho một user: cột hiển thị và chế độ xem */
-@Entity({ name: 'table_preferences' })
-@Index('UQ_table_preferences_user_table', ['userId', 'tableId'], {
-  unique: true,
-})
-export class CoreUserTablePreference extends CoreSoftDeletableEntity {
+/**
+ * Cột của cấu hình bảng dữ liệu theo user: cột hiển thị và chế độ xem.
+ * Lõi chỉ khai báo cột. Module cụ thể thêm `@Entity`, `@Index` và tên bảng.
+ */
+export abstract class BaseTablePreferenceEntity extends CoreSoftDeletableEntity {
   @Column({ type: 'uuid', name: 'user_id' })
   userId: string;
 

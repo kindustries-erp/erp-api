@@ -1,6 +1,6 @@
 import { AdminDashboardController } from './admin-dashboard.controller';
-import { AdminDashboardStatsService } from './services/admin-dashboard-stats.service';
-import { AdminDashboardSummaryResponseDto } from './dto/admin-dashboard-summary.dto';
+import { AdminDashboardStatsService } from '../services/admin-dashboard-stats.service';
+import { AdminDashboardSummaryResponseDto } from '../dto/admin-dashboard-summary.dto';
 
 describe('AdminDashboardController', () => {
   let controller: AdminDashboardController;

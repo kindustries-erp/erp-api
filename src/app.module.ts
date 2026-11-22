@@ -7,7 +7,7 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { CoreUser } from './users/entities/core-user.entity';
 import { CoreUserPreference } from './users/entities/core-user-preference.entity';
-import { CoreUserTablePreference } from './v2/core/table-preferences-core/entities/core-user-table-preference.entity';
+import { CoreUserTablePreference } from './v2/modules/table-preferences/entities/core-user-table-preference.entity';
 import { NotificationInbox } from './v2/modules/notifications-inbox/entities/notification-inbox.entity';
 import { CoreRole } from '@/v2/core/rbac-core/entities/core-role.entity';
 import { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.entity';
@@ -65,7 +65,7 @@ import { AppConfigModule } from './app-config/app-config.module';
 import { SystemOperationsCoreModule } from './system-operations-core/system-operations-core.module';
 import { AiHubCoreModule } from './ai-hub-core/ai-hub-core.module';
 import { FinanceInvoicesModule } from './v2/modules/invoices-finance/invoices-finance.module'; // api-v2-module:invoices-finance:app-imports
-import { AdminDashboardCoreModule } from './v2/core/admin-dashboard-core/admin-dashboard-core.module';
+import { AdminDashboardModule } from './v2/modules/admin-dashboard/admin-dashboard.module';
 import { GarageGoodsReceiptsCoreModule } from './v2/modules/goods-receipts-garage/goods-receipts-garage-core.module'; // api-v2-module:goods-receipts-garage:app-imports
 import { ErpProcurementRequestsModule } from './v2/modules/procurement-requests-erp/procurement-requests-erp.module'; // procurement:pr-module
 import { ErpProcurementOrdersModule } from './v2/modules/procurement-orders-erp/procurement-orders-erp.module'; // procurement:po-module
@@ -209,7 +209,7 @@ import { AuthSessionsModule } from './v2/modules/auth-sessions/auth-sessions.mod
     AppConfigModule,
     AiHubCoreModule,
     FinanceInvoicesModule, // api-v2-module:invoices-finance:app-modules
-    AdminDashboardCoreModule,
+    AdminDashboardModule,
     GarageGoodsReceiptsCoreModule, // api-v2-module:goods-receipts-garage:app-modules
     ErpProcurementRequestsModule, // procurement:pr-module-register
     ErpProcurementOrdersModule, // procurement:po-module-register

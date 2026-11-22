@@ -7,7 +7,7 @@ import type {
   TablePreferenceFilterQueryPatch,
   TablePreferencePatch,
   TablePreferenceViewsPatch,
-} from '../types/table-preference.types';
+} from '@/v2/core/table-preferences-core';
 
 @Injectable()
 export class TablePreferenceCommandService {

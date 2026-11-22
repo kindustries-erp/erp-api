@@ -9,11 +9,11 @@ import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
 import { RequirePermissions } from '@/auth/decorators/require-permissions.decorator';
 import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
-import { AdminDashboardStatsService } from './services/admin-dashboard-stats.service';
+import { AdminDashboardStatsService } from '../services/admin-dashboard-stats.service';
 import {
   AdminDashboardQueryDto,
   AdminDashboardSummaryResponseDto,
-} from './dto/admin-dashboard-summary.dto';
+} from '../dto/admin-dashboard-summary.dto';
 
 @ApiTags('admin-dashboard')
 @ApiBearerAuth()

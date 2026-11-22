@@ -239,7 +239,7 @@ Toàn bộ các API quản trị người dùng thuộc `UsersAdminController` �
    - Khi kiểm tra quyền qua `CoreRbacGuard`, hệ thống nạp các quyền từ những vai trò mà user đang nắm giữ.
 4. **`audit-core` (Kiểm toán Hệ thống)**:
    - Tiếp nhận các sự kiện thay đổi dữ liệu người dùng (`CREATE_USER`, `UPDATE_USER`, `RESET_PASSWORD`, v.v.).
-5. **`table-preferences-core` & `app-config` (Cá nhân hóa Giao diện)**:
+5. **`table-preferences` (lõi `table-preferences-core` base-only + module `table-preferences`) & `app-config` (Cá nhân hóa Giao diện)**:
    - Bảng `table_preferences` (FK `users_management`) và `core_user_preferences` gắn liền với `user_id`, tự động dọn dẹp theo `ON DELETE CASCADE` khi user bị xóa khỏi DB.
 6. **`notifications-inbox` (Hộp thư Thông báo)**:
    - Lưu trữ các thông báo gửi trực tiếp đến từng người dùng cụ thể thông qua `notifications_inbox.user_id`.
