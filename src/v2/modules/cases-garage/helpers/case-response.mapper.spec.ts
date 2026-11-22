@@ -1,6 +1,6 @@
 import { CaseOrigin, CaseStatus } from '../entities/case-garage.enums';
 import type { CaseGarage } from '../entities/case-garage.entity';
-import type { CaseServiceGarage } from '../entities/case-service-garage.entity';
+import type { CaseLineGarage } from '../entities/case-line-garage.entity';
 import { toCaseResponse } from './case-response.mapper';
 
 describe('toCaseResponse', () => {
@@ -13,7 +13,7 @@ describe('toCaseResponse', () => {
       partsCost: null,
       externalDeletedAt: del,
       extraData: {},
-    }) as unknown as CaseServiceGarage;
+    }) as unknown as CaseLineGarage;
 
   it('ép tiền về number, ngày về ISO, trả origin và extraData', () => {
     const r = toCaseResponse({

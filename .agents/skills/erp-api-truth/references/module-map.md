@@ -18,7 +18,8 @@ Tra module cần sửa ở bảng dưới, rồi đọc `../../modules/<module>/
 | `bom-core` | Module tri thức Định mức vật tư (BOM - Bill of Materials) trong erp-api |
 | `branches-core` | Contract hiện hành của chi nhánh ERP trong kiến trúc API v2 core + management module |
 | `business-partners-core` | Module tri thức Đối tác (Khách hàng & Nhà cung cấp) phía API erp-api (src/v2/core/business-partners-core & src/v2/modules/business-partners-… |
-| `cases-garage` | Module vụ việc garage v2 (api/v2/cases-garage), CRUD đầy đủ trên bảng cases_garage + case_services_garage, xe NATIVE nhập tay và xe KGARA_SY… |
+| `cases-core` | Lõi đa ngành `src/v2/core/cases-core` (BaseCaseEntity, BaseCaseLineEntity) cho vụ việc/phiếu dịch vụ, chỉ abstract, không bảng |
+| `cases-garage` | Module vụ việc garage v2 (api/v2/cases-garage), CRUD trên bảng cases_garage + case_lines_garage, xe NATIVE nhập tay và xe KGARA_SYNC chiếu t… |
 | `cashflow-dashboard` | Module tri thức Báo cáo, Phân tích & Dự báo Dòng tiền (Cashflow Dashboard & Forecast) trong ERP (dashboard-core & bank-transactions-core) |
 | `cashflow-vouchers-core` | Lõi phiếu thu chi dùng chung v2 (src/v2/core/cashflow-vouchers-core) - entity base BaseCashflowVoucherEntity, kiểu loại và trạng thái phiếu |
 | `cashflow-vouchers-garage` | Module phiếu thu chi garage v2 (api/v2/cashflow-vouchers-garage) phần đọc - danh sách, column-options, dashboard, kiểm tra trùng; kế thừa ca… |

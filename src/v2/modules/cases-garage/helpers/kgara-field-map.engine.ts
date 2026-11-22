@@ -13,8 +13,8 @@ export type FieldKind =
   | 'int'
   | 'bool';
 
-/** `identity` = định danh/nguồn, `source` = dữ liệu gốc KGara (khóa với xe sync), `erp-local` = sửa được ở ERP. */
-export type FieldGroup = 'identity' | 'source' | 'erp-local';
+/** `identity` = định danh/nguồn (không override được), `source` = dữ liệu gốc KGara (sửa đè được ở v2). */
+export type FieldGroup = 'identity' | 'source';
 
 export interface FieldMapEntry {
   /** Tên property trên entity V1 (`KgaraCase`/`KgaraCaseService`). */
@@ -23,8 +23,6 @@ export interface FieldMapEntry {
   to: string;
   kind: FieldKind;
   group: FieldGroup;
-  /** `both`: có chiều ngược v2 → V1 (chỉ nhóm ERP-local). */
-  direction: 'v1->v2' | 'both';
 }
 
 export interface IgnoredColumn {
@@ -120,20 +118,6 @@ export function mapForward(entries: readonly FieldMapEntry[], src: Dict): Dict {
   for (const e of entries) {
     const v = convertValue(e.kind, src[e.from]);
     if (v !== undefined) out[e.to] = v;
-  }
-  return out;
-}
-
-/** Map v2 → V1 cho các field `both`: chỉ ghi key có mặt (`undefined` bị bỏ). */
-export function mapBackward(
-  entries: readonly FieldMapEntry[],
-  src: Dict,
-): Dict {
-  const out: Dict = {};
-  for (const e of entries) {
-    if (e.direction !== 'both') continue;
-    const v = convertValue(e.kind, src[e.to]);
-    if (v !== undefined) out[e.from] = v;
   }
   return out;
 }

@@ -23,8 +23,10 @@ import {
   CaseServiceLineDto,
   UpdateServicePartsCostDto,
 } from '../dto/case-service-line.dto';
+import { UpdateCaseProgressDto } from '../dto/case-progress.dto';
 import {
   CreateCaseDto,
+  RevertFieldsDto,
   UpdateCaseDto,
   UpdateCaseStatusDto,
 } from '../dto/case-write.dto';
@@ -71,7 +73,9 @@ export class CasesGarageCommandsController {
   }
 
   @RequirePermissions(perm(ErpAction.UPDATE))
-  @ApiOperation({ summary: 'Sửa vụ việc (xe sync chỉ sửa nhóm ERP-local)' })
+  @ApiOperation({
+    summary: 'Sửa vụ việc (xe sync: sửa đè ở v2, không ghi ngược KGara)',
+  })
   @Patch(':id')
   update(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -82,7 +86,60 @@ export class CasesGarageCommandsController {
   }
 
   @RequirePermissions(perm(ErpAction.UPDATE))
-  @ApiOperation({ summary: 'Đổi trạng thái vụ việc nhập tay' })
+  @ApiOperation({
+    summary:
+      'Cập nhật tiến độ xe: KTV, công đoạn, %, ngày hẹn xong (cả xe sync)',
+  })
+  @Patch(':id/progress')
+  progress(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdateCaseProgressDto,
+    @BranchId() branch: string,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.service.updateProgress(
+      requireBranch(branch),
+      id,
+      dto,
+      req.user?.sub ?? '',
+    );
+  }
+
+  @RequirePermissions(perm(ErpAction.UPDATE))
+  @ApiOperation({
+    summary: 'Về giá trị KGara cho các field đã sửa đè (header)',
+  })
+  @Post(':id/revert')
+  revert(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: RevertFieldsDto,
+    @BranchId() branch: string,
+  ) {
+    return this.service.revertCase(requireBranch(branch), id, dto.fields);
+  }
+
+  @RequirePermissions(perm(ErpAction.UPDATE))
+  @ApiOperation({
+    summary:
+      'Về giá trị KGara cho dòng hạng mục (khóa `_deleted` khôi phục dòng đã xóa)',
+  })
+  @Post(':id/services/:lineId/revert')
+  revertLine(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('lineId', new ParseUUIDPipe()) lineId: string,
+    @Body() dto: RevertFieldsDto,
+    @BranchId() branch: string,
+  ) {
+    return this.service.revertLine(
+      requireBranch(branch),
+      id,
+      lineId,
+      dto.fields,
+    );
+  }
+
+  @RequirePermissions(perm(ErpAction.UPDATE))
+  @ApiOperation({ summary: 'Đổi trạng thái vụ việc (xe sync: ghi đè ở v2)' })
   @Patch(':id/status')
   status(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -93,7 +150,7 @@ export class CasesGarageCommandsController {
   }
 
   @RequirePermissions(perm(ErpAction.DELETE))
-  @ApiOperation({ summary: 'Xóa mềm vụ việc nhập tay (xe sync: 409)' })
+  @ApiOperation({ summary: 'Xóa mềm vụ việc' })
   @Delete(':id')
   remove(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -103,7 +160,7 @@ export class CasesGarageCommandsController {
   }
 
   @RequirePermissions(perm(ErpAction.UPDATE))
-  @ApiOperation({ summary: 'Thêm dòng hạng mục (xe nhập tay)' })
+  @ApiOperation({ summary: 'Thêm dòng hạng mục' })
   @Post(':id/services')
   addLine(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -114,7 +171,7 @@ export class CasesGarageCommandsController {
   }
 
   @RequirePermissions(perm(ErpAction.UPDATE))
-  @ApiOperation({ summary: 'Thay dòng hạng mục (xe nhập tay)' })
+  @ApiOperation({ summary: 'Thay dòng hạng mục (dòng sync: sửa đè ở v2)' })
   @Put(':id/services/:lineId')
   replaceLine(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -143,7 +200,7 @@ export class CasesGarageCommandsController {
   }
 
   @RequirePermissions(perm(ErpAction.UPDATE))
-  @ApiOperation({ summary: 'Xóa dòng hạng mục (xe nhập tay)' })
+  @ApiOperation({ summary: 'Xóa dòng hạng mục (dòng sync: đánh dấu xóa ở v2)' })
   @Delete(':id/services/:lineId')
   removeLine(
     @Param('id', new ParseUUIDPipe()) id: string,

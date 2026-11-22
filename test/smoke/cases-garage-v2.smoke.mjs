@@ -130,6 +130,70 @@ const del = await api('DELETE', `/${id}`, BR);
 check('DELETE 200', del.status === 200, `${del.status}`);
 check('sau xóa đọc -> 404', (await api('GET', `/${id}`, BR)).status === 404);
 
+// 9. Tiến độ xe NATIVE: KTV (nhân viên mẫu), công đoạn, %, bảng theo dõi. Nhân viên mẫu xóa ở cuối.
+const EMP = `${BASE}/api/v2/employees`;
+const authH = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+const empCode = `SMK${tag % 1000000}`;
+const empRes = await fetch(EMP, { method: 'POST', headers: authH, body: JSON.stringify({ employeeCode: empCode, fullName: `KTV Smoke ${tag}` }) });
+const empJson = await empRes.json().catch(() => null);
+const empId = empJson?.data?.id ?? empJson?.id;
+check('tạo nhân viên mẫu', [200, 201].includes(empRes.status) && !!empId, `${empRes.status}`);
+const nat = await api('POST', '', BR, { licensePlate: `PRG-${tag % 100000}`, customerName: 'Tiến độ smoke', requestDescription: 'Sơn cản trước' });
+const natId = nat.d?.id;
+check('tạo xe NATIVE cho tiến độ', !!natId, `${nat.status}`);
+if (natId && empId) {
+  const p1 = await api('PATCH', `/${natId}/progress`, BR, { assigneeId: empId, progressStage: 'PAINTING', progressPercent: 40, expectedCompletionAt: '2099-01-01T00:00:00.000Z' });
+  check('PATCH progress 200 và ghi KTV/công đoạn/%', p1.status === 200 && p1.d?.assigneeId === empId && p1.d?.progressStage === 'PAINTING' && p1.d?.progressPercent === 40, `${p1.status} ${JSON.stringify(p1.data)?.slice(0, 200)}`);
+  check('progress: % ngoài 0-100 -> 400', (await api('PATCH', `/${natId}/progress`, BR, { progressPercent: 101 })).status === 400);
+  check('progress: công đoạn lạ -> 400', (await api('PATCH', `/${natId}/progress`, BR, { progressStage: 'NOPE' })).status === 400);
+  check('progress: KTV không tồn tại -> 400', (await api('PATCH', `/${natId}/progress`, BR, { assigneeId: '00000000-0000-4000-8000-000000000000' })).status === 400);
+  check('progress: chi nhánh khác -> 404', (await api('PATCH', `/${natId}/progress`, BR_OTHER, { progressPercent: 10 })).status === 404);
+  const board = await api('GET', `/progress?status=ALL&search=PRG-${tag % 100000}`, BR);
+  const row = (board.data?.items ?? []).find((x) => x.id === natId);
+  check('GET /progress có xe, KTV, công đoạn, %, workSummary, isOverdue=false', board.status === 200 && row?.assigneeName === `KTV Smoke ${tag}` && row?.progressStage === 'PAINTING' && row?.progressPercent === 40 && row?.workSummary === 'Sơn cản trước' && row?.isOverdue === false, `${board.status} ${JSON.stringify(row)?.slice(0, 200)}`);
+  const byStage = await api('GET', `/progress?status=ALL&stage=QC`, BR);
+  check('GET /progress lọc công đoạn khác không thấy xe', byStage.status === 200 && !(byStage.data?.items ?? []).some((x) => x.id === natId));
+  check('GET /progress thiếu chi nhánh -> 400', (await api('GET', '/progress', null)).status === 400);
+  await api('DELETE', `/${natId}`, BR);
+}
+if (empId) await fetch(`${EMP}/${empId}`, { method: 'DELETE', headers: authH });
+
+// 10. Override xe sync (cần E2E_SYNC_BRANCH = branch_external_id có xe KGARA_SYNC). Sửa rồi về giá trị KGara, trả lại nguyên trạng.
+const SYNC_BR = process.env.E2E_SYNC_BRANCH;
+if (!SYNC_BR) {
+  console.log('SKIP override xe sync: thiếu E2E_SYNC_BRANCH');
+} else {
+  const sl = await api('GET', '/?page=1&pageSize=1&origin=KGARA_SYNC', SYNC_BR);
+  const sid = sl.data?.items?.[0]?.id;
+  check('có xe KGARA_SYNC để thử', !!sid, `${sl.status}`);
+  if (sid) {
+    const before = (await api('GET', `/${sid}`, SYNC_BR)).d;
+    const plate0 = before?.licensePlate ?? null;
+    const o1 = await api('PATCH', `/${sid}`, SYNC_BR, { licensePlate: 'SMK-OVR-1', internalNotes: 'smoke override' });
+    check('SYNC: sửa biển số/ghi chú 200 và overriddenFields', o1.status === 200 && o1.d?.licensePlate === 'SMK-OVR-1' && o1.d?.overriddenFields?.includes('licensePlate'), `${o1.status} ${JSON.stringify(o1.data)?.slice(0, 200)}`);
+    check('SYNC: sửa số chứng từ (định danh) -> 400', (await api('PATCH', `/${sid}`, SYNC_BR, { caseCode: 'KHONG-DUOC' })).status === 400);
+    check('SYNC: sửa dòng services kèm header -> 400', (await api('PATCH', `/${sid}`, SYNC_BR, { services: [] })).status === 400);
+    const pg = await api('PATCH', `/${sid}/progress`, SYNC_BR, { progressStage: 'QC', progressPercent: 90 });
+    check('SYNC: PATCH progress 200', pg.status === 200 && pg.d?.progressStage === 'QC', `${pg.status}`);
+    const line = (await api('GET', `/${sid}`, SYNC_BR)).d?.services?.find((l) => l.externalId);
+    if (line) {
+      const pc = await api('PATCH', `/${sid}/services/${line.id}/parts-cost`, SYNC_BR, { partsCost: 12345 });
+      const lpc = pc.d?.services?.find((l) => l.id === line.id);
+      check('SYNC: sửa giá vốn dòng sync -> overriddenFields có partsCost', pc.status === 200 && lpc?.partsCost === 12345 && lpc?.overriddenFields?.includes('partsCost'), `${pc.status}`);
+      const rmL = await api('DELETE', `/${sid}/services/${line.id}`, SYNC_BR);
+      check('SYNC: xóa dòng sync ẩn dòng khỏi services', rmL.status === 200 && !rmL.d?.services?.some((l) => l.id === line.id), `${rmL.status}`);
+      const rvL = await api('POST', `/${sid}/services/${line.id}/revert`, SYNC_BR, {});
+      const restored = rvL.d?.services?.find((l) => l.id === line.id);
+      check('SYNC: revert dòng khôi phục dòng, giá vốn và bỏ override', rvL.status === 201 || rvL.status === 200 ? !!restored && restored.overriddenFields.length === 0 && restored.partsCost === (line.partsCost ?? null) : false, `${rvL.status}`);
+    }
+    check('revert field chưa sửa đè -> 400', (await api('POST', `/${sid}/revert`, SYNC_BR, { fields: ['customerName'] })).status === 400);
+    const rv = await api('POST', `/${sid}/revert`, SYNC_BR, {});
+    check('SYNC: revert header về giá trị KGara', [200, 201].includes(rv.status) && (rv.d?.licensePlate ?? null) === plate0 && !rv.d?.overriddenFields?.includes('licensePlate'), `${rv.status} ${rv.d?.licensePlate}`);
+    await api('PATCH', `/${sid}`, SYNC_BR, { internalNotes: before?.internalNotes ?? null });
+    await api('PATCH', `/${sid}/progress`, SYNC_BR, { progressStage: null, progressPercent: null });
+  }
+}
+
 const failed = results.filter((x) => !x).length;
 console.log(`TOTAL ${results.length}, FAILED ${failed}`);
 process.exit(failed ? 1 : 0);

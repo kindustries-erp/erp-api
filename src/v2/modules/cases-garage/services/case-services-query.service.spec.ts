@@ -3,7 +3,7 @@ import {
   SqlCapture,
 } from '@/common/testing/sql-capture.testing';
 import appDataSource from '@/db/data-source';
-import { CaseServiceGarage } from '../entities/case-service-garage.entity';
+import { CaseLineGarage } from '../entities/case-line-garage.entity';
 import { CaseServicesQueryService } from './case-services-query.service';
 
 describe('CaseServicesQueryService', () => {
@@ -14,7 +14,7 @@ describe('CaseServicesQueryService', () => {
   beforeEach(async () => {
     cap = await createSqlCapture(appDataSource.options.entities as never[]);
     service = new CaseServicesQueryService(
-      cap.dataSource.getRepository(CaseServiceGarage),
+      cap.dataSource.getRepository(CaseLineGarage),
     );
   });
 

@@ -382,6 +382,33 @@ Quy tắc (áp cho mọi họ v2 trong erp-api):
 - Test `plop-helpers/apiCoreLayout.test.mjs` chặn vi phạm. Các họ cũ còn vi phạm nằm trong `LEGACY_CORE_ALLOWLIST` và được đánh dấu `[LEGACY-CORE]`; chuyển xong một họ thì gỡ khỏi danh sách. Chuyển từng họ khi có lệnh riêng.
 - Không sinh lại Base entity hay engine của một họ đã có lõi.
 
+#### Đánh giá use case đa ngành (bắt buộc trước khi tạo lõi hoặc module)
+
+- Trước khi tạo lõi mới hoặc chốt field của module, liệt kê **ít nhất 3 use case khác nhau**, không bó trong ERP hay một ngành (ví dụ vụ việc: sửa xe, bảo hành thiết bị, phòng khám, spa, công trình, ticket IT, bảo hiểm).
+- Với từng field hỏi: "mọi use case đều cần không?". Đều cần thì vào lõi; chỉ một ngành cần thì ở module; chỗ phát sinh sau ghi vào `extra_data`.
+- Ghi bảng `use case → field` vào `SKILL.md` của lõi.
+- Chỉ có **một** use case thì dừng và hỏi người dùng, không tự tạo lõi.
+
+#### Tên không lấy từ lõi
+
+- Lõi chỉ là base để kế thừa. Tên bảng, module, entity cụ thể **không** dùng `base_`, `core_` hay tên lõi để biểu thị quan hệ kế thừa. Quan hệ thể hiện bằng `extends` và ghi trong `SKILL.md` của module.
+
+#### Quy ước tên: code và DB
+
+- Code (property, biến, DTO) và response API: **camelCase**.
+- Cột DB: **snake_case**, map bằng `@Column({ name: 'snake_case' })`. Không tạo cột camelCase mới.
+
+#### Mẫu override cho module đồng bộ từ hệ ngoài
+
+Áp dụng khi module nhận dữ liệu sync từ hệ khác (ví dụ KGara) mà v2 cần sửa mà **không ảnh hưởng nguồn**:
+- Cột hiện có là giá trị **hiệu lực** (giữ nguyên query, filter, index). Thêm hai cột jsonb: `source_snapshot` (giá trị mới nhất từ nguồn) và `overrides` (tập khóa field đã sửa ở v2).
+- Projector luôn ghi `source_snapshot`; chỉ ghi cột hiệu lực nếu field không nằm trong `overrides`.
+- Sửa ở v2 ghi cột hiệu lực và thêm khóa vào `overrides`; **không bao giờ ghi ngược** sang bảng nguồn.
+- Endpoint "về giá trị nguồn": chép `source_snapshot[field]` về cột và bỏ khóa khỏi `overrides`.
+- Khóa đặc biệt `_deleted` trên dòng: xóa mềm ở v2, projector không hồi sinh.
+- Không cho override: định danh/nguồn (`origin`, `externalId`, `accountKey`) và field suy ra từ sổ khác (công nợ).
+- Nối dòng với nguồn bằng `(account_key, external_id)`, không thêm cột `legacy_*` trùng id.
+
 **Cron và job định kỳ**: job là class trong module, kế thừa `ScheduledJob` (lớp nền trừu tượng ở `src/v2/core/scheduler-core/`), khai báo `jobName`, `cron`, `timeZone` và `run()`. Module `src/v2/modules/scheduler-jobs/` (`SchedulerJobsModule`, import một lần trong `AppModule`) tự tìm mọi job qua `DiscoveryService` và đăng ký. Không thêm `@Cron(...)` hay `setInterval` mới để chạy nền. Chi tiết: `.agents/skills/modules/scheduler-jobs/SKILL.md`.
 
 ### 🏷️ Quy tắc đặt tên bảng (v2)

@@ -6,13 +6,15 @@ import { KgaraCaseLinkedInvoice } from '@/kgara-api-core/entities/kgara_case_lin
 import { KgaraCaseSettlement } from '@/kgara-api-core/entities/kgara_case_settlement.entity';
 import { KgaraGrossProfit } from '@/kgara-api-core/entities/kgara_gross_profit.entity';
 import { CaseGarage } from './entities/case-garage.entity';
-import { CaseServiceGarage } from './entities/case-service-garage.entity';
+import { CaseLineGarage } from './entities/case-line-garage.entity';
 import { GARAGE_CASE_PROJECTOR } from '@/kgara-api-core/hub/case-projector.port';
 import { CasesGarageService } from './cases-garage.service';
 import { CasesGarageCommandsController } from './controllers/cases-garage-commands.controller';
 import { CasesGarageController } from './controllers/cases-garage.controller';
 import { CaseCommandService } from './services/case-command.service';
-import { CaseKgaraMirrorService } from './services/case-kgara-mirror.service';
+import { CaseProgressCommandService } from './services/case-progress-command.service';
+import { CaseProgressQueryService } from './services/case-progress-query.service';
+import { CaseRevertService } from './services/case-revert.service';
 import { CaseLineCommandService } from './services/case-line-command.service';
 import { CaseProjectorService } from './services/case-projector.service';
 import { CaseLineWriter } from './services/case-line-writer.service';
@@ -24,8 +26,8 @@ import { CaseListQueryService } from './services/case-list-query.service';
 import { GrossProfitReportService } from './services/gross-profit-report.service';
 
 /**
- * Vụ việc garage v2: CRUD trên `cases_garage` + `case_services_garage` (xe nhập tay `NATIVE`) và bản chiếu
- * xe KGARA_SYNC từ V1 qua `CaseProjectorService`. Route `api/v2/cases-garage`, quyền `GARAGE`
+ * Vụ việc garage v2: CRUD trên `cases_garage` + `case_lines_garage` (xe nhập tay `NATIVE`) và bản chiếu
+ * xe KGARA_SYNC từ V1 qua `CaseProjectorService` (sửa đè ở v2 bằng `overrides`, không ghi ngược KGara). Route `api/v2/cases-garage`, quyền `GARAGE`
  * (READ/CREATE/UPDATE/DELETE). Số liệu cấn trừ/hóa đơn liên kết/lãi gộp vẫn đọc từ `kgara_*` (cùng UUID).
  */
 @Module({
@@ -37,7 +39,7 @@ import { GrossProfitReportService } from './services/gross-profit-report.service
       KgaraCaseLinkedInvoice,
       KgaraBranch,
       CaseGarage,
-      CaseServiceGarage,
+      CaseLineGarage,
     ]),
   ],
   // Controller ghi đứng trước để route tĩnh (`next-code`) không bị `GET :id` nuốt.
@@ -53,7 +55,9 @@ import { GrossProfitReportService } from './services/gross-profit-report.service
     CaseCommandService,
     CaseLineCommandService,
     CaseLineWriter,
-    CaseKgaraMirrorService,
+    CaseRevertService,
+    CaseProgressCommandService,
+    CaseProgressQueryService,
     CaseProjectorService,
     { provide: GARAGE_CASE_PROJECTOR, useExisting: CaseProjectorService },
   ],

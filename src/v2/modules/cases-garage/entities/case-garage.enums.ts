@@ -2,7 +2,7 @@
 export enum CaseOrigin {
   /** Tạo ở v2, sửa được mọi field. */
   NATIVE = 'NATIVE',
-  /** Chiếu từ `kgara_cases` (V1), chỉ sửa được nhóm ERP-local. */
+  /** Chiếu từ `kgara_cases` (V1), sửa đè được ở v2 (override), không ghi ngược KGara. */
   KGARA_SYNC = 'KGARA_SYNC',
 }
 

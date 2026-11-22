@@ -78,7 +78,7 @@ export const CASE_SUMMARY_KEYS = [
 ];
 
 const s = (c: string) => `"s"."${c}"`;
-/** Cột của danh sách hạng mục: alias `s` = case_services_garage, `c` = cases_garage. */
+/** Cột của danh sách hạng mục: alias `s` = case_lines_garage, `c` = cases_garage. */
 export const SERVICE_COLUMNS: TableColumnMap = {
   productCode: t(s('product_code')),
   productName: t(s('product_name')),
