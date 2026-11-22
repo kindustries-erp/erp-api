@@ -1,7 +1,9 @@
-import { ErpBranch } from '@/v2/core/branches-core/entities/erp_branch.entity';
+import { BranchManagement } from '../entities/branch-management.entity';
 import { ErpBranchResponseDto } from '../dto/erp-branch-response.dto';
 
-export function toErpBranchResponse(entity: ErpBranch): ErpBranchResponseDto {
+export function toErpBranchResponse(
+  entity: BranchManagement,
+): ErpBranchResponseDto {
   return {
     id: entity.id,
     extraData: entity.extraData ?? {},

@@ -96,6 +96,36 @@ describe('reconcileCaseLines', () => {
     expect(saved.deletedAt).toBeNull();
   });
 
+  it('giữ giá vốn đã có khi Kgara trả giá vốn 0 (AC-4)', async () => {
+    const row = {
+      ...existing('r1', 'd1'),
+      giaVonPhuTung: 500,
+    } as KgaraCaseService;
+    const { manager, repo } = makeManager([row]);
+    await reconcileCaseLines(manager, CASE, 'MAIN', [
+      {
+        detailId: 'd1',
+        data: { giaVonPhuTung: 0 } as Partial<KgaraCaseService>,
+      },
+    ]);
+    expect(repo.save.mock.calls[0][0][0].giaVonPhuTung).toBe(500);
+  });
+
+  it('ghi giá vốn mới khi Kgara trả giá vốn lớn hơn 0', async () => {
+    const row = {
+      ...existing('r1', 'd1'),
+      giaVonPhuTung: 500,
+    } as KgaraCaseService;
+    const { manager, repo } = makeManager([row]);
+    await reconcileCaseLines(manager, CASE, 'MAIN', [
+      {
+        detailId: 'd1',
+        data: { giaVonPhuTung: 800 } as Partial<KgaraCaseService>,
+      },
+    ]);
+    expect(repo.save.mock.calls[0][0][0].giaVonPhuTung).toBe(800);
+  });
+
   it('soft-deletes lines of this case that Kgara no longer returns', async () => {
     const { manager, repo } = makeManager([
       existing('r1', 'd1'),

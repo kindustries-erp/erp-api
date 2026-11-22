@@ -93,7 +93,7 @@ export function buildReceivablesTrendItem(
     const { paid, remaining } = computeCaseRemaining({
       netRevenue: c.tienCoThue ?? c.tien_co_thue,
       storedPaid: c.tienDaThanhToan ?? c.tien_da_thanh_toan,
-      hasSettlement: receiptsByCaseId.has(c.id),
+      hasReceipt: receiptsByCaseId.has(c.id),
       receipts: receiptsByCaseId.get(c.id),
       excludeFromDebt: c.excludeFromDebt,
     });

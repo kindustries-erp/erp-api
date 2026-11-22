@@ -13,14 +13,16 @@ function makeController() {
   };
   const services = { findPage: jest.fn().mockResolvedValue({ items: [] }) };
   const grossProfit = { getReport: jest.fn().mockResolvedValue({ items: [] }) };
+  const progress = { findPage: jest.fn().mockResolvedValue({ items: [] }) };
   const controller = new CasesGarageController(
     list as never,
     options as never,
     detail as never,
     services as never,
     grossProfit as never,
+    progress as never,
   );
-  return { controller, list, options, detail, services, grossProfit };
+  return { controller, list, options, detail, services, grossProfit, progress };
 }
 
 describe('CasesGarageController', () => {
@@ -34,6 +36,7 @@ describe('CasesGarageController', () => {
       'columnOptions',
       'listServices',
       'grossProfitReport',
+      'progressBoard',
       'byCode',
       'byId',
     ]) {
@@ -100,7 +103,7 @@ describe('CasesGarageController', () => {
         branchId: 'b1',
         page: 2,
         from: '2026-08-01',
-        columnFilters: '{"a":["b"]}',
+        column_filters: '{"a":["b"]}',
         summaryKeys: 'tienCoThue',
         serviceType: 'DV',
       }),

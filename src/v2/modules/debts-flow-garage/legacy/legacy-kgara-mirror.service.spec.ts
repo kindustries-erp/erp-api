@@ -201,3 +201,42 @@ describe('toLegacyPaymentMethod', () => {
     expect(toLegacyPaymentMethod(undefined)).toBe('CASH');
   });
 });
+
+describe('LegacyKgaraMirrorService.recalcCaseDebt: đã thu = RECEIPT-only', () => {
+  function run(settlements: Array<{ settlementType: string; amount: number }>) {
+    const kCase: Record<string, unknown> = {
+      id: 'c1',
+      tienCoThue: 1000,
+      rawData: { TienDaThanhToan: 200 },
+    };
+    const repo = (entity: { name: string }) =>
+      entity.name === 'KgaraCase'
+        ? {
+            findOne: jest.fn().mockResolvedValue(kCase),
+            save: jest.fn().mockResolvedValue(kCase),
+          }
+        : { find: jest.fn().mockResolvedValue(settlements) };
+    const manager = { getRepository: repo };
+    const svc = new LegacyKgaraMirrorService({} as never);
+    return svc.recalcCaseDebt(manager as never, 'c1').then(() => kCase);
+  }
+
+  it('chỉ có PAYMENT: giữ đã thu Kgara báo, không đặt về 0', async () => {
+    const c = await run([{ settlementType: 'PAYMENT', amount: 500 }]);
+    expect(c).toMatchObject({
+      tienDaThanhToan: 200,
+      tienConPhaiThanhToan: 800,
+    });
+  });
+
+  it('có RECEIPT: đã thu = tổng RECEIPT', async () => {
+    const c = await run([
+      { settlementType: 'PAYMENT', amount: 500 },
+      { settlementType: 'RECEIPT', amount: 300 },
+    ]);
+    expect(c).toMatchObject({
+      tienDaThanhToan: 300,
+      tienConPhaiThanhToan: 700,
+    });
+  });
+});

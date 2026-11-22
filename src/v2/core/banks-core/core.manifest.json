@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "layer": "api",
+  "family": "banks-core",
+  "entity": "BaseBankEntity",
+  "style": "v2-core",
+  "barrel": "src/v2/core/banks-core/index.ts",
+  "module": null,
+  "moduleFile": null,
+  "baseClasses": {
+    "entity": "BaseBankEntity",
+    "createDto": null,
+    "contract": "BankContract",
+    "service": null
+  },
+  "serviceFile": null,
+  "permissionPattern": null,
+  "requiredModuleFiles": ["entities"]
+}

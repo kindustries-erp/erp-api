@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { TablePreferencesCoreService } from '@/v2/core/table-preferences-core';
+import { TablePreferenceCommandService } from './services/table-preference-command.service';
+import { TablePreferenceQueryService } from './services/table-preference-query.service';
 import { ListTablePreferencesDto } from './dto/list-table-preferences.dto';
 import { UpdateTablePreferenceDto } from './dto/update-table-preference.dto';
 import {
@@ -8,16 +9,19 @@ import {
 } from './dto/table-preference-response.dto';
 import { toTablePreferenceResponse } from './helpers/table-preference.mapper';
 
-/** Facade HTTP: gọi lõi và map sang response DTO */
+/** Facade HTTP: gọi query/command service và map sang response DTO */
 @Injectable()
 export class TablePreferencesService {
-  constructor(private readonly core: TablePreferencesCoreService) {}
+  constructor(
+    private readonly query: TablePreferenceQueryService,
+    private readonly command: TablePreferenceCommandService,
+  ) {}
 
   async list(
     userId: string,
     dto: ListTablePreferencesDto,
   ): Promise<TablePreferenceListResponseDto> {
-    const rows = await this.core.listForUser(userId, dto.tableIdPrefix);
+    const rows = await this.query.listForUser(userId, dto.tableIdPrefix);
     return { items: rows.map(toTablePreferenceResponse) };
   }
 
@@ -26,7 +30,7 @@ export class TablePreferencesService {
     tableId: string,
     dto: UpdateTablePreferenceDto,
   ): Promise<TablePreferenceResponseDto> {
-    const row = await this.core.upsertForUser(userId, tableId, dto);
+    const row = await this.command.upsert(userId, tableId, dto);
     return toTablePreferenceResponse(row);
   }
 }

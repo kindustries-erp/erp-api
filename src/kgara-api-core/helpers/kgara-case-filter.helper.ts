@@ -1,4 +1,8 @@
 import { Brackets, SelectQueryBuilder } from 'typeorm';
+import {
+  normalizePlate,
+  normalizedPlateSql,
+} from '@/common/utils/license-plate';
 import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraCaseService } from '../entities/kgara_case_service.entity';
 import {
@@ -48,6 +52,14 @@ export function getCaseColumnSelectExpr(column: string): string | null {
       'CASE WHEN "case"."exclude_from_reports" IS TRUE THEN \'EXCLUDE_REPORTS\' WHEN "case"."exclude_from_debt" IS TRUE THEN \'EXCLUDE_DEBT\' ELSE \'NORMAL\' END',
     kgaraClassification: '"case"."kgara_classification"',
     kgaraClassificationCode: '"case"."kgara_classification_code"',
+    soKhung: '"case"."so_khung"',
+    hangXe: '"case"."hang_xe_name"',
+    hangXeCode: '"case"."hang_xe_code"',
+    dongXe: '"case"."dong_xe_name"',
+    dongXeCode: '"case"."dong_xe_code"',
+    namSanXuat: '"case"."nam_san_xuat"',
+    doiTuongThanhToan: '"case"."doi_tuong_thanh_toan_name"',
+    doiTuongThanhToanCode: '"case"."doi_tuong_thanh_toan_code"',
     branchName: '"case"."branch_external_id"',
     branchExternalId: '"case"."branch_external_id"',
     isInsuranceClaim:
@@ -434,7 +446,9 @@ export function applySingleCaseColumnFilter(
               param +
               ' OR "case"."bien_so_xe" ILIKE :' +
               param +
-              " OR REGEXP_REPLACE(LOWER(\"case\".\"bien_so_xe\"), '[^a-z0-9]', '', 'g') ILIKE :" +
+              ' OR ' +
+              normalizedPlateSql('"case"."bien_so_xe"') +
+              ' ILIKE :' +
               param +
               ')';
             if (first) {
@@ -461,19 +475,37 @@ export function applySingleCaseColumnFilter(
 
         if (expandedPlainVals.length > 0) {
           const param = `${paramPrefix}_in_vals`;
+          const plateParam = `${param}_plate`;
+          const plateVals = Array.from(
+            new Set(
+              expandedPlainVals.map((v) => normalizePlate(v)).filter(Boolean),
+            ),
+          );
+          const plateClause =
+            plateVals.length > 0
+              ? ' OR ' +
+                normalizedPlateSql('"case"."bien_so_xe"') +
+                ' IN (:...' +
+                plateParam +
+                ')'
+              : '';
           const cond =
             '("case"."so_chung_tu" IN (:...' +
             param +
             ') OR "case"."bien_so_xe" IN (:...' +
             param +
-            ") OR REGEXP_REPLACE(LOWER(\"case\".\"bien_so_xe\"), '[^a-z0-9]', '', 'g') IN (:..." +
-            param +
-            '))';
+            ')' +
+            plateClause +
+            ')';
+          const condParams: Record<string, string[]> = {
+            [param]: expandedPlainVals,
+          };
+          if (plateVals.length > 0) condParams[plateParam] = plateVals;
           if (first) {
-            sqb.where(cond, { [param]: expandedPlainVals });
+            sqb.where(cond, condParams);
             first = false;
           } else {
-            sqb.orWhere(cond, { [param]: expandedPlainVals });
+            sqb.orWhere(cond, condParams);
           }
         }
       }),
@@ -813,7 +845,9 @@ export function applySingleCaseServiceColumnFilter(
               param +
               ' OR "c"."bien_so_xe" ILIKE :' +
               param +
-              " OR REGEXP_REPLACE(LOWER(\"c\".\"bien_so_xe\"), '[^a-z0-9]', '', 'g') ILIKE :" +
+              ' OR ' +
+              normalizedPlateSql('"c"."bien_so_xe"') +
+              ' ILIKE :' +
               param +
               ')';
             if (first) {
@@ -840,19 +874,37 @@ export function applySingleCaseServiceColumnFilter(
 
         if (expandedPlainVals.length > 0) {
           const param = `${paramPrefix}_srv_in`;
+          const plateParam = `${param}_plate`;
+          const plateVals = Array.from(
+            new Set(
+              expandedPlainVals.map((v) => normalizePlate(v)).filter(Boolean),
+            ),
+          );
+          const plateClause =
+            plateVals.length > 0
+              ? ' OR ' +
+                normalizedPlateSql('"c"."bien_so_xe"') +
+                ' IN (:...' +
+                plateParam +
+                ')'
+              : '';
           const cond =
             '("c"."so_chung_tu" IN (:...' +
             param +
             ') OR "c"."bien_so_xe" IN (:...' +
             param +
-            ") OR REGEXP_REPLACE(LOWER(\"c\".\"bien_so_xe\"), '[^a-z0-9]', '', 'g') IN (:..." +
-            param +
-            '))';
+            ')' +
+            plateClause +
+            ')';
+          const condParams: Record<string, string[]> = {
+            [param]: expandedPlainVals,
+          };
+          if (plateVals.length > 0) condParams[plateParam] = plateVals;
           if (first) {
-            sqb.where(cond, { [param]: expandedPlainVals });
+            sqb.where(cond, condParams);
             first = false;
           } else {
-            sqb.orWhere(cond, { [param]: expandedPlainVals });
+            sqb.orWhere(cond, condParams);
           }
         }
       }),

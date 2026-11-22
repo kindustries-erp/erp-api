@@ -7,7 +7,7 @@ import {
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import type { EntityManager } from 'typeorm';
-import { EmployeeManagement } from '@/v2/core/employees-core/entities/employee-management.entity';
+import { EmployeeManagement } from '@/v2/modules/employees-management/entities/employee-management.entity';
 import {
   assertValidExtraData,
   mergeExtraData,

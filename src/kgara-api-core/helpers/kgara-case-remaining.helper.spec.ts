@@ -1,11 +1,14 @@
-import { computeCaseRemaining } from './kgara-case-remaining.helper';
+import {
+  hasReceiptSettlement,
+  computeCaseRemaining,
+} from './kgara-case-remaining.helper';
 
 describe('computeCaseRemaining', () => {
   it('chiết khấu đã thu đủ phần ròng thì còn phải thu = 0 (dù cột lưu sẵn còn số chiết khấu)', () => {
     const r = computeCaseRemaining({
       netRevenue: 65165402,
       storedPaid: 65165402,
-      hasSettlement: false,
+      hasReceipt: false,
       receipts: 0,
       excludeFromDebt: false,
     });
@@ -16,7 +19,7 @@ describe('computeCaseRemaining', () => {
     const r = computeCaseRemaining({
       netRevenue: 5309550,
       storedPaid: 4769550,
-      hasSettlement: true,
+      hasReceipt: true,
       receipts: 4769550,
       excludeFromDebt: false,
     });
@@ -27,7 +30,7 @@ describe('computeCaseRemaining', () => {
     const r = computeCaseRemaining({
       netRevenue: 1000000,
       storedPaid: 0,
-      hasSettlement: true,
+      hasReceipt: true,
       receipts: 400000,
       excludeFromDebt: false,
     });
@@ -38,7 +41,7 @@ describe('computeCaseRemaining', () => {
     const r = computeCaseRemaining({
       netRevenue: 1000000,
       storedPaid: 0,
-      hasSettlement: true,
+      hasReceipt: true,
       receipts: 1200000,
       excludeFromDebt: false,
     });
@@ -49,7 +52,7 @@ describe('computeCaseRemaining', () => {
     const r = computeCaseRemaining({
       netRevenue: 2000000,
       storedPaid: 0,
-      hasSettlement: false,
+      hasReceipt: false,
       receipts: 0,
       excludeFromDebt: true,
     });
@@ -60,11 +63,29 @@ describe('computeCaseRemaining', () => {
     const r = computeCaseRemaining({
       netRevenue: '100.555',
       storedPaid: null,
-      hasSettlement: false,
+      hasReceipt: false,
       receipts: null,
       excludeFromDebt: null,
     });
     expect(r.remaining).toBe(100.56);
     expect(r.paid).toBe(0);
+  });
+});
+
+describe('hasReceiptSettlement', () => {
+  it('không settlement -> false', () => {
+    expect(hasReceiptSettlement([])).toBe(false);
+    expect(hasReceiptSettlement(undefined)).toBe(false);
+  });
+  it('chỉ PAYMENT -> false', () => {
+    expect(hasReceiptSettlement([{ settlementType: 'PAYMENT' }])).toBe(false);
+  });
+  it('có RECEIPT -> true', () => {
+    expect(
+      hasReceiptSettlement([
+        { settlementType: 'PAYMENT' },
+        { settlementType: 'RECEIPT' },
+      ]),
+    ).toBe(true);
   });
 });

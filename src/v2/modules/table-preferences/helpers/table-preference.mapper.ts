@@ -1,4 +1,4 @@
-import type { CoreUserTablePreference } from '@/v2/core/table-preferences-core';
+import type { CoreUserTablePreference } from '../entities/core-user-table-preference.entity';
 import { TablePreferenceResponseDto } from '../dto/table-preference-response.dto';
 
 /** Entity -> response DTO. Không trả entity ra ngoài module. */

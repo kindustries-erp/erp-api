@@ -433,3 +433,32 @@ describe('GarageCashflowTransactionService - bên thanh toán KH/BH của phiế
     });
   });
 });
+
+describe('GarageCashflowTransactionService - _recalculateCaseDebt: đã thu = RECEIPT-only', () => {
+  async function recalc(settlements: any[]) {
+    const kCase: any = {
+      id: 'case-1',
+      tienCoThue: 1000,
+      rawData: { TienDaThanhToan: 200 },
+    };
+    const { service, manager, queryRunner } = buildHarness({ caseRow: kCase });
+    manager.find = jest.fn(async () => settlements);
+    await (service as any)._recalculateCaseDebt(queryRunner, 'case-1');
+    return kCase;
+  }
+
+  it('chỉ có PAYMENT: giữ đã thu Kgara báo, không đặt về 0', async () => {
+    const c = await recalc([{ settlementType: 'PAYMENT', amount: 500 }]);
+    expect(c.tienDaThanhToan).toBe(200);
+    expect(c.tienConPhaiThanhToan).toBe(800);
+  });
+
+  it('có RECEIPT: đã thu = tổng RECEIPT', async () => {
+    const c = await recalc([
+      { settlementType: 'PAYMENT', amount: 500 },
+      { settlementType: 'RECEIPT', amount: 300 },
+    ]);
+    expect(c.tienDaThanhToan).toBe(300);
+    expect(c.tienConPhaiThanhToan).toBe(700);
+  });
+});

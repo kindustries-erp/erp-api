@@ -1,4 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
+import { notifyCaseProjector } from '../hub/case-projector.port';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { KgaraCase } from '../entities/kgara_case.entity';
@@ -16,6 +23,8 @@ const UUID_REGEX =
 
 @Injectable()
 export class KgaraCaseLookupService {
+  private readonly logger = new Logger(KgaraCaseLookupService.name);
+
   constructor(
     @InjectRepository(KgaraCase)
     private readonly caseRepo: Repository<KgaraCase>,
@@ -27,6 +36,8 @@ export class KgaraCaseLookupService {
     private readonly grossProfitRepo: Repository<KgaraGrossProfit>,
     private readonly client: KgaraClientService,
     private readonly dataSource: DataSource,
+    @Optional()
+    private readonly moduleRef?: ModuleRef,
   ) {}
 
   /**
@@ -238,11 +249,15 @@ export class KgaraCaseLookupService {
     const rev = Number(grossProfit.doanhThu) || 0;
     const cost = Number(grossProfit.chiPhi) || 0;
     const profit = Number(grossProfit.loiNhuan) || rev - cost;
-    const margin = rev > 0 ? Number(((profit / rev) * 100).toFixed(1)) : 0;
-
     const journalItems = (grossProfit.rawData as any)?.journal_items || [];
     const costBreakdown =
       KgaraCaseFinancialParserHelper.parseJournalCostBreakdown(journalItems);
+
+    // Chiết khấu (TK 521) là giảm trừ doanh thu: biên tính trên doanh thu thuần.
+    // ChiPhi/LoiNhuan giữ số thô của KGara (ChiPhi thô đã gồm 521).
+    const netRevenue = rev - costBreakdown.discountCost;
+    const margin =
+      netRevenue > 0 ? Number(((profit / netRevenue) * 100).toFixed(1)) : 0;
 
     return {
       id: grossProfit.id,
@@ -251,28 +266,47 @@ export class KgaraCaseLookupService {
       DoanhThu: rev,
       ChiPhi: cost,
       LoiNhuan: profit,
-      BienLoiNhuan: margin,
       VuViecCode: grossProfit.vuViecCode,
       VuViecName: grossProfit.vuViecName,
       TenKhachHang: grossProfit.tenKhachHang,
       VuViecID: grossProfit.hdPhieuDichVuId,
-      costBreakdown,
       ...(grossProfit.rawData as object),
+      // Đặt sau rawData để payload KGara không ghi đè số đã tính lại (doanh thu thuần, biên, cơ cấu chi phí).
+      DoanhThuThuan: netRevenue,
+      BienLoiNhuan: margin,
+      costBreakdown,
     };
   }
 
   /**
    * Tự động làm giàu đơn giá vốn & tổng vốn cho các dòng phụ tùng từ Sổ nhật ký chi phí (TK 1541)
    */
-  async enrichCostForCase(caseData: KgaraCase): Promise<void> {
+  /**
+   * Làm giàu giá vốn từng dòng từ journal TK 1541.
+   * - Mặc định bỏ qua phiếu đã làm giàu, trừ khi tổng TK 1541 trong journal đã lưu khác
+   *   costBreakdown.warehousePartsCost (xuất kho hạch toán sau lần làm giàu trước).
+   * - `force`: luôn làm lại. `skipRemote`: chỉ dùng journal đã lưu, không gọi KGara.
+   * - `notifyProjector` (mặc định true): chiếu lại sang V2 sau khi ghi.
+   * Trả true nếu đã ghi giá vốn mới.
+   */
+  async enrichCostForCase(
+    caseData: KgaraCase,
+    opts: {
+      force?: boolean;
+      skipRemote?: boolean;
+      notifyProjector?: boolean;
+    } = {},
+  ): Promise<boolean> {
     const rawLines =
       caseData.rawData?.ListPhieuDichVuChiTiet ||
       caseData.rawData?.PhieuDichVuChiTiet;
-    if (!rawLines || !Array.isArray(rawLines) || rawLines.length === 0) return;
-
-    if (caseData.rawData?.costEnriched && caseData.rawData?.costBreakdown) {
-      return;
+    if (!rawLines || !Array.isArray(rawLines) || rawLines.length === 0) {
+      return false;
     }
+
+    const alreadyEnriched = !!(
+      caseData.rawData?.costEnriched && caseData.rawData?.costBreakdown
+    );
 
     try {
       const gpConditions: Array<{
@@ -293,7 +327,23 @@ export class KgaraCaseLookupService {
 
       let journalItems = grossProfit?.rawData?.journal_items;
 
-      if (!journalItems && caseData.branchExternalId) {
+      if (alreadyEnriched && !opts.force) {
+        if (!Array.isArray(journalItems)) return false;
+        const journalCost =
+          KgaraCostEnricherHelper.sumWarehouseCost(journalItems);
+        const lastCost = Number(
+          caseData.rawData.costBreakdown?.warehousePartsCost ?? 0,
+        );
+        if (journalCost === lastCost) {
+          // Giá vốn V1 đã đúng; vẫn chiếu lại V2 khi caller yêu cầu rõ (sync), vì V2 có thể chưa từng được chiếu.
+          if (opts.notifyProjector === true) {
+            await notifyCaseProjector(this.moduleRef, this.logger, caseData.id);
+          }
+          return false;
+        }
+      }
+
+      if (!journalItems && !opts.skipRemote && caseData.branchExternalId) {
         let fromStr = grossProfit?.reportFrom
           ? String(grossProfit.reportFrom).slice(0, 10)
           : null;
@@ -343,32 +393,38 @@ export class KgaraCaseLookupService {
         }
       }
 
-      if (journalItems && Array.isArray(journalItems)) {
-        const enriched = KgaraCostEnricherHelper.enrichCaseLines(
-          rawLines,
-          journalItems,
-        );
-        caseData.rawData.ListPhieuDichVuChiTiet = enriched.lines;
-        caseData.rawData.costBreakdown = enriched.costBreakdown;
-        caseData.rawData.costEnriched = true;
+      if (!journalItems || !Array.isArray(journalItems)) return false;
 
-        await this.caseRepo.save(caseData);
+      const enriched = KgaraCostEnricherHelper.enrichCaseLines(
+        rawLines,
+        journalItems,
+      );
+      caseData.rawData.ListPhieuDichVuChiTiet = enriched.lines;
+      caseData.rawData.costBreakdown = enriched.costBreakdown;
+      caseData.rawData.costEnriched = true;
 
-        for (const line of enriched.lines) {
-          const detailId =
-            line.HdPhieuDichVuChiTietID ||
-            line.HdPhieuDichVuChiTietId ||
-            line.Id;
-          if (detailId && line.GiaVonPhuTung > 0) {
-            await this.caseServiceRepo.update(
-              { hdPhieuDichVuChiTietId: detailId },
-              { giaVonPhuTung: line.GiaVonPhuTung },
-            );
-          }
+      await this.caseRepo.save(caseData);
+
+      for (const line of enriched.lines) {
+        const detailId =
+          line.HdPhieuDichVuChiTietID || line.HdPhieuDichVuChiTietId || line.Id;
+        if (detailId && line.GiaVonPhuTung > 0) {
+          await this.caseServiceRepo.update(
+            { hdPhieuDichVuChiTietId: detailId },
+            { giaVonPhuTung: line.GiaVonPhuTung },
+          );
         }
       }
-    } catch {
-      // Non-blocking error handling
+
+      if (opts.notifyProjector !== false) {
+        await notifyCaseProjector(this.moduleRef, this.logger, caseData.id);
+      }
+      return true;
+    } catch (err: any) {
+      this.logger.warn(
+        `enrichCostForCase failed for ${caseData.soChungTu || caseData.id}: ${err?.message || err}`,
+      );
+      return false;
     }
   }
 
@@ -411,6 +467,7 @@ export class KgaraCaseLookupService {
     caseData.rawData.ListPhieuDichVuChiTiet = rawLines;
     caseData.rawData.costEnriched = true;
     await this.caseRepo.save(caseData);
+    await notifyCaseProjector(this.moduleRef, this.logger, caseData.id);
     return caseData;
   }
 }

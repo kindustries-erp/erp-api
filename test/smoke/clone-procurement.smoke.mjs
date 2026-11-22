@@ -3,13 +3,13 @@
 //   E2E_API_URL      (mặc định suy từ PORT trong erp-api/.env, xem e2e-ports.mjs)
 //   E2E_PASSWORD     (BẮT BUỘC, mật khẩu tài khoản test; không hardcode)
 //   E2E_TAO_EMAIL    (mặc định ai-test-tao@example.com)
-//   E2E_DUYET_EMAIL  (mặc định ai-test-duyet@example.com)
+//   E2E_ADMIN_EMAIL  (mặc định ai-test-admin@example.com)
 // Chạy: bun run test:smoke:clone
 import { resolveApiUrl } from './e2e-ports.mjs';
 const BASE = resolveApiUrl();
 const PASSWORD = process.env.E2E_PASSWORD;
 const TAO_EMAIL = process.env.E2E_TAO_EMAIL ?? 'ai-test-tao@example.com';
-const DUYET_EMAIL = process.env.E2E_DUYET_EMAIL ?? 'ai-test-duyet@example.com';
+const ADMIN_ACCOUNT_EMAIL = process.env.E2E_ADMIN_EMAIL ?? 'ai-test-admin@example.com';
 if (!PASSWORD) {
   console.error('Thiếu E2E_PASSWORD. Đặt mật khẩu tài khoản test rồi chạy lại.');
   process.exit(2);
@@ -19,14 +19,15 @@ const V2 = `${BASE}/api/v2`;
 const results = [];
 
 async function login(email) {
-  const r = await fetch(`${V1}/auth/login`, {
+  const r = await fetch(`${BASE}/api/v2/auth-sessions/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password: PASSWORD }),
   });
-  if (r.status !== 201) throw new Error(`login ${email} -> ${r.status}`);
+  if (r.status !== 200 && r.status !== 201) throw new Error(`login ${email} -> ${r.status}`);
   const body = await r.json();
-  return { token: body.accessToken, user: body.user };
+  const p = body.data ?? body;
+  return { token: p.accessToken, user: p.user };
 }
 
 async function call(s, method, path, body, expect) {
@@ -46,7 +47,7 @@ const check = (label, cond, extra = '') => results.push({ step: `CHECK ${label}`
 
 const today = new Date().toISOString().slice(0, 10);
 const tao = await login(TAO_EMAIL);
-const duyet = await login(DUYET_EMAIL);
+const duyet = await login(ADMIN_ACCOUNT_EMAIL);
 const SUPPLIER = '02c760ca-2a7c-454b-9c52-28712653062b';
 const tag = Date.now();
 

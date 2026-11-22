@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ProcurementRequest } from '../entities/procurement-request.entity';
 import { ProcurementRequestLine } from '../entities/procurement-request-line.entity';
-import { ApprovalEvent } from '@/v2/core/approval-core/entities/approval-event.entity';
+import { ApprovalEvent } from '@/v2/modules/approval-management/entities/approval-event.entity';
 import { PURCHASE_REQUEST_DOC_TYPE } from '@/v2/core/procurement-requests-core/contracts/procurement-requests.contract';
 import {
   applyListSummaries,

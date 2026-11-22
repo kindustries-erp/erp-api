@@ -26,11 +26,11 @@ import {
   resolveScriptEnv,
   ScriptEnvError,
 } from '../../common/scripts/load-script-env';
-import {
+import type {
   CashflowClassification,
   CashflowPurpose,
-  isPurposeAllowed,
 } from '../constants/cashflow-attributes.constants';
+import { isPurposeAllowed } from '../constants/cashflow-attributes.constants';
 import { classifyCashflowByRule } from '../utils/cashflow-rule-classifier';
 
 const args = process.argv.slice(2);

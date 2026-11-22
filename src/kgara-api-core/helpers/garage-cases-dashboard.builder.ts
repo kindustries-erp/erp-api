@@ -22,6 +22,7 @@ import {
   buildTimeSeries,
   chooseBucketUnit,
   classificationBreakdown,
+  countVehicles,
   pickBasisDate,
   spanInDays,
   topCustomersByRevenue,
@@ -107,7 +108,10 @@ export function buildCasesDashboard(
         ? profit / revenue
         : 0;
   const kpis: DashboardKpi[] = [
-    { label: 'SỐ PHIẾU DỊCH VỤ', value: rows.length },
+    {
+      label: `SỐ XE (${rows.length} lệnh)`,
+      value: countVehicles(rows),
+    },
     { label: 'DOANH THU', value: sumKpi('doanhThu', revenue) },
     { label: 'CHI PHÍ', value: sumKpi('chiPhi', sums.chiPhi ?? 0) },
     { label: 'LỢI NHUẬN', value: sumKpi('loiNhuan', profit) },

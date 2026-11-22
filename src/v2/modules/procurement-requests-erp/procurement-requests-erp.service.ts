@@ -14,7 +14,7 @@ import { toPaginatedResult } from '@/common/utils/paginated-result';
 import { resolveApprovalEmails } from '@/v2/core/approval-core/helpers/approval-people';
 import { remainingPoDraftLinesOf } from '@/v2/core/procurement-requests-core/services/procurement-request-engine.service';
 import { toApprovalEventResponse } from '@/v2/core/approval-core/helpers/approval-event.mapper';
-import { ApprovalActorService } from '@/v2/core/approval-core/approval-actor.service';
+import { ApprovalActorService } from '@/v2/modules/approval-management/services/approval-actor.service';
 import { ApprovalEventResponseDto } from '@/v2/core/approval-core/dto/approval-event-response.dto';
 import {
   CreateProcurementRequestDto,

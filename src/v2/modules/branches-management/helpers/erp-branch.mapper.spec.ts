@@ -1,4 +1,4 @@
-import { ErpBranch } from '@/v2/core/branches-core/entities/erp_branch.entity';
+import { BranchManagement } from '../entities/branch-management.entity';
 import { toErpBranchResponse } from './erp-branch.mapper';
 
 describe('ErpBranch mapper', () => {
@@ -12,7 +12,7 @@ describe('ErpBranch mapper', () => {
     isActive: false,
     createdAt,
     updatedAt: createdAt,
-  } as ErpBranch;
+  } as BranchManagement;
 
   it('preserves the exact JSON shape including a null address and inactive state', () => {
     expect(toErpBranchResponse(entity)).toEqual({

@@ -111,6 +111,9 @@ export class GarageDashboardController {
       query.classification,
       query.sort_by || 'ngayHoanThanhCongViec',
       query.sort_order || 'DESC',
+      query.status,
+      query.is_funnel,
+      query.group_by,
     );
   }
 

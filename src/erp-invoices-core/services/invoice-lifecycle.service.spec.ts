@@ -435,7 +435,7 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
   });
 
   describe('autoPostStandard branch inference', () => {
-    it('does not query the removed is_deleted column on erp_branches', async () => {
+    it('chỉ suy chi nhánh từ bản ghi chưa xóa mềm và còn hoạt động trong branches_management', async () => {
       process.env.ENABLE_LIVE_AUTO_POSTING = 'true';
       repository.findOne.mockResolvedValue({
         id: 'inv-1',
@@ -455,12 +455,16 @@ describe('InvoiceLifecycleService - linkVouchersToInvoice', () => {
       const sqls = repository.manager.query.mock.calls.map(
         (c: unknown[]) => c[0] as string,
       );
+      expect(sqls.some((sql: string) => sql.includes('erp_branches'))).toBe(
+        false,
+      );
       expect(
         sqls.some(
           (sql: string) =>
-            sql.includes('is_deleted = false') && sql.includes('erp_branches'),
+            sql.includes('branches_management') &&
+            sql.includes('is_deleted = false'),
         ),
-      ).toBe(false);
+      ).toBe(true);
     });
   });
 });

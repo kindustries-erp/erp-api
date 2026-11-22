@@ -52,6 +52,9 @@ export class GarageDashboardService {
     classification?: string,
     sortBy: string = 'ngayHoanThanhCongViec',
     sortOrder: 'ASC' | 'DESC' = 'DESC',
+    status?: string,
+    isFunnel?: boolean,
+    groupBy?: 'case' | 'vehicle',
   ) {
     return this.checkpointService.getCheckpointCases(
       dateFrom,
@@ -63,6 +66,9 @@ export class GarageDashboardService {
       classification,
       sortBy,
       sortOrder,
+      status,
+      isFunnel,
+      groupBy,
     );
   }
 

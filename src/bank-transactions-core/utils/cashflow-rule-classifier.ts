@@ -1,4 +1,4 @@
-import {
+import type {
   CashflowClassification,
   CashflowPurpose,
 } from '../constants/cashflow-attributes.constants';

@@ -10,14 +10,7 @@ const coreRoot = join(repoRoot, 'src/v2/core');
  * Quy tắc: core chỉ là base để kế thừa. Không chứa entity cụ thể, controller, job định kỳ.
  * Các họ core cũ chưa chuyển được liệt kê ở đây; mỗi lần chuyển một họ thì gỡ khỏi danh sách.
  */
-export const LEGACY_CORE_ALLOWLIST = [
-  'admin-dashboard-core',
-  'approval-core',
-  'branches-core',
-  'business-partners-core',
-  'rbac-core',
-  'table-preferences-core',
-];
+export const LEGACY_CORE_ALLOWLIST = ['business-partners-core', 'rbac-core'];
 
 const FORBIDDEN = [
   { label: '@Entity', pattern: /@Entity\s*\(/ },

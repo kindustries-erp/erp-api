@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
-import { extractNetPayableAmount } from '../kgara-sync.service';
+import { resolveStoredNetPayable } from '../utils/kgara-parser.util';
 
 @Injectable()
 export class KgaraCaseSettlementCalcService {
@@ -38,7 +38,7 @@ export class KgaraCaseSettlementCalcService {
         .filter((s) => s.settlementType === 'RECEIPT')
         .reduce((sum, s) => sum + Number(s.amount || 0), 0);
 
-      const targetRevenue = extractNetPayableAmount(c);
+      const targetRevenue = resolveStoredNetPayable(c);
       const remainingReceivable = Math.max(0, targetRevenue - totalReceipts);
 
       await this.caseRepo.update(c.id, {

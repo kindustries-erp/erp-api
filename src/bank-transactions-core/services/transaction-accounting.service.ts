@@ -13,11 +13,11 @@ import { UpdateBankTransactionDto } from '../dto/update-bank-transaction.dto';
 import { CreateBankTransactionDto } from '../dto/create-bank-transaction.dto';
 import { normalizeBranchColumns } from '../../common/utils/branch-ids.util';
 import { BusinessPartnersCoreService } from '@/v2/core/business-partners-core';
-import {
+import type {
   CashflowClassification,
   CashflowPurpose,
-  isPurposeAllowed,
 } from '../constants/cashflow-attributes.constants';
+import { isPurposeAllowed } from '../constants/cashflow-attributes.constants';
 
 @Injectable()
 export class TransactionAccountingService {
@@ -42,7 +42,7 @@ export class TransactionAccountingService {
   private async assertBranchesExist(branchIds: string[]): Promise<void> {
     if (branchIds.length === 0) return;
     const rows: { id: string }[] = await this.dataSource.query(
-      'SELECT id FROM erp_branches WHERE id = ANY($1)',
+      'SELECT id FROM branches_management WHERE id = ANY($1) AND is_deleted = false',
       [branchIds],
     );
     const found = new Set(rows.map((row) => row.id));

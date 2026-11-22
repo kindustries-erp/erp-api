@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
-import { EmployeeManagement } from '@/v2/core/employees-core/entities/employee-management.entity';
+import { EmployeeManagement } from '@/v2/modules/employees-management/entities/employee-management.entity';
 import { applyMultiKeywordMultiFieldFilter } from '@/common/utils/query-builder.util';
 import {
   applyDateBounds,
@@ -19,7 +19,11 @@ import {
   TableOperatorFilter,
   TableOptionsPage,
 } from '@/common/utils/table-query';
-import { parseStrictJsonParam } from '@/v2/core/users-core';
+import {
+  canViewTestAccounts,
+  HIDDEN_TEST_EMAILS,
+  parseStrictJsonParam,
+} from '@/v2/core/users-core';
 import { ColumnOptionsQueryDto } from '../dto/column-options-query.dto';
 import { QueryUserDto } from '../dto/query-user.dto';
 import { UsersManagement } from '../entities/users-management.entity';
@@ -60,11 +64,14 @@ export class UsersManagementQueryService {
     private readonly employees: Repository<EmployeeManagement>,
   ) {}
 
-  async findAll(query: QueryUserDto): Promise<UserPageResult> {
+  async findAll(
+    query: QueryUserDto,
+    viewerEmail?: string | null,
+  ): Promise<UserPageResult> {
     const page = Math.max(1, Number(query.page) || 1);
     const pageSize = Math.max(1, Math.min(200, Number(query.pageSize) || 20));
-    const qb = this.baseQuery();
-    this.readFilters(query); // JSON sai trả 400 trước khi chạm DB
+    const filters = this.readFilters(query); // JSON sai trả 400 trước khi chạm DB
+    const qb = this.baseQuery(viewerEmail);
 
     if (query.status) {
       qb.andWhere('e.status = :status', { status: query.status });
@@ -78,7 +85,7 @@ export class UsersManagementQueryService {
         'global_search',
       );
     }
-    applyTableFilters(qb, this.readFilters(query), TABLE_COLUMNS, 'filter');
+    applyTableFilters(qb, filters, TABLE_COLUMNS, 'filter');
     applyDateBounds(
       qb,
       'e.createdAt',
@@ -111,6 +118,7 @@ export class UsersManagementQueryService {
 
   async findColumnOptions(
     query: ColumnOptionsQueryDto,
+    viewerEmail?: string | null,
   ): Promise<TableOptionsPage> {
     const page = Math.max(1, Number(query.page) || 1);
     const pageSize = Math.max(1, Math.min(200, Number(query.pageSize) || 20));
@@ -120,13 +128,21 @@ export class UsersManagementQueryService {
     const payload = this.toPayload(
       parseStrictJsonParam(query.filters, 'filters'),
     );
-    const qb = this.baseQuery();
+    const qb = this.baseQuery(viewerEmail);
     applyTableFilters(qb, payload, TABLE_COLUMNS, 'col_opt', query.column);
     return findTableColumnOptions(qb, def, query.search, page, pageSize);
   }
 
   async findById(id: string): Promise<UsersManagement | null> {
     return this.repo.findOne({ where: { id, isDeleted: false } });
+  }
+
+  /** Tài khoản theo id, trả null nếu là tài khoản test mà người xem không được thấy. */
+  async findVisibleById(
+    id: string,
+    viewerEmail?: string | null,
+  ): Promise<UsersManagement | null> {
+    return this.baseQuery(viewerEmail).andWhere('e.id = :id', { id }).getOne();
   }
 
   /** Nhân viên theo danh sách id, trả Map để ghép vào response. */
@@ -139,11 +155,18 @@ export class UsersManagementQueryService {
     return new Map(rows.map((row) => [row.id, row]));
   }
 
-  private baseQuery() {
-    return this.repo
+  /** Mặc định ẩn tài khoản test (người xem không phải admin@liouni.com). */
+  private baseQuery(viewerEmail?: string | null) {
+    const qb = this.repo
       .createQueryBuilder('e')
       .leftJoin(EmployeeManagement, 'emp', 'emp.id = e.employeeId')
       .where('e.isDeleted = :isDeleted', { isDeleted: false });
+    if (!canViewTestAccounts(viewerEmail)) {
+      qb.andWhere('LOWER(e.email) NOT IN (:...hiddenEmails)', {
+        hiddenEmails: [...HIDDEN_TEST_EMAILS],
+      });
+    }
+    return qb;
   }
 
   private readFilters(query: QueryUserDto): TableFilterPayload {

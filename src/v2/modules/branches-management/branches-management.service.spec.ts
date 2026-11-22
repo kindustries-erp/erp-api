@@ -13,8 +13,8 @@ describe('BranchesManagementService', () => {
     updatedAt: createdAt,
   };
 
-  const core = {
-    findAll: jest.fn(),
+  const query = { findAll: jest.fn() };
+  const command = {
     create: jest.fn(),
     update: jest.fn(),
     remove: jest.fn(),
@@ -23,7 +23,7 @@ describe('BranchesManagementService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new BranchesManagementService(core as never);
+    service = new BranchesManagementService(query as never, command as never);
   });
 
   it('maps list items without adding generated v2 summaries', async () => {
@@ -34,7 +34,7 @@ describe('BranchesManagementService', () => {
       pageSize: 20,
       totalPages: 3,
     };
-    core.findAll.mockResolvedValue(page);
+    query.findAll.mockResolvedValue(page);
     expect(await service.findAll({})).toEqual({
       items: page.items,
       pagination: {
@@ -50,11 +50,11 @@ describe('BranchesManagementService', () => {
 
   it('keeps creation and update messages, including null on a missing row', async () => {
     const body = { code: 'HN', is_active: false, extra: 1 };
-    core.create.mockResolvedValue({
+    command.create.mockResolvedValue({
       data: row,
       message: 'Branch created successfully',
     });
-    core.update.mockResolvedValue({
+    command.update.mockResolvedValue({
       data: null,
       message: 'Branch updated successfully',
     });
@@ -66,15 +66,17 @@ describe('BranchesManagementService', () => {
       data: null,
       message: 'Branch updated successfully',
     });
-    expect(core.create).toHaveBeenCalledWith(body);
-    expect(core.update).toHaveBeenCalledWith('missing', body);
+    expect(command.create).toHaveBeenCalledWith(body);
+    expect(command.update).toHaveBeenCalledWith('missing', body);
   });
 
-  it('delegates hard delete without adding a data envelope', async () => {
-    core.remove.mockResolvedValue({ message: 'Branch deleted successfully' });
+  it('delegates soft delete without adding a data envelope', async () => {
+    command.remove.mockResolvedValue({
+      message: 'Branch deleted successfully',
+    });
     expect(await service.remove('id-1')).toEqual({
       message: 'Branch deleted successfully',
     });
-    expect(core.remove).toHaveBeenCalledWith('id-1');
+    expect(command.remove).toHaveBeenCalledWith('id-1');
   });
 });

@@ -1,4 +1,9 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import {
+  Global,
+  INestApplication,
+  Module,
+  ValidationPipe,
+} from '@nestjs/common';
 import { MODULE_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -7,7 +12,20 @@ import request from 'supertest';
 import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { AppModule } from '@/app.module';
 import { applyGlobalPrefix } from '@/common/config/global-prefix.config';
-import { ErpBranch } from '@/v2/core/branches-core/entities/erp_branch.entity';
+import { DataSource } from 'typeorm';
+import { BranchManagementExternalLink } from './entities/branch-management-external-link.entity';
+import { BranchManagement } from './entities/branch-management.entity';
+
+/** DataSource do TypeOrmCoreModule (global) cung cấp ở app thật; test dựng bản giả toàn cục. */
+function dataSourceStub(query: jest.Mock) {
+  @Global()
+  @Module({
+    providers: [{ provide: DataSource, useValue: { query } }],
+    exports: [DataSource],
+  })
+  class DataSourceStubModule {}
+  return DataSourceStubModule;
+}
 
 describe('branches v2 HTTP contract', () => {
   let app: INestApplication;
@@ -17,8 +35,8 @@ describe('branches v2 HTTP contract', () => {
     save: jest.Mock;
     update: jest.Mock;
     findOne: jest.Mock;
-    delete: jest.Mock;
   };
+  let dataSource: { query: jest.Mock };
   const branch = {
     id: '00000000-0000-4000-8000-000000000001',
     extraData: {},
@@ -49,13 +67,15 @@ describe('branches v2 HTTP contract', () => {
       save: jest.fn(),
       update: jest.fn(),
       findOne: jest.fn(),
-      delete: jest.fn(),
     };
+    dataSource = { query: jest.fn() };
     const moduleRef = await Test.createTestingModule({
-      imports: [branchesModule],
+      imports: [dataSourceStub(dataSource.query), branchesModule],
     })
-      .overrideProvider(getRepositoryToken(ErpBranch))
+      .overrideProvider(getRepositoryToken(BranchManagement))
       .useValue(repository)
+      .overrideProvider(getRepositoryToken(BranchManagementExternalLink))
+      .useValue({})
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
       .compile();
@@ -81,7 +101,7 @@ describe('branches v2 HTTP contract', () => {
     repository.save.mockResolvedValue(branch);
     repository.findOne.mockResolvedValue(branch);
     repository.update.mockResolvedValue({ affected: 1 });
-    repository.delete.mockResolvedValue({ affected: 1 });
+    dataSource.query.mockResolvedValue([{ count: '0' }]);
   });
 
   it('keeps GET route, query binding, defaults, sort and response shape', async () => {
@@ -111,7 +131,10 @@ describe('branches v2 HTTP contract', () => {
         skip: 0,
         take: 20,
         where: expect.arrayContaining([
-          expect.objectContaining({ code: expect.anything() }),
+          expect.objectContaining({
+            code: expect.anything(),
+            isDeleted: false,
+          }),
         ]),
       }),
     );
@@ -121,6 +144,7 @@ describe('branches v2 HTTP contract', () => {
         order: { createdAt: 'DESC' },
         skip: 0,
         take: 20,
+        where: [{ isDeleted: false }],
       }),
     );
     await request(app.getHttpServer()).get('/api/v1/branches').expect(404);
@@ -152,28 +176,57 @@ describe('branches v2 HTTP contract', () => {
     });
   });
 
-  it('keeps PATCH null data on a missing record and DELETE hard-delete response', async () => {
+  it('keeps PATCH null data on a missing record without writing', async () => {
     repository.findOne.mockResolvedValueOnce(null);
     await request(app.getHttpServer())
       .patch('/api/v2/branches/not-a-uuid')
       .send({ name: 'Updated', address: 'ignored', extra: true })
       .expect(200, { data: null, message: 'Branch updated successfully' });
-    expect(repository.update).toHaveBeenCalledWith('not-a-uuid', {
+    expect(repository.update).not.toHaveBeenCalled();
+  });
+
+  it('PATCH updates only the legacy fields of a live branch', async () => {
+    await request(app.getHttpServer())
+      .patch('/api/v2/branches/b1')
+      .send({ name: 'Updated', address: 'ignored', extra: true })
+      .expect(200);
+    expect(repository.update).toHaveBeenCalledWith('b1', {
       code: undefined,
       name: 'Updated',
       isActive: undefined,
     });
-    await request(app.getHttpServer())
-      .delete('/api/v2/branches/not-a-uuid')
-      .expect(200, { message: 'Branch deleted successfully' });
-    expect(repository.delete).toHaveBeenCalledWith('not-a-uuid');
   });
 
-  it('propagates a foreign-key rejection instead of returning success', async () => {
-    repository.delete.mockRejectedValueOnce(new Error('foreign key violation'));
+  it('DELETE soft-deletes an unreferenced branch and keeps the success message', async () => {
     await request(app.getHttpServer())
-      .delete('/api/v2/branches/referenced')
-      .expect(500);
-    expect(repository.delete).toHaveBeenCalledWith('referenced');
+      .delete('/api/v2/branches/b1')
+      .expect(200, { message: 'Branch deleted successfully' });
+    expect(repository.update).toHaveBeenCalledWith('b1', {
+      isDeleted: true,
+      isActive: false,
+    });
+  });
+
+  it('DELETE returns 409 with referencing tables and does not write', async () => {
+    dataSource.query.mockImplementation((sql: string) =>
+      Promise.resolve([
+        { count: sql.includes('erp_bank_accounts') ? '3' : '0' },
+      ]),
+    );
+    const response = await request(app.getHttpServer())
+      .delete('/api/v2/branches/b1')
+      .expect(409);
+    expect(response.body.references).toEqual([
+      { table: 'erp_bank_accounts', count: 3 },
+    ]);
+    expect(repository.update).not.toHaveBeenCalled();
+  });
+
+  it('DELETE returns 404 when the branch is missing or already soft-deleted', async () => {
+    repository.findOne.mockResolvedValueOnce(null);
+    await request(app.getHttpServer())
+      .delete('/api/v2/branches/missing')
+      .expect(404);
+    expect(repository.update).not.toHaveBeenCalled();
   });
 });

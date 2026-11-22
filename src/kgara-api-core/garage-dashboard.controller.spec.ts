@@ -92,6 +92,9 @@ describe('GarageDashboardController — checkpoint-cases', () => {
       undefined, // classification
       'ngayHoanThanhCongViec', // sort_by mặc định
       'DESC', // sort_order mặc định
+      undefined, // status
+      undefined, // is_funnel
+      undefined, // group_by mặc định (theo lệnh)
     );
   });
 
@@ -118,6 +121,62 @@ describe('GarageDashboardController — checkpoint-cases', () => {
       undefined,
       'ngayHoanThanhCongViec',
       'ASC',
+      undefined,
+      undefined,
+      undefined,
     );
+  });
+
+  it('truyền classification và status → service nhận đúng tham số', async () => {
+    await request(app.getHttpServer())
+      .get(PATH)
+      .query({
+        date_from: '2026-11-01',
+        date_to: '2026-11-30',
+        classification: 'SUA_CHUA_CHUNG',
+        status: 'quotation',
+        is_funnel: 'true',
+      })
+      .expect(200);
+
+    expect(dashboardService.getCheckpointCases).toHaveBeenCalledWith(
+      '2026-11-01',
+      '2026-11-30',
+      1,
+      20,
+      undefined,
+      undefined,
+      'SUA_CHUA_CHUNG',
+      'ngayHoanThanhCongViec',
+      'DESC',
+      'quotation',
+      true,
+      undefined,
+    );
+  });
+
+  it('group_by=vehicle được chuyển xuống service; mặc định không truyền', async () => {
+    await request(app.getHttpServer())
+      .get(PATH)
+      .query({
+        date_from: '2026-11-01',
+        date_to: '2026-11-30',
+        group_by: 'vehicle',
+      })
+      .expect(200);
+
+    const args = dashboardService.getCheckpointCases.mock.calls.at(-1);
+    expect(args?.[11]).toBe('vehicle');
+  });
+
+  it('group_by sai giá trị → 400', async () => {
+    await request(app.getHttpServer())
+      .get(PATH)
+      .query({
+        date_from: '2026-11-01',
+        date_to: '2026-11-30',
+        group_by: 'khac',
+      })
+      .expect(400);
   });
 });

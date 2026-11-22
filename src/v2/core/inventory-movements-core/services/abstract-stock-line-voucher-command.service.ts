@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { DataSource, DeepPartial, EntityManager, EntityTarget } from 'typeorm';
-import { ApprovalEventService } from '@/v2/core/approval-core/approval-event.service';
+import { ApprovalEventRecorder } from '@/v2/core/approval-core/approval-event.recorder';
 import {
   assertValidExtraData,
   mergeExtraData,
@@ -57,7 +57,7 @@ export abstract class AbstractStockLineVoucherCommandService<
 
   constructor(
     dataSource: DataSource,
-    events: ApprovalEventService,
+    events: ApprovalEventRecorder,
     protected readonly engine: StockMovementEngineService,
   ) {
     super(dataSource, events);

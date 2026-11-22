@@ -34,7 +34,7 @@ Web: trang `/erp-users` đã trỏ về V2 (page key `users-management`); trang 
 
 Múi giờ: DB lưu `timestamptz` (múi giờ DB là UTC), API trả ISO, client hiển thị theo múi giờ của browser hoặc thiết bị.
 
-Kiểm thử: `bunx jest src/v2/modules/users-management src/v2/core/users-core`; smoke trên API đang chạy (không chạy trên production): `bun run test:smoke:users` (cần `E2E_ADMIN_EMAIL`, `E2E_PASSWORD`; tạo dữ liệu test tiền tố `smoke-users-` và mã nhân viên `SMK`, dọn bằng SQL sau khi chạy).
+Kiểm thử: `bunx jest src/v2/modules/users-management src/v2/core/users-core`; smoke trên API đang chạy (không chạy trên production): `bun run test:smoke:users` (cần `E2E_PASSWORD` và `E2E_TAO_EMAIL` mặc định `ai-test-tao`, tài khoản cần quyền `admin_users:manage`; tạo dữ liệu test tiền tố `smoke-users-` và mã nhân viên `SMK`, dọn bằng SQL sau khi chạy).
 
 ---
 
@@ -239,7 +239,7 @@ Toàn bộ các API quản trị người dùng thuộc `UsersAdminController` �
    - Khi kiểm tra quyền qua `CoreRbacGuard`, hệ thống nạp các quyền từ những vai trò mà user đang nắm giữ.
 4. **`audit-core` (Kiểm toán Hệ thống)**:
    - Tiếp nhận các sự kiện thay đổi dữ liệu người dùng (`CREATE_USER`, `UPDATE_USER`, `RESET_PASSWORD`, v.v.).
-5. **`table-preferences-core` & `app-config` (Cá nhân hóa Giao diện)**:
+5. **`table-preferences` (lõi `table-preferences-core` base-only + module `table-preferences`) & `app-config` (Cá nhân hóa Giao diện)**:
    - Bảng `table_preferences` (FK `users_management`) và `core_user_preferences` gắn liền với `user_id`, tự động dọn dẹp theo `ON DELETE CASCADE` khi user bị xóa khỏi DB.
 6. **`notifications-inbox` (Hộp thư Thông báo)**:
    - Lưu trữ các thông báo gửi trực tiếp đến từng người dùng cụ thể thông qua `notifications_inbox.user_id`.
@@ -270,3 +270,13 @@ bun run test:find -- src/users src/users-admin
 - [x] YAML frontmatter có `name: erp-users` và `description` rõ ràng.
 - [x] Thư mục module được tự động quản lý qua `.agents/skills.json` của workspace.
 - [x] Đã cập nhật tham chiếu trong `erp-api/.agents/skills/erp-api-truth/SKILL.md`.
+
+---
+
+## Tài khoản và role test (ẩn với người khác admin)
+
+- Nguồn duy nhất: `src/v2/core/users-core/helpers/test-account-visibility.helper.ts`.
+- Email ẩn: `ai-test-tao@example.com`, `ai-test-admin@example.com`. Role ẩn theo tên: `Test Admin`, `Test Tạo`, `E2E Loans Test`.
+- Chỉ `admin@liouni.com` thấy. Với người khác: danh sách, filter, tổng số, column-options bỏ qua; gọi theo `id` trả 404.
+- `rbac-roles` `PATCH :roleId/users` với người không có quyền giữ nguyên gán role của tài khoản test (không gỡ, không gán thêm). Test: `services/role-users.service.spec.ts`.
+- Đăng nhập E2E vẫn dùng bình thường; ẩn chỉ áp ở đọc và thao tác quản trị.

@@ -32,7 +32,7 @@ import { ErpInvoiceAttachment } from './entities/erp_invoice_attachment.entity';
 import { ErpInvoiceItemSubscriber } from './subscribers/erp-invoice-item.subscriber';
 import { ErpAttachmentsCoreModule } from '../erp-attachments-core/erp-attachments-core.module';
 import { FileAttachmentsModule } from '@/v2/modules/file-attachments-management/file-attachments-management.module';
-import { ErpBranch } from '@/v2/core/branches-core/entities/erp_branch.entity';
+import { BranchManagement } from '@/v2/modules/branches-management/entities/branch-management.entity';
 import { ErpEntityAttributeValue } from '../module-config/entities/erp_entity_attribute_value.entity';
 
 import { VinfastPartsModule } from '../vinfast-parts/vinfast-parts.module';
@@ -95,7 +95,7 @@ import { XmlDownloadLinkAdapter } from './services/adapters/xml-download-link.ad
       CompanyProfile,
       CorePermission,
       CoreUserRole,
-      ErpBranch,
+      BranchManagement,
       ErpEntityAttributeValue,
       ErpModuleCategory,
       ErpModuleAttributeDef,

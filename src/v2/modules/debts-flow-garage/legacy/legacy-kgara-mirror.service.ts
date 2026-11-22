@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { hasReceiptSettlement } from '@/kgara-api-core/helpers/kgara-case-remaining.helper';
 import type { EntityManager } from 'typeorm';
 import { KgaraCase } from '@/kgara-api-core/entities/kgara_case.entity';
 import { KgaraCashflowVoucher } from '@/kgara-api-core/entities/kgara_cashflow_voucher.entity';
@@ -133,12 +134,11 @@ export class LegacyKgaraMirrorService {
       .getRepository(KgaraCaseSettlement)
       .find({ where: { caseId } });
     const net = resolveStoredNetPayable(kCase);
-    const paid =
-      settlements.length > 0
-        ? settlements
-            .filter((s) => s.settlementType === 'RECEIPT')
-            .reduce((sum, s) => sum + Number(s.amount || 0), 0)
-        : Number(kCase.rawData?.TienDaThanhToan || 0);
+    const paid = hasReceiptSettlement(settlements)
+      ? settlements
+          .filter((s) => s.settlementType === 'RECEIPT')
+          .reduce((sum, s) => sum + Number(s.amount || 0), 0)
+      : Number(kCase.rawData?.TienDaThanhToan || 0);
     kCase.tienDaThanhToan = paid;
     kCase.tienConPhaiThanhToan = Math.max(0, net - paid);
     await cases.save(kCase);

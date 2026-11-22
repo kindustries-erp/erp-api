@@ -25,7 +25,7 @@ import { KgaraCaseLinkedInvoice } from '../entities/kgara_case_linked_invoice.en
 import { DocumentTraceabilityService } from '../../common/services/document-traceability.service';
 import { GarageSmartSettlementService } from '../services/garage-smart-settlement.service';
 import { KgaraCaseQueryService } from '../services/kgara-case-query.service';
-import { extractNetPayableAmount } from '../kgara-sync.service';
+import { resolveStoredNetPayable } from '../utils/kgara-parser.util';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import {
@@ -238,7 +238,7 @@ export class KgaraCaseFinancialController {
     });
 
     const isCompleted = c.tinhTrangDichVu === 3;
-    const totalPayable = extractNetPayableAmount(c);
+    const totalPayable = resolveStoredNetPayable(c);
     const targetRevenue = totalPayable;
     const targetCost = Number(c.chiPhi ?? gp?.chiPhi ?? 0);
     const expectedProfit = isCompleted

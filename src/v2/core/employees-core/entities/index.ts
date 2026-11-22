@@ -1,1 +1,1 @@
-export * from './employee-management.entity';
+export * from './base-employee.entity';

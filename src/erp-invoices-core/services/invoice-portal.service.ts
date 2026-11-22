@@ -12,7 +12,7 @@ import { Subject } from 'rxjs';
 
 import { ErpInvoice } from '../entities/erp_invoice.entity';
 import { CompanyProfile } from '../../company-profile/entities/company-profile.entity';
-import { ErpBranch } from '@/v2/core/branches-core/entities/erp_branch.entity';
+import { BranchManagement } from '@/v2/modules/branches-management/entities/branch-management.entity';
 import { PortalFetchDto } from '../dto/portal-invoice.dto';
 import { R2Service } from '../../r2/r2.service';
 import { NotificationsPublisherService } from '@/v2/modules/notifications-inbox';
@@ -101,8 +101,8 @@ export class InvoicePortalService implements OnModuleInit {
     private readonly repository: Repository<ErpInvoice>,
     @InjectRepository(CompanyProfile)
     private readonly companyProfileRepo: Repository<CompanyProfile>,
-    @InjectRepository(ErpBranch)
-    private readonly branchRepository: Repository<ErpBranch>,
+    @InjectRepository(BranchManagement)
+    private readonly branchRepository: Repository<BranchManagement>,
     private readonly r2: R2Service,
     private readonly notificationsService: NotificationsPublisherService,
     private readonly lifecycleService: InvoiceLifecycleService,

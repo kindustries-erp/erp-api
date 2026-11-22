@@ -18,7 +18,7 @@ import { ErpBranchListResponseDto } from '../dto/erp-branch-list-response.dto';
 import { UpdateErpBranchDto } from '../dto/update-erp-branch.dto';
 import { ParseBranchBodyPipe } from '../pipes/parse-branch-body.pipe';
 
-@ApiTags('erp_branches')
+@ApiTags('branches_management')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('api/v2/branches')

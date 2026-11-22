@@ -2,9 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import {
   GarageSmartSettlementService,
-  cleanLicensePlate,
   extractCustomerKeywords,
 } from './garage-smart-settlement.service';
+import { normalizePlate } from '@/common/utils/license-plate';
 import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
 
@@ -48,9 +48,10 @@ describe('GarageSmartSettlementService', () => {
   });
 
   describe('helpers', () => {
-    it('cleanLicensePlate should remove punctuation and lowercase', () => {
-      expect(cleanLicensePlate('51G-123.45')).toBe('51g12345');
-      expect(cleanLicensePlate('30H 987.65')).toBe('30h98765');
+    it('normalizePlate bỏ dấu câu, bỏ dấu tiếng Việt và viết hoa', () => {
+      expect(normalizePlate('51G-123.45')).toBe('51G12345');
+      expect(normalizePlate('30H 987.65')).toBe('30H98765');
+      expect(normalizePlate('29-MĐ1/123_45')).toBe('29MD112345');
     });
 
     it('extractCustomerKeywords should extract meaningful words', () => {

@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
-import { ApprovalEventService } from '../../approval-core/approval-event.service';
+import { ApprovalEventRecorder } from '../../approval-core/approval-event.recorder';
 import { BasePurchaseRequestEntity } from '../entities/base-purchase-request.entity';
 import { BasePurchaseRequestLineEntity } from '../entities/base-purchase-request-line.entity';
 import { AbstractPurchaseRequestCommandService } from './abstract-purchase-request-command.service';
@@ -40,7 +40,7 @@ function setup(status: string) {
   } as never;
   const events = {
     record: jest.fn(),
-  } as unknown as ApprovalEventService;
+  } as unknown as ApprovalEventRecorder;
   return { svc: new TestCommand(dataSource, events), manager };
 }
 

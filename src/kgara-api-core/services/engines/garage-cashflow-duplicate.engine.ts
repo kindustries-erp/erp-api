@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, SelectQueryBuilder } from 'typeorm';
+import {
+  normalizePlate,
+  normalizedPlateSql,
+} from '@/common/utils/license-plate';
 import { KgaraCashflowVoucher } from '../../entities/kgara_cashflow_voucher.entity';
 import {
   CheckKgaraCashflowDuplicateQueryDto,
@@ -20,7 +24,7 @@ export class GarageCashflowDuplicateEngine {
   ) {}
 
   static normalizePlate(plate?: string): string {
-    return (plate ?? '').replace(/[^0-9a-zA-Z]/g, '').toUpperCase();
+    return normalizePlate(plate);
   }
 
   static shiftDate(isoDate: string, days: number): string {
@@ -80,7 +84,7 @@ export class GarageCashflowDuplicateEngine {
       plate
         ? run(
             base().andWhere(
-              "regexp_replace(upper(COALESCE(v.licensePlate, c.bienSoXe, '')), '[^0-9A-Z]', '', 'g') = :plate",
+              `${normalizedPlateSql('v.licensePlate', 'c.bienSoXe')} = :plate`,
               { plate },
             ),
           )
