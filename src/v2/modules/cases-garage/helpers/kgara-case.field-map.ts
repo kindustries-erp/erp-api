@@ -5,14 +5,11 @@ const f = (
   to: string,
   kind: FieldMapEntry['kind'],
   group: FieldMapEntry['group'] = 'source',
-  direction: FieldMapEntry['direction'] = 'v1->v2',
-): FieldMapEntry => ({ from, to, kind, group, direction });
-const local = (from: string, to: string, kind: FieldMapEntry['kind']) =>
-  f(from, to, kind, 'erp-local', 'both');
+): FieldMapEntry => ({ from, to, kind, group });
 
 /**
  * Từ điển `kgara_cases` (V1, snake_case VN) → `cases_garage` (v2, camelCase EN).
- * Nguồn sự thật duy nhất cho projector, mirror ngược và backfill.
+ * Nguồn sự thật duy nhất cho projector và backfill. Mọi field nhóm `source` sửa đè được ở v2.
  */
 export const KGARA_CASE_FIELD_MAP: readonly FieldMapEntry[] = [
   f('hdPhieuDichVuId', 'externalId', 'text', 'identity'),
@@ -44,18 +41,13 @@ export const KGARA_CASE_FIELD_MAP: readonly FieldMapEntry[] = [
   f('doanhThu', 'revenue', 'money'),
   f('chiPhi', 'cost', 'money'),
   f('loiNhuan', 'profit', 'money'),
-  local('categoryId', 'categoryId', 'copy'),
-  local('classification', 'classification', 'text'),
-  local(
-    'classificationManuallyCleared',
-    'classificationManuallyCleared',
-    'bool',
-  ),
-  local('excludeFromReports', 'excludeFromReports', 'bool'),
-  local('excludeFromDebt', 'excludeFromDebt', 'bool'),
-  local('erpNotes', 'internalNotes', 'text'),
+  f('categoryId', 'categoryId', 'copy'),
+  f('classification', 'classification', 'text'),
+  f('classificationManuallyCleared', 'classificationManuallyCleared', 'bool'),
+  f('excludeFromReports', 'excludeFromReports', 'bool'),
+  f('excludeFromDebt', 'excludeFromDebt', 'bool'),
+  f('erpNotes', 'internalNotes', 'text'),
   f('kgaraDeletedAt', 'externalDeletedAt', 'date'),
-  f('kgaraDeleteCount', 'externalDeleteCount', 'int'),
   f('createdAt', 'createdAt', 'date', 'identity'),
   f('updatedAt', 'updatedAt', 'date', 'identity'),
 ];
@@ -64,15 +56,33 @@ export const KGARA_CASE_FIELD_MAP: readonly FieldMapEntry[] = [
 export const KGARA_CASE_IGNORED_COLUMNS: readonly IgnoredColumn[] = [
   {
     property: 'id',
-    reason: 'Xử lý riêng: thành `id` và `legacyCaseId` của v2',
+    reason: 'Xử lý riêng: thành `id` của v2 (cùng UUID)',
   },
-  { property: 'rawData', reason: 'Payload thô KGara, v2 không lưu raw_data' },
+  {
+    property: 'rawData',
+    reason:
+      'Payload thô KGara, v2 không lưu raw_data; nhóm tiến độ đọc riêng ở `kgaraRawProgress`',
+  },
+  {
+    property: 'kgaraDeleteCount',
+    reason: 'Bộ đếm lần xóa phía KGara, v2 không dùng',
+  },
   {
     property: 'dataAsOf',
     reason: 'Mốc thời gian phản hồi sync, không phải dữ liệu nghiệp vụ',
   },
 ];
 
-/** Tên property v2 do ERP-local sở hữu (xe KGARA_SYNC chỉ được sửa nhóm này). */
-export const CASE_ERP_LOCAL_FIELDS: readonly string[] =
-  KGARA_CASE_FIELD_MAP.filter((e) => e.group === 'erp-local').map((e) => e.to);
+/**
+ * Nhóm tiến độ đọc từ `kgara_cases.raw_data` (khóa PascalCase của KGara, không có cột riêng ở V1).
+ * Ngày là giờ tường VN không kèm múi giờ. Hiện KGara thường để trống `NgayDuKienHoanThanh`,
+ * `YeuCauDichVu`, `ChanDoan`; v2 nhập tay và sync tôn trọng override.
+ */
+export const KGARA_CASE_RAW_PROGRESS_MAP: readonly FieldMapEntry[] = [
+  f('NgayBatDauSuaChua', 'startedAt', 'vnLocalDateTime'),
+  f('NgayDuKienHoanThanh', 'expectedCompletionAt', 'vnLocalDateTime'),
+  f('YeuCauDichVu', 'requestDescription', 'text'),
+  f('ChanDoan', 'diagnosis', 'text'),
+  f('NhanVienCoVanDichVuCode', 'advisorCode', 'text'),
+  f('NhanVienCoVanDichVuName', 'advisorName', 'text'),
+];

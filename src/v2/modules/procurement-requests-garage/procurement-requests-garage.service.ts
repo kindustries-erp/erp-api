@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ErpResource, RbacCoreService } from '@/v2/core/rbac-core';
-import { ApproverDirectoryService } from '@/v2/core/approval-core/approver-directory.service';
+import { ApproverDirectoryService } from '@/v2/modules/approval-management/services/approver-directory.service';
 import { toPurchaseRequestResponse } from '@/v2/core/procurement-requests-core/helpers/procurement-request.mapper';
 import {
   PurchaseRequestAction,
@@ -15,7 +15,7 @@ import { toPaginatedResult } from '@/common/utils/paginated-result';
 import { resolveApprovalEmails } from '@/v2/core/approval-core/helpers/approval-people';
 import { remainingPoDraftLinesOf } from '@/v2/core/procurement-requests-core/services/procurement-request-engine.service';
 import { toApprovalEventResponse } from '@/v2/core/approval-core/helpers/approval-event.mapper';
-import { ApprovalActorService } from '@/v2/core/approval-core/approval-actor.service';
+import { ApprovalActorService } from '@/v2/modules/approval-management/services/approval-actor.service';
 import { ApprovalEventResponseDto } from '@/v2/core/approval-core/dto/approval-event-response.dto';
 import {
   CreateAndSubmitProcurementRequestDto,

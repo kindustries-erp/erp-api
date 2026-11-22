@@ -10,6 +10,7 @@ Tra module cần sửa ở bảng dưới, rồi đọc `../../modules/<module>/
 | `ai-hub-core` | Module tri thức AI Hub Core & 9router Gateway Integration trong erp-api (ai-hub-core) |
 | `ai-hub-v2` | Tri thức AI Hub v2 trong erp-api (lõi v2/core/ai-hub-core, module ai-hub-gateway gọi 9router theo tier, items-core + items-garage là danh mụ… |
 | `app-config` | Module tri thức Quản lý Cấu hình Ứng dụng & Tùy chọn Người dùng (App Config & User Preferences) trong erp-api (app-config & users) |
+| `approval-management` | Module tri thức Duyệt chứng từ V2 trong erp-api gồm lõi base-only src/v2/core/approval-core (engine chuyển trạng thái, gate helper, BaseAppr… |
 | `audit-core` | Module tri thức Nhật ký Kiểm toán Hệ thống (Audit Logs & Zero-Trust Tracking) trong erp-api (audit-core) |
 | `auth-core` | Lõi base (v2) cho phiên đăng nhập tại src/v2/core/auth-core |
 | `auth-sessions` | Module backend Auth V2 tại /api/v2/auth-sessions (login, refresh, logout, impersonate, change-password, profile) |
@@ -18,14 +19,15 @@ Tra module cần sửa ở bảng dưới, rồi đọc `../../modules/<module>/
 | `bom-core` | Module tri thức Định mức vật tư (BOM - Bill of Materials) trong erp-api |
 | `branches-core` | Contract hiện hành của chi nhánh ERP trong kiến trúc API v2 core + management module |
 | `business-partners-core` | Module tri thức Đối tác (Khách hàng & Nhà cung cấp) phía API erp-api (src/v2/core/business-partners-core & src/v2/modules/business-partners-… |
-| `cases-garage` | Module vụ việc garage v2 (api/v2/cases-garage), CRUD đầy đủ trên bảng cases_garage + case_services_garage, xe NATIVE nhập tay và xe KGARA_SY… |
+| `cases-core` | Lõi đa ngành `src/v2/core/cases-core` (BaseCaseEntity, BaseCaseLineEntity) cho vụ việc/phiếu dịch vụ, chỉ abstract, không bảng |
+| `cases-garage` | Module vụ việc garage v2 (api/v2/cases-garage), CRUD trên bảng cases_garage + case_lines_garage, xe NATIVE nhập tay và xe KGARA_SYNC chiếu t… |
 | `cashflow-dashboard` | Module tri thức Báo cáo, Phân tích & Dự báo Dòng tiền (Cashflow Dashboard & Forecast) trong ERP (dashboard-core & bank-transactions-core) |
 | `cashflow-vouchers-core` | Lõi phiếu thu chi dùng chung v2 (src/v2/core/cashflow-vouchers-core) - entity base BaseCashflowVoucherEntity, kiểu loại và trạng thái phiếu |
 | `cashflow-vouchers-garage` | Module phiếu thu chi garage v2 (api/v2/cashflow-vouchers-garage) phần đọc - danh sách, column-options, dashboard, kiểm tra trùng; kế thừa ca… |
 | `debts-core` | Lõi công nợ dùng chung v2 (src/v2/core/debts-core) - hợp đồng, entity base sổ nợ và phân bổ, engine tính số dư và tuổi nợ, khung query abstr… |
 | `debts-flow-garage` | Orchestrator thu chi + công nợ garage v2 - ghi phiếu và phân bổ trong một transaction, mirror sang bảng V1 cùng UUID, projector chiếu thay đ… |
 | `debts-garage` | Module công nợ garage v2 (api/v2/debts-garage) - công nợ phải thu khách hàng, phải trả nhà cung cấp, analytics, time-horizon, export nền |
-| `employees-core` | Module tri thức Nhân viên V2 trong erp-api gồm lõi src/v2/core/employees-core và module src/v2/modules/employees-management (route /api/v2/e… |
+| `employees-core` | Module tri thức Nhân viên V2 trong erp-api gồm lõi base-only src/v2/core/employees-core (BaseEmployeeEntity, EmployeeRef) và module src/v2/m… |
 | `erp-inventory-adjustments` | Module tri thức Quản lý Kiểm kê & Điều chỉnh Kho trong ERP |
 | `erp-inventory-items` | Module tri thức Danh mục Mặt hàng & Master Data Kho trong ERP |
 | `erp-inventory-stock` | Module tri thức Sổ Tồn kho Thực tế & Định giá Tồn kho trong ERP |

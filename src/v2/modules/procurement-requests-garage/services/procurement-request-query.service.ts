@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { GarageProcurementRequest } from '../entities/procurement-request.entity';
 import { GarageProcurementRequestLine } from '../entities/procurement-request-line.entity';
-import { ApprovalEvent } from '@/v2/core/approval-core/entities/approval-event.entity';
+import { ApprovalEvent } from '@/v2/modules/approval-management/entities/approval-event.entity';
 import { ListProcurementRequestsDto } from '../dto/procurement-request.dto';
 import { applyMultiKeywordMultiFieldFilter } from '@/common/utils/query-builder.util';
 import {

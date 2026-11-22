@@ -1,7 +1,7 @@
 import { KgaraCase } from '@/kgara-api-core/entities/kgara_case.entity';
 import { CaseGarage } from '../entities/case-garage.entity';
 import { CaseOrigin } from '../entities/case-garage.enums';
-import { CaseServiceGarage } from '../entities/case-service-garage.entity';
+import { CaseLineGarage } from '../entities/case-line-garage.entity';
 import { CaseProjectorService } from './case-projector.service';
 
 const v1Case = (over: Record<string, unknown> = {}) => ({
@@ -35,7 +35,7 @@ function make(opts: {
       return null;
     }),
     find: jest.fn(async (entity: unknown) => {
-      if (entity === CaseServiceGarage) return opts.current ?? [];
+      if (entity === CaseLineGarage) return opts.current ?? [];
       if (entity === (CaseGarage as unknown)) return [];
       // KgaraCaseService hoặc BranchManagementExternalLink theo thứ tự gọi
       return (entity as { name: string }).name === 'KgaraCaseService'
@@ -61,7 +61,6 @@ describe('CaseProjectorService', () => {
     const row = manager.insert.mock.calls[0][1] as Record<string, unknown>;
     expect(row).toMatchObject({
       id: 'c1',
-      legacyCaseId: 'c1',
       origin: CaseOrigin.KGARA_SYNC,
       branchExternalId: 'B1',
       accountKey: 'OJ',
@@ -72,7 +71,28 @@ describe('CaseProjectorService', () => {
       payerCode: 'BH1',
       status: 'COMPLETED',
       branchId: 'erp-oj',
+      overrides: {},
     });
+    expect(row.sourceSnapshot).toMatchObject({
+      licensePlate: '30A-1',
+      status: 'COMPLETED',
+    });
+    expect(row.sourceSnapshot).not.toHaveProperty('origin');
+  });
+
+  it('chạy lại: field đã override không bị ghi đè nhưng snapshot vẫn cập nhật', async () => {
+    const { svc, manager } = make({
+      existing: {
+        id: 'c1',
+        origin: CaseOrigin.KGARA_SYNC,
+        overrides: { licensePlate: true },
+      },
+    });
+    await svc.project('c1');
+    const patch = manager.update.mock.calls[0][2] as Record<string, unknown>;
+    expect(patch).not.toHaveProperty('licensePlate');
+    expect(patch).toHaveProperty('caseCode', 'PDV-1');
+    expect(patch.sourceSnapshot).toMatchObject({ licensePlate: '30A-1' });
   });
 
   it('chạy lại: update, không insert (không nhân đôi), không ghi đè id/createdAt', async () => {
@@ -96,7 +116,7 @@ describe('CaseProjectorService', () => {
     expect(await make({ v1: null }).svc.project('c1')).toBe('skipped');
   });
 
-  it('dòng hạng mục: dòng mới insert với lineNumber, dòng đã chiếu thì update theo legacyServiceId', async () => {
+  it('dòng hạng mục: dòng mới insert với lineNumber, dòng đã chiếu thì update theo externalId', async () => {
     const { svc, manager } = make({
       lines: [
         {
@@ -112,22 +132,51 @@ describe('CaseProjectorService', () => {
           soLuongHoaDon: 2,
         },
       ],
-      current: [{ id: 'v2-s1', legacyServiceId: 's1' }],
+      current: [{ id: 'v2-s1', externalId: 'L1', overrides: {} }],
     });
     await svc.project('c1');
     const inserted = manager.insert.mock.calls.filter(
-      (c) => c[0] === CaseServiceGarage,
+      (c) => c[0] === CaseLineGarage,
     );
     expect(inserted).toHaveLength(1);
     expect(inserted[0][1]).toMatchObject({
-      legacyServiceId: 's2',
+      externalId: 'L2',
       lineNumber: 2,
       caseId: 'c1',
     });
     expect(manager.update).toHaveBeenCalledWith(
-      CaseServiceGarage,
+      CaseLineGarage,
       { id: 'v2-s1' },
-      expect.objectContaining({ legacyServiceId: 's1' }),
+      expect.objectContaining({ externalId: 'L1' }),
     );
+  });
+
+  it('dòng đã _deleted ở v2: chỉ cập nhật snapshot, không hồi sinh', async () => {
+    const { svc, manager } = make({
+      lines: [
+        {
+          id: 's1',
+          hdPhieuDichVuChiTietId: 'L1',
+          accountKey: 'OJ',
+          soLuongHoaDon: 1,
+        },
+      ],
+      current: [
+        { id: 'v2-s1', externalId: 'L1', overrides: { _deleted: true } },
+      ],
+    });
+    await svc.project('c1');
+    const call = manager.update.mock.calls.find((c) => c[0] === CaseLineGarage);
+    expect(Object.keys(call?.[2] as object)).toEqual(['sourceSnapshot']);
+  });
+
+  it('dòng v1 thiếu hd_phieu_dich_vu_chi_tiet_id: bỏ qua, không insert', async () => {
+    const { svc, manager } = make({
+      lines: [{ id: 's1', hdPhieuDichVuChiTietId: null, accountKey: 'OJ' }],
+    });
+    await svc.project('c1');
+    expect(
+      manager.insert.mock.calls.filter((c) => c[0] === CaseLineGarage),
+    ).toHaveLength(0);
   });
 });

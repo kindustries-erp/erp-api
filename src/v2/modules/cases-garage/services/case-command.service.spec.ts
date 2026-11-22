@@ -23,13 +23,8 @@ const make = (current: Record<string, unknown> | null) => {
   };
   const ds = { transaction: (cb: (m: unknown) => unknown) => cb(manager) };
   const lines = { replaceAll: jest.fn(), recompute: jest.fn() };
-  const mirror = { mirrorCase: jest.fn() };
-  const svc = new CaseCommandService(
-    ds as never,
-    lines as never,
-    mirror as never,
-  );
-  return { svc, manager, lines, mirror };
+  const svc = new CaseCommandService(ds as never, lines as never);
+  return { svc, manager, lines };
 };
 
 const owned = (origin: CaseOrigin, status = CaseStatus.INTAKE) => ({
@@ -94,36 +89,55 @@ describe('CaseCommandService', () => {
     expect(lines.replaceAll).toHaveBeenCalled();
   });
 
-  it('update SYNC: field nguồn KGara → 400; ERP-local → ghi + mirror V1', async () => {
+  it('update SYNC: định danh → 400; field nguồn KGara ghi cột hiệu lực + overrides, không ghi ngược V1', async () => {
     const a = make(owned(CaseOrigin.KGARA_SYNC));
     await expect(
-      a.svc.update('B1', 'c1', { licensePlate: 'x' } as never),
+      a.svc.update('B1', 'c1', { caseCode: 'x' } as never),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(a.manager.update).not.toHaveBeenCalled();
 
-    const b = make(owned(CaseOrigin.KGARA_SYNC));
-    await b.svc.update('B1', 'c1', { internalNotes: 'n' } as never);
-    expect(b.mirror.mirrorCase).toHaveBeenCalledWith(b.manager, 'c1', {
-      internalNotes: 'n',
+    const b = make({
+      ...owned(CaseOrigin.KGARA_SYNC),
+      sourceSnapshot: { licensePlate: '30A-1' },
+      overrides: {},
     });
+    await b.svc.update('B1', 'c1', { licensePlate: '29B-2' } as never);
+    expect(b.manager.update).toHaveBeenCalledTimes(1);
+    expect(b.manager.update).toHaveBeenCalledWith(
+      expect.anything(),
+      { id: 'c1' },
+      { licensePlate: '29B-2', overrides: { licensePlate: true } },
+    );
     expect(b.lines.replaceAll).not.toHaveBeenCalled();
   });
 
-  it('softDelete: NATIVE đặt isDeleted, SYNC → 409', async () => {
-    const a = make(owned(CaseOrigin.NATIVE));
-    await a.svc.softDelete('B1', 'c1');
-    expect(a.manager.update).toHaveBeenCalledWith(
+  it('update SYNC: sửa về đúng giá trị KGara thì bỏ dấu override', async () => {
+    const c = make({
+      ...owned(CaseOrigin.KGARA_SYNC),
+      sourceSnapshot: { licensePlate: '30A-1' },
+      overrides: { licensePlate: true },
+    });
+    await c.svc.update('B1', 'c1', { licensePlate: '30A-1' } as never);
+    expect(c.manager.update).toHaveBeenCalledWith(
       expect.anything(),
       { id: 'c1' },
-      { isDeleted: true },
-    );
-    const b = make(owned(CaseOrigin.KGARA_SYNC));
-    await expect(b.svc.softDelete('B1', 'c1')).rejects.toBeInstanceOf(
-      ConflictException,
+      { licensePlate: '30A-1', overrides: {} },
     );
   });
 
-  it('updateStatus: chuyển hợp lệ ok, không hợp lệ → 400, SYNC → 400', async () => {
+  it('softDelete: đặt isDeleted cho cả xe NATIVE và xe sync', async () => {
+    for (const origin of [CaseOrigin.NATIVE, CaseOrigin.KGARA_SYNC]) {
+      const a = make(owned(origin));
+      await a.svc.softDelete('B1', 'c1');
+      expect(a.manager.update).toHaveBeenCalledWith(
+        expect.anything(),
+        { id: 'c1' },
+        { isDeleted: true },
+      );
+    }
+  });
+
+  it('updateStatus: chuyển hợp lệ ok, không hợp lệ → 400, SYNC ghi đè ở v2', async () => {
     const ok = make(owned(CaseOrigin.NATIVE));
     await ok.svc.updateStatus('B1', 'c1', CaseStatus.QUOTED);
     expect(ok.manager.update).toHaveBeenCalledWith(
@@ -135,9 +149,16 @@ describe('CaseCommandService', () => {
     await expect(
       bad.svc.updateStatus('B1', 'c1', CaseStatus.COMPLETED),
     ).rejects.toBeInstanceOf(BadRequestException);
-    const sync = make(owned(CaseOrigin.KGARA_SYNC));
-    await expect(
-      sync.svc.updateStatus('B1', 'c1', CaseStatus.QUOTED),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    const sync = make({
+      ...owned(CaseOrigin.KGARA_SYNC),
+      sourceSnapshot: { status: 'INTAKE' },
+      overrides: {},
+    });
+    await sync.svc.updateStatus('B1', 'c1', CaseStatus.QUOTED);
+    expect(sync.manager.update).toHaveBeenCalledWith(
+      expect.anything(),
+      { id: 'c1' },
+      { status: 'QUOTED', overrides: { status: true } },
+    );
   });
 });

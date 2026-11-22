@@ -48,12 +48,12 @@ const one = async (sql, params = []) => (await db.query(sql, params)).rows[0];
 
 // Phiếu V2 lệch so với giờ VN của V1 trong khoảng (theo ngày VN của V1).
 const MISMATCH_SQL = `
-  select count(*)::int n from cases_garage c join kgara_cases k on k.id = c.legacy_case_id::uuid
+  select count(*)::int n from cases_garage c join kgara_cases k on k.id = c.id
   where k.ngay_phat_sinh is not null
     and k.ngay_phat_sinh >= $1::date and k.ngay_phat_sinh < ($2::date + 1)
     and c.issued_at is distinct from (k.ngay_phat_sinh at time zone 'Asia/Ho_Chi_Minh')`;
 const OUTSIDE_SQL = `
-  select count(*)::int n from cases_garage c join kgara_cases k on k.id = c.legacy_case_id::uuid
+  select count(*)::int n from cases_garage c join kgara_cases k on k.id = c.id
   where k.ngay_phat_sinh is not null
     and (k.ngay_phat_sinh < $1::date or k.ngay_phat_sinh >= ($2::date + 1))
     and c.issued_at is distinct from (k.ngay_phat_sinh at time zone 'Asia/Ho_Chi_Minh')`;
@@ -82,7 +82,7 @@ console.log(`A. lệch trước sync trong ${FROM}..${TO}: ${before.n}; ngoài k
 // sync/gross-profit chỉ chiếu V2 khi số liệu giá vốn đổi; muốn chiếu lại ngày thì sync chi tiết từng phiếu lệch.
 const mism = (
   await db.query(
-    `select k.id from cases_garage c join kgara_cases k on k.id = c.legacy_case_id::uuid
+    `select k.id from cases_garage c join kgara_cases k on k.id = c.id
      where k.ngay_phat_sinh >= $1::date and k.ngay_phat_sinh < ($2::date + 1)
        and c.issued_at is distinct from (k.ngay_phat_sinh at time zone 'Asia/Ho_Chi_Minh')
      limit $3`,
@@ -109,7 +109,7 @@ check('A2. phiếu ngoài khoảng không bị đổi', outsideAfter.n === outsi
 // Lọc ngày V2 theo ngày VN: phiếu phát sinh trong ngày D (VN) phải xuất hiện khi lọc date_from=date_to=D.
 const sample = await one(
   `select to_char(k.ngay_phat_sinh,'YYYY-MM-DD') d, c.case_code as code
-   from cases_garage c join kgara_cases k on k.id = c.legacy_case_id::uuid
+   from cases_garage c join kgara_cases k on k.id = c.id
    where k.ngay_phat_sinh >= $1::date and k.ngay_phat_sinh < ($2::date + 1)
      and extract(hour from k.ngay_phat_sinh) < 7 order by k.ngay_phat_sinh limit 1`,
   [FROM, TO],

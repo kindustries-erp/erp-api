@@ -82,6 +82,24 @@ export class CreateCaseDto {
   @MaxLength(255)
   payerName?: string;
 
+  @ApiPropertyOptional() @IsOptional() @IsDateString() startedAt?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  expectedCompletionAt?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() requestDescription?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() diagnosis?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  advisorCode?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  advisorName?: string;
+
   @ApiPropertyOptional() @IsOptional() @IsDateString() issuedAt?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() receivedAt?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() completedAt?: string;
@@ -112,9 +130,8 @@ export class CreateCaseDto {
 }
 
 /**
- * Sửa header vụ việc. Xe NATIVE sửa mọi field; xe KGARA_SYNC chỉ nhận nhóm ERP-local
- * (`classification`, `categoryId`, `excludeFromReports`, `excludeFromDebt`, `internalNotes`,
- * `classificationManuallyCleared`), field khác bị từ chối 400 ở `CaseOriginGuard`.
+ * Sửa header vụ việc. Xe NATIVE sửa mọi field; xe KGARA_SYNC sửa đè được mọi field có nguồn KGara
+ * (giá trị lưu ở v2, không ghi ngược KGara), trừ định danh/nguồn và tiền công nợ (400 ở `case-origin.guard`).
  */
 export class UpdateCaseDto extends PartialType(CreateCaseDto) {
   @ApiPropertyOptional()
@@ -125,4 +142,13 @@ export class UpdateCaseDto extends PartialType(CreateCaseDto) {
 
 export class UpdateCaseStatusDto {
   @ApiProperty({ enum: CaseStatus }) @IsEnum(CaseStatus) status: CaseStatus;
+}
+
+/** Về giá trị KGara: danh sách khóa cần về; bỏ trống thì về mọi field đang sửa đè. */
+export class RevertFieldsDto {
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  fields?: string[];
 }

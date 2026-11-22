@@ -1,6 +1,9 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { EntityManager } from 'typeorm';
-import { ApprovalSetting } from './entities/approval-setting.entity';
+import type { ApprovalSettingLike } from './contracts/approval.contract';
+
+/** Tên entity của khóa duyệt do module approval-management đăng ký. */
+const APPROVAL_SETTING_ENTITY = 'ApprovalSetting';
 
 /**
  * Chế độ duyệt của một họ chứng từ, suy ra từ khóa trong erp_approval_settings:
@@ -11,7 +14,7 @@ import { ApprovalSetting } from './entities/approval-setting.entity';
 export type ApprovalMode = 'LEGACY' | 'REQUIRED' | 'AUTO';
 
 export function resolveApprovalMode(
-  setting: Pick<ApprovalSetting, 'approvalEnabled'> | null,
+  setting: Pick<ApprovalSettingLike, 'approvalEnabled'> | null,
 ): ApprovalMode {
   if (!setting) return 'LEGACY';
   return setting.approvalEnabled ? 'REQUIRED' : 'AUTO';
@@ -23,7 +26,7 @@ export async function loadApprovalMode(
   docType: string,
 ): Promise<ApprovalMode> {
   const setting = await manager
-    .getRepository(ApprovalSetting)
+    .getRepository<ApprovalSettingLike>(APPROVAL_SETTING_ENTITY)
     .findOne({ where: { docType } });
   return resolveApprovalMode(setting);
 }

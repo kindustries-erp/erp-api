@@ -1,4 +1,4 @@
-import type { ApprovalActorService } from '../approval-actor.service';
+import type { ApprovalActorResolver } from '../contracts/approval.contract';
 import type { ApprovalEmailLookup } from './approval-summary.mapper';
 
 /** Các cột user id của một chứng từ duyệt. Thiếu cột nào thì bỏ qua. */
@@ -18,7 +18,7 @@ export interface ApprovalPeopleSource {
  * Trả hàm tra cứu dùng chung cho mọi dòng của trang.
  */
 export async function resolveApprovalEmails(
-  actors: Pick<ApprovalActorService, 'resolve'>,
+  actors: Pick<ApprovalActorResolver, 'resolve'>,
   headers: ReadonlyArray<ApprovalPeopleSource>,
 ): Promise<ApprovalEmailLookup> {
   const ids = headers.flatMap((h) => [

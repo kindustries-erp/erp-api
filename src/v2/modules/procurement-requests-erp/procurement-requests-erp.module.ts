@@ -1,9 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ApprovalManagementModule } from '@/v2/modules/approval-management/approval-management.module';
 import { RbacCoreModule } from '@/v2/core/rbac-core';
-import { ApprovalEvent } from '@/v2/core/approval-core/entities/approval-event.entity';
-import { ApprovalEventService } from '@/v2/core/approval-core/approval-event.service';
-import { ApprovalActorService } from '@/v2/core/approval-core/approval-actor.service';
 import { UsersManagement } from '@/v2/modules/users-management/entities/users-management.entity';
 import { ProcurementRequest } from './entities/procurement-request.entity';
 import { ProcurementRequestLine } from './entities/procurement-request-line.entity';
@@ -19,15 +17,13 @@ import { ProcurementRequestOrderingService } from './services/procurement-reques
     TypeOrmModule.forFeature([
       ProcurementRequest,
       ProcurementRequestLine,
-      ApprovalEvent,
       UsersManagement,
     ]),
     RbacCoreModule,
+    ApprovalManagementModule,
   ],
   controllers: [ErpProcurementRequestController],
   providers: [
-    ApprovalEventService,
-    ApprovalActorService,
     ProcurementRequestCommandService,
     ProcurementRequestQueryService,
     ErpProcurementRequestsService,

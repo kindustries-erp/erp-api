@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "layer": "api",
+  "family": "cases-core",
+  "entity": "BaseCaseEntity",
+  "style": "v2-core",
+  "barrel": "src/v2/core/cases-core/index.ts",
+  "module": null,
+  "moduleFile": null,
+  "baseClasses": {
+    "entity": "BaseCaseEntity",
+    "createDto": null,
+    "contract": null,
+    "service": null
+  },
+  "serviceFile": null,
+  "permissionPattern": null,
+  "requiredModuleFiles": []
+}

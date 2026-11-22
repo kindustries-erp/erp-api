@@ -2,8 +2,6 @@ import type { KgaraCase } from '@/kgara-api-core/entities/kgara_case.entity';
 import type { KgaraCaseService } from '@/kgara-api-core/entities/kgara_case_service.entity';
 import { CaseOrigin, CaseStatus } from '../entities/case-garage.enums';
 import {
-  caseGarageErpLocalToKgara,
-  caseServiceErpLocalToKgara,
   kgaraCaseToCaseGarage,
   kgaraServiceToCaseService,
 } from './kgara-case.mapper';
@@ -26,16 +24,20 @@ const v1 = (over: Partial<KgaraCase> = {}) =>
     ngayTiepNhan: new Date('2026-11-01T00:00:00Z'),
     erpNotes: 'ghi chú',
     classification: 'OJ',
-    rawData: { x: 1 },
+    rawData: {
+      x: 1,
+      NgayBatDauSuaChua: '2026-10-02T16:04:00',
+      NhanVienCoVanDichVuName: 'Sơn',
+      ChanDoan: '',
+    },
     ...over,
   }) as unknown as KgaraCase;
 
 describe('kgaraCaseToCaseGarage', () => {
-  it('gắn origin/legacyCaseId, giữ cùng UUID và map tên EN', () => {
+  it('gắn origin, giữ cùng UUID và map tên EN', () => {
     const r = kgaraCaseToCaseGarage(v1());
     expect(r).toMatchObject({
       id: 'c1',
-      legacyCaseId: 'c1',
       origin: CaseOrigin.KGARA_SYNC,
       externalId: 'HD-1',
       caseCode: 'PDV-001',
@@ -65,20 +67,13 @@ describe('kgaraCaseToCaseGarage', () => {
   });
 });
 
-describe('caseGarageErpLocalToKgara', () => {
-  it('chỉ ghi nhóm ERP-local và bỏ field nguồn KGara', () => {
-    const r = caseGarageErpLocalToKgara({
-      internalNotes: 'x',
-      excludeFromDebt: true,
-      licensePlate: 'KHÔNG ĐƯỢC GHI',
-    });
-    expect(r).toEqual({ erpNotes: 'x', excludeFromDebt: true });
-  });
-
-  it('round-trip ERP-local giữ nguyên giá trị', () => {
-    const fwd = kgaraCaseToCaseGarage(v1());
-    const back = caseGarageErpLocalToKgara(fwd);
-    expect(back).toMatchObject({ erpNotes: 'ghi chú', classification: 'OJ' });
+describe('nhóm tiến độ từ raw_data', () => {
+  it('đọc khóa PascalCase của KGara, ngày theo giờ VN, chuỗi rỗng thành null', () => {
+    const r = kgaraCaseToCaseGarage(v1());
+    expect(r.startedAt?.toISOString()).toBe('2026-10-02T09:04:00.000Z');
+    expect(r.advisorName).toBe('Sơn');
+    expect(r.diagnosis).toBeNull();
+    expect(r).not.toHaveProperty('expectedCompletionAt');
   });
 });
 
@@ -92,21 +87,14 @@ describe('service mapper', () => {
     deletedAt: null,
   } as unknown as KgaraCaseService;
 
-  it('map dòng, gắn caseId/lineNumber/legacyServiceId', () => {
+  it('map dòng, gắn caseId/lineNumber', () => {
     expect(kgaraServiceToCaseService(line, 'c1', 3)).toMatchObject({
       caseId: 'c1',
       lineNumber: 3,
-      legacyServiceId: 's1',
       externalId: 'L1',
       quantity: '2.0000',
       partsCost: '10.00',
       externalDeletedAt: null,
     });
-  });
-
-  it('chiều ngược chỉ có giá vốn phụ tùng', () => {
-    expect(
-      caseServiceErpLocalToKgara({ partsCost: '5', quantity: '9' }),
-    ).toEqual({ giaVonPhuTung: '5.00' });
   });
 });

@@ -1,6 +1,6 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { EntityManager } from 'typeorm';
-import { ApprovalEventService } from '../../approval-core/approval-event.service';
+import { ApprovalEventRecorder } from '../../approval-core/approval-event.recorder';
 import { BasePurchaseRequestEntity } from '../entities/base-purchase-request.entity';
 import { BasePurchaseRequestLineEntity } from '../entities/base-purchase-request-line.entity';
 import { AbstractPurchaseRequestCommandService } from './abstract-purchase-request-command.service';
@@ -55,7 +55,7 @@ function fakeDataSource(manager: unknown) {
 
 const events = {
   record: jest.fn().mockResolvedValue(undefined),
-} as unknown as ApprovalEventService;
+} as unknown as ApprovalEventRecorder;
 
 class TestCommand extends AbstractPurchaseRequestCommandService<Header, Line> {
   protected readonly headerEntity = Header;
