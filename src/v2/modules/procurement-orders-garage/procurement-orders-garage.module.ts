@@ -1,13 +1,8 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ApprovalManagementModule } from '@/v2/modules/approval-management/approval-management.module';
 import { ErpResource, RbacCoreModule } from '@/v2/core/rbac-core';
-import { ApprovalEvent } from '@/v2/core/approval-core/entities/approval-event.entity';
-import { ApprovalEventService } from '@/v2/core/approval-core/approval-event.service';
-import { ApprovalActorService } from '@/v2/core/approval-core/approval-actor.service';
-import { ApprovalSetting } from '@/v2/core/approval-core/entities/approval-setting.entity';
-import { ApprovalSettingsService } from '@/v2/core/approval-core/approval-settings.service';
-import { ApproverDirectoryService } from '@/v2/core/approval-core/approver-directory.service';
-import { createApprovalConfigController } from '@/v2/core/approval-core/approval-config.controller';
+import { createApprovalConfigController } from '@/v2/modules/approval-management/controllers/approval-config.controller';
 import { UsersManagement } from '@/v2/modules/users-management/entities/users-management.entity';
 import { GarageProcurementRequestsModule } from '@/v2/modules/procurement-requests-garage/procurement-requests-garage.module';
 import { GarageProcurementRequest } from '@/v2/modules/procurement-requests-garage/entities/procurement-request.entity';
@@ -43,11 +38,10 @@ const GarageProcurementOrderApprovalConfigController =
       GarageProcurementOrderLine,
       GarageProcurementOrderAcceptance,
       GarageProcurementRequest,
-      ApprovalEvent,
-      ApprovalSetting,
       UsersManagement,
     ]),
     RbacCoreModule,
+    ApprovalManagementModule,
     ItemsGarageModule,
     GarageProcurementRequestsModule,
   ],
@@ -56,10 +50,6 @@ const GarageProcurementOrderApprovalConfigController =
     GarageProcurementOrderApprovalConfigController,
   ],
   providers: [
-    ApprovalEventService,
-    ApprovalActorService,
-    ApprovalSettingsService,
-    ApproverDirectoryService,
     GarageProcurementRequestLinkAdapter,
     GarageProcurementOrderRequestRefService,
     {

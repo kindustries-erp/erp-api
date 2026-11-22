@@ -1,10 +1,11 @@
 import type { CaseServiceLineDto } from '../dto/case-service-line.dto';
-import type { CaseServiceGarage } from '../entities/case-service-garage.entity';
+import type { CaseLineGarage } from '../entities/case-line-garage.entity';
+import { isLineDeleted } from './case-override.helper';
 
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const n = (v: number | string | null | undefined) => Number(v ?? 0) || 0;
 
-type LineFields = Partial<CaseServiceGarage>;
+type LineFields = Partial<CaseLineGarage>;
 
 /** Tính thành tiền một dòng nhập tay từ DTO. Trả field entity (numeric dạng string). */
 export function computeLineAmounts(dto: CaseServiceLineDto): LineFields {
@@ -36,7 +37,9 @@ export function computeCaseTotals(
   lines: ReadonlyArray<LineFields>,
   paid: number | string | null = 0,
 ): CaseTotals {
-  const live = lines.filter((l) => !l.externalDeletedAt);
+  const live = lines.filter(
+    (l) => !l.externalDeletedAt && !isLineDeleted(l.overrides ?? {}),
+  );
   const total = r2(live.reduce((s, l) => s + n(l.amountWithTax), 0));
   const revenue = r2(live.reduce((s, l) => s + n(l.amountBeforeTax), 0));
   const cost = r2(live.reduce((s, l) => s + n(l.partsCost), 0));

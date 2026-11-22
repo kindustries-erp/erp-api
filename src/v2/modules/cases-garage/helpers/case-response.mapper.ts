@@ -3,16 +3,15 @@ import type {
   CaseServiceResponse,
 } from '../dto/case-response.types';
 import type { CaseGarage } from '../entities/case-garage.entity';
-import type { CaseServiceGarage } from '../entities/case-service-garage.entity';
+import type { CaseLineGarage } from '../entities/case-line-garage.entity';
+import { isLineDeleted, overriddenFields } from './case-override.helper';
 
 const num = (v: string | number | null | undefined): number | null =>
   v == null || v === '' ? null : Number(v);
 const iso = (v: Date | string | null | undefined): string | null =>
   v == null ? null : v instanceof Date ? v.toISOString() : String(v);
 
-export function toCaseServiceResponse(
-  s: CaseServiceGarage,
-): CaseServiceResponse {
+export function toCaseServiceResponse(s: CaseLineGarage): CaseServiceResponse {
   return {
     id: s.id,
     caseId: s.caseId,
@@ -38,10 +37,11 @@ export function toCaseServiceResponse(
     warehouseCode: s.warehouseCode ?? null,
     externalDeletedAt: iso(s.externalDeletedAt),
     extraData: s.extraData ?? {},
+    overriddenFields: overriddenFields(s.overrides),
   };
 }
 
-/** Entity → response DTO. Dòng đã `externalDeletedAt` không trả trong `services`. */
+/** Entity → response DTO. Dòng đã `externalDeletedAt` hoặc `_deleted` (xóa ở v2) không trả trong `services`. */
 export function toCaseResponse(c: CaseGarage): CaseResponse {
   const base: CaseResponse = {
     id: c.id,
@@ -69,6 +69,8 @@ export function toCaseResponse(c: CaseGarage): CaseResponse {
     statusName: c.statusName ?? null,
     issuedAt: iso(c.issuedAt),
     receivedAt: iso(c.receivedAt),
+    startedAt: iso(c.startedAt),
+    expectedCompletionAt: iso(c.expectedCompletionAt),
     completedAt: iso(c.completedAt),
     deliveredAt: iso(c.deliveredAt),
     totalAmountWithTax: num(c.totalAmountWithTax),
@@ -83,14 +85,24 @@ export function toCaseResponse(c: CaseGarage): CaseResponse {
     excludeFromReports: c.excludeFromReports,
     excludeFromDebt: c.excludeFromDebt,
     internalNotes: c.internalNotes ?? null,
+    requestDescription: c.requestDescription ?? null,
+    diagnosis: c.diagnosis ?? null,
+    advisorCode: c.advisorCode ?? null,
+    advisorName: c.advisorName ?? null,
+    assigneeId: c.assigneeId ?? null,
+    progressStage: c.progressStage ?? null,
+    progressPercent: c.progressPercent ?? null,
+    progressUpdatedAt: iso(c.progressUpdatedAt),
+    progressUpdatedBy: c.progressUpdatedBy ?? null,
     externalDeletedAt: iso(c.externalDeletedAt),
     createdAt: iso(c.createdAt) ?? '',
     updatedAt: iso(c.updatedAt) ?? '',
     extraData: c.extraData ?? {},
+    overriddenFields: overriddenFields(c.overrides),
   };
   if (c.services) {
     base.services = c.services
-      .filter((s) => !s.externalDeletedAt)
+      .filter((s) => !s.externalDeletedAt && !isLineDeleted(s.overrides))
       .sort((a, b) => a.lineNumber - b.lineNumber)
       .map(toCaseServiceResponse);
   }

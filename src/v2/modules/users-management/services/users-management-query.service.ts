@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
-import { EmployeeManagement } from '@/v2/core/employees-core/entities/employee-management.entity';
+import { EmployeeManagement } from '@/v2/modules/employees-management/entities/employee-management.entity';
 import { applyMultiKeywordMultiFieldFilter } from '@/common/utils/query-builder.util';
 import {
   applyDateBounds,

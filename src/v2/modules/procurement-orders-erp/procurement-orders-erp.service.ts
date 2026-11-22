@@ -1,5 +1,5 @@
 import { toApprovalEventResponse } from '@/v2/core/approval-core/helpers/approval-event.mapper';
-import { ApprovalActorService } from '@/v2/core/approval-core/approval-actor.service';
+import { ApprovalActorService } from '@/v2/modules/approval-management/services/approval-actor.service';
 import { ApprovalEventResponseDto } from '@/v2/core/approval-core/dto/approval-event-response.dto';
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';

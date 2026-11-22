@@ -14,7 +14,7 @@ import { KgaraBranch } from '@/kgara-api-core/entities/kgara_branch.entity';
 import type { CaseServicesResponse } from '../dto/case-service-row.types';
 import { CaseGarage } from '../entities/case-garage.entity';
 import type { CaseOrigin } from '../entities/case-garage.enums';
-import { CaseServiceGarage } from '../entities/case-service-garage.entity';
+import { CaseLineGarage } from '../entities/case-line-garage.entity';
 import {
   SERVICE_COLUMNS,
   SERVICE_SUMMARY_COLUMNS,
@@ -54,15 +54,15 @@ const SEARCH_COLUMNS = [
 ];
 
 /**
- * Hạng mục dịch vụ và phụ tùng của vụ việc v2 (nguồn `case_services_garage` + `cases_garage`), cả NATIVE
+ * Hạng mục dịch vụ và phụ tùng của vụ việc v2 (nguồn `case_lines_garage` + `cases_garage`), cả NATIVE
  * lẫn KGARA_SYNC, lọc được theo `origin`. Chỉ vụ việc/dòng còn hiệu lực. Join chi nhánh KGara đủ
  * `account_key` để không nhân đôi dòng. Tổng bằng SQL qua `applyListSummaries`.
  */
 @Injectable()
 export class CaseServicesQueryService {
   constructor(
-    @InjectRepository(CaseServiceGarage)
-    private readonly services: Repository<CaseServiceGarage>,
+    @InjectRepository(CaseLineGarage)
+    private readonly services: Repository<CaseLineGarage>,
   ) {}
 
   async findPage(f: CaseServicesFilter): Promise<CaseServicesResponse> {
@@ -107,9 +107,7 @@ export class CaseServicesQueryService {
     };
   }
 
-  private baseQuery(
-    f: CaseServicesFilter,
-  ): SelectQueryBuilder<CaseServiceGarage> {
+  private baseQuery(f: CaseServicesFilter): SelectQueryBuilder<CaseLineGarage> {
     const qb = this.services
       .createQueryBuilder('s')
       .innerJoin(CaseGarage, 'c', '"c"."id" = "s"."case_id"')
@@ -122,6 +120,7 @@ export class CaseServicesQueryService {
       .where('"c"."is_deleted" = false')
       .andWhere('"c"."external_deleted_at" IS NULL')
       .andWhere('"s"."external_deleted_at" IS NULL')
+      .andWhere(`NOT jsonb_exists("s"."overrides", '_deleted')`)
       .andWhere('"c"."branch_external_id" = :branchId', {
         branchId: f.branchId,
       });

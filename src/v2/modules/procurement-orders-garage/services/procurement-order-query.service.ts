@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { nextDocumentNo } from '@/common/numbering/document-numbering';
-import { ApprovalEvent } from '@/v2/core/approval-core/entities/approval-event.entity';
+import { ApprovalEvent } from '@/v2/modules/approval-management/entities/approval-event.entity';
 import { GarageProcurementOrder } from '../entities/procurement-order.entity';
 import { GarageProcurementOrderLine } from '../entities/procurement-order-line.entity';
 import { GarageProcurementOrderAcceptance } from '../entities/procurement-order-acceptance.entity';

@@ -12,7 +12,6 @@ const coreRoot = join(repoRoot, 'src/v2/core');
  */
 export const LEGACY_CORE_ALLOWLIST = [
   'admin-dashboard-core',
-  'approval-core',
   'business-partners-core',
   'rbac-core',
   'table-preferences-core',

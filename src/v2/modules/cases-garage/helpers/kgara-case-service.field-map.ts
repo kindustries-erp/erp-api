@@ -5,10 +5,9 @@ const f = (
   to: string,
   kind: FieldMapEntry['kind'],
   group: FieldMapEntry['group'] = 'source',
-  direction: FieldMapEntry['direction'] = 'v1->v2',
-): FieldMapEntry => ({ from, to, kind, group, direction });
+): FieldMapEntry => ({ from, to, kind, group });
 
-/** Từ điển `kgara_case_services` (V1) → `case_services_garage` (v2). */
+/** Từ điển `kgara_case_services` (V1) → `case_lines_garage` (v2). */
 export const KGARA_CASE_SERVICE_FIELD_MAP: readonly FieldMapEntry[] = [
   f('hdPhieuDichVuChiTietId', 'externalId', 'text', 'identity'),
   f('accountKey', 'accountKey', 'text', 'identity'),
@@ -26,7 +25,7 @@ export const KGARA_CASE_SERVICE_FIELD_MAP: readonly FieldMapEntry[] = [
   f('soGioCongLam', 'laborHours', 'money'),
   f('tienDichVu', 'serviceAmount', 'money'),
   f('tienPhuTung', 'partsAmount', 'money'),
-  f('giaVonPhuTung', 'partsCost', 'money', 'erp-local', 'both'),
+  f('giaVonPhuTung', 'partsCost', 'money'),
   f('tyLeChietKhauCt', 'lineDiscountRate', 'money'),
   f('tienChietKhauCt', 'lineDiscountAmount', 'money'),
   f('tienPhuPhi', 'surchargeAmount', 'money'),
@@ -36,7 +35,10 @@ export const KGARA_CASE_SERVICE_FIELD_MAP: readonly FieldMapEntry[] = [
 ];
 
 export const KGARA_CASE_SERVICE_IGNORED_COLUMNS: readonly IgnoredColumn[] = [
-  { property: 'id', reason: 'Xử lý riêng: thành `legacyServiceId` của v2' },
+  {
+    property: 'id',
+    reason: 'Id nội bộ v1; v2 nối dòng bằng `(accountKey, externalId)`',
+  },
   {
     property: 'hdPhieuDichVuId',
     reason: 'Khóa cha KGara; v2 dùng `caseId` (FK nội bộ) do projector tra',

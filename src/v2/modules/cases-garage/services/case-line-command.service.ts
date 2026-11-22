@@ -1,16 +1,24 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import type { CaseServiceLineDto } from '../dto/case-service-line.dto';
-import { CaseServiceGarage } from '../entities/case-service-garage.entity';
-import { assertStructureEditable } from '../helpers/case-origin.guard';
-import { CaseCommandService } from './case-command.service';
-import { CaseKgaraMirrorService } from './case-kgara-mirror.service';
-import { CaseLineWriter } from './case-line-writer.service';
+import { CaseLineGarage } from '../entities/case-line-garage.entity';
 import { CaseOrigin } from '../entities/case-garage.enums';
+import {
+  markOverrides,
+  OVERRIDE_DELETED,
+  type OverrideMap,
+} from '../helpers/case-override.helper';
+import { LINE_OVERRIDABLE_KEYS } from '../helpers/case-override.keys';
+import { CaseCommandService } from './case-command.service';
+import { CaseLineWriter } from './case-line-writer.service';
+
+/** Dòng nối với KGara (có `externalId`): sửa đè ở v2, không xóa cứng. Dòng nhập tay: ghi trực tiếp. */
+const isSyncLine = (l: CaseLineGarage) => l.externalId != null;
 
 /**
- * Lệnh trên từng dòng hạng mục. Xe NATIVE thêm/thay/xóa tự do; xe KGARA_SYNC chỉ sửa giá vốn
- * phụ tùng (`partsCost`, giống V1 `lines-cost`) và mirror ngược về `kgara_case_services`.
+ * Lệnh trên từng dòng hạng mục. Xe NATIVE và dòng nhập tay ghi trực tiếp (tổng header tính lại).
+ * Dòng sync từ KGara: sửa ghi cột hiệu lực + `overrides`, xóa là đặt `_deleted`; không ghi ngược `kgara_*`.
+ * Header của xe sync không tính lại từ dòng (số tiền header cũng là field override được).
  */
 @Injectable()
 export class CaseLineCommandService {
@@ -18,14 +26,17 @@ export class CaseLineCommandService {
     private readonly dataSource: DataSource,
     private readonly cases: CaseCommandService,
     private readonly lines: CaseLineWriter,
-    private readonly mirror: CaseKgaraMirrorService,
   ) {}
 
   add(branch: string, caseId: string, dto: CaseServiceLineDto) {
     return this.dataSource.transaction(async (m) => {
       const header = await this.cases.findOwned(m, branch, caseId, true);
-      assertStructureEditable(header.origin);
-      await this.lines.add(m, header, dto);
+      await this.lines.add(
+        m,
+        header,
+        dto,
+        header.origin !== CaseOrigin.KGARA_SYNC,
+      );
       return this.cases.reload(m, caseId);
     });
   }
@@ -38,22 +49,36 @@ export class CaseLineCommandService {
   ) {
     return this.dataSource.transaction(async (m) => {
       const header = await this.cases.findOwned(m, branch, caseId, true);
-      assertStructureEditable(header.origin);
-      await this.lines.replaceOne(m, header, lineId, dto);
+      const line = await this.lines.findLine(m, caseId, lineId);
+      if (isSyncLine(line)) {
+        const fields: Record<string, unknown> = { ...this.lines.toFields(dto) };
+        if (dto.lineNumber == null) delete fields.lineNumber;
+        await this.writeOverride(m, line, fields);
+      } else {
+        await this.lines.replaceOne(m, header, lineId, dto);
+      }
       return this.cases.reload(m, caseId);
     });
   }
 
   remove(branch: string, caseId: string, lineId: string) {
     return this.dataSource.transaction(async (m) => {
-      const header = await this.cases.findOwned(m, branch, caseId, true);
-      assertStructureEditable(header.origin);
-      await this.lines.remove(m, caseId, lineId);
+      await this.cases.findOwned(m, branch, caseId, true);
+      const line = await this.lines.findLine(m, caseId, lineId);
+      if (isSyncLine(line)) {
+        const overrides: OverrideMap = {
+          ...line.overrides,
+          [OVERRIDE_DELETED]: true,
+        };
+        await m.update(CaseLineGarage, { id: line.id }, { overrides });
+      } else {
+        await this.lines.remove(m, caseId, lineId);
+      }
       return this.cases.reload(m, caseId);
     });
   }
 
-  /** Cho cả NATIVE và SYNC. SYNC: mirror V1; tổng header do projector cập nhật từ V1. */
+  /** Sửa giá vốn phụ tùng. Dòng sync: ghi đè ở v2; dòng nhập tay: ghi thẳng và tính lại tổng. */
   updatePartsCost(
     branch: string,
     caseId: string,
@@ -61,16 +86,33 @@ export class CaseLineCommandService {
     partsCost: number,
   ) {
     return this.dataSource.transaction(async (m) => {
-      const header = await this.cases.findOwned(m, branch, caseId, true);
+      await this.cases.findOwned(m, branch, caseId, true);
       const line = await this.lines.findLine(m, caseId, lineId);
       const patch = { partsCost: partsCost.toFixed(2) };
-      await m.update(CaseServiceGarage, { id: line.id }, patch);
-      if (header.origin === CaseOrigin.KGARA_SYNC) {
-        await this.mirror.mirrorLine(m, line, patch);
+      if (isSyncLine(line)) {
+        await this.writeOverride(m, line, patch);
       } else {
+        await m.update(CaseLineGarage, { id: line.id }, patch);
         await this.lines.recompute(m, caseId);
       }
       return this.cases.reload(m, caseId);
     });
+  }
+
+  private async writeOverride(
+    m: import('typeorm').EntityManager,
+    line: CaseLineGarage,
+    fields: Record<string, unknown>,
+  ): Promise<void> {
+    const overrides = markOverrides(
+      fields,
+      line.sourceSnapshot,
+      line.overrides,
+      LINE_OVERRIDABLE_KEYS,
+    );
+    await m.update(CaseLineGarage, { id: line.id }, {
+      ...fields,
+      overrides,
+    } as never);
   }
 }

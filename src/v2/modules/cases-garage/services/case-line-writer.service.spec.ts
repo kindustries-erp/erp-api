@@ -1,9 +1,9 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { CaseGarage } from '../entities/case-garage.entity';
-import { CaseServiceGarage } from '../entities/case-service-garage.entity';
+import { CaseLineGarage } from '../entities/case-line-garage.entity';
 import { CaseLineWriter } from './case-line-writer.service';
 
-const make = (lines: Array<Partial<CaseServiceGarage>> = []) => {
+const make = (lines: Array<Partial<CaseLineGarage>> = []) => {
   const m = {
     create: jest.fn((_e: unknown, v: object) => ({ ...v })),
     save: jest.fn((_e: unknown, v: object) =>
@@ -35,7 +35,7 @@ describe('CaseLineWriter', () => {
       { productName: 'A', quantity: 1, unitPrice: 100, taxRate: 10 },
       { productName: 'B' },
     ]);
-    expect(m.delete).toHaveBeenCalledWith(CaseServiceGarage, { caseId: 'c1' });
+    expect(m.delete).toHaveBeenCalledWith(CaseLineGarage, { caseId: 'c1' });
     const rows = m.save.mock.calls[0][1] as Array<{
       lineNumber: number;
       amountWithTax: string;
@@ -78,7 +78,7 @@ describe('CaseLineWriter', () => {
   it('remove: xóa dòng rồi tính lại tổng', async () => {
     const { m, writer } = make([{ id: 'l1' }]);
     await writer.remove(m as never, 'c1', 'l1');
-    expect(m.delete).toHaveBeenCalledWith(CaseServiceGarage, { id: 'l1' });
+    expect(m.delete).toHaveBeenCalledWith(CaseLineGarage, { id: 'l1' });
     expect(m.update).toHaveBeenCalled();
   });
 

@@ -2,7 +2,7 @@ import { getMetadataArgsStorage } from 'typeorm';
 import { KgaraCase } from '@/kgara-api-core/entities/kgara_case.entity';
 import { KgaraCaseService } from '@/kgara-api-core/entities/kgara_case_service.entity';
 import { CaseGarage } from '../entities/case-garage.entity';
-import { CaseServiceGarage } from '../entities/case-service-garage.entity';
+import { CaseLineGarage } from '../entities/case-line-garage.entity';
 import {
   KGARA_CASE_FIELD_MAP,
   KGARA_CASE_IGNORED_COLUMNS,
@@ -42,7 +42,7 @@ describe.each([
   [
     'kgara_case_services',
     KgaraCaseService,
-    CaseServiceGarage,
+    CaseLineGarage,
     KGARA_CASE_SERVICE_FIELD_MAP,
     KGARA_CASE_SERVICE_IGNORED_COLUMNS,
   ],
@@ -75,9 +75,7 @@ describe.each([
     expect(new Set(to).size).toBe(to.length);
   });
 
-  it('chiều `both` chỉ dành cho nhóm erp-local', () => {
-    for (const e of map.filter((x) => x.direction === 'both')) {
-      expect(e.group).toBe('erp-local');
-    }
+  it('chỉ có hai nhóm identity và source', () => {
+    for (const e of map) expect(['identity', 'source']).toContain(e.group);
   });
 });

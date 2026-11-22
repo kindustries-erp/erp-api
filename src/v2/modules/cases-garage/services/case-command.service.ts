@@ -15,17 +15,21 @@ import {
   CaseStatus,
   DEFAULT_CASE_ACCOUNT_KEY,
 } from '../entities/case-garage.enums';
-import {
-  assertDeletable,
-  assertHeaderPatchAllowed,
-  assertStatusEditable,
-} from '../helpers/case-origin.guard';
+import { assertHeaderPatchAllowed } from '../helpers/case-origin.guard';
+import { markOverrides } from '../helpers/case-override.helper';
+import { CASE_OVERRIDABLE_KEYS } from '../helpers/case-override.keys';
 import { canTransition, statusToKgaraCode } from '../helpers/kgara-status.map';
-import { CaseKgaraMirrorService } from './case-kgara-mirror.service';
 import { CaseLineWriter } from './case-line-writer.service';
 
 const CASE_NO_PREFIX = 'VV';
-const DATE_KEYS = ['issuedAt', 'receivedAt', 'completedAt', 'deliveredAt'];
+const DATE_KEYS = [
+  'issuedAt',
+  'receivedAt',
+  'startedAt',
+  'expectedCompletionAt',
+  'completedAt',
+  'deliveredAt',
+];
 
 /** Chuyển chuỗi ngày ISO của DTO thành Date; bỏ `services` (xử lý riêng). */
 function headerFields(dto: Record<string, unknown>): Partial<CaseGarage> {
@@ -49,7 +53,6 @@ export class CaseCommandService {
   constructor(
     private readonly dataSource: DataSource,
     private readonly lines: CaseLineWriter,
-    private readonly mirror: CaseKgaraMirrorService,
   ) {}
 
   /** Tìm vụ việc đang hoạt động của đúng chi nhánh; khác chi nhánh coi như không tồn tại. */
@@ -119,11 +122,20 @@ export class CaseCommandService {
       assertHeaderPatchAllowed(current.origin, patch);
       const fields = headerFields(patch);
       try {
-        await m.update(CaseGarage, { id }, fields as never);
         if (current.origin === CaseOrigin.KGARA_SYNC) {
-          await this.mirror.mirrorCase(m, id, fields);
-        } else if (dto.services !== undefined) {
-          await this.lines.replaceAll(m, current, dto.services);
+          // Sửa đè ở v2: ghi cột hiệu lực + `overrides`, không ghi ngược `kgara_*`.
+          const overrides = markOverrides(
+            fields as Record<string, unknown>,
+            current.sourceSnapshot,
+            current.overrides,
+            CASE_OVERRIDABLE_KEYS,
+          );
+          await m.update(CaseGarage, { id }, { ...fields, overrides } as never);
+        } else {
+          await m.update(CaseGarage, { id }, fields as never);
+          if (dto.services !== undefined) {
+            await this.lines.replaceAll(m, current, dto.services);
+          }
         }
       } catch (e) {
         rethrowUnique(e);
@@ -139,17 +151,33 @@ export class CaseCommandService {
   ): Promise<CaseGarage> {
     return this.dataSource.transaction(async (m) => {
       const current = await this.findOwned(m, branchExternalId, id, true);
-      assertStatusEditable(current.origin);
       if (!canTransition(current.status, status)) {
         throw new BadRequestException(
           `Không chuyển được trạng thái ${current.status} → ${status}.`,
         );
       }
-      await m.update(CaseGarage, { id }, {
-        status,
-        kgaraStatusCode: statusToKgaraCode(status),
-        ...(status === CaseStatus.COMPLETED ? { completedAt: new Date() } : {}),
-      } as never);
+      const completed =
+        status === CaseStatus.COMPLETED ? { completedAt: new Date() } : {};
+      if (current.origin === CaseOrigin.KGARA_SYNC) {
+        // Trạng thái KGara giữ ở snapshot; v2 đổi trạng thái hiệu lực và đánh dấu override.
+        const overrides = markOverrides(
+          { status, ...completed },
+          current.sourceSnapshot,
+          current.overrides,
+          CASE_OVERRIDABLE_KEYS,
+        );
+        await m.update(CaseGarage, { id }, {
+          status,
+          ...completed,
+          overrides,
+        } as never);
+      } else {
+        await m.update(CaseGarage, { id }, {
+          status,
+          kgaraStatusCode: statusToKgaraCode(status),
+          ...completed,
+        } as never);
+      }
       return this.reload(m, id);
     });
   }
@@ -157,7 +185,6 @@ export class CaseCommandService {
   async softDelete(branchExternalId: string, id: string): Promise<void> {
     await this.dataSource.transaction(async (m) => {
       const current = await this.findOwned(m, branchExternalId, id, true);
-      assertDeletable(current.origin);
       await m.update(CaseGarage, { id }, { isDeleted: true } as never);
     });
   }

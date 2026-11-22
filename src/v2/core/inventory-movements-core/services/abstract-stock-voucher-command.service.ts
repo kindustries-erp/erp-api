@@ -1,6 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import { DataSource, DeepPartial, EntityManager, EntityTarget } from 'typeorm';
-import { ApprovalEventService } from '@/v2/core/approval-core/approval-event.service';
+import { ApprovalEventRecorder } from '@/v2/core/approval-core/approval-event.recorder';
 import { resolveTransition } from '@/v2/core/approval-core/approval.engine';
 import {
   STOCK_VOUCHER_TRANSITIONS,
@@ -27,7 +27,7 @@ export abstract class AbstractStockVoucherCommandService<
 
   constructor(
     protected readonly dataSource: DataSource,
-    protected readonly events: ApprovalEventService,
+    protected readonly events: ApprovalEventRecorder,
   ) {}
 
   /** CUSTOM: trạng thái ban đầu của chứng từ mới. Mặc định DRAFT. */

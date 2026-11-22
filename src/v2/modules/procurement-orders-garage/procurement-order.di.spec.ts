@@ -1,6 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
-import { ApprovalEventService } from '@/v2/core/approval-core/approval-event.service';
+import { ApprovalEventService } from '@/v2/modules/approval-management/services/approval-event.service';
 import { GarageLineItemResolver } from '@/v2/modules/items-garage/services/garage-line-item-resolver.service';
 import { GarageProcurementOrderCommandService } from './services/procurement-order-command.service';
 import {

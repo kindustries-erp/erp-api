@@ -13,9 +13,11 @@ import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
 import { RequirePermissions } from '@/auth/decorators/require-permissions.decorator';
 import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
 import { BranchId } from '@/kgara-api-core/decorators/branch-id.decorator';
+import { QueryCaseProgressDto } from '../dto/case-progress.dto';
 import { QueryCasesGarageDto } from '../dto/query-cases-garage.dto';
 import { CaseColumnOptionsService } from '../services/case-column-options.service';
 import { CaseDetailQueryService } from '../services/case-detail-query.service';
+import { CaseProgressQueryService } from '../services/case-progress-query.service';
 import { CaseListQueryService } from '../services/case-list-query.service';
 import { CaseServicesQueryService } from '../services/case-services-query.service';
 import { GrossProfitReportService } from '../services/gross-profit-report.service';
@@ -43,6 +45,7 @@ export class CasesGarageController {
     private readonly detail: CaseDetailQueryService,
     private readonly services: CaseServicesQueryService,
     private readonly grossProfit: GrossProfitReportService,
+    private readonly progress: CaseProgressQueryService,
   ) {}
 
   @RequirePermissions(GARAGE_READ)
@@ -64,6 +67,16 @@ export class CasesGarageController {
       sort: q.sort,
       summaryKeys: q.summary_keys,
     });
+  }
+
+  @RequirePermissions(GARAGE_READ)
+  @ApiOperation({ summary: 'Bảng theo dõi tiến độ xe (mặc định xe đang sửa)' })
+  @Get('progress')
+  progressBoard(
+    @Query() q: QueryCaseProgressDto,
+    @BranchId() branchId: string,
+  ) {
+    return this.progress.findPage(requireBranch(branchId), q);
   }
 
   @RequirePermissions(GARAGE_READ)

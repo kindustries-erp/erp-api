@@ -12,6 +12,9 @@ import type { CaseStatus } from './entities/case-garage.enums';
 import { toCaseResponse } from './helpers/case-response.mapper';
 import { CaseCommandService } from './services/case-command.service';
 import { CaseLineCommandService } from './services/case-line-command.service';
+import { CaseProgressCommandService } from './services/case-progress-command.service';
+import { CaseRevertService } from './services/case-revert.service';
+import type { UpdateCaseProgressDto } from './dto/case-progress.dto';
 
 const wrap = (message: string, c: CaseGarage): CaseMutationResponse => ({
   message,
@@ -25,6 +28,8 @@ export class CasesGarageService {
     private readonly dataSource: DataSource,
     private readonly commands: CaseCommandService,
     private readonly lineCommands: CaseLineCommandService,
+    private readonly reverts: CaseRevertService,
+    private readonly progress: CaseProgressCommandService,
   ) {}
 
   async nextCode(): Promise<{ caseCode: string }> {
@@ -83,6 +88,37 @@ export class CasesGarageService {
     return wrap(
       'Đã xóa hạng mục',
       await this.lineCommands.remove(branch, id, lineId),
+    );
+  }
+
+  async updateProgress(
+    branch: string,
+    id: string,
+    dto: UpdateCaseProgressDto,
+    actorId: string,
+  ) {
+    return wrap(
+      'Đã cập nhật tiến độ',
+      await this.progress.update(branch, id, dto, actorId),
+    );
+  }
+
+  async revertCase(branch: string, id: string, fields?: string[]) {
+    return wrap(
+      'Đã về giá trị KGara',
+      await this.reverts.revertCase(branch, id, fields),
+    );
+  }
+
+  async revertLine(
+    branch: string,
+    id: string,
+    lineId: string,
+    fields?: string[],
+  ) {
+    return wrap(
+      'Đã về giá trị KGara',
+      await this.reverts.revertLine(branch, id, lineId, fields),
     );
   }
 

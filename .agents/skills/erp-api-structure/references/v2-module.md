@@ -29,6 +29,9 @@ Kiến trúc API V2 được tổ chức phân cấp tương tự Web V2 (`erp-w
 - Dòng chứng từ: `<header>_lines` (hoặc `<header>_lines_<hậu tố>` khi header có hậu tố).
 - Bảng đang có (`erp_*`, `core_*`, `*_garage` cũ) giữ nguyên. Đổi tên là task migration riêng, cần lệnh của người dùng.
 - Generator truyền `tableNameInput` tường minh. Mặc định của plop là tên module, không có `_core`.
+- **Tên không lấy từ lõi**: lõi chỉ là base để kế thừa. Không dùng `base_`, `core_` hay tên lõi trong tên bảng, module, entity cụ thể; quan hệ kế thừa thể hiện bằng `extends` và ghi trong `SKILL.md` module.
+- **Quy ước tên**: code và response API camelCase; cột DB snake_case qua `@Column({ name })`.
+- **Đánh giá use case đa ngành** trước khi tạo lõi/module: liệt kê ≥3 use case (không bó trong ERP), mỗi field hỏi "mọi use case cần không" (cần → lõi, một ngành → module, phát sinh sau → `extra_data`), ghi bảng `use case → field` vào `SKILL.md` của lõi. Chỉ có một use case thì dừng và hỏi người dùng.
 
 ## 1. Quy ước v2
 
@@ -65,6 +68,7 @@ Lõi `src/v2/core/base-core` (barrel `@/v2/core/base-core`) là chuỗi entity n
   - Giới hạn (`assertValidExtraData`, 400 khi vi phạm): object, tối đa 16 KB, sâu 5 cấp, key tối đa 64 ký tự, cấm `__proto__`, `constructor`, `prototype`.
   - Chặn ở hai lớp: `RejectUnsafeExtraDataPipe` (`base-core/pipes`, đăng ký trong `main.ts` TRƯỚC ValidationPipe) kiểm body thô, vì ValidationPipe của Nest tự xóa key `__proto__` mà không báo lỗi; và service kiểm lại cho mọi caller không đi qua HTTP.
   - Logic kiểm và merge nằm ở lớp command/service, không ở controller. Response luôn trả `extraData` là object (không null).
+- **Mẫu override cho module sync từ hệ ngoài** (chi tiết: workflow `erp-api-structure.md`, mục "Mẫu override"): cột hiện có là giá trị hiệu lực; thêm `source_snapshot` và `overrides` (jsonb). Projector luôn ghi snapshot, chỉ ghi cột hiệu lực khi field không nằm trong `overrides`; sửa ở v2 không ghi ngược nguồn; có endpoint về giá trị nguồn; `_deleted` cho xóa mềm dòng; nối dòng bằng `(account_key, external_id)`.
 - Migration thêm cột: `ADD COLUMN IF NOT EXISTS "extra_data" jsonb NOT NULL DEFAULT '{}'::jsonb` kèm `CHECK (jsonb_typeof("extra_data") = 'object')`. Không đổi kiểu cột cũ.
 
 ## 2. Kiểu trường (`fieldSpec`)
@@ -199,7 +203,7 @@ Các file trong `plop-helpers/` là hàm thuần: `apiV2Fields`, `apiV2Data`, `a
 | `audit-core` (v1, `erp_audit_logs`, `/api/v1/audit-logs-core`) | Lõi `src/v2/core/audit-core/` (base only) & module `src/v2/modules/audit-logs/` (route `/api/v2/audit-logs`, bảng `audit_logs`, backfill từ `erp_audit_logs`, interceptor + writer + retention `ScheduledJob`). | Đã chuyển ghi và đọc. V1 ủy quyền sang v2 (giữ route/hình dạng cũ), web gọi v2. `erp_audit_logs` giữ làm bản lưu. JWT-only theo hành vi cũ; retention chỉ chạy khi `ENABLE_CRON=true`. |
 | `erp-attachments-core` + file hóa đơn (v1, `erp_attachments`, `erp_invoice_attachments`, `pdf_file_key`/`xml_file_key`) | Lõi `src/v2/core/file-attachments-core/` (base only: policy, owner registry, key/sanitize helper) & module `src/v2/modules/file-attachments-management/` (route `/api/v2/file-attachments-management`, bảng `file_attachments`, `file_attachment_settings`, backfill từ dữ liệu hóa đơn cũ, purge job) + owner hóa đơn trong `invoices-finance` (`/api/v2/invoices/:id/attachments`). | Đang chạy song song: API và web V2 xong, backfill staging 5982 dòng. Chưa cutover V1 (Phase 5): route V1 vẫn ghi file. Xem module skill `file-attachments`. |
 
-Họ còn đánh dấu `[LEGACY-CORE]` và chưa có dòng riêng ở bảng này: `table-preferences-core`, `approval-core`, `admin-dashboard-core`. Chuyển từng họ khi có lệnh; mỗi lần chuyển xong thì gỡ khỏi `LEGACY_CORE_ALLOWLIST` và cập nhật bảng này.
+Họ còn đánh dấu `[LEGACY-CORE]` và chưa có dòng riêng ở bảng này: `table-preferences-core`, `admin-dashboard-core`. `approval-core` đã base-only từ 2026-11-22 (entity, service, controller factory ở module `approval-management`; core chỉ còn engine, gate helper, `BaseApprovalFields`, `BaseApprovalEventEntity`, cổng `ApprovalEventRecorder`). Chuyển từng họ khi có lệnh; mỗi lần chuyển xong thì gỡ khỏi `LEGACY_CORE_ALLOWLIST` và cập nhật bảng này.
 
 Khi làm module v2 mới không có lõi dùng chung và có bảng mới, dùng `api-module-v2`. Ví dụ PO v2 từng dựng tay theo cấu trúc này đã được gỡ; khôi phục từ commit `5b1ec29` nếu cần tham khảo.
 

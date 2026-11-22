@@ -27,7 +27,7 @@ import {
   QueryEmployeeManagementDto,
   UpdateEmployeeManagementDto,
   UpdateEmployeeStatusDto,
-} from '@/v2/core/employees-core';
+} from '../dto';
 import { EmployeesManagementService } from '../employees-management.service';
 
 @ApiTags('employees')

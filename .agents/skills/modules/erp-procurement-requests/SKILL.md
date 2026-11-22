@@ -62,7 +62,7 @@ PO không import module này. Cổng `RequestLinkPort` do `ProcurementRequestLin
 
 - Module Garage tương ứng: [`garage-procurement-requests`](../garage-procurement-requests/SKILL.md)
 - PO thường: [`erp-procurement-orders`](../erp-procurement-orders/SKILL.md)
-- Nhật ký duyệt dùng chung: `src/v2/core/approval-core/`
+- Nhật ký duyệt dùng chung: lõi `src/v2/core/approval-core/` (base) và cài đặt `src/v2/modules/approval-management/`
 
 ## 9. Cập nhật 2026-11-05: PR không tự đóng
 

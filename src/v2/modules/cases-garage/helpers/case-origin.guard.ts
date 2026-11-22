@@ -1,55 +1,28 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import { CaseOrigin } from '../entities/case-garage.enums';
-import { CASE_ERP_LOCAL_FIELDS } from './kgara-case.field-map';
+import { CASE_OVERRIDABLE_KEYS } from './case-override.keys';
 
-/** Field của dòng hạng mục mà xe KGARA_SYNC được sửa (giống V1 `lines-cost`). */
-export const SERVICE_ERP_LOCAL_FIELDS: readonly string[] = ['partsCost'];
+/** Field v2-native (không có nguồn KGara) mà xe sync cũng sửa trực tiếp. */
+const V2_NATIVE_KEYS: ReadonlySet<string> = new Set(['extraData']);
 
-/** Key điều khiển không phải dữ liệu nghiệp vụ, luôn bị bỏ khỏi so sánh. */
-const IGNORE = new Set(['services']);
-
-function forbidden(keys: string[], allowed: readonly string[]): string[] {
-  return keys.filter((k) => !IGNORE.has(k) && !allowed.includes(k));
-}
-
-/** Xe SYNC chỉ nhận nhóm ERP-local; field khác bị 400. Xe NATIVE sửa mọi field. */
+/**
+ * Xe NATIVE sửa mọi field. Xe KGARA_SYNC sửa được mọi field có thể override (ghi vào cột hiệu lực và
+ * `overrides`); định danh/nguồn, tiền suy ra từ công nợ và `services` bị 400 (dùng endpoint dòng).
+ */
 export function assertHeaderPatchAllowed(
   origin: CaseOrigin,
   patch: Record<string, unknown>,
 ): void {
   if (origin !== CaseOrigin.KGARA_SYNC) return;
-  const keys = Object.keys(patch).filter((k) => patch[k] !== undefined);
-  if (patch.services !== undefined) keys.push('services');
-  const bad = forbidden(keys, CASE_ERP_LOCAL_FIELDS).concat(
-    keys.includes('services') ? ['services'] : [],
+  const bad = Object.keys(patch).filter(
+    (k) =>
+      patch[k] !== undefined &&
+      !CASE_OVERRIDABLE_KEYS.has(k) &&
+      !V2_NATIVE_KEYS.has(k),
   );
   if (bad.length) {
     throw new BadRequestException(
-      `Xe đồng bộ từ KGara chỉ được sửa: ${CASE_ERP_LOCAL_FIELDS.join(', ')}. Không sửa được: ${[...new Set(bad)].join(', ')}.`,
-    );
-  }
-}
-
-export function assertStructureEditable(origin: CaseOrigin): void {
-  if (origin === CaseOrigin.KGARA_SYNC) {
-    throw new BadRequestException(
-      'Xe đồng bộ từ KGara không thêm/xóa/sửa dòng hạng mục ngoài giá vốn phụ tùng.',
-    );
-  }
-}
-
-export function assertDeletable(origin: CaseOrigin): void {
-  if (origin === CaseOrigin.KGARA_SYNC) {
-    throw new ConflictException(
-      'Xe đồng bộ từ KGara không xóa được ở v2; xóa bên KGara để đồng bộ.',
-    );
-  }
-}
-
-export function assertStatusEditable(origin: CaseOrigin): void {
-  if (origin === CaseOrigin.KGARA_SYNC) {
-    throw new BadRequestException(
-      'Trạng thái xe đồng bộ từ KGara do KGara quyết định.',
+      `Xe đồng bộ từ KGara không sửa được: ${bad.join(', ')} (định danh/nguồn, tiền công nợ hoặc dòng hạng mục: dùng endpoint dòng).`,
     );
   }
 }

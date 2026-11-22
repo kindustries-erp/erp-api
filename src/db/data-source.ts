@@ -12,7 +12,7 @@ import { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.ent
 import { CoreUserRole } from '@/v2/core/rbac-core/entities/core-user-role.entity';
 import { ErpEmployee } from '../employees-core/entities/erp_employee.entity';
 import { ErpBusinessPartner } from '@/v2/core/business-partners-core';
-import { EmployeeManagement } from '@/v2/core/employees-core';
+import { EmployeeManagement } from '@/v2/modules/employees-management/entities/employee-management.entity';
 import { ErpInventoryItem } from '../inventory-core/entities/erp_inventory_item.entity';
 import { ErpInventoryTransaction } from '../inventory-core/entities/erp_inventory_transaction.entity';
 import { ErpInventoryBalance } from '../inventory-core/entities/erp_inventory_balance.entity';
@@ -101,10 +101,10 @@ import { GarageInventoryBalance } from '@/v2/modules/goods-receipts-garage/entit
 import { DebtGarage } from '@/v2/modules/debts-garage/entities/debt-garage.entity';
 import { DebtAllocationGarage } from '@/v2/modules/debts-garage/entities/debt-allocation-garage.entity';
 import { CaseGarage } from '@/v2/modules/cases-garage/entities/case-garage.entity';
-import { CaseServiceGarage } from '@/v2/modules/cases-garage/entities/case-service-garage.entity';
+import { CaseLineGarage } from '@/v2/modules/cases-garage/entities/case-line-garage.entity';
 import { CashflowVoucherGarage } from '@/v2/modules/cashflow-vouchers-garage/entities/cashflow-voucher-garage.entity';
-import { ApprovalEvent } from '@/v2/core/approval-core/entities/approval-event.entity';
-import { ApprovalSetting } from '@/v2/core/approval-core/entities/approval-setting.entity';
+import { ApprovalEvent } from '@/v2/modules/approval-management/entities/approval-event.entity';
+import { ApprovalSetting } from '@/v2/modules/approval-management/entities/approval-setting.entity';
 import { ProcurementRequest } from '@/v2/modules/procurement-requests-erp/entities/procurement-request.entity';
 import { ProcurementRequestLine } from '@/v2/modules/procurement-requests-erp/entities/procurement-request-line.entity';
 import { ProcurementOrder } from '@/v2/modules/procurement-orders-erp/entities/procurement-order.entity';
@@ -245,7 +245,7 @@ const entities = [
   DebtAllocationGarage,
   CashflowVoucherGarage,
   CaseGarage,
-  CaseServiceGarage,
+  CaseLineGarage,
   GarageInventoryBalance,
   InventoryMovementsGarageReceiptLine,
   InventoryMovementsGarageIssueLine,

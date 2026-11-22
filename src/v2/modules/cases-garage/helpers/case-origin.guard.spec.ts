@@ -1,48 +1,42 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import { CaseOrigin } from '../entities/case-garage.enums';
-import {
-  assertDeletable,
-  assertHeaderPatchAllowed,
-  assertStatusEditable,
-  assertStructureEditable,
-} from './case-origin.guard';
+import { assertHeaderPatchAllowed } from './case-origin.guard';
 
 describe('case-origin.guard', () => {
   it('NATIVE sửa mọi field', () => {
     expect(() =>
       assertHeaderPatchAllowed(CaseOrigin.NATIVE, {
         licensePlate: 'x',
+        caseCode: 'y',
         services: [],
       }),
     ).not.toThrow();
-    expect(() => assertDeletable(CaseOrigin.NATIVE)).not.toThrow();
   });
 
-  it('SYNC: nhóm ERP-local qua, field nguồn KGara bị 400', () => {
+  it('SYNC: field override được (kể cả trạng thái, biển số, ngày) qua; extraData qua', () => {
     expect(() =>
       assertHeaderPatchAllowed(CaseOrigin.KGARA_SYNC, {
-        internalNotes: 'x',
-        excludeFromDebt: true,
+        licensePlate: 'x',
+        status: 'COMPLETED',
+        receivedAt: '2026-01-01',
+        internalNotes: 'n',
+        extraData: {},
         classification: undefined,
       }),
     ).not.toThrow();
-    expect(() =>
-      assertHeaderPatchAllowed(CaseOrigin.KGARA_SYNC, { licensePlate: 'x' }),
-    ).toThrow(BadRequestException);
-    expect(() =>
-      assertHeaderPatchAllowed(CaseOrigin.KGARA_SYNC, { services: [] }),
-    ).toThrow(BadRequestException);
   });
 
-  it('SYNC: không xóa (409), không đổi trạng thái, không sửa cấu trúc dòng', () => {
-    expect(() => assertDeletable(CaseOrigin.KGARA_SYNC)).toThrow(
-      ConflictException,
-    );
-    expect(() => assertStatusEditable(CaseOrigin.KGARA_SYNC)).toThrow(
-      BadRequestException,
-    );
-    expect(() => assertStructureEditable(CaseOrigin.KGARA_SYNC)).toThrow(
-      BadRequestException,
-    );
+  it('SYNC: định danh/nguồn, tiền công nợ và services bị 400', () => {
+    for (const patch of [
+      { caseCode: 'x' },
+      { externalId: 'x' },
+      { origin: 'NATIVE' },
+      { paidAmount: '1' },
+      { services: [] },
+    ]) {
+      expect(() =>
+        assertHeaderPatchAllowed(CaseOrigin.KGARA_SYNC, patch),
+      ).toThrow(BadRequestException);
+    }
   });
 });

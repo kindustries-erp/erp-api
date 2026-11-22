@@ -1,4 +1,4 @@
-import type { ApprovalActorInfo } from '../approval-actor.service';
+import type { ApprovalActorInfo } from '../contracts/approval.contract';
 import { ApprovalEventResponseDto } from '../dto/approval-event-response.dto';
 
 export interface ApprovalEventLike {
@@ -13,7 +13,7 @@ export interface ApprovalEventLike {
 
 /**
  * Chuyển entity nhật ký sang response DTO.
- * `actor` lấy từ ApprovalActorService; thiếu thì tên và email để null.
+ * `actor` lấy từ ApprovalActorResolver; thiếu thì tên và email để null.
  */
 export function toApprovalEventResponse(
   e: ApprovalEventLike,

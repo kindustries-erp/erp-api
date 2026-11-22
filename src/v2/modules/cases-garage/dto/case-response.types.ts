@@ -26,6 +26,8 @@ export interface CaseServiceResponse {
   warehouseCode: string | null;
   externalDeletedAt: string | null;
   extraData: Record<string, unknown>;
+  /** Khóa field đã sửa đè ở v2 (khác giá trị sync từ KGara). */
+  overriddenFields: string[];
 }
 
 /** Vụ việc garage v2. Không có `raw_data`; `origin` phân biệt xe nhập tay và xe sync từ V1. */
@@ -55,6 +57,8 @@ export interface CaseResponse {
   statusName: string | null;
   issuedAt: string | null;
   receivedAt: string | null;
+  startedAt: string | null;
+  expectedCompletionAt: string | null;
   completedAt: string | null;
   deliveredAt: string | null;
   totalAmountWithTax: number | null;
@@ -69,7 +73,18 @@ export interface CaseResponse {
   excludeFromReports: boolean;
   excludeFromDebt: boolean;
   internalNotes: string | null;
+  requestDescription: string | null;
+  diagnosis: string | null;
+  advisorCode: string | null;
+  advisorName: string | null;
+  assigneeId: string | null;
+  progressStage: string | null;
+  progressPercent: number | null;
+  progressUpdatedAt: string | null;
+  progressUpdatedBy: string | null;
   externalDeletedAt: string | null;
+  /** Khóa field đã sửa đè ở v2 (khác giá trị sync từ KGara). */
+  overriddenFields: string[];
   createdAt: string;
   updatedAt: string;
   extraData: Record<string, unknown>;

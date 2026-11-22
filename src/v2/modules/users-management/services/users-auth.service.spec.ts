@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import type { DataSource } from 'typeorm';
 import { CoreRefreshToken } from '@/auth/entities/core-refresh-token.entity';
-import { EmployeeManagement } from '@/v2/core/employees-core/entities/employee-management.entity';
+import { EmployeeManagement } from '@/v2/modules/employees-management/entities/employee-management.entity';
 import { CoreUser } from '@/users/entities/core-user.entity';
 import { hashPassword } from '@/v2/core/users-core';
 import { UsersManagement } from '../entities/users-management.entity';

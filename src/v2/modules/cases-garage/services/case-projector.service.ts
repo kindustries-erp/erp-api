@@ -7,7 +7,12 @@ import type { GarageCaseProjectorPort } from '@/kgara-api-core/hub/case-projecto
 import { BranchManagementExternalLink } from '@/v2/modules/branches-management/entities/branch-management-external-link.entity';
 import { CaseGarage } from '../entities/case-garage.entity';
 import { CaseOrigin } from '../entities/case-garage.enums';
-import { CaseServiceGarage } from '../entities/case-service-garage.entity';
+import { CaseLineGarage } from '../entities/case-line-garage.entity';
+import {
+  applyProjection,
+  isLineDeleted,
+  type OverrideMap,
+} from '../helpers/case-override.helper';
 import { resolveKgaraCaseMoney } from '../helpers/kgara-case-money';
 import {
   kgaraCaseToCaseGarage,
@@ -19,9 +24,10 @@ const KGARA_SOURCE = 'KGARA';
 export type ProjectResult = 'created' | 'updated' | 'skipped';
 
 /**
- * Chiếu vụ việc V1 (`kgara_cases` + `kgara_case_services`) sang `cases_garage` + `case_services_garage`.
+ * Chiếu vụ việc V1 (`kgara_cases` + `kgara_case_services`) sang `cases_garage` + `case_lines_garage`.
  * Chỉ gọi mapper (không map tay). Cùng UUID, `origin=KGARA_SYNC`, idempotent theo `id` và
- * `legacyServiceId`; chép nguyên chi nhánh KGara và `accountKey` từ V1, không suy lại quy tắc OJ.
+ * `(accountKey, externalId)` của dòng; chép nguyên chi nhánh KGara và `accountKey` từ V1.
+ * Luôn ghi `sourceSnapshot`; chỉ ghi cột hiệu lực cho field chưa bị override ở v2.
  */
 @Injectable()
 export class CaseProjectorService implements GarageCaseProjectorPort {
@@ -55,11 +61,22 @@ export class CaseProjectorService implements GarageCaseProjectorPort {
       mapped.revenue = String(money.revenue);
       mapped.cost = String(money.cost);
       mapped.profit = String(money.profit);
+      const { snapshot, patch } = applyProjection(
+        mapped as Record<string, unknown>,
+        existing?.overrides ?? {},
+      );
       if (existing) {
-        const { id: _id, createdAt: _c, updatedAt: _u, ...patch } = mapped;
-        await m.update(CaseGarage, { id: caseId }, patch as never);
+        const { id: _id, createdAt: _c, updatedAt: _u, ...fields } = patch;
+        await m.update(CaseGarage, { id: caseId }, {
+          ...fields,
+          sourceSnapshot: snapshot,
+        } as never);
       } else {
-        await m.insert(CaseGarage, mapped as never);
+        await m.insert(CaseGarage, {
+          ...mapped,
+          sourceSnapshot: snapshot,
+          overrides: {},
+        } as never);
       }
       await this.projectLines(m, v1);
       return existing ? 'updated' : 'created';
@@ -101,18 +118,40 @@ export class CaseProjectorService implements GarageCaseProjectorPort {
       order: { createdAt: 'ASC', id: 'ASC' },
     });
     if (!lines.length) return;
-    const current = await m.find(CaseServiceGarage, {
+    const current = await m.find(CaseLineGarage, {
       where: { caseId: v1.id },
     });
-    const byLegacy = new Map(current.map((l) => [l.legacyServiceId, l]));
+    const byExternal = new Map(
+      current.filter((l) => l.externalId).map((l) => [l.externalId, l]),
+    );
     for (const [i, line] of lines.entries()) {
+      if (!line.hdPhieuDichVuChiTietId) {
+        this.logger.warn(
+          `Bỏ qua dòng ${line.id} của ${v1.id}: thiếu hd_phieu_dich_vu_chi_tiet_id.`,
+        );
+        continue;
+      }
       const mapped = kgaraServiceToCaseService(line, v1.id, i + 1);
-      const found = byLegacy.get(line.id);
+      const found = byExternal.get(line.hdPhieuDichVuChiTietId);
+      const overrides: OverrideMap = found?.overrides ?? {};
+      const { snapshot, patch } = applyProjection(
+        mapped as Record<string, unknown>,
+        overrides,
+      );
       if (found) {
-        const { createdAt: _c, updatedAt: _u, ...patch } = mapped;
-        await m.update(CaseServiceGarage, { id: found.id }, patch as never);
+        const { createdAt: _c, updatedAt: _u, ...fields } = patch;
+        // Dòng đã xóa ở v2 (`_deleted`): chỉ cập nhật snapshot, không hồi sinh.
+        const values = isLineDeleted(overrides) ? {} : fields;
+        await m.update(CaseLineGarage, { id: found.id }, {
+          ...values,
+          sourceSnapshot: snapshot,
+        } as never);
       } else {
-        await m.insert(CaseServiceGarage, mapped as never);
+        await m.insert(CaseLineGarage, {
+          ...mapped,
+          sourceSnapshot: snapshot,
+          overrides: {},
+        } as never);
       }
     }
   }

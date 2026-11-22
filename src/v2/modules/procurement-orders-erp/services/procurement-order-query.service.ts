@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { ProcurementOrder } from '../entities/procurement-order.entity';
 import { ProcurementOrderLine } from '../entities/procurement-order-line.entity';
 import { ProcurementOrderAcceptance } from '../entities/procurement-order-acceptance.entity';
-import { ApprovalEvent } from '@/v2/core/approval-core/entities/approval-event.entity';
+import { ApprovalEvent } from '@/v2/modules/approval-management/entities/approval-event.entity';
 import {
   applyListSummaries,
   parseSummaryKeys,

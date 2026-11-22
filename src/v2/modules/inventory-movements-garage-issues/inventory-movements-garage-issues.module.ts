@@ -1,9 +1,8 @@
 import { InventoryMovementsGarageLedgerModule } from '@/v2/modules/inventory-movements-garage-ledger/inventory-movements-garage-ledger.module';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ApprovalManagementModule } from '@/v2/modules/approval-management/approval-management.module';
 import { RbacCoreModule } from '@/v2/core/rbac-core';
-import { ApprovalEvent } from '@/v2/core/approval-core/entities/approval-event.entity';
-import { ApprovalEventService } from '@/v2/core/approval-core/approval-event.service';
 import { InventoryMovementsCoreModule } from '@/v2/core/inventory-movements-core';
 import { GoodsReceiptsCoreModule } from '@/v2/core/goods-receipts-core';
 import { InventoryMovementsGarageIssue } from './entities/inventory-movements-garage-issue.entity';
@@ -21,16 +20,15 @@ import { ItemsGarageModule } from '@/v2/modules/items-garage/items-garage.module
     TypeOrmModule.forFeature([
       InventoryMovementsGarageIssue,
       InventoryMovementsGarageIssueLine,
-      ApprovalEvent,
     ]),
     RbacCoreModule,
+    ApprovalManagementModule,
     InventoryMovementsCoreModule,
     ItemsGarageModule,
     GoodsReceiptsCoreModule,
   ],
   controllers: [InventoryMovementsGarageIssueController],
   providers: [
-    ApprovalEventService,
     InventoryMovementsGarageIssueCommandService,
     InventoryMovementsGarageIssueQueryService,
     InventoryMovementsGarageIssuesService,

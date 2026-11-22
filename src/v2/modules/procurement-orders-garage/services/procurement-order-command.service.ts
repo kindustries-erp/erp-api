@@ -1,7 +1,7 @@
 import { ConflictException, Inject, Injectable } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
 import { GarageGoodsReceipt } from '@/v2/modules/goods-receipts-garage/entities/garage-goods-receipt.entity';
-import { ApprovalEventService } from '@/v2/core/approval-core/approval-event.service';
+import { ApprovalEventService } from '@/v2/modules/approval-management/services/approval-event.service';
 import {
   AbstractProcurementOrderCommandService,
   OrderDraftLineFields,
