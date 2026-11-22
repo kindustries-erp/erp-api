@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import { EmployeeManagement } from '@/v2/core/employees-core/entities/employee-management.entity';
+import { EmployeeManagement } from '@/v2/modules/employees-management/entities/employee-management.entity';
 import type { UpdateCaseProgressDto } from '../dto/case-progress.dto';
 import { CaseGarage } from '../entities/case-garage.entity';
 import { CaseOrigin } from '../entities/case-garage.enums';

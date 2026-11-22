@@ -10,7 +10,7 @@ import {
   Matches,
   MaxLength,
 } from 'class-validator';
-import { ExtraDataField } from '../../base-core/dto/extra-data.decorator';
+import { ExtraDataField } from '@/v2/core/base-core/dto/extra-data.decorator';
 
 export const EMPLOYEE_STATUSES = ['ACTIVE', 'INACTIVE'] as const;
 export type EmployeeStatus = (typeof EMPLOYEE_STATUSES)[number];

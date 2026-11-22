@@ -1,5 +1,5 @@
 import { NotFoundException } from '@nestjs/common';
-import type { EmployeeManagement } from '@/v2/core/employees-core/entities/employee-management.entity';
+import type { EmployeeManagement } from '@/v2/modules/employees-management/entities/employee-management.entity';
 import type { UsersManagement } from './entities/users-management.entity';
 import type { UserAuditContext } from './helpers/audit-context';
 import type { UsersManagementCommandService } from './services/users-management-command.service';

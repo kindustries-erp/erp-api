@@ -1,8 +1,8 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
-import { EmployeeManagement } from '../entities/employee-management.entity';
-import { EmployeeCommandService } from './employee-command.service';
-import { EmployeeQueryService } from './employee-query.service';
-import { EmployeesCoreService } from './employees-core.service';
+import { EmployeeManagement } from './entities/employee-management.entity';
+import { EmployeeCommandService } from './services/employee-command.service';
+import { EmployeeQueryService } from './services/employee-query.service';
+import { EmployeesManagementService } from './employees-management.service';
 
 const row = (over: Partial<EmployeeManagement> = {}): EmployeeManagement =>
   ({
@@ -35,14 +35,14 @@ function build() {
     setStatus: jest.fn(),
     softDelete: jest.fn(),
   };
-  const service = new EmployeesCoreService(
+  const service = new EmployeesManagementService(
     query as unknown as EmployeeQueryService,
     command as unknown as EmployeeCommandService,
   );
   return { service, query, command };
 }
 
-describe('EmployeesCoreService', () => {
+describe('EmployeesManagementService', () => {
   it('findAll trả {items, pagination, summaries}, che CCCD và ghép tài khoản liên kết', async () => {
     const { service, query } = build();
     query.findAll.mockResolvedValue({

@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import type { Repository } from 'typeorm';
-import type { EmployeeManagement } from '@/v2/core/employees-core/entities/employee-management.entity';
+import type { EmployeeManagement } from '@/v2/modules/employees-management/entities/employee-management.entity';
 import type { UsersManagement } from '../entities/users-management.entity';
 import { UsersManagementQueryService } from './users-management-query.service';
 

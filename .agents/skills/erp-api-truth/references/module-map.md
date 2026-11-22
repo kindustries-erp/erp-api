@@ -26,7 +26,7 @@ Tra module cần sửa ở bảng dưới, rồi đọc `../../modules/<module>/
 | `debts-core` | Lõi công nợ dùng chung v2 (src/v2/core/debts-core) - hợp đồng, entity base sổ nợ và phân bổ, engine tính số dư và tuổi nợ, khung query abstr… |
 | `debts-flow-garage` | Orchestrator thu chi + công nợ garage v2 - ghi phiếu và phân bổ trong một transaction, mirror sang bảng V1 cùng UUID, projector chiếu thay đ… |
 | `debts-garage` | Module công nợ garage v2 (api/v2/debts-garage) - công nợ phải thu khách hàng, phải trả nhà cung cấp, analytics, time-horizon, export nền |
-| `employees-core` | Module tri thức Nhân viên V2 trong erp-api gồm lõi src/v2/core/employees-core và module src/v2/modules/employees-management (route /api/v2/e… |
+| `employees-core` | Module tri thức Nhân viên V2 trong erp-api gồm lõi base-only src/v2/core/employees-core (BaseEmployeeEntity, EmployeeRef) và module src/v2/m… |
 | `erp-inventory-adjustments` | Module tri thức Quản lý Kiểm kê & Điều chỉnh Kho trong ERP |
 | `erp-inventory-items` | Module tri thức Danh mục Mặt hàng & Master Data Kho trong ERP |
 | `erp-inventory-stock` | Module tri thức Sổ Tồn kho Thực tế & Định giá Tồn kho trong ERP |

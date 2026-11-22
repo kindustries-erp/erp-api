@@ -13,7 +13,7 @@ import { assertEmployeeDates } from '../helpers/employee-dates.rules';
 import {
   assertValidExtraData,
   mergeExtraData,
-} from '../../base-core/helpers/extra-data.util';
+} from '@/v2/core/base-core/helpers/extra-data.util';
 
 const PG_UNIQUE_VIOLATION = '23505';
 const PG_FK_VIOLATION = '23503';

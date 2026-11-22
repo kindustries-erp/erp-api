@@ -2,18 +2,20 @@
   "schemaVersion": 1,
   "layer": "api",
   "family": "employees-core",
-  "entity": "EmployeeManagement",
-  "style": "legacy-compatible",
+  "entity": "BaseEmployeeEntity",
+  "style": "v2-core",
   "barrel": "src/v2/core/employees-core/index.ts",
-  "module": "EmployeesCoreModule",
-  "moduleFile": "employees-core.module.ts",
+  "module": null,
+  "moduleFile": null,
   "baseClasses": {
-    "entity": "EmployeeManagement",
-    "createDto": "CreateEmployeeManagementDto",
-    "contract": null,
-    "service": "EmployeesCoreService"
+    "entity": "BaseEmployeeEntity",
+    "createDto": null,
+    "contract": "EmployeeRef",
+    "service": null
   },
-  "serviceFile": "services/employees-core.service.ts",
-  "permissionPattern": "employees",
-  "requiredModuleFiles": ["dto", "entities", "services"]
+  "serviceFile": null,
+  "permissionPattern": null,
+  "requiredModuleFiles": [
+    "entities"
+  ]
 }
