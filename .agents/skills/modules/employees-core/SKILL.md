@@ -32,4 +32,4 @@ Unique một phần `WHERE is_deleted = false`: `employee_code`, `user_id`, `nat
 
 ## 5. Kiểm thử
 
-`bun test plop-helpers/apiCoreLayout.test.mjs` (lõi không có `@Entity`); `bunx jest src/v2/modules/employees-management src/v2/modules/users-management src/v2/modules/auth-sessions src/v2/core/approval-core --forceExit`; migration spec `src/migrations/20261115130000-create-employees-management.spec.ts`.
+`bun test plop-helpers/apiCoreLayout.test.mjs` (lõi không có `@Entity`); `bunx jest src/v2/modules/employees-management src/v2/modules/users-management src/v2/modules/auth-sessions src/v2/modules/approval-management --forceExit`; migration spec `src/migrations/20261115130000-create-employees-management.spec.ts`.

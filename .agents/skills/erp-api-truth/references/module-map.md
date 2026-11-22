@@ -10,6 +10,7 @@ Tra module cần sửa ở bảng dưới, rồi đọc `../../modules/<module>/
 | `ai-hub-core` | Module tri thức AI Hub Core & 9router Gateway Integration trong erp-api (ai-hub-core) |
 | `ai-hub-v2` | Tri thức AI Hub v2 trong erp-api (lõi v2/core/ai-hub-core, module ai-hub-gateway gọi 9router theo tier, items-core + items-garage là danh mụ… |
 | `app-config` | Module tri thức Quản lý Cấu hình Ứng dụng & Tùy chọn Người dùng (App Config & User Preferences) trong erp-api (app-config & users) |
+| `approval-management` | Module tri thức Duyệt chứng từ V2 trong erp-api gồm lõi base-only src/v2/core/approval-core (engine chuyển trạng thái, gate helper, BaseAppr… |
 | `audit-core` | Module tri thức Nhật ký Kiểm toán Hệ thống (Audit Logs & Zero-Trust Tracking) trong erp-api (audit-core) |
 | `auth-core` | Lõi base (v2) cho phiên đăng nhập tại src/v2/core/auth-core |
 | `auth-sessions` | Module backend Auth V2 tại /api/v2/auth-sessions (login, refresh, logout, impersonate, change-password, profile) |

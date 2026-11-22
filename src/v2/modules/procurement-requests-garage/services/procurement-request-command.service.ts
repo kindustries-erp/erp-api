@@ -1,6 +1,6 @@
 import { ConflictException, Injectable } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
-import { ApprovalEventService } from '@/v2/core/approval-core/approval-event.service';
+import { ApprovalEventService } from '@/v2/modules/approval-management/services/approval-event.service';
 import {
   AbstractPurchaseRequestCommandService,
   DraftHeaderPatch,

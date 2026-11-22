@@ -1,14 +1,10 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
-import { UsersManagement } from '../../modules/users-management/entities/users-management.entity';
-import { ErpAction } from '../rbac-core/enums';
-import { RbacCoreService } from '../rbac-core/services/rbac-core.service';
-
-export interface ApproverOption {
-  id: string;
-  email: string;
-}
+import { UsersManagement } from '@/v2/modules/users-management/entities/users-management.entity';
+import type { ApproverOption } from '@/v2/core/approval-core/contracts/approval.contract';
+import { ErpAction } from '@/v2/core/rbac-core/enums';
+import { RbacCoreService } from '@/v2/core/rbac-core/services/rbac-core.service';
 
 /**
  * Danh sách người duyệt hợp lệ cho một resource: user đang ACTIVE và có đủ

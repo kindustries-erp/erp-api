@@ -2,20 +2,18 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { EmployeeManagement } from '@/v2/modules/employees-management/entities/employee-management.entity';
-import { UsersManagement } from '../../modules/users-management/entities/users-management.entity';
-
-export interface ApprovalActorInfo {
-  /** Họ tên nhân viên liên kết; null nếu user chưa gắn hồ sơ nhân viên. */
-  name: string | null;
-  email: string | null;
-}
+import { UsersManagement } from '@/v2/modules/users-management/entities/users-management.entity';
+import type {
+  ApprovalActorInfo,
+  ApprovalActorResolver,
+} from '@/v2/core/approval-core/contracts/approval.contract';
 
 /**
  * Tra tên và email của người thực hiện bước duyệt từ actorId (UUID).
  * Một truy vấn cho cả danh sách; không bao giờ trả về id nội bộ của nhật ký.
  */
 @Injectable()
-export class ApprovalActorService {
+export class ApprovalActorService implements ApprovalActorResolver {
   constructor(
     @InjectRepository(UsersManagement)
     private readonly users: Repository<UsersManagement>,

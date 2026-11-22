@@ -3,10 +3,10 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
 import { RequirePermissions } from '@/auth/decorators/require-permissions.decorator';
-import { ErpAction, ErpResource } from '../rbac-core/enums';
-import { ApprovalSettingsService } from './approval-settings.service';
-import { ApproverDirectoryService } from './approver-directory.service';
-import { UpdateApprovalSettingDto } from './dto/approval-action.dto';
+import { ErpAction, ErpResource } from '@/v2/core/rbac-core/enums';
+import { UpdateApprovalSettingDto } from '@/v2/core/approval-core/dto/approval-action.dto';
+import { ApprovalSettingsService } from '../services/approval-settings.service';
+import { ApproverDirectoryService } from '../services/approver-directory.service';
 
 interface RequestWithUser {
   user?: { sub?: string };
@@ -23,8 +23,8 @@ export interface ApprovalConfigOptions {
 }
 
 /**
- * Tạo controller cấu hình duyệt cho một họ chứng từ. Lõi chứa logic; module
- * chỉ khai báo docType và resource. Mọi endpoint đều qua JwtAuthGuard và CoreRbacGuard.
+ * Tạo controller cấu hình duyệt cho một họ chứng từ. Module approval-management
+ * chứa logic; module chứng từ chỉ khai báo docType và resource. Mọi endpoint đều qua JwtAuthGuard và CoreRbacGuard.
  *  - GET  {path}/approvers: danh sách người có quyền duyệt (không gồm người gọi).
  *  - GET  {path}/setting: trạng thái khóa duyệt hiện tại.
  *  - PATCH {path}/setting: bật/tắt khóa, chỉ admin (quyền admin_users:update).

@@ -1,19 +1,11 @@
-import {
-  Column,
-  CreateDateColumn,
-  Entity,
-  Index,
-  PrimaryGeneratedColumn,
-} from 'typeorm';
+import { Column, CreateDateColumn, PrimaryGeneratedColumn } from 'typeorm';
 
 /**
- * Nhật ký mọi bước chuyển trạng thái của chứng từ duyệt: PR, PO (erp và garage)
- * và chứng từ kho dùng chung approval-core (inventory-movements-*).
+ * Cột của nhật ký bước duyệt dùng chung cho mọi chứng từ duyệt (PR, PO, chứng từ kho).
+ * Lõi chỉ khai báo cột. Module cụ thể thêm `@Entity`, `@Index` và tên bảng.
  * Bảng chỉ ghi thêm, không sửa, không xóa.
  */
-@Entity({ name: 'erp_approval_events' })
-@Index('IDX_erp_approval_events_doc', ['docType', 'docId', 'createdAt'])
-export class ApprovalEvent {
+export abstract class BaseApprovalEventEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 

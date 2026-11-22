@@ -1,8 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ApprovalSetting } from './entities/approval-setting.entity';
-import { ApprovalMode, resolveApprovalMode } from './approval-gate.helper';
+import { ApprovalSetting } from '../entities/approval-setting.entity';
+import {
+  ApprovalMode,
+  resolveApprovalMode,
+} from '@/v2/core/approval-core/approval-gate.helper';
 
 /** Đọc và ghi khóa bật/tắt duyệt theo họ chứng từ. */
 @Injectable()

@@ -103,8 +103,8 @@ import { DebtAllocationGarage } from '@/v2/modules/debts-garage/entities/debt-al
 import { CaseGarage } from '@/v2/modules/cases-garage/entities/case-garage.entity';
 import { CaseLineGarage } from '@/v2/modules/cases-garage/entities/case-line-garage.entity';
 import { CashflowVoucherGarage } from '@/v2/modules/cashflow-vouchers-garage/entities/cashflow-voucher-garage.entity';
-import { ApprovalEvent } from '@/v2/core/approval-core/entities/approval-event.entity';
-import { ApprovalSetting } from '@/v2/core/approval-core/entities/approval-setting.entity';
+import { ApprovalEvent } from '@/v2/modules/approval-management/entities/approval-event.entity';
+import { ApprovalSetting } from '@/v2/modules/approval-management/entities/approval-setting.entity';
 import { ProcurementRequest } from '@/v2/modules/procurement-requests-erp/entities/procurement-request.entity';
 import { ProcurementRequestLine } from '@/v2/modules/procurement-requests-erp/entities/procurement-request-line.entity';
 import { ProcurementOrder } from '@/v2/modules/procurement-orders-erp/entities/procurement-order.entity';

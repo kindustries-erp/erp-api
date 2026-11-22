@@ -38,7 +38,7 @@ Cùng bộ endpoint với họ thường: `POST /`, `GET /`, `GET /:id`, `GET /:
 - Khối duyệt thống nhất `approval` (xem mục "Response duyệt" cuối file). Không còn key phẳng `approverEmail`/`approvedBy`/`rejectReason`... Response trả cả `createdBy` (id người tạo, để nhận diện người tạo khi duyệt) và `createdByEmail` (để hiển thị).
 - `ApprovalEventResponseDto` (`GET /:id/approval-events`) có thêm `actorName` (họ tên nhân viên) và `actorEmail`, resolve bởi `ApprovalActorService`. Không có `id` nội bộ của nhật ký.
 - `TABLE_COLUMNS` (`procurement-request-table.constants.ts`): `createdBy`/`created_by` và `approver` lọc, sắp xếp và liệt kê option theo email (subselect `core_users.email`), không theo UUID.
-- Module đăng ký `CoreUser` trong `TypeOrmModule.forFeature` để `ApprovalActorService` inject được (xem `approval-actor-wiring.spec.ts`).
+- Module import `ApprovalManagementModule` (`src/v2/modules/approval-management`); module này tự đăng ký `UsersManagement` để `ApprovalActorService` inject được (xem `approval-actor-wiring.spec.ts`).
 
 Quyền resource: `garage_procurement_requests`. Seed từ `garage_purchase_orders` (read/create/update/delete; quyền cũ đã gỡ ở migration `20261106100000`).
 
@@ -81,7 +81,7 @@ Quyền resource: `garage_procurement_requests`. Seed từ `garage_purchase_orde
 - Khóa **bật**: `POST /:id/submit` nhận body `{ approverId }` (bắt buộc). Người duyệt phải ACTIVE, có `APPROVE` và `REJECT` trên `garage_procurement_requests`, khác người gửi. Lưu `approver_id` (cột mới trên `proc_requests_garage`). Chỉ đúng người đó approve/reject được, người khác nhận 403. Recall về DRAFT xóa `approver_id`. Reject chuyển REJECTED (xem mục 9).
 - Khóa **tắt**: submit tự duyệt trong cùng transaction, ghi event `AUTO_APPROVED`, không cần người duyệt.
 - Danh sách người duyệt: `GET /api/v2/approval-config/garage-procurement-requests/approvers` (loại người đang gọi).
-- Logic dùng chung ở `src/v2/core/approval-core` (`approval-gate.helper.ts`, `approval-settings.service.ts`, `approver-directory.service.ts`); module chỉ khai báo `docType` và resource.
+- Logic thuần dùng chung ở `src/v2/core/approval-core` (`approval.engine.ts`, `approval-gate.helper.ts`); service cụ thể (`approval-settings.service.ts`, `approver-directory.service.ts`) và factory `createApprovalConfigController` ở `src/v2/modules/approval-management`; module chỉ khai báo `docType` và resource.
 - Migration: `20261106110000-AddApprovalSettingsAndApprover.ts`.
 - Thông báo (2026-11-09): `services/procurement-request-notifier.service.ts` gọi sau transition thành công (facade `procurement-requests-garage.service.ts`). Gửi duyệt có người duyệt → báo `approverId` (`target.action = APPROVE`). Duyệt / từ chối → báo người tạo (`target.action = VIEW`, từ chối kèm lý do). Khóa tắt (AUTO), không có người duyệt, hoặc người thao tác trùng người nhận → không gửi. Đích: `PROCUREMENT_REQUEST_GARAGE`. Lỗi gửi chỉ log, không làm hỏng transition.
 

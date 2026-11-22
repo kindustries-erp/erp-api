@@ -3,7 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
-import { ApprovalEventService } from '../../approval-core/approval-event.service';
+import { ApprovalEventRecorder } from '../../approval-core/approval-event.recorder';
 import { BaseProcurementOrderEntity } from '../entities/base-procurement-order.entity';
 import { BaseProcurementOrderLineEntity } from '../entities/base-procurement-order-line.entity';
 import { AbstractProcurementOrderCommandService } from './abstract-procurement-order-command.service';
@@ -55,7 +55,7 @@ function setup(header: Header, lines: Line[], restrictApprover = false) {
   } as never;
   const events = {
     record: jest.fn().mockResolvedValue(undefined),
-  } as unknown as ApprovalEventService;
+  } as unknown as ApprovalEventRecorder;
   const link: RequestLinkPort = {
     reserve: jest.fn(),
     release: jest.fn().mockResolvedValue(undefined),

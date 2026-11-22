@@ -1,6 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { UsersManagement } from '../../modules/users-management/entities/users-management.entity';
+import { UsersManagement } from '@/v2/modules/users-management/entities/users-management.entity';
 import { ApprovalActorService } from './approval-actor.service';
 
 describe('ApprovalActorService', () => {

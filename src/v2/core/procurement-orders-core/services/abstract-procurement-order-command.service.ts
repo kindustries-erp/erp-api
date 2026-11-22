@@ -7,7 +7,7 @@ import {
   FindOptionsWhere,
 } from 'typeorm';
 import { nextDocumentNo } from '../../../../common/numbering/document-numbering';
-import { ApprovalEventService } from '../../approval-core/approval-event.service';
+import { ApprovalEventRecorder } from '../../approval-core/approval-event.recorder';
 import {
   assertCanDecide,
   loadApprovalMode,
@@ -110,7 +110,7 @@ export abstract class AbstractProcurementOrderCommandService<
 
   constructor(
     protected readonly dataSource: DataSource,
-    protected readonly events: ApprovalEventService,
+    protected readonly events: ApprovalEventRecorder,
     protected readonly requestLink: RequestLinkPort,
   ) {}
 

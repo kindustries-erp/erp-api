@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { ApprovalActorService } from '@/v2/core/approval-core/approval-actor.service';
+import { ApprovalActorService } from '@/v2/modules/approval-management/services/approval-actor.service';
+import { ApprovalManagementModule } from '@/v2/modules/approval-management/approval-management.module';
 import { UsersManagement } from '@/v2/modules/users-management/entities/users-management.entity';
 import { GarageProcurementRequestsModule } from './procurement-requests-garage/procurement-requests-garage.module';
 import { GarageProcurementOrdersModule } from './procurement-orders-garage/procurement-orders-garage.module';
@@ -29,16 +30,33 @@ const MODULES: Array<[string, object]> = [
   ['procurement-orders-erp', ErpProcurementOrdersModule],
 ];
 
-describe('Đăng ký ApprovalActorService trong module procurement', () => {
+describe('Đăng ký ApprovalActorService qua ApprovalManagementModule', () => {
+  it('ApprovalManagementModule cung cấp ApprovalActorService và có UsersManagement repository trực tiếp (nơi service inject)', () => {
+    const providers = (Reflect.getMetadata(
+      'providers',
+      ApprovalManagementModule,
+    ) ?? []) as unknown[];
+    const exported = (Reflect.getMetadata(
+      'exports',
+      ApprovalManagementModule,
+    ) ?? []) as unknown[];
+    expect(providers).toContain(ApprovalActorService);
+    expect(exported).toContain(ApprovalActorService);
+    expect(
+      ownRepositoryTokens(ApprovalManagementModule).has(
+        getRepositoryToken(UsersManagement),
+      ),
+    ).toBe(true);
+  });
+
   it.each(MODULES)(
-    '%s: có UsersManagement repository trực tiếp trong forFeature (nơi ApprovalActorService inject)',
+    '%s: import ApprovalManagementModule và không tự đăng ký lại ApprovalActorService',
     (_name, mod) => {
+      const imports = (Reflect.getMetadata('imports', mod) ?? []) as unknown[];
       const providers = (Reflect.getMetadata('providers', mod) ??
         []) as unknown[];
-      expect(providers).toContain(ApprovalActorService);
-      expect(
-        ownRepositoryTokens(mod).has(getRepositoryToken(UsersManagement)),
-      ).toBe(true);
+      expect(imports).toContain(ApprovalManagementModule);
+      expect(providers).not.toContain(ApprovalActorService);
     },
   );
 });

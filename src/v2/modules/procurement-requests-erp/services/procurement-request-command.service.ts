@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import { ApprovalEventService } from '@/v2/core/approval-core/approval-event.service';
+import { ApprovalEventService } from '@/v2/modules/approval-management/services/approval-event.service';
 import { AbstractPurchaseRequestCommandService } from '@/v2/core/procurement-requests-core/services/abstract-purchase-request-command.service';
 import { ProcurementRequest } from '../entities/procurement-request.entity';
 import { ProcurementRequestLine } from '../entities/procurement-request-line.entity';
