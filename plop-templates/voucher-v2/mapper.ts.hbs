@@ -11,6 +11,7 @@ export function to{{lineEntityName}}Response(
 ): {{lineEntityName}}ResponseDto {
   return {
     id: line.id,
+    extraData: line.extraData ?? {},
     lineNo: line.lineNo,
     itemCode: line.itemCode ?? undefined,
     itemName: line.itemName,
@@ -19,8 +20,7 @@ export function to{{lineEntityName}}Response(
     unitCost: Number(line.unitCost || 0),
     amount: Number(line.amount || 0),
     notes: line.notes ?? undefined,
-    createdAt: line.createdAt ? new Date(line.createdAt).toISOString() : '',
-    updatedAt: line.updatedAt ? new Date(line.updatedAt).toISOString() : '',
+    createdAt: line.createdAt,
   };
 }
 
@@ -29,6 +29,7 @@ export function to{{headerEntityName}}Response(
 ): {{headerEntityName}}ResponseDto {
   return {
     id: entity.id,
+    extraData: entity.extraData ?? {},
     receiptNo: entity.receiptNo,
     receiptDate: entity.receiptDate,
     supplierId: entity.supplierId ?? undefined,
@@ -39,9 +40,8 @@ export function to{{headerEntityName}}Response(
     status: entity.status,
     paymentStatus: entity.paymentStatus,
     remarks: entity.remarks ?? undefined,
-    createdBy: entity.createdBy ?? undefined,
-    createdAt: entity.createdAt ? new Date(entity.createdAt).toISOString() : '',
-    updatedAt: entity.updatedAt ? new Date(entity.updatedAt).toISOString() : '',
+    createdAt: entity.createdAt,
+    updatedAt: entity.updatedAt,
     lines: entity.lines?.map((l) => to{{lineEntityName}}Response(l)),
   };
 }
@@ -52,7 +52,7 @@ export function to{{headerEntityName}}EntityFields(
   const fields: Partial<{{headerEntityName}}> = {};
 
   if (dto.receiptNo !== undefined) fields.receiptNo = dto.receiptNo;
-  if (dto.receiptDate !== undefined) fields.receiptDate = dto.receiptDate;
+  if (dto.receiptDate !== undefined) fields.receiptDate = new Date(dto.receiptDate);
   if (dto.supplierId !== undefined) fields.supplierId = dto.supplierId ?? null;
   if (dto.supplierName !== undefined) fields.supplierName = dto.supplierName ?? null;
   if (dto.branchId !== undefined) fields.branchId = dto.branchId ?? null;

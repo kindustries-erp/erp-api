@@ -17,7 +17,7 @@ import {
   RequireAnyPermissions,
   RequirePermissions,
 } from '../../auth/decorators/require-permissions.decorator';
-import { ErpResource, ErpAction } from '@/rbac-core/enums';
+import { ErpResource, ErpAction } from '@/v2/core/rbac-core';
 import { InvoiceDebtsService } from '../services/invoice-debts.service';
 import { InvoiceDebtsExportBackgroundService } from '../services/invoice-debts-export-background.service';
 import { DebtNetOffAllocateDto } from '../dto/debt-net-off.dto';

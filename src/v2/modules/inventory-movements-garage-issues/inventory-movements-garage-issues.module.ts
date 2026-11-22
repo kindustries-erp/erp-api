@@ -1,0 +1,38 @@
+import { InventoryMovementsGarageLedgerModule } from '@/v2/modules/inventory-movements-garage-ledger/inventory-movements-garage-ledger.module';
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { ApprovalManagementModule } from '@/v2/modules/approval-management/approval-management.module';
+import { RbacCoreModule } from '@/v2/core/rbac-core';
+import { InventoryMovementsCoreModule } from '@/v2/core/inventory-movements-core';
+import { GoodsReceiptsCoreModule } from '@/v2/core/goods-receipts-core';
+import { InventoryMovementsGarageIssue } from './entities/inventory-movements-garage-issue.entity';
+import { InventoryMovementsGarageIssueLine } from './entities/inventory-movements-garage-issue-line.entity';
+import { InventoryMovementsGarageIssueController } from './controllers/inventory-movements-garage-issue.controller';
+import { InventoryMovementsGarageIssueCommandService } from './services/inventory-movements-garage-issue-command.service';
+import { InventoryMovementsGarageIssueQueryService } from './services/inventory-movements-garage-issue-query.service';
+import { InventoryMovementsGarageIssuesService } from './inventory-movements-garage-issues.service';
+import { ItemsGarageModule } from '@/v2/modules/items-garage/items-garage.module';
+
+/** Module xuất kho Garage: ghép lõi inventory-movements-core (sổ tồn) và goods-receipts-core (đánh số phiếu). */
+@Module({
+  imports: [
+    InventoryMovementsGarageLedgerModule,
+    TypeOrmModule.forFeature([
+      InventoryMovementsGarageIssue,
+      InventoryMovementsGarageIssueLine,
+    ]),
+    RbacCoreModule,
+    ApprovalManagementModule,
+    InventoryMovementsCoreModule,
+    ItemsGarageModule,
+    GoodsReceiptsCoreModule,
+  ],
+  controllers: [InventoryMovementsGarageIssueController],
+  providers: [
+    InventoryMovementsGarageIssueCommandService,
+    InventoryMovementsGarageIssueQueryService,
+    InventoryMovementsGarageIssuesService,
+  ],
+  exports: [InventoryMovementsGarageIssuesService],
+})
+export class InventoryMovementsGarageIssuesModule {}

@@ -11,10 +11,11 @@ import { KgaraCaseService } from './entities/kgara_case_service.entity';
 import { GwSyncRun } from './entities/kgara_sync_run.entity';
 import { KgaraCaseLinkedInvoice } from './entities/kgara_case_linked_invoice.entity';
 import { KgaraCaseSettlement } from './entities/kgara_case_settlement.entity';
-import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsPublisherService } from '@/v2/modules/notifications-inbox';
 import { SyncRunLoggerService } from './services/sync-run-logger.service';
 import { SyncDeletionService } from './services/sync-deletion.service';
 import { SyncGrossProfitService } from './services/sync-gross-profit.service';
+import { SyncGrossProfitJournalService } from './services/sync-gross-profit-journal.service';
 import { SyncDebtService } from './services/sync-debt.service';
 import { SyncCaseService } from './services/sync-case.service';
 import { KgaraAccountKey } from './enums/kgara-account.enum';
@@ -95,6 +96,7 @@ describe('KgaraSyncService', () => {
         SyncRunLoggerService,
         SyncDeletionService,
         SyncGrossProfitService,
+        SyncGrossProfitJournalService,
         SyncDebtService,
         SyncCaseService,
         {
@@ -102,7 +104,7 @@ describe('KgaraSyncService', () => {
           useValue: clientService,
         },
         {
-          provide: NotificationsService,
+          provide: NotificationsPublisherService,
           useValue: notificationsService,
         },
         {
@@ -770,9 +772,12 @@ describe('KgaraSyncService', () => {
         deletedCount: 0,
         withLinkedInvoices: [],
       });
-      jest
-        .spyOn(service, 'syncGrossProfitForBranch')
-        .mockResolvedValue(undefined);
+      jest.spyOn(service, 'syncGrossProfitForBranch').mockResolvedValue({
+        journalCases: 0,
+        enrichedCases: 0,
+        projected: 0,
+        failed: 0,
+      });
       jest.spyOn(service, 'syncCaseDetailsBatch').mockResolvedValue({
         totalCasesProcessed: 5,
         totalLinesSynced: 12,

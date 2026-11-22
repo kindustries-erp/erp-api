@@ -25,7 +25,7 @@ import { ApiBearerAuth, ApiConsumes, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
-import { ErpResource, ErpAction } from '@/rbac-core/enums';
+import { ErpResource, ErpAction } from '@/v2/core/rbac-core';
 import { ErpInvoicesCoreService } from './erp-invoices-core.service';
 import type {
   ErpInvoiceQuery,
@@ -39,7 +39,7 @@ import { PortalTokenDto } from './dto/portal-token.dto';
 import { BulkDownloadXmlDto } from './dto/bulk-download-xml.dto';
 import { PortalLoginDto } from './dto/portal-login.dto';
 
-import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsPublisherService } from '@/v2/modules/notifications-inbox';
 import { DocumentTraceabilityService } from '../common/services/document-traceability.service';
 import { InvoiceAdjustmentService } from './services/sub-services/invoice-adjustment.service';
 import { ExecuteAdjustmentNetoffDto } from './dto/invoice-adjustment-reconciliation.dto';
@@ -51,7 +51,7 @@ import { ExecuteAdjustmentNetoffDto } from './dto/invoice-adjustment-reconciliat
 export class ErpInvoicesCoreController {
   constructor(
     private readonly service: ErpInvoicesCoreService,
-    private readonly notificationsService: NotificationsService,
+    private readonly notificationsService: NotificationsPublisherService,
     private readonly traceabilityService: DocumentTraceabilityService,
     private readonly adjustmentService: InvoiceAdjustmentService,
   ) {}

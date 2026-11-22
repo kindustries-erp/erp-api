@@ -22,7 +22,7 @@ export function buildApiVoucherData(answers) {
   const voucherPrefix = (answers.voucherPrefixInput || 'REC').toUpperCase().trim();
 
   const tableName =
-    answers.tableNameInput?.trim() || `erp_${toSnake(moduleBase)}`;
+    answers.tableNameInput?.trim() || toSnake(moduleBase);
   const lineTableName =
     answers.lineTableNameInput?.trim() || `${tableName}_lines`;
 

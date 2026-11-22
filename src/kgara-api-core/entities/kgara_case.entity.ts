@@ -28,6 +28,7 @@ export class KgaraCase {
   // ── V2 typed columns ──────────────────────────────────────────────────────
 
   /** SoChungTu – case/document number */
+  @Index('IDX_kgara_cases_so_chung_tu')
   @Column({ type: 'varchar', length: 100, name: 'so_chung_tu', nullable: true })
   soChungTu: string | null;
 
@@ -198,6 +199,66 @@ export class KgaraCase {
     nullable: true,
   })
   kgaraClassificationCode: string | null;
+
+  /** DoiTuongThanhToanCode – mã đối tượng thanh toán (công ty bảo hiểm / khách) */
+  @Index()
+  @Column({
+    type: 'varchar',
+    length: 100,
+    name: 'doi_tuong_thanh_toan_code',
+    nullable: true,
+  })
+  doiTuongThanhToanCode: string | null;
+
+  /** DoiTuongThanhToanName – tên đối tượng thanh toán */
+  @Column({
+    type: 'varchar',
+    length: 255,
+    name: 'doi_tuong_thanh_toan_name',
+    nullable: true,
+  })
+  doiTuongThanhToanName: string | null;
+
+  /** MaHangSanXuat – mã hãng xe */
+  @Index('IDX_kgara_cases_hang_xe_code')
+  @Column({
+    type: 'varchar',
+    length: 100,
+    name: 'hang_xe_code',
+    nullable: true,
+  })
+  hangXeCode: string | null;
+
+  /** TenHdHangSanXuat – tên hãng xe */
+  @Column({
+    type: 'varchar',
+    length: 255,
+    name: 'hang_xe_name',
+    nullable: true,
+  })
+  hangXeName: string | null;
+
+  /** MaDongXe – mã dòng xe */
+  @Column({
+    type: 'varchar',
+    length: 100,
+    name: 'dong_xe_code',
+    nullable: true,
+  })
+  dongXeCode: string | null;
+
+  /** TenHdDongXe – tên dòng xe */
+  @Column({
+    type: 'varchar',
+    length: 255,
+    name: 'dong_xe_name',
+    nullable: true,
+  })
+  dongXeName: string | null;
+
+  /** HoSoPhuongTien.NamSanXuat – năm sản xuất (chỉ có ở chi tiết) */
+  @Column({ type: 'smallint', name: 'nam_san_xuat', nullable: true })
+  namSanXuat: number | null;
 
   // ── ERP Local columns ─────────────────────────────────────────────────────
 

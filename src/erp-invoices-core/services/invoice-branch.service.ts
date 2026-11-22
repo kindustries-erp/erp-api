@@ -68,14 +68,14 @@ export class InvoiceBranchService {
     });
   }
 
-  /** Mọi chi nhánh được gán phải còn hoạt động (`erp_branches.is_active`). */
+  /** Mọi chi nhánh được gán phải còn hoạt động (`branches_management.is_active`). */
   private async assertBranchesActive(
     manager: EntityManager,
     branchIds: string[],
   ): Promise<void> {
     if (branchIds.length === 0) return;
     const found: { id: string }[] = await manager.query(
-      `SELECT id FROM erp_branches WHERE id = ANY($1::uuid[]) AND is_active = true`,
+      `SELECT id FROM branches_management WHERE id = ANY($1::uuid[]) AND is_deleted = false AND is_active = true`,
       [branchIds],
     );
     if (found.length !== branchIds.length) {

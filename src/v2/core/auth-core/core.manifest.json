@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "layer": "api",
+  "family": "auth-core",
+  "entity": "BaseAuthSessionEntity",
+  "style": "v2-core",
+  "barrel": "src/v2/core/auth-core/index.ts",
+  "module": null,
+  "moduleFile": null,
+  "baseClasses": {
+    "entity": "BaseAuthSessionEntity",
+    "createDto": null,
+    "contract": null,
+    "service": "AbstractAuthSessionService"
+  },
+  "serviceFile": "services/abstract-auth-session.service.ts",
+  "permissionPattern": null,
+  "requiredModuleFiles": []
+}

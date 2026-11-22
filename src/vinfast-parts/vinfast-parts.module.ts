@@ -13,9 +13,11 @@ import { VinfastPartsSyncService } from './services/vinfast-parts-sync.service';
 import { VinfastPartsStockService } from './services/vinfast-parts-stock.service';
 import { VinfastPartsLedgerService } from './services/vinfast-parts-ledger.service';
 import { VinfastPartsStockExportBackgroundService } from './services/vinfast-parts-stock-export-background.service';
+import { ExportJobsVinfastPartsModule } from '@/v2/modules/export-jobs-vinfast-parts';
 
 @Module({
   imports: [
+    ExportJobsVinfastPartsModule,
     TypeOrmModule.forFeature([
       VinfastPartsCatalog,
       VinfastPartsLedger,

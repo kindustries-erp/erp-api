@@ -9,15 +9,21 @@ export class {{pascalCase migrationName}}{{timestamp}} implements MigrationInter
         "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         "code" varchar(100) NOT NULL UNIQUE,
         "name" varchar(255) NOT NULL,
-        "status" varchar(50) DEFAULT 'ACTIVE',
+        "status" varchar(50) NOT NULL DEFAULT 'ACTIVE',
         "notes" text,
-        "created_at" timestamptz DEFAULT now(),
-        "updated_at" timestamptz DEFAULT now(),
-        "deleted_at" timestamptz
+        "is_deleted" boolean NOT NULL DEFAULT false,
+        "extra_data" jsonb NOT NULL DEFAULT '{}'::jsonb,
+        "created_at" timestamptz NOT NULL DEFAULT now(),
+        "updated_at" timestamptz NOT NULL DEFAULT now()
       );
+
+      ALTER TABLE "{{snakeCase tableName}}"
+        ADD CONSTRAINT "CHK_{{snakeCase tableName}}_extra_data_object"
+        CHECK (jsonb_typeof("extra_data") = 'object');
 
       CREATE INDEX IF NOT EXISTS "idx_{{snakeCase tableName}}_code" ON "{{snakeCase tableName}}" ("code");
       CREATE INDEX IF NOT EXISTS "idx_{{snakeCase tableName}}_status" ON "{{snakeCase tableName}}" ("status");
+      CREATE INDEX IF NOT EXISTS "idx_{{snakeCase tableName}}_is_deleted" ON "{{snakeCase tableName}}" ("is_deleted");
     `);
   }
 

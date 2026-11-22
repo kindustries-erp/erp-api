@@ -1,0 +1,20 @@
+import type { TransitionRule } from '@/v2/core/approval-core/approval.engine';
+
+/** Hợp đồng lõi họ {{family}}: các trường mà mọi module con phải có. */
+export interface {{baseContract}} {
+  id: string;
+  isDeleted: boolean;
+  status: string;
+}
+
+/**
+ * CUSTOM: khai báo các hành động của họ {{family}}. Mặc định rỗng, dev thêm vào.
+ * Ví dụ: export type {{entity}}Action = 'submit' | 'approve';
+ */
+export type {{entity}}Action = never;
+
+/**
+ * CUSTOM: bảng chuyển trạng thái. Mỗi hành động có `from` (các trạng thái nguồn) và `to` (trạng thái đích).
+ * Ví dụ: submit: { from: ['DRAFT'], to: 'PENDING' }
+ */
+export const {{entityUpperSnake}}_TRANSITIONS: Record<{{entity}}Action, TransitionRule> = {};

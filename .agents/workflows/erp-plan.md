@@ -24,9 +24,9 @@ graph LR
 2. **Thứ tự giao hàng**: `DB → API → UI → QC`. Repo chỉ dùng các phase thuộc phạm vi task, nhưng không đảo thứ tự.
 3. **Task 3 cấp `X.Y.Z`**: mỗi task chạm tối đa 1–2 file, có **DoD** và **Verification** thu hẹp (chạy được dưới 10 giây).
    - Lệnh trong `Verification` khi lập plan chỉ là **đặc tả văn bản**. Chỉ chạy ở Giai đoạn 5 sau khi có `OK`.
-4. **Structure Routing bắt buộc**: task chạm cấu trúc code phải theo `/ui-structure` hoặc `/api-structure` (xem mục 3).
+4. **Structure Routing bắt buộc**: task chạm cấu trúc code phải theo `/erp-ui-structure` hoặc `/erp-api-structure` (xem mục 3).
 5. **Session Checkpoint**: tạm dừng và tiếp tục không mất ngữ cảnh.
-6. **Knowledge-Sync Guard**: sau khi xong task đổi schema, contract, component, store hoặc token, cập nhật Module Skill ngay. Không để tri thức lỗi thời.
+6. **Knowledge-Sync Guard**: sau khi xong task đổi schema, contract, component, store hoặc token, cập nhật Module Skill ngay. Không để tri thức lỗi thời. Bản đồ module (`references/module-map.md` của `*-truth`) là file tự sinh từ `description` trong frontmatter của Module Skill: không sửa tay; tạo module mới hoặc đổi phạm vi module thì viết hoặc sửa `description` một dòng rồi chạy `/sync-agents`.
 
 ---
 
@@ -56,12 +56,13 @@ Quy tắc chung:
 
   | Task chạm | Theo workflow | Ghi trong plan |
   | :--- | :--- | :--- |
-  | `erp-web`: component, page, drawer, table, form, enum nhập liệu | `/ui-structure` (kèm `/standardize-table` hoặc `/standardize-drawer` nếu là bảng/drawer) | `Structure: /ui-structure` |
-  | `erp-api`: Controller/Service vượt ngưỡng, module mới, chuyển v2 | `/api-structure` | `Structure: /api-structure` |
-  | Cả hai | Theo cả hai, thứ tự DB → API → UI | `Structure: /ui-structure + /api-structure` |
+  | `erp-web`: component, page, drawer, table, form, enum nhập liệu | `/erp-ui-structure` (kèm `/standardize-table` hoặc `/standardize-drawer` nếu là bảng/drawer) | `Structure: /erp-ui-structure` |
+  | `erp-api`: Controller/Service vượt ngưỡng, module mới, chuyển v2 | `/erp-api-structure` | `Structure: /erp-api-structure` |
+  | Cả hai | Theo cả hai, thứ tự DB → API → UI | `Structure: /erp-ui-structure + /erp-api-structure` |
   | Không chạm cấu trúc (ví dụ sửa một endpoint nhỏ) | — | `Structure: N/A (lý do)` |
 
 - **Chọn Track (khi chạm module v1 hoặc v2)**: `T1` = refactor v1 theo hướng v2-ready (mặc định). `T2` = migrate sang v2, chỉ khi user ra lệnh cho từng module. Module mới: đề xuất v2 qua plop, hỏi user ở Approval Gate. Ghi `Track:` đầu `implementation_plan.md`.
+- **Quét tiền lệ Plane**: trước khi lập plan, tìm trên Plane (project KINDU) việc tương tự, kể cả `Done`/`Cancelled`, theo `plane-work-items` mục 5. Báo cáo bảng Tiền lệ và chờ người dùng chốt: dùng lại, tiếp tục, tạo mới có liên kết, hoặc hủy. Ghi vào mục `🔎 Tiền lệ trên Plane` của plan.
 - **Scope Boundaries**: In-Scope và Out-of-Scope rõ ràng để tránh scope creep.
 - **Threat Model**: phụ lục repo quy định checklist cụ thể.
 - Sub-agent research là tùy chọn khi môi trường hỗ trợ và task đọc diện rộng. CLI đơn luồng thì agent chính tự làm tuần tự.
@@ -90,6 +91,7 @@ Mẫu task chuẩn:
 ```markdown
 - [ ] **Task X.Y.Z: [Tên task súc tích, rõ hành động]**
   - **Phân hệ**: `[DB / API / Web / QC]` | **Ưu tiên**: `[P0 / P1 / P2]`
+  - **Plane**: `[<module>] X.Y.Z` | **Ngày**: `start → target` | **State**: `Backlog → Todo → In Progress → Done`
   - **Runner**: `[Main Agent]` *(Mặc định Main Agent. Chỉ ghi `Sub-agent (self)` khi agent có sub-agent và task độc lập hoàn toàn)*
   - **Files**: `[NEW]` / `[MODIFY]` / `[DELETE]` [path/to/file](erp/<repo>/path/to/file)
   - **DoD**: tiêu chí hoàn thành cụ thể.
@@ -114,17 +116,24 @@ Mẫu task chuẩn:
 
 ---
 
-### 🔸 Sau `OK`: Tích hợp Plane (`plane-work-items`)
+### 🔸 Sau `OK`: Tích hợp Plane (`plane-work-items`) — TẠO TRƯỚC KHI LÀM
+
+**Thứ tự bắt buộc**: `OK` → tạo Plane (Cycle, Module nếu thiếu, Story, toàn bộ Task con) → mới sửa file đầu tiên. Không được làm code xong rồi mới tạo task, vì như vậy Plane không còn là công cụ theo dõi.
 
 Ngay sau `OK`, agent **PHẢI HỎI** trước khi làm trên Plane:
 
 > Bạn có muốn tôi tạo và theo dõi task này trên Plane (project KINDU, workspace k-industries) không? **Có / Không**
 
-- **Có**: load skill `plane-work-items`, tạo Module, Cycle, Story và Task. Ghi identifier (ví dụ `KINDU-12`) vào plan.
+- **Có**: load skill `plane-work-items`, tạo Module, Cycle, Story và **tất cả Task con theo Task Breakdown**, gắn vào Module và Cycle, rồi ghi identifier (ví dụ `KINDU-12`) vào plan. Chỉ bắt đầu Giai đoạn 5 khi bước này xong.
 - **Không**: ghi `Plane: không theo dõi` vào plan.
-- Task ERP: khuyến nghị **Có**, theo `AGENTS.md`. Câu hỏi vẫn phải được hỏi.
+- Task ERP: khuyến nghị **Có**, theo `AGENTS.md`. Câu hỏi vẫn phải được hỏi. Nếu user đã nói rõ trong cùng yêu cầu (ví dụ "tạo Plane trước khi làm") thì không hỏi lại.
+- **Quy chuẩn Plane (bắt buộc)**, theo `plane-work-items` mục 2–4:
+  - Luồng state: tạo ở `Backlog`; gắn Cycle rồi chuyển `Todo`; bắt đầu làm chuyển `In Progress`; PASS verification chuyển `Done`. Cấm nhảy `Backlog → In Progress`.
+  - Tên: Story `[<module>] <n>. <tên>`; Task `[<module>] X.Y.Z <tên>`, với `X.Y.Z` khớp Task Breakdown.
+  - Mọi Story và Task có `start_date` và `target_date`, nằm trong khoảng Cycle chứa nó.
+  - Cycle: nếu `parallel_cycles` tắt thì tuần tự, không chồng lấn; chỉ một cycle `current`; cycle mới nối sau cycle cuối.
+  - Việc phát sinh ngoài plan thì tạo Task con mới ngay lúc phát hiện.
 - Chưa có `OK` thì không tạo gì trên Plane. Không ghi plan hay task vào Trilium.
-
 ---
 
 ## ⚙️ Giai Đoạn 5 — Thực thi, Checkpoint & Nghiệm thu
@@ -133,6 +142,7 @@ Ngay sau `OK`, agent **PHẢI HỎI** trước khi làm trên Plane:
 - **Single Active Task**: đổi `[ ]` thành `[/]` khi bắt đầu. Tại một thời điểm chỉ có **một** task `[/]`.
 - **Test-Before-Tick**: chỉ đổi `[/]` thành `[x]` khi lệnh `Verification` **PASS 100%**. Nếu fail, giữ `[/]` và sửa tiếp.
 - **Live Sync**: ghi trạng thái vào `implementation_plan.md` ngay sau mỗi task.
+- **Plane Live Sync** (khi `Plane: KINDU-xx`): trước khi `[/]` một task phát sinh, quét nhanh tiền lệ. Bắt đầu task thì chuyển Task con sang `In Progress`; `[x]` thì chuyển `Done`. Hết task thì chuyển Story sang `Done`. Chỉ tạo hoặc cập nhật hàng loạt sau khi làm xong là sai quy trình.
 
 ### 1.1 Single-Agent và Sub-agent
 - **Mặc định**: agent chính tự làm tuần tự: `[/]` → sửa file → verification → PASS → `[x]`.
@@ -159,8 +169,12 @@ Khi user gõ `tiếp tục`, `continue` hoặc gửi prompt mới:
 4. Làm tiếp đúng bước, không làm lại từ đầu.
 
 ### 4. Final Gate, Knowledge-Sync & Walkthrough
+- **E2E (khi task chạm luồng nhiều bước)**: chạy skill E2E của repo trên môi trường đang chạy, trước khi báo hoàn tất. erp-api: `erp-e2e-api-smoke`. erp-web: `erp-e2e-playwright`. Ghi PASS hoặc FAIL theo lần chạy hiện tại.
+- **Nạp `E2E_PASSWORD`**: nếu shell chưa có biến này, đọc dòng `E2E_PASSWORD=` trong `erp/erp-api/.env` và nạp vào tiến trình chạy script. Không in giá trị ra log, không ghi vào repo, không hỏi lại user nếu `.env` đã có. Trước khi ghi DB, chạy `SELECT current_database();` và báo tên DB. Không chạy E2E trên DB production.
 - **Final Gate**: phụ lục repo quy định lệnh và thứ tự (thường: commit → `git pull --rebase` → push → xác nhận CI xanh trên commit cuối).
 - **Knowledge & Skill Sync**: cập nhật Module Skill tương ứng liền sau khi xong task. Nếu là module mới thì tạo skill và gắn vào `*-truth` của repo. Không để tri thức chỉ nằm trong commit.
+- **Bản đồ module tự sinh**: sau khi tạo hoặc sửa `modules/<m>/SKILL.md`, chạy `/sync-agents` (Claude Code có hook tự dựng lại). `sync-agents.sh --check` và `validate-agent-system.sh` báo `DRIFT` hoặc lỗi nếu module chưa có trong bản đồ hoặc thiếu `description`.
+- **Context nạp sẵn gọn**: mỗi rule đặt đúng một nơi, nơi khác chỉ trỏ tới. File nạp sẵn (`.agents/AGENTS.md`, `*-truth/SKILL.md`) có trần byte trong `manifest.context_budget`; nội dung dài đặt trong `references/` và chỉ để lại con trỏ. Trước khi chốt task có sửa các file này, chạy `bash .agents/scripts/validate-agent-system.sh`.
 - **Walkthrough**: tạo `walkthrough.md` gồm bằng chứng test, trạng thái đồng bộ skill và hướng dẫn kiểm thử thủ công.
 
 ---
@@ -173,9 +187,12 @@ Khi user gõ `tiếp tục`, `continue` hoặc gửi prompt mới:
 Tóm tắt mục tiêu và giá trị.
 
 Track: [T1 / T2 / N/A]
-Structure: [/ui-structure | /api-structure | N/A (lý do)]
+Structure: [/erp-ui-structure | /erp-api-structure | N/A (lý do)]
 Consistency Check: [đạt / chỗ lệch và cách xử lý]
 Plane: [KINDU-xx / không theo dõi]
+
+## 🔎 Tiền lệ trên Plane
+- [KINDU-xx hoặc "không có"] · State · Cycle · Quyết định: [dùng lại / tiếp tục / tạo mới có liên kết / hủy]
 
 ## 📝 Spec
 - **Mục tiêu**: một hai câu.
@@ -228,7 +245,7 @@ Plane: [KINDU-xx / không theo dõi]
 
 1. **Runtime Truth**: đọc `.env`, chạy `SELECT current_database();` và báo tên DB trước khi ghi.
 2. **Scan Codebase**: rà Entities, Services, DTOs liên quan và đọc Module Skill (`erp/erp-api/.agents/skills/modules/...`).
-3. **Structure Routing**: plan theo `/api-structure`. Phần A khi tách Controller/Service vượt ngưỡng. Phần B khi tạo hoặc chuyển module sang v2 (plop `api-module-v2`). Ghi `Structure: /api-structure` hoặc `Structure: N/A (lý do)`.
+3. **Structure Routing**: plan theo `/erp-api-structure`. Phần A khi tách Controller/Service vượt ngưỡng. Phần B khi tạo hoặc chuyển module sang v2 (plop `api-module-v2`). Ghi `Structure: /erp-api-structure` hoặc `Structure: N/A (lý do)`.
 4. **Threat Model**: RBAC permissions, SQL injection, khóa bi quan (`pessimistic_write`) khi trừ kho hoặc sổ quỹ, rủi ro cross-module. Khi đụng endpoint, auth, DTO hoặc upload, đối chiếu `erp-api-truth/references/security-baseline.md`.
 5. ⚠️ Không chạy test runner hay build ở bước này.
 
@@ -246,7 +263,7 @@ Plane: [KINDU-xx / không theo dõi]
 - **Rollback Strategy**: hoàn tác migration và code an toàn khi có sự cố.
 
 ### Quy tắc backend bắt buộc
-- Mỗi file dưới 180 dòng. Tách Controller/Service vượt ngưỡng theo `/api-structure`.
+- Mỗi file dưới 180 dòng. Tách Controller/Service vượt ngưỡng theo `/erp-api-structure`.
 - Không trả Entity thẳng từ Controller.
 - Test runner duy nhất là `jest`. **Cấm** gõ `vitest` trong `erp-api`.
 

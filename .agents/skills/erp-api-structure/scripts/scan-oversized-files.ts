@@ -261,7 +261,7 @@ async function main() {
 
   if (includeScripts) {
     console.log('\n' + line);
-    console.log(' 🧹 VỆ SINH SCRIPT (chỉ báo cáo, không chặn) - xem quy ước env trong api-structure.md');
+    console.log(' 🧹 VỆ SINH SCRIPT (chỉ báo cáo, không chặn) - xem quy ước env trong erp-api-structure.md');
     console.log(line);
     if (hygiene.length === 0) {
       console.log(' \x1b[32m✔ Không phát hiện.\x1b[0m');
@@ -272,7 +272,7 @@ async function main() {
   }
 
   console.log('\n' + line);
-  console.log(' 💡 Đây là báo cáo CẢNH BÁO, script KHÔNG tự sửa code. Quy chuẩn: .agents/workflows/api-structure.md');
+  console.log(' 💡 Đây là báo cáo CẢNH BÁO, script KHÔNG tự sửa code. Quy chuẩn: .agents/workflows/erp-api-structure.md');
   console.log(' 💡 Khi chạy dưới /erp-plan: chỉ chạy test scoped ở từng task, full suite ở Final Gate.');
   console.log(line + '\n');
 

@@ -159,7 +159,7 @@ export function _applyItemColumnSearch(
       applyMultiKeywordMultiFieldFilter(
         qb,
         [
-          "(SELECT string_agg(bb.name || ' ' || bb.code, ' ') FROM erp_branches bb WHERE bb.id = ANY(inv.branch_ids))",
+          "(SELECT string_agg(bb.name || ' ' || bb.code, ' ') FROM branches_management bb WHERE bb.id = ANY(inv.branch_ids))",
         ],
         val,
         'itemBranchSearch',

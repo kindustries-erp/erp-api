@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "layer": "api",
+  "family": "inventory-movements-core",
+  "entity": "StockVoucher",
+  "style": "abstract-services",
+  "barrel": "src/v2/core/inventory-movements-core/index.ts",
+  "module": "InventoryMovementsCoreModule",
+  "moduleFile": "inventory-movements-core.module.ts",
+  "baseClasses": {
+    "entity": "BaseStockVoucherEntity",
+    "createDto": "BaseCreateStockVoucherDto",
+    "contract": "BaseStockVoucherContract",
+    "service": "AbstractStockVoucherCommandService"
+  },
+  "serviceFile": "abstract-stock-voucher-command.service.ts",
+  "permissionPattern": "inventory-movements-core",
+  "requiredModuleFiles": [
+    "contracts",
+    "controllers",
+    "dto",
+    "entities",
+    "services"
+  ]
+}

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -10,6 +10,7 @@ import { ProviderAdapterRegistry } from '../adapters/provider-adapter.registry';
 import { InvoiceProviderDetectorService } from './invoice-provider-detector.service';
 import { readXmlFromBuffer } from './invoice-xml-reader.helper';
 import { R2Service } from '../../../r2/r2.service';
+import { LegacyFileRegistrarService } from '@/v2/modules/file-attachments-management/services/legacy-file-registrar.service';
 
 @Injectable()
 export class InvoicePdfDownloadWorkerService {
@@ -25,6 +26,8 @@ export class InvoicePdfDownloadWorkerService {
     private readonly detectorService: InvoiceProviderDetectorService,
     private readonly r2Service: R2Service,
     private readonly configService: ConfigService,
+    @Optional()
+    private readonly fileRegistrar?: LegacyFileRegistrarService,
   ) {}
 
   async downloadSingleInvoice(
@@ -129,6 +132,13 @@ export class InvoicePdfDownloadWorkerService {
       invoice.pdfSource = 'provider_original';
       invoice.pdfError = null;
       await this.invoiceRepo.save(invoice);
+      await this.fileRegistrar?.registerInvoiceFile({
+        invoiceId: invoice.id,
+        fileKey: s3Key,
+        column: 'pdf_file_key',
+        fileName: `${invoice.invoiceNo ?? invoice.id}.pdf`,
+        fileSize: result.pdfBuffer.length,
+      });
 
       return { success: true };
     } catch (err: any) {

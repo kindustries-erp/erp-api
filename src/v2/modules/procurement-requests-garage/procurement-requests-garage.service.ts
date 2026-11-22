@@ -1,0 +1,265 @@
+import { Injectable } from '@nestjs/common';
+import { ErpResource, RbacCoreService } from '@/v2/core/rbac-core';
+import { ApproverDirectoryService } from '@/v2/modules/approval-management/services/approver-directory.service';
+import { toPurchaseRequestResponse } from '@/v2/core/procurement-requests-core/helpers/procurement-request.mapper';
+import {
+  PurchaseRequestAction,
+  PurchaseRequestStatus,
+} from '@/v2/core/procurement-requests-core/contracts/procurement-requests.contract';
+import {
+  PurchaseRequestPoDraftDto,
+  PurchaseRequestResponseDto,
+} from '@/v2/core/procurement-requests-core/dto/procurement-request-response.dto';
+import { PurchaseRequestListResponseDto } from '@/v2/core/procurement-requests-core/dto/procurement-request-list-response.dto';
+import { toPaginatedResult } from '@/common/utils/paginated-result';
+import { resolveApprovalEmails } from '@/v2/core/approval-core/helpers/approval-people';
+import { remainingPoDraftLinesOf } from '@/v2/core/procurement-requests-core/services/procurement-request-engine.service';
+import { toApprovalEventResponse } from '@/v2/core/approval-core/helpers/approval-event.mapper';
+import { ApprovalActorService } from '@/v2/modules/approval-management/services/approval-actor.service';
+import { ApprovalEventResponseDto } from '@/v2/core/approval-core/dto/approval-event-response.dto';
+import {
+  CreateAndSubmitProcurementRequestDto,
+  CreateProcurementRequestDto,
+  ListProcurementRequestsDto,
+  ReplaceRequestLinesDto,
+  UpdateAndSubmitProcurementRequestDto,
+  UpdateProcurementRequestHeaderDto,
+} from './dto/procurement-request.dto';
+import { GarageProcurementRequestCommandService } from './services/procurement-request-command.service';
+import { GarageProcurementRequestFlowService } from './services/garage-procurement-request-flow.service';
+import { GarageProcurementRequestQueryService } from './services/procurement-request-query.service';
+import { ProcurementRequestNotifierService } from './services/procurement-request-notifier.service';
+import { GarageProcurementRequestOrderRefService } from './services/garage-procurement-request-order-ref.service';
+
+/** Facade: điều phối giữa command, query và chuyển sang response DTO. */
+@Injectable()
+export class GarageProcurementRequestsService {
+  constructor(
+    private readonly command: GarageProcurementRequestCommandService,
+    private readonly query: GarageProcurementRequestQueryService,
+    private readonly rbac: RbacCoreService,
+    private readonly actors: ApprovalActorService,
+    private readonly approvers: ApproverDirectoryService,
+    private readonly notifier: ProcurementRequestNotifierService,
+    private readonly flow: GarageProcurementRequestFlowService,
+    private readonly orderRef: GarageProcurementRequestOrderRefService,
+  ) {}
+
+  async create(
+    dto: CreateProcurementRequestDto,
+    actorId: string,
+  ): Promise<PurchaseRequestResponseDto> {
+    const { lines, ...header } = dto;
+    const saved = await this.command.createDraft(
+      { id: actorId, roles: await this.roles(actorId) },
+      header,
+      lines,
+    );
+    return this.findOne(saved.id);
+  }
+
+  /** Nhân bản đề nghị đã từ chối/hủy thành nháp mới (giữ chi nhánh). */
+  async clone(
+    id: string,
+    actorId: string,
+  ): Promise<PurchaseRequestResponseDto> {
+    const saved = await this.command.cloneDraft(
+      id,
+      { id: actorId, roles: await this.roles(actorId) },
+      ['branchId', 'branchName'],
+    );
+    return this.findOne(saved.id);
+  }
+
+  async list(
+    dto: ListProcurementRequestsDto,
+  ): Promise<PurchaseRequestListResponseDto> {
+    const out = await this.query.list(dto);
+    const emailOf = await resolveApprovalEmails(this.actors, out.rows);
+    const related = await this.orderRef.forRequests(out.rows.map((h) => h.id));
+    return toPaginatedResult(
+      out.rows.map((h) =>
+        toPurchaseRequestResponse(h, [], emailOf, related.get(h.id) ?? []),
+      ),
+      out.page,
+      out.pageSize,
+      out.total,
+      out.summaries,
+    );
+  }
+
+  findColumnOptions(
+    column: string,
+    search: string | undefined,
+    page: number,
+    pageSize: number,
+    filters?: string,
+    deleted?: 'only',
+  ) {
+    return this.query.findColumnOptions(
+      column,
+      search,
+      page,
+      pageSize,
+      filters,
+      deleted,
+    );
+  }
+
+  async findOne(id: string): Promise<PurchaseRequestResponseDto> {
+    const { header, lines } = await this.query.findOne(id);
+    const emailOf = await resolveApprovalEmails(this.actors, [header]);
+    return toPurchaseRequestResponse(header, lines, emailOf);
+  }
+
+  async updateHeader(
+    id: string,
+    dto: UpdateProcurementRequestHeaderDto,
+  ): Promise<PurchaseRequestResponseDto> {
+    await this.command.updateHeader(id, dto);
+    return this.findOne(id);
+  }
+
+  async replaceLines(
+    id: string,
+    dto: ReplaceRequestLinesDto,
+  ): Promise<PurchaseRequestResponseDto> {
+    await this.command.replaceDraftLines(id, dto.lines);
+    return this.findOne(id);
+  }
+
+  async transition(
+    id: string,
+    action: PurchaseRequestAction,
+    actorId: string,
+    reason?: string,
+    approverId?: string | null,
+  ): Promise<PurchaseRequestResponseDto> {
+    if (approverId) {
+      await this.approvers.assertEligible(
+        ErpResource.GARAGE_PROCUREMENT_REQUESTS,
+        approverId,
+        actorId,
+      );
+    }
+    // Chụp người duyệt và trạng thái trước khi chuyển, vì recall xóa approverId trên phiếu.
+    const snapshot =
+      action === 'recall' || action === 'cancel'
+        ? await this.query.findApprovalSnapshot(id)
+        : null;
+    const header = await this.command.transition(
+      id,
+      action,
+      { id: actorId, roles: await this.roles(actorId) },
+      reason,
+      approverId ?? null,
+    );
+    await this.notifier.afterTransition(
+      action,
+      snapshot
+        ? {
+            ...header,
+            previousApproverId: snapshot.approverId,
+            previousStatus: snapshot.status,
+          }
+        : header,
+      actorId,
+      reason,
+    );
+    return this.findOne(id);
+  }
+
+  /** Tạo đề nghị rồi gửi duyệt trong một bước (một transaction qua orchestrator). */
+  createAndSubmit(
+    dto: CreateAndSubmitProcurementRequestDto,
+    actorId: string,
+  ): Promise<PurchaseRequestResponseDto> {
+    const { lines, approverId, ...header } = dto;
+    return this.saveAndSubmit(null, header, lines, approverId, actorId);
+  }
+
+  /** Cập nhật đề nghị nháp rồi gửi duyệt trong một bước. */
+  updateAndSubmit(
+    id: string,
+    dto: UpdateAndSubmitProcurementRequestDto,
+    actorId: string,
+  ): Promise<PurchaseRequestResponseDto> {
+    const { lines, approverId, ...header } = dto;
+    return this.saveAndSubmit(id, header, lines, approverId, actorId);
+  }
+
+  private async saveAndSubmit(
+    id: string | null,
+    header: CreateProcurementRequestDto | UpdateProcurementRequestHeaderDto,
+    lines: CreateProcurementRequestDto['lines'],
+    approverId: string | undefined,
+    actorId: string,
+  ): Promise<PurchaseRequestResponseDto> {
+    if (approverId) {
+      await this.approvers.assertEligible(
+        ErpResource.GARAGE_PROCUREMENT_REQUESTS,
+        approverId,
+        actorId,
+      );
+    }
+    const saved = await this.flow.saveAndSubmit(
+      id,
+      { header, lines },
+      { id: actorId, roles: await this.roles(actorId) },
+      approverId ?? null,
+    );
+    await this.notifier.afterTransition('submit', saved, actorId, undefined);
+    return this.findOne(saved.id);
+  }
+
+  /** Xóa mềm đề nghị nháp. */
+  async softDelete(id: string): Promise<{ id: string }> {
+    await this.command.softDeleteDraft(id);
+    return { id };
+  }
+
+  /** Xóa cứng đề nghị nháp (chỉ admin, qua quyền PURGE). */
+  async hardDelete(id: string): Promise<{ id: string }> {
+    await this.command.hardDeleteDraft(id);
+    return { id };
+  }
+
+  async approvalEvents(id: string): Promise<ApprovalEventResponseDto[]> {
+    await this.query.findOne(id);
+    const events = await this.query.approvalEvents(id);
+    const actors = await this.actors.resolve(events.map((e) => e.actorId));
+    return events.map((e) => toApprovalEventResponse(e, actors.get(e.actorId)));
+  }
+
+  /** Điền sẵn PO Garage từ phần còn lại của đề nghị đã duyệt. Chỉ đọc. */
+  async poDraft(id: string): Promise<PurchaseRequestPoDraftDto> {
+    const { header, lines } = await this.query.findOne(id);
+    const draftLines = remainingPoDraftLinesOf(
+      header.status as PurchaseRequestStatus,
+      lines.map((l) => ({
+        id: l.id,
+        lineNo: l.lineNo,
+        lineType: l.lineType as 'GOODS' | 'SERVICE',
+        itemId: l.itemId,
+        itemCode: l.itemCode,
+        itemName: l.itemName,
+        description: l.description,
+        qtyRequested: Number(l.qtyRequested),
+        qtyOrdered: Number(l.qtyOrdered),
+        estUnitPrice: l.estUnitPrice == null ? null : Number(l.estUnitPrice),
+      })),
+    );
+    return {
+      requestId: header.id,
+      requestNo: header.requestNo,
+      lines: draftLines.map((l) => ({
+        ...l,
+        qtyRemaining: Number(l.qtyRemaining.toFixed(3)),
+      })),
+    };
+  }
+
+  private roles(userId: string): Promise<string[]> {
+    return this.rbac.getUserRoleNames(userId);
+  }
+}

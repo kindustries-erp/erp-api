@@ -8,7 +8,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { ErpBranch } from '../../branches-core/entities/erp_branch.entity';
+import { BranchManagement } from '@/v2/modules/branches-management/entities/branch-management.entity';
 import { ErpJournalEntryLine } from './erp_journal_entry_line.entity';
 
 @Entity({ name: 'erp_journal_entries' })
@@ -19,9 +19,9 @@ export class ErpJournalEntry {
   @Column({ type: 'uuid', name: 'branch_id', nullable: true })
   branchId: string | null;
 
-  @ManyToOne(() => ErpBranch, { nullable: true })
+  @ManyToOne(() => BranchManagement, { nullable: true })
   @JoinColumn({ name: 'branch_id' })
-  branch: ErpBranch | null;
+  branch: BranchManagement | null;
 
   @Column({ type: 'varchar', length: 100, name: 'entry_no' })
   entryNo: string;

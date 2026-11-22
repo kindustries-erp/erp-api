@@ -1,0 +1,18 @@
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { RbacCoreModule } from '@/v2/core/rbac-core';
+import { ApprovalEvent } from '@/v2/core/approval-core/entities/approval-event.entity';
+import { ApprovalEventService } from '@/v2/core/approval-core/approval-event.service';
+{{#if coreModule}}import { {{coreModule}} } from '{{coreBarrel}}';
+{{/if}}import { {{entityName}} } from './entities/{{entityKebab}}.entity';
+import { {{entityName}}Controller } from './controllers/{{entityKebab}}.controller';
+import { {{entityName}}CommandService } from './services/{{entityKebab}}-command.service';
+
+/** Module {{moduleName}}: chứng từ có vòng đời, ghép lõi họ {{family}}. */
+@Module({
+  imports: [TypeOrmModule.forFeature([{{entityName}}, ApprovalEvent]), RbacCoreModule{{#if coreModule}}, {{coreModule}}{{/if}}],
+  controllers: [{{entityName}}Controller],
+  providers: [ApprovalEventService, {{entityName}}CommandService],
+  exports: [{{entityName}}CommandService],
+})
+export class {{moduleClass}}Module {}

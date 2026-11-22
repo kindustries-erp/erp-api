@@ -31,5 +31,6 @@ yarn-error.log*
 !/scripts/sync-invoice-netoffs-to-case-settlements.ts
 !/scripts/backfill-garage-forecast.ts
 !/scripts/final-gate.sh
+!/scripts/seed-admin-full.ts
 backups/
 scratch/

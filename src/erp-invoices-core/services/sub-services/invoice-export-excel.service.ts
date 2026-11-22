@@ -162,7 +162,7 @@ export class InvoiceExportExcelService {
     emitProgress(45, 'Dang tai du lieu chi nhanh...');
 
     const branches = await this.repository.manager.query(
-      'SELECT id, name FROM erp_branches',
+      'SELECT id, name FROM branches_management',
     );
     const branchMap: Record<string, string> = branches.reduce(
       (acc: any, curr: any) => {

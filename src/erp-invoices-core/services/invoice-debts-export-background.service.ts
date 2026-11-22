@@ -4,8 +4,17 @@ import {
   Logger,
   NotFoundException,
   OnModuleDestroy,
+  Optional,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+
+import {
+  formatExportTimestamp,
+  isExportJobsV2Enabled,
+  normalizeJsonString,
+  stableStringify,
+} from '@/v2/core/export-jobs-core';
+import { InvoiceDebtsExportJobsService } from '@/v2/modules/export-jobs-invoice-debts';
 
 import {
   GetInvoiceDebtsQueryDto,
@@ -69,10 +78,19 @@ export class InvoiceDebtsExportBackgroundService implements OnModuleDestroy {
   private readonly activeJobByUser = new Map<string, string>();
   private readonly cleanupIntervalId: NodeJS.Timeout;
 
-  constructor(private readonly invoiceDebtsService: InvoiceDebtsService) {
+  constructor(
+    private readonly invoiceDebtsService: InvoiceDebtsService,
+    @Optional()
+    private readonly v2Jobs?: InvoiceDebtsExportJobsService,
+  ) {
     this.cleanupIntervalId = setInterval(() => {
       this.cleanupExpiredJobs();
     }, 60_000);
+  }
+
+  /** Job nền V2 (lõi `export-jobs-core`) khi cờ bật và đã được cấp; ngược lại dùng cơ chế cũ bên dưới. */
+  private get v2(): InvoiceDebtsExportJobsService | undefined {
+    return this.v2Jobs && isExportJobsV2Enabled() ? this.v2Jobs : undefined;
   }
 
   onModuleDestroy() {
@@ -81,6 +99,22 @@ export class InvoiceDebtsExportBackgroundService implements OnModuleDestroy {
 
   async startBackgroundExport(query: GetInvoiceDebtsQueryDto, userId: string) {
     const queryFingerprint = this.buildQueryFingerprint(query);
+
+    if (this.v2) {
+      return this.v2.startBackgroundExport({
+        userId,
+        fingerprint: queryFingerprint,
+        fileName: this.buildExportFileName(query),
+        totalUnits: InvoiceDebtsExportBackgroundService.TOTAL_UNITS,
+        dateFrom: query.date_from,
+        dateTo: query.date_to,
+        extra: {
+          partnerType: query.partner_type || InvoicePartnerType.CUSTOMER,
+        },
+        producer: (onProgress) =>
+          this.invoiceDebtsService.exportDebtsExcel(query, { onProgress }),
+      });
+    }
 
     const runningJobId = this.activeJobByUser.get(userId);
     if (runningJobId) {
@@ -105,10 +139,7 @@ export class InvoiceDebtsExportBackgroundService implements OnModuleDestroy {
       };
     }
 
-    const timestamp = new Date();
-    const isSupplier = query.partner_type === InvoicePartnerType.SUPPLIER;
-    const typeText = isSupplier ? 'nha_cung_cap' : 'khach_hang';
-    const fileName = `Bao_cao_cong_no_${typeText}_${this.formatDateForFileName(timestamp)}.xlsx`;
+    const fileName = this.buildExportFileName(query);
 
     const job: InvoiceDebtExportJob = {
       id: randomUUID(),
@@ -137,11 +168,26 @@ export class InvoiceDebtsExportBackgroundService implements OnModuleDestroy {
     };
   }
 
+  /** Tên file: `Bao_cao_cong_no_<nha_cung_cap|khach_hang>_<YYYYMMDD_HHmmss>.xlsx`. */
+  private buildExportFileName(query: GetInvoiceDebtsQueryDto): string {
+    const isSupplier = query.partner_type === InvoicePartnerType.SUPPLIER;
+    const typeText = isSupplier ? 'nha_cung_cap' : 'khach_hang';
+    return `Bao_cao_cong_no_${typeText}_${formatExportTimestamp(new Date())}.xlsx`;
+  }
+
   listHistoryForUser(
     userId: string,
     page = 1,
     pageSize = 10,
   ): InvoiceDebtExportHistoryResult {
+    if (this.v2) {
+      return this.v2.listHistoryForUser(
+        userId,
+        page,
+        pageSize,
+      ) as InvoiceDebtExportHistoryResult;
+    }
+
     const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
     const safePageSize = Number.isFinite(pageSize)
       ? Math.min(100, Math.max(1, Math.floor(pageSize)))
@@ -166,6 +212,10 @@ export class InvoiceDebtsExportBackgroundService implements OnModuleDestroy {
   }
 
   getReadyExportFile(jobId: string, userId: string) {
+    if (this.v2) {
+      return this.v2.getReadyFile(jobId, userId);
+    }
+
     const job = this.jobs.get(jobId);
     if (!job || job.userId !== userId) {
       throw new NotFoundException('Không tìm thấy file xuất Excel công nợ.');
@@ -309,44 +359,10 @@ export class InvoiceDebtsExportBackgroundService implements OnModuleDestroy {
       date_from: query.date_from || '',
       date_to: query.date_to || '',
       branch_id: (query.branch_id || '').trim(),
-      column_search: this.normalizeJsonString(query.column_search),
-      column_filters: this.normalizeJsonString(query.column_filters),
+      column_search: normalizeJsonString(query.column_search),
+      column_filters: normalizeJsonString(query.column_filters),
     };
 
-    return this.stableStringify(normalized);
-  }
-
-  private normalizeJsonString(input?: string) {
-    if (!input) return '';
-    try {
-      return this.stableStringify(JSON.parse(input));
-    } catch {
-      return input.trim();
-    }
-  }
-
-  private stableStringify(value: unknown): string {
-    if (value === null || value === undefined) return String(value);
-    if (typeof value !== 'object') return JSON.stringify(value);
-    if (Array.isArray(value)) {
-      return `[${value.map((item) => this.stableStringify(item)).join(',')}]`;
-    }
-
-    const obj = value as Record<string, unknown>;
-    const keys = Object.keys(obj).sort();
-    const entries = keys.map(
-      (key) => `${JSON.stringify(key)}:${this.stableStringify(obj[key])}`,
-    );
-    return `{${entries.join(',')}}`;
-  }
-
-  private formatDateForFileName(date: Date) {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    const h = String(date.getHours()).padStart(2, '0');
-    const mi = String(date.getMinutes()).padStart(2, '0');
-    const s = String(date.getSeconds()).padStart(2, '0');
-    return `${y}${m}${d}_${h}${mi}${s}`;
+    return stableStringify(normalized);
   }
 }

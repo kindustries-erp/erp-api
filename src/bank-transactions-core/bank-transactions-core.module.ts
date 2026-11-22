@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { RbacCoreModule } from '../rbac-core/rbac-core.module';
+import { RbacCoreModule } from '@/v2/core/rbac-core';
 import { BankTransactionsCoreService } from './bank-transactions-core.service';
 import { BankTransactionsCoreController } from './bank-transactions-core.controller';
 import { ErpBankAccount } from './entities/erp_bank_account.entity';
@@ -10,7 +10,7 @@ import { ErpBankAccountBalance } from './entities/erp_bank_account_balance.entit
 import { ErpCashBookBalance } from './entities/erp_cash_book_balance.entity';
 import { ErpBankStatementFile } from './entities/erp_bank_statement_file.entity';
 import { AccountingCoreModule } from '../accounting-core/accounting-core.module';
-import { BusinessPartnersCoreModule } from '../v2/business-partners-core/business-partners-core.module';
+import { BusinessPartnersCoreModule } from '@/v2/core/business-partners-core';
 import { BankAccountLifecycleService } from './services/bank-account-lifecycle.service';
 import { CashBookLifecycleService } from './services/cash-book-lifecycle.service';
 import { BalanceStatementLifecycleService } from './services/balance-statement-lifecycle.service';
@@ -20,9 +20,11 @@ import { TransactionAnalyticsService } from './services/transaction-analytics.se
 import { TransactionAccountingService } from './services/transaction-accounting.service';
 import { BankStatementExportBackgroundService } from './services/bank-statement-export-background.service';
 import { BankStatementExcelBuilder } from './services/bank-statement-excel.builder';
+import { ExportJobsBankStatementsModule } from '@/v2/modules/export-jobs-bank-statements';
 
 @Module({
   imports: [
+    ExportJobsBankStatementsModule,
     TypeOrmModule.forFeature([
       ErpBankAccount,
       ErpCashBook,

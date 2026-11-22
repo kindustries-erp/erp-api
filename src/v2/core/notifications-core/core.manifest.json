@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "layer": "api",
+  "family": "notifications-core",
+  "entity": "BaseNotificationEntity",
+  "style": "v2-core",
+  "barrel": "src/v2/core/notifications-core/index.ts",
+  "module": null,
+  "moduleFile": null,
+  "baseClasses": {
+    "entity": "BaseNotificationEntity",
+    "createDto": null,
+    "contract": null,
+    "service": "AbstractNotificationCommandService"
+  },
+  "serviceFile": "services/abstract-notification-command.service.ts",
+  "permissionPattern": null,
+  "requiredModuleFiles": []
+}

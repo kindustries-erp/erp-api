@@ -5,6 +5,8 @@ import {
   Optional,
   Logger,
 } from '@nestjs/common';
+import { hasReceiptSettlement } from '@/kgara-api-core/helpers/kgara-case-remaining.helper';
+import { ModuleRef } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, QueryRunner } from 'typeorm';
 import { KgaraCashflowVoucher } from '../entities/kgara_cashflow_voucher.entity';
@@ -17,7 +19,7 @@ import {
   KgaraCashflowVoucherResponseDto,
   toKgaraCashflowVoucherResponse,
 } from '../dto/garage-cashflow.dto';
-import { extractNetPayableAmount } from '../utils/kgara-parser.util';
+import { resolveStoredNetPayable } from '../utils/kgara-parser.util';
 import {
   isDebtOffsetPayment,
   isPaymentLocked,
@@ -29,6 +31,9 @@ import {
   syncOpexFromVoucher,
 } from '../helpers/garage-cashflow-opex-sync.helper';
 import { GarageHubService } from '../hub/garage-hub.service';
+import { notifyLedgerProjector } from '../hub/ledger-projector.port';
+import { resolveCaseReceiptPayer } from '../helpers/kgara-case-receipt-payer.helper';
+import type { ReceiptPayerType } from '../helpers/kgara-receipt-payer-resolver.helper';
 
 @Injectable()
 export class GarageCashflowTransactionService {
@@ -46,6 +51,8 @@ export class GarageCashflowTransactionService {
     private readonly auditCoreService?: AuditCoreService,
     @Optional()
     private readonly garageHub?: GarageHubService,
+    @Optional()
+    private readonly moduleRef?: ModuleRef,
   ) {}
 
   async createVoucher(
@@ -116,7 +123,17 @@ export class GarageCashflowTransactionService {
         await syncOpexFromVoucher(queryRunner.manager, savedVoucher);
       }
 
+      let settlementPayer: ReceiptPayerType | null = null;
       if (dto.caseId && shouldHaveSettlement(savedVoucher)) {
+        settlementPayer =
+          dto.voucherType === 'RECEIPT'
+            ? await resolveCaseReceiptPayer(
+                queryRunner,
+                dto.caseId,
+                Number(dto.amount),
+                dto.payerType,
+              )
+            : 'KH';
         let paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'POS' | 'OTHER' = 'CASH';
         if (dto.paymentMethod === 'Chuyển khoản')
           paymentMethod = 'BANK_TRANSFER';
@@ -137,7 +154,7 @@ export class GarageCashflowTransactionService {
           cashflowVoucherId: savedVoucher.id,
           sourceChannel: 'ON_SYSTEM',
           paymentMethod,
-          payerType: 'KH',
+          payerType: settlementPayer,
           note: dto.note || undefined,
           partnerName: dto.partnerName || caseRef?.khachHangName || undefined,
         });
@@ -150,6 +167,9 @@ export class GarageCashflowTransactionService {
 
       await queryRunner.commitTransaction();
       await this.syncReceiptForecast([dto.caseId]);
+      await notifyLedgerProjector(this.moduleRef, this.logger, (p) =>
+        p.projectVoucher(savedVoucher.id),
+      );
 
       if (this.auditCoreService) {
         this.auditCoreService.recordAction({
@@ -164,7 +184,10 @@ export class GarageCashflowTransactionService {
         });
       }
 
-      return toKgaraCashflowVoucherResponse(savedVoucher);
+      return {
+        ...toKgaraCashflowVoucherResponse(savedVoucher),
+        payerType: settlementPayer,
+      };
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;
@@ -265,11 +288,28 @@ export class GarageCashflowTransactionService {
 
       const wantsSettlement =
         !!newCaseId && shouldHaveSettlement(updatedVoucher);
+      let settlementPayer: ReceiptPayerType | null = null;
 
       if (existingSettlement) {
         if (!wantsSettlement) {
           await queryRunner.manager.remove(existingSettlement);
         } else {
+          const targetChanged =
+            oldCaseId !== newCaseId ||
+            oldType !== newType ||
+            Number(oldAmount) !== Number(newAmount);
+          if (newType !== 'RECEIPT') {
+            if (targetChanged) existingSettlement.payerType = 'KH';
+          } else if (dto.payerType !== undefined || targetChanged) {
+            existingSettlement.payerType = await resolveCaseReceiptPayer(
+              queryRunner,
+              newCaseId as string,
+              Number(newAmount),
+              dto.payerType,
+              existingSettlement.id,
+            );
+          }
+          settlementPayer = existingSettlement.payerType as ReceiptPayerType;
           existingSettlement.caseId = newCaseId || undefined;
           existingSettlement.amount = newAmount;
           existingSettlement.transDate = newTransDate;
@@ -313,6 +353,15 @@ export class GarageCashflowTransactionService {
           paymentMethod = 'POS';
         else if (dto.paymentMethod) paymentMethod = 'OTHER';
 
+        settlementPayer =
+          newType === 'RECEIPT'
+            ? await resolveCaseReceiptPayer(
+                queryRunner,
+                newCaseId as string,
+                Number(newAmount),
+                dto.payerType,
+              )
+            : 'KH';
         const newSettlement = queryRunner.manager.create(KgaraCaseSettlement, {
           caseId: newCaseId,
           settlementType: newType,
@@ -322,7 +371,7 @@ export class GarageCashflowTransactionService {
           cashflowVoucherId: updatedVoucher.id,
           sourceChannel: 'ON_SYSTEM',
           paymentMethod,
-          payerType: 'KH',
+          payerType: settlementPayer,
           note: updatedVoucher.note || undefined,
           partnerName: dto.partnerName || partnerName,
         });
@@ -352,6 +401,11 @@ export class GarageCashflowTransactionService {
 
       await queryRunner.commitTransaction();
       await this.syncReceiptForecast([oldCaseId, newCaseId]);
+      await notifyLedgerProjector(this.moduleRef, this.logger, async (p) => {
+        await p.projectVoucher(updatedVoucher.id);
+        if (oldCaseId && oldCaseId !== newCaseId)
+          await p.projectCase(oldCaseId);
+      });
 
       if (this.auditCoreService) {
         this.auditCoreService.recordAction({
@@ -367,7 +421,10 @@ export class GarageCashflowTransactionService {
         });
       }
 
-      return toKgaraCashflowVoucherResponse(updatedVoucher);
+      return {
+        ...toKgaraCashflowVoucherResponse(updatedVoucher),
+        payerType: settlementPayer,
+      };
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;
@@ -424,6 +481,9 @@ export class GarageCashflowTransactionService {
 
       await queryRunner.commitTransaction();
       await this.syncReceiptForecast([relatedCaseId]);
+      await notifyLedgerProjector(this.moduleRef, this.logger, (p) =>
+        p.removeVoucher(id, existingVoucher.caseId ?? relatedCaseId),
+      );
 
       if (this.auditCoreService) {
         this.auditCoreService.recordAction({
@@ -477,9 +537,10 @@ export class GarageCashflowTransactionService {
     const settlements = await queryRunner.manager.find(KgaraCaseSettlement, {
       where: { caseId },
     });
-    const netPayable = extractNetPayableAmount(kCase);
+    // Số ròng (sau chiết khấu): ưu tiên raw có field chiết khấu, nếu không dùng tienCoThue đã lưu (đã ròng).
+    const netPayable = resolveStoredNetPayable(kCase);
 
-    if (settlements.length > 0) {
+    if (hasReceiptSettlement(settlements)) {
       const totalReceipts = settlements
         .filter((s) => s.settlementType === 'RECEIPT')
         .reduce((sum, s) => sum + Number(s.amount || 0), 0);

@@ -122,7 +122,7 @@ src/kgara-api-core/
 | `PUT` | `/:id` | `UPDATE` | Cập nhật phiếu thu/chi. Tự động đồng bộ sang record cấn trừ tương ứng. Trả về `KgaraCashflowVoucherResponseDto`. |
 | `DELETE` | `/:id` | `DELETE` | Xóa phiếu thu/chi, đồng thời xóa record cấn trừ liên kết. |
 
-## 5. Logic Nghiệp vụ & Kiến trúc Chuẩn Hóa (/api-structure)
+## 5. Logic Nghiệp vụ & Kiến trúc Chuẩn Hóa (/erp-api-structure)
 - **Zero-Entity Leaking Mandate (Pattern D)**:
   - 100% Endpoints của `GarageCashflowController` không trả trực tiếp TypeORM Entity `KgaraCashflowVoucher` ra ngoài.
   - Sử dụng hàm chuẩn hóa `toKgaraCashflowVoucherResponse(voucher: KgaraCashflowVoucher): KgaraCashflowVoucherResponseDto` để map dữ liệu an toàn.
@@ -134,7 +134,7 @@ src/kgara-api-core/
 - **Express Body Parser & Exception Handling (10MB & HTTP 413)**:
   - Cấu hình tại `erp-api/src/main.ts` nâng giới hạn `bodyParser` lên 10MB: `json({ limit: '10mb' })` và `urlencoded({ limit: '10mb', extended: true })`.
   - `AllExceptionsFilter` (`src/common/filters/all-exceptions.filter.ts`) tự động bắt lỗi `PayloadTooLargeError` hoặc HTTP status 413 từ Express/Body-Parser để trả về mã chuẩn HTTP 413 Payload Too Large thay vì rơi vào 500 Internal Server Error.
-- **Transaction Safety & Audit Trail (`/api-structure`)**:
+- **Transaction Safety & Audit Trail (`/erp-api-structure`)**:
   - Toàn bộ thao tác Create, Update, Delete đều sử dụng `queryRunner.startTransaction()` để đảm bảo tính nhất quán (ACID) giữa bảng `kgara_cashflow_vouchers` và `kgara_case_settlements`.
   - Tích hợp `AuditCoreService` với Clean DI constructor (`@Optional() private readonly auditCoreService?: AuditCoreService`).
   - Tự động ghi nhận `recordAction` vào `erp_audit_logs` khi tạo mới (`actionType: 'CREATE'`), cập nhật (`actionType: 'UPDATE'` kèm `beforeSnapshot` và `afterSnapshot`), và xóa (`actionType: 'DELETE'`).
@@ -142,7 +142,7 @@ src/kgara-api-core/
   - Phía Web (`GarageCashflowDrawer`) tự động lấy nhật ký kiểm toán từ API `/api/v1/audit-logs-core/garage_cashflow_voucher/:id/timeline` và kết hợp với baseline metadata qua `mergeAuditItems` để hiển thị trong Tab **"Lịch sử & Kiểm duyệt"** (`DrawerAuditTimeline`).
   - **Timeline Smart Actor Rendering**: `DrawerAuditTimeline` hiển thị ưu tiên `actorEmail` (hoặc `{actorName} ({actorEmail})` nếu có tên riêng), fallback thông minh sang `currentUserEmail` từ `useAuthStore` cho các phiếu cũ chưa có `createdBy`.
 - **Auto-Sync Settlements**:
-  - Khi **tạo** Voucher có `caseId`, hệ thống tự sinh `KgaraCaseSettlement` với `sourceChannel = 'ON_SYSTEM'`, `paymentMethod = 'CASH'`, `payerType = 'KH'`. **Phiếu chi** chỉ sinh settlement khi `payment_status = 'PAID'` và `payment_content` không phải `4. HHBH` / `8. Vật tư tiêu hao` (xem mục "Quy tắc phiếu chi" cuối file).
+  - Khi **tạo** Voucher có `caseId`, hệ thống tự sinh `KgaraCaseSettlement` với `sourceChannel = 'ON_SYSTEM'`, `paymentMethod = 'CASH'`, `payerType` do DTO `payerType` (KH|BH) quyết định; bỏ trống thì `resolveReceiptPayerType` tự gán BH khi phiếu có phần BH và số tiền khớp phần BH còn thiếu (±1.000đ), ngược lại KH; phiếu chi luôn KH. Sửa phiếu giữ payer đã lưu, đổi khi gửi `payerType` hoặc khi đổi phiếu dịch vụ/loại phiếu (tính lại). Response phiếu (tạo, sửa, danh sách) có `payerType` lấy từ settlement. Dữ liệu cũ gắn BH bằng `scripts/backfill-receipt-payer-type.ts` (dry-run mặc định; phiếu mơ hồ chỉ liệt kê). Web: drawer phiếu thu có field "Bên thanh toán" (Tự động / Khách hàng / Bảo hiểm), chỉ hiện với phiếu thu có phiếu dịch vụ. **Phiếu chi** chỉ sinh settlement khi `payment_status = 'PAID'` và `payment_content` không phải `4. HHBH` / `8. Vật tư tiêu hao` (xem mục "Quy tắc phiếu chi" cuối file).
   - Khi **cập nhật** Voucher (thay đổi `amount`, `date`, `caseId`), hệ thống dò tìm `KgaraCaseSettlement` qua `cashflowVoucherId` để cập nhật đồng bộ, hoặc xóa đi (nếu `caseId` bị gỡ), hoặc tạo mới (nếu `caseId` mới được thêm vào).
   - Khi **xóa** Voucher, hệ thống tự động kiểm tra và xóa `KgaraCaseSettlement` tương ứng nếu có.
 - **Mã tự động**: `voucherCode` nếu client không truyền lên sẽ tự sinh theo format: `PT-GARA-YYMMDD-XXX` hoặc `PC-GARA-YYMMDD-XXX`.
@@ -157,7 +157,7 @@ src/kgara-api-core/
 - **kgara-cases**: Lấy thông tin khách hàng (`khachHangName`) từ `KgaraCase` để gán `partnerName` vào phiếu cấn trừ `KgaraCaseSettlement`. Hiển thị `soChungTu` qua selective join.
 
 ## 7. Cấu trúc Source Code Frontend (Web)
-Tuân thủ nghiêm ngặt **Atomic UI** (Folder-per-Component, < 180 LoC/file, co-located tests, No Blue Mandate) theo `/ui-structure`:
+Tuân thủ nghiêm ngặt **Atomic UI** (Folder-per-Component, < 180 LoC/file, co-located tests, No Blue Mandate) theo `/erp-ui-structure`:
 ```text
 src/modules/garage/components/
 ├── molecules/
@@ -317,7 +317,7 @@ Nguồn quy tắc: `helpers/garage-cashflow-payment-rules.ts` (có spec). Áp d�
   - Mặc định truy cập `/garage-cashflow` render `GarageCashflowTab` (Layer 3 Organism), tự động đồng bộ query param hai chiều `?tab=dashboard` (URL gắn `?tab=dashboard`, tương tự `/cashflow`).
   - Gồm 2 Top Tabs: **"Tổng quan"** (`dashboard`) và **"Danh sách phiếu thu chi"** (`vouchers`).
   - Cơ chế **Keep-Alive DOM**: Sử dụng `mountedViewsRef.current` và toggling qua CSS `className={currentTabKey === ... ? "..." : "hidden"}`, đảm bảo không mất state lọc/bảng khi chuyển đổi qua lại giữa Dashboard và Danh sách phiếu.
-- **Cấu trúc Atomic Design 5 tầng (`/ui-structure`, 100% file < 180 LoC)**:
+- **Cấu trúc Atomic Design 5 tầng (`/erp-ui-structure`, 100% file < 180 LoC)**:
   - **L1 Atoms**: `cashflow-kpi-badge` (`CashflowKpiBadge.tsx`, 35 LoC)
   - **L2 Molecules**:
     - `cashflow-legend-item` (`CashflowLegendItem.tsx`, 18 LoC)
@@ -390,3 +390,14 @@ Nguồn quy tắc: `helpers/garage-cashflow-payment-rules.ts` (có spec). Áp d�
 - **Đồng bộ Dự thu khi thu một phần**: sau khi tạo, sửa hoặc xóa phiếu gắn phiếu dịch vụ, `GarageCashflowTransactionService` gọi `GarageHubService.handleCaseReceiptChanged(caseId)` (sau commit, lỗi chỉ log). Nếu case đang Hoàn tất, phiếu Dự thu được đặt bằng `max(0, tien_con_phai_thanh_toan)` của case: thu 8tr trên dự thu 10tr thì còn 2tr; về 0 thì phiếu chuyển `CANCELLED`.
 - **Phiếu tự sinh đã Đã thu/Đã duyệt không còn chặn sinh Dự thu**: `GarageCaseForecastService` chỉ cập nhật phiếu `EXPECTED`/`CANCELLED` mới nhất; phần còn lại tạo phiếu mới.
 - Lưu ý: nếu người dùng tự sửa số tiền phiếu Dự thu mà vẫn để trạng thái Dự thu, lần đồng bộ kế tiếp sẽ đặt lại theo còn phải thu.
+
+## Thu chi v2 song song (2026-11-17)
+- Ghi mới ở v2: `cashflow-vouchers-garage` (đọc) + `debts-flow-garage` (ghi, một transaction phiếu + phân bổ). V2 mirror sang `kgara_cashflow_vouchers`/`kgara_case_settlements` cùng UUID để V1 đọc đúng.
+- V1 → v2: sau commit, `GarageCashflowTransactionService`, `KgaraCaseFinancialController` (3 endpoint settlement) và `SyncCaseService` gọi cổng `GARAGE_LEDGER_PROJECTOR` (ModuleRef lười, `@Optional()`, lỗi chỉ log).
+- Quy tắc trừ nợ giữ như V1 (`shouldHaveSettlement`): thu trừ nợ trừ EXPECTED/CANCELLED; chi chỉ khi PAID và không thuộc opex/hoa hồng. Chi tiết: skill `debts-flow-garage`.
+
+## Quy tắc "đã thu = RECEIPT-only" và số ròng (cập nhật 2026-11-19)
+
+- Đã thu của phiếu = tổng settlement `RECEIPT` nếu phiếu có ít nhất một RECEIPT; chỉ có `PAYMENT` hoặc không có settlement thì giữ `tien_da_thanh_toan` đã lưu (Kgara báo). Dùng `hasReceiptSettlement` / `computeCaseRemaining` (`kgara-case-remaining.helper.ts`), tham số `hasReceipt`. Không dùng `settlements.length > 0` hay `setInfo !== undefined` để chọn nguồn đã thu.
+- Còn phải thu = max(0, số ròng − đã thu). Số ròng của entity đã lưu lấy bằng `resolveStoredNetPayable`, không dùng `extractNetPayableAmount` trên entity (chỉ dùng trên payload Kgara).
+- V1 (`kgara-case-list-query`, `kgara-customer-cases-detail`, sheet xuất) và V2 (`cases-garage`: `CaseSettlementSums.hasReceipt`) cùng quy tắc.

@@ -43,6 +43,21 @@ describe('kgara-case-filter.helper', () => {
     });
   });
 
+  describe('getCaseColumnSelectExpr - cột xe và đối tượng thanh toán', () => {
+    it.each([
+      ['soKhung', '"case"."so_khung"'],
+      ['hangXe', '"case"."hang_xe_name"'],
+      ['hangXeCode', '"case"."hang_xe_code"'],
+      ['dongXe', '"case"."dong_xe_name"'],
+      ['dongXeCode', '"case"."dong_xe_code"'],
+      ['namSanXuat', '"case"."nam_san_xuat"'],
+      ['doiTuongThanhToan', '"case"."doi_tuong_thanh_toan_name"'],
+      ['doiTuongThanhToanCode', '"case"."doi_tuong_thanh_toan_code"'],
+    ])('map %s', (key, expr) => {
+      expect(getCaseColumnSelectExpr(key)).toBe(expr);
+    });
+  });
+
   describe('getCaseServiceColumnSelectExpr', () => {
     it('should map service columns to SQL expressions', () => {
       expect(getCaseServiceColumnSelectExpr('sanPhamCode')).toBe(
@@ -158,8 +173,24 @@ describe('kgara-case-filter.helper', () => {
         ),
         {
           test_plate_in_in_vals: ['51F-123.45', 'PDV-001', '51G-999.99'],
+          // giá trị đã chuẩn hóa để so với biển số chuẩn hóa (không phân biệt dấu câu, hoa/thường)
+          test_plate_in_in_vals_plate: ['51F12345', 'PDV001', '51G99999'],
         },
       );
+      const cond = sqb.where.mock.calls[0][0] as string;
+      expect(cond).toContain('IN (:...test_plate_in_in_vals_plate)');
+      expect(cond).toContain('TRANSLATE("case"."bien_so_xe",');
+    });
+
+    it('bỏ vế so khớp biển chuẩn hóa khi giá trị không còn ký tự hợp lệ', () => {
+      const qb: any = { andWhere: jest.fn().mockReturnThis() };
+      applySingleCaseColumnFilter(qb, 'caseCode', ['---'], 'test_junk');
+      const sqb: any = { where: jest.fn(), orWhere: jest.fn() };
+      qb.andWhere.mock.calls[0][0].whereFactory(sqb);
+
+      const [cond, params] = sqb.where.mock.calls[0];
+      expect(cond).not.toContain('_plate');
+      expect(params).toEqual({ test_junk_in_vals: ['---'] });
     });
 
     it('should handle caseCode with __BLANK__', () => {

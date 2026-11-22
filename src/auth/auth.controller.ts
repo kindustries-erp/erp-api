@@ -14,6 +14,7 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterLocalUserDto } from './dto/register-local-user.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { V1AuthTokensGuard } from './guards/v1-auth-tokens.guard';
 import { ChangePasswordSelfDto } from '../users-admin/dto/user-admin.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 
@@ -23,6 +24,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('login')
+  @UseGuards(V1AuthTokensGuard)
   @ApiOperation({ summary: 'ERP Core local login' })
   @ApiBody({ type: LoginDto })
   login(@Body() body: LoginDto, @Req() req: Request) {
@@ -42,6 +44,7 @@ export class AuthController {
   }
 
   @Post('refresh')
+  @UseGuards(V1AuthTokensGuard)
   @ApiOperation({ summary: 'Làm mới access token bằng refresh token' })
   @ApiBody({ type: RefreshTokenDto })
   refresh(@Body() body: RefreshTokenDto) {
@@ -71,7 +74,7 @@ export class AuthController {
   }
 
   @Post('impersonate')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(V1AuthTokensGuard, JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Login as user (chỉ dành cho admin)' })
   impersonate(

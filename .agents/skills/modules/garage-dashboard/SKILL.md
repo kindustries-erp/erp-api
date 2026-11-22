@@ -53,19 +53,15 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
             - **Badge Cột Hóa đơn & VAT**: Các phiếu không có hóa đơn và không phát sinh thuế GTGT hiển thị badge chuẩn hóa **`"Không VAT"`** (thay vì `"Chưa xuất HĐ (K.Thuế)"`), phong cách outline slate/neutral.
             - Khi ở Tab **Tất cả đối tượng** (`all`): Mỗi nhóm (Doanh nghiệp, Cá nhân, Bảo hiểm) chỉ chứa **1 TABLE TỔNG HỢP DUY NHẤT** (`categorized.all`), không chia nhỏ thành các sub-section hóa đơn.
             - Khi ở **3 Tab con** (`enterprise`, `individual`, `insurance`): Chia thành **3 DRAWER SECTION ĐỘC LẬP** riêng biệt (`Đã xuất hóa đơn`, `Chưa xuất hóa đơn - Có VAT`, `Không xuất hóa đơn`).
-          - **Chuẩn hóa Kiến trúc `/ui-structure`**:
+          - **Chuẩn hóa Kiến trúc `/erp-ui-structure`**:
             - `MonthInvoiceCaseRow.type.ts` (< 80 LoC), `MonthInvoiceCaseRow.helper.ts` (< 150 LoC kèm co-located test), `MonthInvoiceCaseTable.cells.tsx` (< 80 LoC), `MonthInvoiceCaseTable.columns.tsx` (< 165 LoC), `MonthInvoicePartnerTable.tsx` (< 170 LoC), `MonthPartnerCategorizedSection.tsx` (< 150 LoC).
             - Tuân thủ 100% No Blue Mandate và giới hạn cứng < 180 LoC.
         - **Alert Banner Cảnh báo VAT**: Tự động phát hiện và cảnh báo nổi bật các vụ việc có thuế GTGT (`tien_thue > 0`) nhưng chưa đính kèm / chưa xuất hóa đơn điện tử OUT (`vatWarning = true`) kèm số tiền thuế VAT đang treo.
         - **2 Thẻ KPI Tương phản (`MonthPayerKpiGrid`)**: Phân tách rõ rệt nguồn thu từ Khách hàng và từng khoản duyệt bồi thường từ Bảo hiểm.
     - **Cột Phải**: Các `DrawerSection` độc lập (Tổng quan Thu/Chi, Cơ cấu Thu KH vs Thu BH, Thống kê Vụ việc theo Phân loại, Tỷ lệ Hoàn tất) có hỗ trợ **Expand / Collapse** toàn cột phải và từng section con.
   - **Đồng bộ hóa Giao diện & Kiến trúc Drawer Chi tiết Mốc Thời Gian Tuổi Nợ (`GarageTimeHorizonDetailDrawer.tsx`)**:
-    - **Áp dụng toàn bộ UI & Layout của Tháng (`GarageMonthDetailDrawer`)**: Drawer chi tiết của các card tuổi nợ (`criticalOverdue90Plus`, `overdue30To90`, `currentMonth`, `futureReceivable`) sử dụng chuẩn 2-columns `StandardFormDrawer` với 3 tabs:
-      1. Tab 1: **Phân loại Nghiệp vụ** (`TimeHorizonClassificationTab.tsx`): Bảng tổng hợp nhóm nghiệp vụ (Sửa chữa chung, Ký gửi / Nội bộ, OJ Ngoài, Khác).
-      2. Tab 2: **Phân loại theo đối tượng** (`TimeHorizonPartnerTab.tsx`): Ma trận 3 nhóm đối tượng (Doanh nghiệp, Cá nhân, Bảo hiểm) tích hợp công tắc Phải thu / Phải trả, click drilldown vào `GaragePartnerMonthDetailDrawer`.
-      3. Tab 3: **Danh sách vụ việc** (`TimeHorizonCasesTab.tsx`): Bảng danh sách phiếu dịch vụ chi tiết với STT chuẩn 1-based, pagination server-side và mở chi tiết `GarageCaseStandaloneDrawer`.
-    - **Cột phải (`TimeHorizonRightPanel.tsx`)**: Tích hợp cảnh báo hóa đơn VAT chưa xuất (`ReceivablesVatWarningSummary`), cơ cấu Thu KH vs Thu BH (`MonthPayerKpiGrid`), chi phí phát sinh & phải trả (`MonthCostPayableKpiCard`), và đánh giá rủi ro mốc thời gian.
-    - **Backend API mở rộng**: Endpoint `GET /garage-dashboard/monthly-receivables-breakdown` hỗ trợ nhận tham số query `horizon` (hoặc `date_from`, `date_to`), tự động tính toán trả về `trendItem` và phân loại chi tiết theo mốc tuổi nợ thông qua helper chuẩn `/api-structure` (`garage-receivables-classification.helper.ts`).
+    - **Áp dụng toàn bộ UI & Layout của Tháng (`GarageMonthDetailDrawer`)**: Mốc tuổi nợ (`age = CURRENT_DATE − ngày hoàn thành`, v1 và v2 giống nhau, không chồng lấn): `nextWeekDue` ≤ 7; `nextMonthDue` 8–30; `overdue31To60` 31–60; `overdue61To90` 61–90; `criticalOverdue90Plus` > 90. `overdue30To90` là key cũ, deprecated, bằng 31–60 + 61–90 (tương thích client cũ). Dashboard garage hiển thị 5 thẻ (`GarageDebtsAgingCardsGrid`). **Còn phải thu (định nghĩa chung, 2026-11)**: `max(0, tien_co_thue − đã thu)` theo từng phiếu, đã thu = tổng settlement RECEIPT (`RECEIPT_BY_CASE_JOIN`) nếu có, không thì `tien_da_thanh_toan`. Phiếu `exclude_from_debt = true` không tính. Helper: `helpers/kgara-case-remaining.helper.ts` (`computeCaseRemaining`, `CASE_REMAINING_SQL`), dùng cho analytics, bảng phân loại (`garage-receivables-classification.helper.ts`) và tổng của breakdown. Cột `tien_con_phai_thanh_toan` không còn là nguồn của thẻ tuổi nợ (vẫn dùng ở KPI và danh sách khách nợ). Tách KH/BH trong breakdown đọc `payer_type` đã lưu của settlement; writer `garage-cashflow-transaction.service` ghi đúng bên từ 2026-11 (DTO `payerType` KH|BH tùy chọn; bỏ trống thì `resolveReceiptPayerType` tự gán BH khi số tiền khớp phần BH còn thiếu ±1.000đ, ngược lại KH; công thức phần KH/BH của phiếu ở `helpers/kgara-case-dues.helper.ts`, dùng chung với breakdown và script `scripts/backfill-receipt-payer-type.ts`). Dữ liệu cũ đều là 'KH' nên breakdown vẫn giữ lưới an toàn suy ra theo số tiền (`helpers/kgara-receipt-payer-allocation.helper.ts`) cho phiếu mơ hồ chưa gắn BH: khoản BH đã ghi rõ giữ nguyên, khoản khớp phần BH còn thiếu (±1.000đ) tính cho BH, phần còn lại KH trước rồi tới BH. Tổng KH + BH luôn bằng tổng đã thu. Drawer chi tiết của các card tuổi nợ dùng chung component với drawer tháng (`GarageDebtDetailDrawer` trong erp-web, scope `horizon`): cùng 2 tab (Phân loại Nghiệp vụ, Phân loại theo đối tượng), cùng right panel (Cơ cấu Thu KH vs Thu BH, Chi phí phát sinh & Còn nợ). Không còn tab "Danh sách vụ việc" và khối "Đánh giá rủi ro" riêng của mốc; xem danh sách phiếu qua drill-down như tháng. Số liệu mốc đối soát từ `/monthly-receivables-breakdown?horizon=` với phạm vi `tinh_trang_dich_vu = 3`, `ngay_hoan_thanh >= 2026-07-01`, chi nhánh khớp chính xác (cùng điều kiện với analytics).
+    - **Backend API mở rộng**: Endpoint `GET /garage-dashboard/monthly-receivables-breakdown` hỗ trợ nhận tham số query `horizon` (hoặc `date_from`, `date_to`), tự động tính toán trả về `trendItem` và phân loại chi tiết theo mốc tuổi nợ thông qua helper chuẩn `/erp-api-structure` (`garage-receivables-classification.helper.ts`).
   - Phân tách chi tiết 2 nhóm hóa đơn: **Có HĐ** (`raw_data->>'TienThueKH' > 0` / `hd_phieu_dich_vu_id IS NOT NULL`) và **Không HĐ** trên cả cấp Tháng, nhóm Nghiệp vụ và từng Đối tượng HĐ.
   - Tích hợp đầy đủ từ điển đa ngôn ngữ i18n (`garage:progress`) cho cả tiếng Việt và tiếng Anh.
 - **Báo cáo Lợi nhuận P&L theo Tháng Đơn Lẻ (`getPnlReport` & `GaragePnlSection.tsx`)**:
@@ -75,7 +71,7 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
   - Combobox **Kỳ báo cáo (Tháng/Năm)** đặt bên trong Card Header (bên trái), đối xứng với nút **Xuất Excel** (bên phải), loại bỏ divider thừa.
   - **Switch Chế độ Xem Kép (PnlViewModeSwitch - Toàn bộ ⇄ Riêng OJ)**:
     - Bố trí trực tiếp trên Card Header của `GaragePnlSection`, nằm giữa bộ chọn kỳ tháng và nút Xuất Excel.
-    - Molecule độc lập `PnlViewModeSwitch.tsx` (< 180 LoC, folder-per-component) theo chuẩn `/ui-structure`, tương đồng UX với switch ở card Phân Tích Xu Hướng & Cơ Cấu Chuyển Đổi.
+    - Molecule độc lập `PnlViewModeSwitch.tsx` (< 180 LoC, folder-per-component) theo chuẩn `/erp-ui-structure`, tương đồng UX với switch ở card Phân Tích Xu Hướng & Cơ Cấu Chuyển Đổi.
     - Hai chế độ hiển thị:
       - **Toàn bộ** (`isOjOnly = false`, mặc định): Xem kết quả kinh doanh chung toàn xưởng; hiển thị các hàng phân cấp con `Trong đó: Phát sinh liên quan OJ` (1.1.1, 2.1.1, 3.1, 5.1.1, 6.1, 7.1.1, 8.1) để đối soát đóng góp của mảng OJ.
       - **Riêng OJ** (`isOjOnly = true`): Chỉ hiển thị kết quả kinh doanh của riêng mảng OJ. Hàng chính bind trực tiếp từ `report.oj`, `prevReport.oj`, `prev2Report.oj`. Tự động ẩn toàn bộ các dòng con `Trong đó: Phát sinh liên quan OJ`, lọc danh sách chi phí vận hành (OPEX) và chi phí trực tiếp nhập tay chỉ giữ lại các mục có phát sinh OJ (`ojAmount > 0`), có fallback hint thân thiện nếu kỳ chưa có chi phí phân bổ cho OJ.
@@ -103,16 +99,23 @@ Module `garage-dashboard` (được hiện thực tại `src/kgara-api-core/`) l
   - **Cơ chế Thu gọn / Mở rộng (Expand / Collapse)**:
     - **Từng mục Level 1**: Tích hợp nút `ChevronDown` / `ChevronRight` tại `PnlLevel1HeaderCell`, click để ẩn / hiện các dòng con cấp 2 và cấp 3 của riêng mục đó.
     - **Toàn cục (Global Toggle)**: Nút `ChevronsUpDown` trên Header cột Danh Mục cho phép 1-click **Thu gọn tất cả** (đưa bảng về 8 dòng số La Mã tổng quan) hoặc **Mở rộng tất cả** (bung toàn bộ chi tiết).
-  - **Chuẩn hóa Kiến trúc `/ui-structure`**:
+  - **Chuẩn hóa Kiến trúc `/erp-ui-structure`**:
     - `usePnlCollapseState.ts`: Hook quản lý map đóng/mở 8 sections.
     - `PnlLevel1HeaderCell.tsx`: Molecule chuẩn hóa hiển thị chevron, tiêu đề La Mã và icon bên phải.
     - `PnlOpexItemRow.tsx`: Molecule bóc tách từ `PnlOpexRows.tsx` để khống chế 100% files dưới 180 LoC.
 - **Chỉ số KPI Sparklines theo Chu kỳ (`getCheckpointKpis` & `GarageStatsCards.tsx`)**:
   - Phân tích 3 chu kỳ: **Tháng này** (Sparkline 6 tháng), **Tuần này** (Sparkline 4 tuần), **Hôm nay** (Sparkline 7 ngày) theo Ngày hoàn thành.
+  - Cung cấp thông số các giai đoạn tiếp nhận dịch vụ (`stages`: `intake`, `quotation`, `inProgress`, `completed`, `cancelled`) kèm số tiền phát sinh theo từng giai đoạn (`intakeAmount`, `quotationAmount`, `inProgressAmount`, `completedAmount`) và cơ cấu phân loại xe (`classifications`, `byStage`).
   - Tooltip Sparkline hiển thị 2 dòng tinh gọn và chuẩn xác:
     - Card Doanh thu: **Doanh thu thuần** & **Doanh thu có VAT** (khớp số liệu với bảng chi tiết).
     - Card Chi phí: **Chi phí thuần** & **Chi phí có VAT**.
   - Hỗ trợ click-to-drilldown xem danh sách phiếu dịch vụ chi tiết hoàn thành trong kỳ (`getCheckpointCases`).
+  - **Drilldown Phân Loại ERP & Phễu Chuyển Đổi (`getCheckpointCases` kèm `classification` & `status`)**:
+    - Khi `classification` được cung cấp (khác `'ALL'`), API tự động kích hoạt **chế độ Funnel**:
+      - Không yêu cầu `c.ngay_hoan_thanh_cong_viec IS NOT NULL`, mà sử dụng khoảng thời gian trên `COALESCE(c.ngay_hoan_thanh_cong_viec, c.ngay_phat_sinh, c.created_at)` để bao quát toàn bộ 5 giai đoạn phễu.
+      - Hỗ trợ tham số `status` (`ALL`, `QUOTATION`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`).
+      - Trả về `funnelCounts` (`total`, `quotation`, `inProgress`, `completed`, `cancelled`) và `tinhTrangDichVu` trong từng dòng kết quả.
+    - Khi `classification` không truyền hoặc là `'ALL'` (click Card Doanh thu): giữ nguyên 100% quy tắc hoàn thành nghiêm ngặt (`c.ngay_hoan_thanh_cong_viec IS NOT NULL`).
 - **Pipeline Dự Thu & Phễu Chuyển Đổi Dịch Vụ (`GarageConversionFunnelCard.tsx`)**:
   - Hub phân tích 3 tầng tích hợp toàn diện:
     - **Tầng 1**: 4 Cards tổng quan tiếp nhận & tiến độ (Tổng tiếp nhận, Đang xử lý, Đã hoàn thành, Hủy) kèm sub-badge Dự thu Hôm nay & Tháng này và thanh tỷ lệ chuyển đổi trực quan.
@@ -217,7 +220,7 @@ Resource RBAC: `garage`
 | :--- | :--- | :--- | :--- | :--- |
 | `GET` | `/stats` | `{ resource: 'garage', action: 'read' }` | `date_from`, `date_to` | Xu hướng tháng, tiến độ thu/chi & phân bổ trạng thái |
 | `GET` | `/checkpoint-kpis` | `{ resource: 'garage', action: 'read' }` | — | KPIs Sparkline Tháng/Tuần/Hôm nay |
-| `GET` | `/checkpoint-cases` | `{ resource: 'garage', action: 'read' }` | `date_from`, `date_to`, `page`, `pageSize` | Danh sách vụ việc chi tiết theo checkpoint |
+| `GET` | `/checkpoint-cases` | `{ resource: 'garage', action: 'read' }` | `date_from`, `date_to` (bắt buộc, `YYYY-MM-DD`), `page`, `pageSize`, `search`, `payment_status` (`all`/`remaining`/`paid`/`unpaid`), `classification`, `sort_by`, `sort_order` (`ASC`/`DESC`) | Danh sách vụ việc chi tiết theo checkpoint. Validate bằng `GarageCheckpointCasesQueryDto` (`src/kgara-api-core/dto/garage-checkpoint-cases-query.dto.ts`): thiếu ngày hoặc tham số lạ → 400, không còn 500 |
 | `GET` | `/customers` | `{ resource: 'garage', action: 'read' }` | Query pagination, filters, sort | Danh sách khách hàng kèm doanh thu, lãi gộp & nợ |
 | `POST` | `/export/background` | `garage:read` + `garage_debts:read` | body `{ from?, to?, reportType? }` | Tạo job nền xuất báo cáo Garage theo kỳ (kèm `GET /export/background/history`, `GET /export/background/:jobId/download`, `SSE /export/progress/stream`). Thay endpoint cũ `GET /export` đã xóa |
 | `GET` | `/opex` | `{ resource: 'garage', action: 'read' }` | `year`, `month`, `page`, `pageSize`, `sorts`, `columnFilters`, `columnSearch` | Danh sách chi phí vận hành có phân trang, sort, filter |
@@ -276,7 +279,7 @@ Resource RBAC: `garage`
     - [`garageOpexApi.ts`](erp/erp-web/src/modules/garage/api/garageOpexApi.ts)
   - Custom Hook:
     - [`useGarageOpexList.ts`](erp/erp-web/src/modules/garage/hooks/useGarageOpexList.ts)
-  - Pages & Components (Chuẩn `/ui-structure`):
+  - Pages & Components (Chuẩn `/erp-ui-structure`):
     - [`pages/GarageDashboard/`](erp/erp-web/src/modules/garage/pages/GarageDashboard/) (Trang Dashboard chính: Page entry, DateFilterToolbar, useGarageDashboardLogic)
     - [`components/GarageStatsCards/`](erp/erp-web/src/modules/garage/components/GarageStatsCards/) (6 KPI Cards & Sparklines)
     - [`components/GaragePnlSection/`](erp/erp-web/src/modules/garage/components/GaragePnlSection/) (Section Báo cáo P&L dạng bảng phân cấp 8 tầng tài chính, bộ lọc Combobox Tháng/Năm, xuất Excel P&L)
@@ -300,3 +303,32 @@ Resource RBAC: `garage`
 > **Bảng màu chart Excel (2026-10-17)**: `CHART_PALETTE` (`src/common/xlsx-charts/xlsx-chart.types.ts`) đổi sang tông chart Dòng tiền web: `059669, EA580C, 475569, E11D48, 7C3AED, 0D9488, CA8A04` (+3 màu dự phòng). Đường `% Lợi nhuận gộp` ở sheet Báo cáo lợi nhuận dùng slot teal `[5]`. Mọi sheet có chart dùng chung bảng này.
 
 > **Phễu chuyển đổi (2026-10-17)**: `conversionFunnel` / `conversionFunnelByMonth` (`garage-dashboard-stats.service.ts`) có thêm `quotation {count, amount, rate}` và `byClassification.*.quotationCount/quotationAmount`. Báo giá = phiếu chưa hoàn thành, chưa hủy và thỏa `quotationStatusSql(alias)` (`helpers/kgara-case-filter.helper.ts`, cùng điều kiện tab Báo giá của danh sách vụ việc); `inProgress*` chỉ còn phiếu chưa hoàn thành không phải báo giá.
+
+## 8. Đếm theo XE (biển số), không đếm theo phiếu (2026-11-20)
+
+Một xe có thể có nhiều lệnh, nên mọi con số "xe" của dashboard là **số biển số khác nhau**, không phải số phiếu.
+
+- **Chuẩn hóa biển số (MỘT hàm duy nhất)**: `src/common/utils/license-plate.ts`. TS `normalizePlate(plate)`: bỏ dấu tiếng Việt, `Đ`/`đ` thành `D`, viết hoa, chỉ giữ `A-Z0-9` (`51a-123.45` thành `51A12345`; `29-MĐ1 123.45` thành `29MD112345`; `null` hoặc `---` thành `""`). SQL `normalizedPlateSql(...columns)` = `REGEXP_REPLACE(UPPER(TRANSLATE(col, <chữ có dấu>, <chữ gốc>)), '[^A-Z0-9]', '', 'g')` (bảng TRANSLATE sinh từ `normalizePlate`; nhiều cột thì `COALESCE`; tên cột whitelist, không nối input). Mọi chỗ so khớp/tìm/gom biển (dashboard, `kgara-case-filter.helper`, `kgara-case-list-query`, `garage-checkpoint-case-filters` search, smart-settlement, cashflow insight/duplicate, invoice netoff) phải dùng hàm này; KHÔNG viết `REGEXP_REPLACE`/`cleanLicensePlate` riêng. Giá trị hiển thị vẫn là chuỗi gốc.
+- **Khóa xe**: `src/common/utils/vehicle-count-sql.ts`. SQL `vehicleKeySql(alias, plateColumn)` (cột whitelist `bien_so_xe` | `license_plate`) = `COALESCE(NULLIF(<normalizedPlateSql>, ''), id::text)`, `countVehiclesSql(keySql, cond?)`; bản TS `vehicleKey(plate, id)`, `countDistinctVehicles(items)`. Phiếu thiếu biển = 1 xe riêng (khóa = id phiếu).
+- **Mỗi giai đoạn đếm xe riêng**: xe có hai lệnh ở hai giai đoạn xuất hiện ở cả hai thẻ, nên **tổng các giai đoạn có thể lớn hơn tổng xe**. Tổng toàn kỳ và tổng theo tháng là truy vấn `COUNT(DISTINCT)` riêng, không cộng dồn từ các dòng nhỏ.
+- **Hợp đồng V1 (giữ tên field, đổi nghĩa sang xe)**: `count`, `totalCount`, `*Count` của `/checkpoint-kpis`, `/checkpoint-cases` (`summary`, `classificationSummary`) và `/stats` (`conversionFunnel*`, `statusDistribution*`, `classificationDistribution*`) đều là số xe. Thêm `totalCases` (số lệnh) ở KPI kỳ và `summary.totalCases` của `/checkpoint-cases`. Tiền vẫn cộng theo lệnh.
+- **Hai cách đếm trong `/checkpoint-kpis` (dễ nhầm)**:
+  - `month.stages.totalIntake` = số xe khác nhau trong cửa sổ `COALESCE(ngày hoàn thành, ngày phát sinh, ngày tạo)`. **Đây là số hiển thị ở thẻ "XE THÁNG NÀY"**, cùng cửa sổ với 4 thẻ giai đoạn.
+  - `month.totalCount`/`totalCases` = xe/lệnh **đã hoàn thành** trong kỳ (theo ngày hoàn thành, không hủy). Cùng cửa sổ với tiền (`totalTienCoThue`, `totalRevenue`). Không hiển thị trên thẻ.
+- **Chưa đổi**: các field `caseCount*` của xu hướng tháng trong `garage-dashboard-stats.service.ts` vẫn đếm phiếu (ngoài phạm vi).
+- **SQL tách file** (mỗi file dưới ngưỡng): `helpers/garage-checkpoint-stages.sql.ts`, `helpers/garage-dashboard-funnel.sql.ts`.
+- **Excel bảng kê dashboard**: KPI "SỐ XE (N lệnh)" thay "SỐ PHIẾU DỊCH VỤ" (`countVehicles` trong `garage-cases-dashboard-data.helper.ts`, giá trị tĩnh vì Excel không có COUNT DISTINCT gọn); 10 thẻ KPI và layout không đổi. Sheet 1 vẫn mỗi dòng một lệnh.
+- **Module V2 `cases-dashboard-garage`** (`src/v2/modules/cases-dashboard-garage/`, route `api/v2/cases-dashboard-garage`, RBAC `ErpResource.GARAGE` READ, đọc `cases_garage`, không bảng mới) chỉ còn **2 endpoint** (đã gom từ 4: `period-kpis`, `funnel`, `cases`, `vehicles` đã bỏ, trả 404): `GET /overview?date&date_from&date_to` trả `{period, funnel}` (KPI tháng/tuần/ngày + dự thu, và phễu toàn kỳ/theo tháng/theo phân loại, facade chạy `Promise.all`), và `GET /?date_from&date_to&stage&classification&page&pageSize` (list chuẩn v2, mỗi dòng MỘT XE kèm `cases[]`). **Ngoại lệ list chuẩn**: `GET /` không trả `summaries`/`extraData` vì không có cột số cần tổng toàn bảng; tổng nằm ở `/overview`. Giai đoạn lấy từ `CaseStatus`, không ILIKE như V1. Bao gồm cả xe `NATIVE`, nên số xe V2 có thể lớn hơn V1 đúng bằng số xe NATIVE.
+  - `totalVehicles` = xe trong cửa sổ ngày (như `totalIntake` của V1), bỏ lệnh hủy. `totalCases` và tiền = lệnh hoàn thành trong kỳ (như `totalCount` của V1).
+- **Smoke đối chiếu V1 và V2** (chỉ đọc): `bun run test:smoke:garage-dashboard` (KPI kỳ, giai đoạn, phễu tháng). Chênh lệch số xe/tiền do NATIVE được ghi KỲ VỌNG; V2 nhỏ hơn V1 là LỖI.
+
+### 8.1. Drill-down theo XE (2026-11-20, Phase 5)
+
+- **V1 `GET /checkpoint-cases?group_by=case|vehicle`** (mặc định `case`, hợp đồng cũ không đổi). `group_by=vehicle`: mỗi item một xe `{vehicleKey, bienSoXe, khachHangName, classification, caseCount, soChungTus[], doanhThu, chiPhi, loiNhuan, tienCoThue, tienDaThanhToan, tienConPhaiThanhToan, hasInvoice, ngayHoanThanhCongViec, ngayPhatSinh, cases[]}`; `total`/`page`/`totalPages` tính theo xe; `summary`/`classificationSummary` giữ nguyên; response có `groupBy`. Sort theo xe: cột tiền = SUM, cột ngày = MAX, `soChungTu` = MIN, mặc định = mốc kỳ mới nhất (whitelist, không nối input vào SQL). Mỗi lệnh ở dạng theo-lệnh có thêm `vehicleKey`.
+- File: `kgara-api-core/helpers/garage-checkpoint-case-filters.ts` (bộ lọc dùng chung), `garage-checkpoint-case-item.mapper.ts`, `garage-checkpoint-vehicles.query.ts` (3 truy vấn: COUNT DISTINCT khóa xe, trang khóa xe GROUP BY, lệnh của các xe trong trang) + spec mỗi file; spec service `services/__tests__/garage-checkpoint-cases-group.spec.ts`.
+- **V2 `GET api/v2/cases-dashboard-garage`** (bộ lọc `date_from`, `date_to`, `stage`, `classification`, `page`, `pageSize` tối đa 100): list `{items, pagination}`, item `{vehicleKey, licensePlate, customerName, caseCount, caseCodes[], amount, latestAt, cases[]}`; `pagination.total` = số xe. Không còn route theo từng lệnh.
+- Lưu ý: biển viết khác dấu (`51D88801` và `51D-888.01`) gộp một xe; phiếu không biển là một xe riêng (khóa = id).
+- **V1 `pageSize`** của `/checkpoint-cases` giới hạn `@Max(500)` (`CHECKPOINT_CASES_MAX_PAGE_SIZE`), `listCheckpointVehicles` kẹp thêm ở service. `search` so biển theo `normalizedPlateSql` (gõ `51b75695` ra `51B-756.95`).
+- **QC**: smoke `bun run test:smoke:garage-dashboard` (đọc `/overview` và `GET /`) kiểm số hàng drill-down = số xe của thẻ cùng giai đoạn (V1 4 giai đoạn, V2 3 giai đoạn), mỗi khóa xe một hàng, Σ `caseCount` = Σ lệnh lồng, và tìm biển không dấu gạch ra đúng xe.
+- Excel dashboard: Sheet 1 giữ mỗi dòng một lệnh; KPI "SỐ XE (N lệnh)" đếm xe distinct (xem 2.6.2).
+

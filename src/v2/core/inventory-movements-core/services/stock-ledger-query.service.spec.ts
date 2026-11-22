@@ -1,0 +1,295 @@
+import { StockLedgerQueryService } from './stock-ledger-query.service';
+
+interface FakeQb {
+  alias: string;
+  [key: string]: any;
+}
+
+/** Query builder giả. `alias` quyết định nó được trả cho bảng b (số dư) hay t (thẻ kho). */
+function chain(
+  alias: 'b' | 't',
+  result: {
+    many?: unknown[];
+    total?: number;
+    raw?: unknown;
+    rows?: unknown[];
+    count?: number;
+  },
+): FakeQb {
+  const qb: FakeQb = { alias, expressionMap: { orderBys: {} } };
+  for (const m of [
+    'where',
+    'andWhere',
+    'addSelect',
+    'addOrderBy',
+    'groupBy',
+    'skip',
+    'take',
+    'leftJoin',
+  ]) {
+    qb[m] = jest.fn(() => qb);
+  }
+  qb.select = jest.fn(() => qb);
+  qb.orderBy = jest.fn((col: string) => {
+    qb.expressionMap.orderBys = { [col]: 'ASC' };
+    return qb;
+  });
+  qb.getManyAndCount = jest.fn(async () => [
+    result.many ?? [],
+    result.total ?? 0,
+  ]);
+  qb.getMany = jest.fn(async () => result.many ?? []);
+  qb.getRawOne = jest.fn(async () => result.raw);
+  qb.getRawMany = jest.fn(async () => result.rows ?? []);
+  qb.getCount = jest.fn(async () => result.count ?? 0);
+  return qb;
+}
+
+/** Trả query builder theo alias, lấy lần lượt theo thứ tự đã khai báo cho mỗi alias. */
+function build(qbs: FakeQb[]) {
+  const createQueryBuilder = jest.fn((alias: string) => {
+    const i = qbs.findIndex((q) => q.alias === alias);
+    return qbs.splice(i, 1)[0];
+  });
+  const getRepository = jest.fn((_table: unknown) => ({ createQueryBuilder }));
+  const svc = new StockLedgerQueryService({ getRepository } as never, {
+    ledgerScope: 'GARAGE',
+    costingMethod: 'WEIGHTED_AVG',
+    tables: { balance: 'B', transaction: 'T', costLayer: 'C' } as never,
+  });
+  return { svc, getRepository };
+}
+
+describe('StockLedgerQueryService', () => {
+  it('lists balances scoped by config, with summaries and tab counts in extraData', async () => {
+    const list = chain('b', {
+      many: [
+        {
+          id: '1',
+          branchId: null,
+          itemCode: 'A',
+          itemName: 'Item A',
+          unit: 'Cái',
+          qtyOnHand: '3.000',
+          avgCost: '10.00',
+          inventoryValue: '30.00',
+          updatedAt: new Date(),
+        },
+      ],
+      total: 1,
+    });
+    const pageMovements = chain('t', {
+      rows: [
+        {
+          itemCode: 'A',
+          qtyReceived: '5',
+          qtyIssued: '2',
+          qtyAdjusted: '-1',
+        },
+      ],
+    });
+    const sums = chain('b', {
+      raw: { itemCount: '1', totalQty: '3.000', totalValue: '30.00' },
+    });
+    const tabs = [0, 1, 2, 3].map((i) => chain('b', { count: i }));
+    const codes = chain('b', { rows: [{ itemCode: 'A' }] });
+    const totalMovements = chain('t', {
+      rows: [{ qtyReceived: '5', qtyIssued: '2', qtyAdjusted: '-1' }],
+    });
+    // Thứ tự gọi bảng b: danh sách, mã khớp tab, tổng, 4 tab; bảng t: trang, tổng
+    const { svc } = build([
+      list,
+      codes,
+      sums,
+      ...tabs,
+      pageMovements,
+      totalMovements,
+    ]);
+    const out = await svc.listBalances({
+      stockTab: 'IN_STOCK',
+      sort: '-qtyOnHand,bad;x',
+      search: 'a_b',
+    });
+    expect(list.where).toHaveBeenCalledWith('b.ledgerScope = :scope', {
+      scope: 'GARAGE',
+    });
+    expect(list.andWhere).toHaveBeenCalledWith('b.qtyOnHand > 0');
+    expect(list.orderBy).toHaveBeenCalledWith('b.qtyOnHand', 'DESC');
+    expect(out.items[0].qtyOnHand).toBe(3);
+    expect(out.items[0]).toMatchObject({
+      qtyReceived: 5,
+      qtyIssued: 2,
+      qtyAdjusted: -1,
+    });
+    expect(out.summaries.qtyOnHand).toEqual({
+      total: 3,
+      pageSubtotal: 3,
+      cumulative: 3,
+    });
+    expect(out.summaries.inventoryValue).toEqual({
+      total: 30,
+      pageSubtotal: 30,
+      cumulative: 30,
+    });
+    expect(out.summaries.qtyReceived).toMatchObject({ total: 5 });
+    expect(out.summaries.qtyIssued).toMatchObject({ total: 2 });
+    expect(out.summaries.qtyAdjusted).toMatchObject({ total: -1 });
+    expect(out.extraData.tabCounts).toEqual({
+      ALL: 0,
+      IN_STOCK: 1,
+      OUT_OF_STOCK: 2,
+      NEGATIVE: 3,
+    });
+  });
+
+  it('defaults sort to itemCode and skips movement queries when no rows match', async () => {
+    const list = chain('b', {});
+    const sums = chain('b', { raw: {} });
+    const tabs = [0, 1, 2, 3].map(() => chain('b', {}));
+    const codes = chain('b', { rows: [] });
+    const { svc, getRepository } = build([list, codes, sums, ...tabs]);
+    const out = await svc.listBalances({});
+    expect(list.orderBy).toHaveBeenCalledWith('b.itemCode', 'ASC');
+    expect(out.summaries.qtyReceived).toMatchObject({
+      total: 0,
+      pageSubtotal: 0,
+    });
+    expect(out.summaries.qtyIssued).toMatchObject({ total: 0 });
+    expect(out.summaries.qtyAdjusted).toMatchObject({ total: 0 });
+    // 7 lần dựng truy vấn số dư (danh sách, tổng, 4 tab, mã); không có truy vấn thẻ kho nào
+    expect(getRepository).toHaveBeenCalledTimes(7);
+    const txCalls = getRepository.mock.calls.filter((c) => c[0] === 'T');
+    expect(txCalls).toHaveLength(0);
+  });
+
+  it('lists transactions by item within the configured scope with running balance', async () => {
+    const rawRows = [
+      {
+        id: 'tx1',
+        transactionDate: new Date('2026-01-01'),
+        transactionType: 'RECEIPT',
+        documentType: 'PURCHASE_RECEIPT',
+        documentId: 'd1',
+        qtyIn: '10',
+        qtyOut: '0',
+        unitCost: '100',
+      },
+      {
+        id: 'tx2',
+        transactionDate: new Date('2026-01-02'),
+        transactionType: 'ISSUE',
+        documentType: 'ISSUE',
+        documentId: 'd2',
+        qtyIn: '0',
+        qtyOut: '4',
+        unitCost: '100',
+      },
+    ];
+    const qb = chain('t', { many: rawRows, total: 2 });
+    const { svc } = build([qb]);
+    const res = await svc.listTransactions({
+      itemCode: 'A',
+      costingMethod: 'WEIGHTED_AVG',
+    });
+
+    expect(qb.where).toHaveBeenCalledWith('t.ledgerScope = :scope', {
+      scope: 'GARAGE',
+    });
+    expect(qb.andWhere).toHaveBeenCalledWith('t.itemCode = :itemCode', {
+      itemCode: 'A',
+    });
+    expect(qb.orderBy).toHaveBeenCalledWith('t.transactionDate', 'ASC');
+
+    // Kết quả phân trang đảo ngược (mới nhất tx2 lên đầu)
+    expect(res.items).toHaveLength(2);
+    expect(res.items[0].id).toBe('tx2');
+    expect(res.items[0].balanceQty).toBe(6);
+    expect(res.items[1].id).toBe('tx1');
+    expect(res.items[1].balanceQty).toBe(10);
+  });
+
+  it('filters balances by column_filters and column_operators correctly', async () => {
+    const list = chain('b', { many: [], total: 0 });
+    const codes = chain('b', { rows: [] });
+    const sums = chain('b', { raw: {} });
+    const tabs = [0, 1, 2, 3].map(() => chain('b', {}));
+    const { svc } = build([list, codes, sums, ...tabs]);
+
+    await svc.listBalances({
+      column_filters: JSON.stringify({ unit: ['Cái'], itemCode: ['ITEM-01'] }),
+      column_operators: JSON.stringify({
+        qtyOnHand: { operator: 'gt', value: '0' },
+      }),
+    });
+
+    expect(list.andWhere).toHaveBeenCalledWith(
+      expect.stringContaining('b.unit IN (:...bf_select_'),
+      expect.objectContaining({ bf_select_0: ['Cái'] }),
+    );
+    expect(list.andWhere).toHaveBeenCalledWith(
+      expect.stringContaining('b.itemCode IN (:...bf_select_'),
+      expect.objectContaining({ bf_select_1: ['ITEM-01'] }),
+    );
+    expect(list.andWhere).toHaveBeenCalledWith('b.qtyOnHand > :bf_operator_0', {
+      bf_operator_0: 0,
+    });
+  });
+
+  it('finds balance column options with search and pagination', async () => {
+    const countQb = chain('b', { raw: { count: 2 } });
+    const dataQb = chain('b', {
+      rows: [{ value: 'Cái' }, { value: 'Bộ' }],
+    });
+    const { svc } = build([countQb, dataQb]);
+
+    const res = await svc.findBalanceColumnOptions({
+      column: 'unit',
+      search: 'Cá',
+      page: 1,
+      pageSize: 20,
+    });
+
+    expect(countQb.andWhere).toHaveBeenCalledWith('b.unit IS NOT NULL');
+    expect(countQb.andWhere).toHaveBeenCalledWith('b.unit ILIKE :search', {
+      search: '%Cá%',
+    });
+    expect(res.items).toEqual([
+      { label: 'Cái', value: 'Cái' },
+      { label: 'Bộ', value: 'Bộ' },
+    ]);
+    expect(res.pagination.total).toBe(2);
+  });
+
+  it('finds numeric column options with numeric order and normalized values', async () => {
+    const countQb = chain('b', { raw: { count: 3 } });
+    const dataQb = chain('b', {
+      rows: [{ num_val: '0.000' }, { num_val: '5.000' }, { num_val: '10' }],
+    });
+    const { svc } = build([countQb, dataQb]);
+
+    const res = await svc.findBalanceColumnOptions({
+      column: 'qtyReceived',
+      page: 1,
+      pageSize: 20,
+    });
+
+    expect(dataQb.orderBy).toHaveBeenCalledWith('num_val', 'ASC');
+    expect(res.items).toEqual([
+      { label: '0', value: '0' },
+      { label: '5', value: '5' },
+      { label: '10', value: '10' },
+    ]);
+    expect(res.pagination.total).toBe(3);
+  });
+
+  it('returns empty page for unsupported column options without throwing', async () => {
+    const { svc } = build([]);
+    const res = await svc.findBalanceColumnOptions({
+      column: 'nonExistentColumn',
+      page: 1,
+      pageSize: 20,
+    });
+    expect(res.items).toEqual([]);
+    expect(res.pagination.total).toBe(0);
+  });
+});

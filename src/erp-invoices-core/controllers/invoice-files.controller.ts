@@ -19,7 +19,8 @@ import { ApiBearerAuth, ApiConsumes, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
-import { ErpResource, ErpAction } from '@/rbac-core/enums';
+import { ErpResource, ErpAction } from '@/v2/core/rbac-core';
+import { DeprecatedV1FileWrite } from '@/common/decorators/deprecated-v1-file-write.decorator';
 import { ErpInvoicesCoreService } from '../erp-invoices-core.service';
 import type { ErpInvoiceQuery } from '../erp-invoices-core.service';
 
@@ -54,6 +55,7 @@ export class InvoiceFilesController {
    * POST /api/v1/erp-invoices/:id/upload-url
    * Body: { fileType: 'pdf' | 'xml' }
    */
+  @DeprecatedV1FileWrite('Tạo URL upload PDF/XML')
   @Post(':id/upload-url')
   getUploadUrl(
     @Param('id') id: string,
@@ -68,6 +70,7 @@ export class InvoiceFilesController {
   /**
    * POST /api/v1/erp-invoices/:id/pdfs
    */
+  @DeprecatedV1FileWrite('Upload PDF')
   @Post(':id/pdfs')
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(
@@ -115,6 +118,7 @@ export class InvoiceFilesController {
     resource: ErpResource.INVOICES,
     action: ErpAction.UPDATE,
   })
+  @DeprecatedV1FileWrite('Liên kết file đính kèm')
   @Post(':id/attachments/link')
   linkAttachment(
     @Param('id') id: string,
@@ -127,6 +131,7 @@ export class InvoiceFilesController {
     resource: ErpResource.INVOICES,
     action: ErpAction.UPDATE,
   })
+  @DeprecatedV1FileWrite('Gỡ liên kết file đính kèm')
   @Delete(':id/attachments/:attachmentId')
   unlinkAttachment(
     @Param('id') id: string,
@@ -220,6 +225,7 @@ export class InvoiceFilesController {
     );
   }
 
+  @DeprecatedV1FileWrite('Xóa PDF')
   @Delete(':id/pdfs/:key')
   deletePdf(@Param('id') id: string, @Param('key') key: string) {
     return this.service.deletePdf(id, decodeURIComponent(key));

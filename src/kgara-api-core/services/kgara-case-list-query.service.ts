@@ -1,12 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Brackets, DataSource } from 'typeorm';
+import {
+  normalizePlate,
+  normalizedPlateSql,
+} from '@/common/utils/license-plate';
 import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
 import { KgaraCaseLinkedInvoice } from '../entities/kgara_case_linked_invoice.entity';
 import { KgaraSuppliersDebtQueryEngine } from './engines/kgara-suppliers-debt-query.engine';
-import { extractNetPayableAmount } from '../kgara-sync.service';
+import { resolveStoredNetPayable } from '../utils/kgara-parser.util';
 import { EntityCustomFieldsHelper } from '../../module-config/helpers/entity-custom-fields.helper';
 import {
   getCaseColumnSelectExpr,
@@ -51,7 +55,7 @@ export interface GrossProfitReportParams {
 
 /**
  * Sub-Service quản lý toàn bộ câu truy vấn Danh sách Vụ việc, Distinct Options & Báo cáo Lãi gộp
- * Tách biệt theo chuẩn /api-structure để giải phóng Controller khỏi logic TypeORM QueryBuilder.
+ * Tách biệt theo chuẩn /erp-api-structure để giải phóng Controller khỏi logic TypeORM QueryBuilder.
  */
 @Injectable()
 export class KgaraCaseListQueryService {
@@ -123,7 +127,9 @@ export class KgaraCaseListQueryService {
           qb.where('case.soChungTu ILIKE :q', { q: `%${q}%` })
             .orWhere('case.bienSoXe ILIKE :q', { q: `%${q}%` })
             .orWhere('case.khachHangName ILIKE :q', { q: `%${q}%` })
-            .orWhere('case.khachHangCode ILIKE :q', { q: `%${q}%` });
+            .orWhere('case.khachHangCode ILIKE :q', { q: `%${q}%` })
+            .orWhere('case.hangXeName ILIKE :q', { q: `%${q}%` })
+            .orWhere('case.dongXeName ILIKE :q', { q: `%${q}%` });
 
           if (isNumeric) {
             qb.orWhere('case.tienCoThue = :qNum', { qNum: qNumber }).orWhere(
@@ -155,7 +161,7 @@ export class KgaraCaseListQueryService {
     const caseIds = data.map((item) => item.id).filter(Boolean);
     const settlementsMap: Record<
       string,
-      { receipts: number; payments: number }
+      { receipts: number; payments: number; hasReceipt: boolean }
     > = {};
     const linkedInvoiceCounts: Record<
       string,
@@ -175,10 +181,15 @@ export class KgaraCaseListQueryService {
 
       for (const row of settlementRows) {
         if (!settlementsMap[row.caseId]) {
-          settlementsMap[row.caseId] = { receipts: 0, payments: 0 };
+          settlementsMap[row.caseId] = {
+            receipts: 0,
+            payments: 0,
+            hasReceipt: false,
+          };
         }
         if (row.settlementType === 'RECEIPT') {
           settlementsMap[row.caseId].receipts += Number(row.totalAmount || 0);
+          settlementsMap[row.caseId].hasReceipt = true;
         } else if (row.settlementType === 'PAYMENT') {
           settlementsMap[row.caseId].payments += Number(row.totalAmount || 0);
         }
@@ -220,13 +231,13 @@ export class KgaraCaseListQueryService {
           : null;
 
       const setInfo = settlementsMap[item.id];
-      const hasSettlement = setInfo !== undefined;
-      const targetRev = extractNetPayableAmount(item);
-      const totalPaid = hasSettlement
+      const hasReceipt = setInfo?.hasReceipt === true;
+      const targetRev = resolveStoredNetPayable(item);
+      const totalPaid = hasReceipt
         ? setInfo.receipts
         : Number(item.tienDaThanhToan) || 0;
       const remainingBal = Math.max(0, targetRev - totalPaid);
-      const paidCost = hasSettlement ? setInfo.payments : 0;
+      const paidCost = setInfo ? setInfo.payments : 0;
       const linkInfo = linkedInvoiceCounts[item.id];
 
       const raw = item.rawData;
@@ -548,7 +559,10 @@ export class KgaraCaseListQueryService {
       applyCaseOptionFilters(query, column, filtersStr);
 
       if (search) {
-        const cleanSearch = search.replace(/[^a-zA-Z0-9;]/g, '');
+        const cleanSearch = search
+          .split(';')
+          .map((part) => normalizePlate(part))
+          .join(';');
         query.andWhere(
           new Brackets((sqb) => {
             applyMultiKeywordMultiFieldFilter(
@@ -565,8 +579,8 @@ export class KgaraCaseListQueryService {
                 new Brackets((innerSqb) => {
                   applyMultiKeywordFilter(
                     innerSqb,
-                    "REGEXP_REPLACE(LOWER(\"case\".\"bien_so_xe\"), '[^a-z0-9]', '', 'g')",
-                    cleanSearch.toLowerCase(),
+                    normalizedPlateSql('"case"."bien_so_xe"'),
+                    cleanSearch,
                     'opt_case_search_clean',
                   );
                 }),

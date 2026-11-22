@@ -11,17 +11,18 @@ import {
   writeDataTable,
   writeKpiCards,
   type DashboardKpi,
-} from '../../common/xlsx-charts/dashboard-sheet.helper';
+} from '@/v2/core/xlsx-core';
 import {
   CHART_PALETTE,
   CHART_TINT,
   type XlsxChartSpec,
-} from '../../common/xlsx-charts/xlsx-chart.types';
+} from '@/v2/core/xlsx-core';
 import {
   buildCashSeries,
   buildTimeSeries,
   chooseBucketUnit,
   classificationBreakdown,
+  countVehicles,
   pickBasisDate,
   spanInDays,
   topCustomersByRevenue,
@@ -107,7 +108,10 @@ export function buildCasesDashboard(
         ? profit / revenue
         : 0;
   const kpis: DashboardKpi[] = [
-    { label: 'SỐ PHIẾU DỊCH VỤ', value: rows.length },
+    {
+      label: `SỐ XE (${rows.length} lệnh)`,
+      value: countVehicles(rows),
+    },
     { label: 'DOANH THU', value: sumKpi('doanhThu', revenue) },
     { label: 'CHI PHÍ', value: sumKpi('chiPhi', sums.chiPhi ?? 0) },
     { label: 'LỢI NHUẬN', value: sumKpi('loiNhuan', profit) },

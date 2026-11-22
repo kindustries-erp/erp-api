@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SyncCaseService } from './services/sync-case.service';
-import { SyncGrossProfitService } from './services/sync-gross-profit.service';
+import {
+  SyncGrossProfitService,
+  type GrossProfitSyncStats,
+} from './services/sync-gross-profit.service';
 import { SyncDebtService } from './services/sync-debt.service';
 import { SyncDeletionService } from './services/sync-deletion.service';
 import { SyncRunLoggerService } from './services/sync-run-logger.service';
@@ -82,7 +85,7 @@ export class KgaraSyncService {
     from?: string,
     to?: string,
     accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
-  ): Promise<void> {
+  ): Promise<GrossProfitSyncStats> {
     return this.syncGrossProfitService.syncGrossProfitForBranch(
       branchExternalId,
       from,

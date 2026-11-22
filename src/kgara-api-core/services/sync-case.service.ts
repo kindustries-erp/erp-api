@@ -1,4 +1,6 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
+import { hasReceiptSettlement } from '@/kgara-api-core/helpers/kgara-case-remaining.helper';
+import { ModuleRef } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { KgaraBranch } from '../entities/kgara_branch.entity';
@@ -12,14 +14,26 @@ import { KgaraClientService } from '../kgara-client.service';
 import { SyncRunLoggerService } from './sync-run-logger.service';
 import { SyncDeletionService } from './sync-deletion.service';
 import { SyncGrossProfitService } from './sync-gross-profit.service';
+import { KgaraCaseFinalizeService } from './kgara-case-finalize.service';
+import { KgaraCostEnricherHelper } from '../helpers/kgara-cost-enricher.helper';
+import {
+  buildDetailSnapshot,
+  isDetailStale,
+} from '../utils/kgara-detail-snapshot.util';
 import { GarageCaseForecastService } from './garage-case-forecast.service';
 import { GarageHubService } from '../hub/garage-hub.service';
+import { notifyLedgerProjector } from '../hub/ledger-projector.port';
+import { notifyCaseProjector } from '../hub/case-projector.port';
 import { resolveCompletionDate } from '../helpers/kgara-completion-date.helper';
 import {
   buildGuidMap,
   KgaraReceivableRow,
   resolveCaseGuid,
 } from '../helpers/kgara-case-identity.helper';
+import {
+  applyDetailVehicle,
+  applyListVehicle,
+} from '../helpers/kgara-case-vehicle.helper';
 import {
   KgaraCaseLineInput,
   reconcileCaseLines,
@@ -32,7 +46,9 @@ import {
   extractNetPayableAmount,
   extractKgaraClassification,
   mapKgaraClassificationToErp,
+  pickNonEmpty,
   resolveStoredRevenue,
+  toTrimmedOrNull,
 } from '../utils/kgara-parser.util';
 
 @Injectable()
@@ -60,7 +76,24 @@ export class SyncCaseService {
     private readonly caseForecaster?: GarageCaseForecastService,
     @Optional()
     private readonly garageHub?: GarageHubService,
+    @Optional()
+    private readonly moduleRef?: ModuleRef,
+    @Optional()
+    private readonly finalizer?: KgaraCaseFinalizeService,
   ) {}
+
+  /** Chiếu vụ việc vừa đồng bộ sang sổ nợ v2 (lỗi chỉ log). */
+  private projectCaseToLedger(caseId?: string): Promise<void> {
+    if (!caseId) return Promise.resolve();
+    return notifyLedgerProjector(this.moduleRef, this.logger, (p) =>
+      p.projectCase(caseId),
+    );
+  }
+
+  /** Chiếu vụ việc (kèm dòng đã lưu) sang bảng v2 `cases_garage` (lỗi chỉ log). */
+  private projectCaseToV2(caseId?: string): Promise<void> {
+    return notifyCaseProjector(this.moduleRef, this.logger, caseId);
+  }
 
   async syncBranches(
     accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
@@ -269,14 +302,15 @@ export class SyncCaseService {
             const existingSettlements = await this.settlementRepo.find({
               where: { caseId: gwCase.id },
             });
-            if (existingSettlements?.length > 0) {
+            if (hasReceiptSettlement(existingSettlements)) {
               const totalReceipts = existingSettlements
                 .filter((s) => s.settlementType === 'RECEIPT')
                 .reduce((sum, s) => sum + Number(s.amount || 0), 0);
               gwCase.tienDaThanhToan = totalReceipts;
+              // Dùng số ròng đã lưu (resolveStoredRevenue), không dùng netPayable của dòng danh sách (thiếu chiết khấu).
               gwCase.tienConPhaiThanhToan = Math.max(
                 0,
-                netPayable - totalReceipts,
+                Number(gwCase.tienCoThue) - totalReceipts,
               );
             }
           }
@@ -333,7 +367,9 @@ export class SyncCaseService {
             parseSafeDate(c.NgayHoanThanhCongViec),
           );
           gwCase.ngayGiaoXeFull = parseSafeDate(c.NgayGiaoXeFull);
-          gwCase.soKhung = c.SoKhung;
+          // List KGara thường trả SoKhung rỗng: không ghi đè giá trị đã có
+          gwCase.soKhung = pickNonEmpty(c.SoKhung, gwCase.soKhung);
+          applyListVehicle(gwCase, c);
           gwCase.dataAsOf = parseSafeDate(dataAsOf);
 
           const caseDate =
@@ -405,6 +441,8 @@ export class SyncCaseService {
           }
 
           await this.caseRepo.save(gwCase);
+          await this.projectCaseToLedger(gwCase.id);
+          await this.projectCaseToV2(gwCase.id);
 
           if (this.garageHub && gwCase.id) {
             await this.garageHub.handleCaseTransition({
@@ -436,6 +474,15 @@ export class SyncCaseService {
         }
         page++;
       } while (page <= totalPages);
+
+      // Số khung thường chỉ có ở receivables: điền cho các phiếu còn trống
+      await this.fillChassisFromReceivables(
+        branchExternalId,
+        effectiveFrom,
+        effectiveTo,
+        updatedSince,
+        accountKey,
+      );
 
       // Sync gross profit details to map financial data to cases across all lookback months
       try {
@@ -500,21 +547,10 @@ export class SyncCaseService {
               if (group.Items) {
                 for (const item of group.Items) {
                   if (item.VuViecID) {
-                    await this.grossProfitRepo.upsert(
-                      {
-                        hdPhieuDichVuId: item.VuViecID,
-                        branchExternalId,
-                        vuViecCode: item.VuViecCode,
-                        vuViecName: item.VuViecName,
-                        tenKhachHang: item.TenKhachHang,
-                        doanhThu: item.DoanhThu,
-                        chiPhi: item.ChiPhi,
-                        loiNhuan: item.LoiNhuan,
-                        reportFrom: range.from,
-                        reportTo: range.to,
-                        rawData: item,
-                      },
-                      ['hdPhieuDichVuId'],
+                    await this.syncGrossProfit.persistItem(
+                      item,
+                      branchExternalId,
+                      range,
                     );
                   }
                 }
@@ -581,6 +617,23 @@ export class SyncCaseService {
     updatedSince: string | undefined,
     accountKey: KgaraAccountKey,
   ): Promise<Map<string, string>> {
+    const rows = await this.loadReceivableRows(
+      branchExternalId,
+      from,
+      to,
+      updatedSince,
+      accountKey,
+    );
+    return buildGuidMap(rows);
+  }
+
+  private async loadReceivableRows(
+    branchExternalId: string,
+    from: string | undefined,
+    to: string | undefined,
+    updatedSince: string | undefined,
+    accountKey: KgaraAccountKey,
+  ): Promise<KgaraReceivableRow[]> {
     const rows: KgaraReceivableRow[] = [];
     let page = 1;
     let totalPages = 1;
@@ -598,7 +651,45 @@ export class SyncCaseService {
       totalPages = response?.pagination?.totalPages || 1;
       page++;
     } while (page <= totalPages);
-    return buildGuidMap(rows);
+    return rows;
+  }
+
+  /**
+   * Điền số khung từ receivables cho các phiếu còn trống. Không ghi đè số khung đã có.
+   * Lỗi chỉ ghi cảnh báo, không làm hỏng sync phiếu.
+   */
+  private async fillChassisFromReceivables(
+    branchExternalId: string,
+    from: string | undefined,
+    to: string | undefined,
+    updatedSince: string | undefined,
+    accountKey: KgaraAccountKey,
+  ): Promise<void> {
+    try {
+      const rows = await this.loadReceivableRows(
+        branchExternalId,
+        from,
+        to,
+        updatedSince,
+        accountKey,
+      );
+      for (const row of rows) {
+        const chassis = toTrimmedOrNull(row.SoKhung);
+        const caseGuid = toTrimmedOrNull(row.HdPhieuDichVuID);
+        if (!chassis || !caseGuid) continue;
+        const gwCase = await this.caseRepo.findOne({
+          where: { hdPhieuDichVuId: caseGuid, accountKey },
+        });
+        if (!gwCase || gwCase.soKhung) continue;
+        gwCase.soKhung = chassis;
+        await this.caseRepo.save(gwCase);
+        await this.projectCaseToV2(gwCase.id);
+      }
+    } catch (err: any) {
+      this.logger.warn(
+        `Fill chassis from receivables failed for branch ${branchExternalId} (account: ${accountKey}): ${err?.message}`,
+      );
+    }
   }
 
   async syncCaseDetail(
@@ -645,7 +736,10 @@ export class SyncCaseService {
       );
       const caseData = response?.data;
       if (!caseData) {
-        throw new Error(`Case ${targetCaseId} detail not found on Kgara`);
+        const reason = response?.message ? `: ${response.message}` : '';
+        throw new Error(
+          `Case ${targetCaseId} detail not found on Kgara${reason}`,
+        );
       }
 
       // Update case if exists
@@ -683,7 +777,7 @@ export class SyncCaseService {
         const existingSettlements = await this.settlementRepo.find({
           where: { caseId: gwCase.id },
         });
-        if (existingSettlements?.length > 0) {
+        if (hasReceiptSettlement(existingSettlements)) {
           const totalReceipts = existingSettlements
             .filter((s) => s.settlementType === 'RECEIPT')
             .reduce((sum, s) => sum + Number(s.amount || 0), 0);
@@ -743,9 +837,28 @@ export class SyncCaseService {
         parseSafeDate(caseData.NgayHoanThanhCongViec),
       );
       gwCase.ngayGiaoXeFull = parseSafeDate(caseData.NgayGiaoXeFull);
-      gwCase.soKhung = caseData.SoKhung;
+      applyDetailVehicle(gwCase, caseData);
+      // Chỉ ghi đối tượng thanh toán khi payload chi tiết có key (không xóa khi thiếu key)
+      if (
+        'DoiTuongThanhToanCode' in caseData ||
+        'DoiTuongThanhToanName' in caseData
+      ) {
+        gwCase.doiTuongThanhToanCode = toTrimmedOrNull(
+          caseData.DoiTuongThanhToanCode,
+        );
+        gwCase.doiTuongThanhToanName = toTrimmedOrNull(
+          caseData.DoiTuongThanhToanName,
+        );
+      }
       gwCase.dataAsOf = parseSafeDate(response.dataAsOf);
+      const prevRawLines =
+        gwCase.rawData?.ListPhieuDichVuChiTiet ??
+        gwCase.rawData?.PhieuDichVuChiTiet;
       gwCase.rawData = caseData;
+      KgaraCostEnricherHelper.carryOverManualLines(
+        prevRawLines,
+        caseData.ListPhieuDichVuChiTiet ?? caseData.PhieuDichVuChiTiet,
+      );
       gwCase.accountKey = effectiveAccountKey;
 
       if (effectiveAccountKey === KgaraAccountKey.OJ) {
@@ -830,7 +943,9 @@ export class SyncCaseService {
         this.logger.log(`Case ${targetCaseId} was restored from soft-delete.`);
       }
 
+      gwCase.rawData.__detailSnapshot = buildDetailSnapshot(gwCase);
       await this.caseRepo.save(gwCase);
+      await this.projectCaseToLedger(gwCase.id);
 
       if (this.garageHub && gwCase.id) {
         await this.garageHub.handleCaseTransition({
@@ -930,6 +1045,9 @@ export class SyncCaseService {
           ),
       );
       linesCount = linesResult.upserted;
+      // Khôi phục giá vốn từ journal đã lưu (payload KGara không có giá vốn), rồi mới chiếu V2
+      await this.finalizer?.finalizeCase(gwCase);
+      await this.projectCaseToV2(targetCaseId);
       if (linesResult.conflicts.length > 0) {
         this.logger.warn(
           `Case ${targetCaseId}: ${linesResult.conflicts.length} line(s) belong to another case, not moved: ${linesResult.conflicts.join(', ')}`,
@@ -1030,7 +1148,9 @@ export class SyncCaseService {
           c.rawData?.ListPhieuDichVuChiTiet ||
           c.rawData?.PhieuDichVuChiTiet ||
           c.rawData?.HoaDonChiTiet;
-        return !Array.isArray(rawList) || rawList.length === 0;
+        return (
+          !Array.isArray(rawList) || rawList.length === 0 || isDetailStale(c)
+        );
       });
     }
 

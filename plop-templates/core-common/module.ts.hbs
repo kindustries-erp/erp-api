@@ -1,0 +1,11 @@
+import { Module } from '@nestjs/common';
+{{#if moduleProviders}}
+import { {{serviceClass}} } from './services/{{serviceFile}}';
+{{/if}}
+
+/** Module lõi họ {{family}}: cung cấp service dùng chung (nếu có), không có controller. */
+@Module({
+  providers: [{{moduleProviders}}],
+  exports: [{{moduleProviders}}],
+})
+export class {{moduleClass}} {}

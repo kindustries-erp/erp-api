@@ -225,7 +225,7 @@ export class VinfastPartsService {
       FROM vinfast_parts_ledger l
       JOIN erp_invoices i ON i.id = l.invoice_id
       LEFT JOIN erp_invoice_items ii ON ii.id = l.invoice_item_id
-      LEFT JOIN erp_branches br ON br.id = i.branch_id
+      LEFT JOIN branches_management br ON br.id = i.branch_id
       LEFT JOIN vinfast_parts_catalog c ON c.sku = l.part_sku
       WHERE l.part_sku = ANY($1) AND i.tax_invoice_status IN (1, 3)
       ORDER BY l.part_sku ASC, l.transaction_date ASC, l.created_at ASC

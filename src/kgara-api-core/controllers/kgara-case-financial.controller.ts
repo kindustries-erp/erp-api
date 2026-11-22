@@ -12,9 +12,12 @@ import {
   NotFoundException,
   BadRequestException,
   Logger,
+  Optional,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { notifyLedgerProjector } from '../hub/ledger-projector.port';
 import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
@@ -22,14 +25,14 @@ import { KgaraCaseLinkedInvoice } from '../entities/kgara_case_linked_invoice.en
 import { DocumentTraceabilityService } from '../../common/services/document-traceability.service';
 import { GarageSmartSettlementService } from '../services/garage-smart-settlement.service';
 import { KgaraCaseQueryService } from '../services/kgara-case-query.service';
-import { extractNetPayableAmount } from '../kgara-sync.service';
+import { resolveStoredNetPayable } from '../utils/kgara-parser.util';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import {
   RequirePermissions,
   RequireAnyPermissions,
 } from '../../auth/decorators/require-permissions.decorator';
-import { ErpResource, ErpAction } from '@/rbac-core/enums';
+import { ErpResource, ErpAction } from '@/v2/core/rbac-core';
 
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
 @Controller('greenway')
@@ -48,7 +51,16 @@ export class KgaraCaseFinancialController {
     private readonly traceabilityService: DocumentTraceabilityService,
     private readonly smartSettlementService: GarageSmartSettlementService,
     private readonly caseQueryService: KgaraCaseQueryService,
+    @Optional()
+    private readonly moduleRef?: ModuleRef,
   ) {}
+
+  /** Chiếu kết quả cấn trừ vừa ghi sang sổ nợ v2 (lỗi chỉ log). */
+  private projectCaseToLedger(caseId: string): Promise<void> {
+    return notifyLedgerProjector(this.moduleRef, this.logger, (p) =>
+      p.projectCase(caseId),
+    );
+  }
 
   @Get('cases/:id/linked-invoices')
   @RequireAnyPermissions(
@@ -226,7 +238,7 @@ export class KgaraCaseFinancialController {
     });
 
     const isCompleted = c.tinhTrangDichVu === 3;
-    const totalPayable = extractNetPayableAmount(c);
+    const totalPayable = resolveStoredNetPayable(c);
     const targetRevenue = totalPayable;
     const targetCost = Number(c.chiPhi ?? gp?.chiPhi ?? 0);
     const expectedProfit = isCompleted
@@ -416,6 +428,7 @@ export class KgaraCaseFinancialController {
     const saved = await this.settlementRepo.save(settlement);
 
     await this.caseQueryService.recalculateCaseSettlementSummary(id);
+    await this.projectCaseToLedger(id);
     return saved;
   }
 
@@ -447,6 +460,7 @@ export class KgaraCaseFinancialController {
 
     await this.settlementRepo.delete({ id: settlementId, caseId: id });
     await this.caseQueryService.recalculateCaseSettlementSummary(id);
+    await this.projectCaseToLedger(id);
     return { success: true };
   }
 
@@ -540,6 +554,7 @@ export class KgaraCaseFinancialController {
     }
 
     await this.caseQueryService.recalculateCaseSettlementSummary(id);
+    await this.projectCaseToLedger(id);
     return saved;
   }
 }

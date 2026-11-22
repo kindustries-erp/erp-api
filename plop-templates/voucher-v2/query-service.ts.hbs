@@ -1,37 +1,69 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { applyMultiKeywordMultiFieldFilter } from '@/common/utils/query-builder.util';
 import {
+  applyDateBounds,
+  applyListSummaries,
   applyTableFilters,
   applyTableSort,
-  computeTableSummaries,
   findTableColumnOptions,
-  TableColumnConfig,
+  parseFilterRecord,
+  parseSummaryKeys,
+  resolveTableColumn,
+  SummaryMetric,
+  TableColumnMap,
+  TableDateRange,
+  TableFilterPayload,
+  TableOperatorFilter,
+  TableOptionsPage,
 } from '@/common/utils/table-query';
 import { {{headerEntityName}} } from '../entities/{{headerEntityKebab}}.entity';
 import { Query{{headerEntityName}}Dto } from '../dto/query-{{headerEntityKebab}}.dto';
 
-const TABLE_COLUMNS: Record<string, TableColumnConfig> = {
-  receiptNo: { type: 'text', dbColumn: 'receipt_no' },
-  receipt_no: { type: 'text', dbColumn: 'receipt_no' },
-  receiptDate: { type: 'date', dbColumn: 'receipt_date' },
-  receipt_date: { type: 'date', dbColumn: 'receipt_date' },
-  supplierName: { type: 'text', dbColumn: 'supplier_name' },
-  supplier_name: { type: 'text', dbColumn: 'supplier_name' },
-  branchName: { type: 'text', dbColumn: 'branch_name' },
-  branch_name: { type: 'text', dbColumn: 'branch_name' },
-  totalAmount: { type: 'number', dbColumn: 'total_amount' },
-  total_amount: { type: 'number', dbColumn: 'total_amount' },
-  status: { type: 'status', dbColumn: 'status' },
-  paymentStatus: { type: 'status', dbColumn: 'payment_status' },
-  payment_status: { type: 'status', dbColumn: 'payment_status' },
-  remarks: { type: 'text', dbColumn: 'remarks' },
-  createdAt: { type: 'date', dbColumn: 'created_at' },
-  created_at: { type: 'date', dbColumn: 'created_at' },
+/** Cột lọc, sắp xếp và tổng (whitelist, không nhận biểu thức từ client). */
+const TABLE_COLUMNS: TableColumnMap = {
+  createdAt: { sql: 'e.createdAt', type: 'date' },
+  created_at: { sql: 'e.createdAt', type: 'date' },
+  receiptNo: { sql: 'e.receiptNo', type: 'text' },
+  receipt_no: { sql: 'e.receiptNo', type: 'text' },
+  receiptDate: { sql: 'e.receiptDate', type: 'date' },
+  receipt_date: { sql: 'e.receiptDate', type: 'date' },
+  supplierName: { sql: 'e.supplierName', type: 'text' },
+  supplier_name: { sql: 'e.supplierName', type: 'text' },
+  branchName: { sql: 'e.branchName', type: 'text' },
+  branch_name: { sql: 'e.branchName', type: 'text' },
+  totalAmount: { sql: 'e.totalAmount', type: 'number' },
+  total_amount: { sql: 'e.totalAmount', type: 'number' },
+  status: { sql: 'e.status', type: 'status' },
+  paymentStatus: { sql: 'e.paymentStatus', type: 'status' },
+  payment_status: { sql: 'e.paymentStatus', type: 'status' },
+  remarks: { sql: 'e.remarks', type: 'text' },
 };
 
-const SUMMARY_COLUMNS = ['totalAmount', 'total_amount'];
+/** Cột số được tổng qua `summary_keys` (whitelist SQL; key ngoài danh sách trả `null`). */
+const SUMMARY_COLUMNS: { key: string; sql: string }[] = [
+  { key: 'totalAmount', sql: 'e.totalAmount' },
+];
 
+/** Cột dùng cho ô tìm kiếm chung (ILIKE, nhiều từ khóa cách nhau bằng dấu `;`). */
+const SEARCH_COLUMNS: string[] = [
+  'e.receiptNo',
+  'e.supplierName',
+  'e.branchName',
+  'e.remarks',
+];
+
+export interface {{headerEntityName}}PageResult {
+  items: {{headerEntityName}}[];
+  total: number;
+  page: number;
+  pageSize: number;
+  /** Theo key trong `summary_keys`: `{ total, pageSubtotal, cumulative }` hoặc `null` */
+  summaries: Record<string, SummaryMetric | null>;
+}
+
+/** Đọc dữ liệu: lọc, sắp xếp, phân trang, gợi ý giá trị cột và tổng. Chỉ đọc các dòng chưa xóa mềm. */
 @Injectable()
 export class {{headerEntityName}}QueryService {
   constructor(
@@ -39,39 +71,60 @@ export class {{headerEntityName}}QueryService {
     private readonly repo: Repository<{{headerEntityName}}>,
   ) {}
 
-  async findAll(dto: Query{{headerEntityName}}Dto) {
-    const qb = this.repo
-      .createQueryBuilder('voucher')
-      .where('voucher.isDeleted = :isDeleted', { isDeleted: false });
+  async findAll(query: Query{{headerEntityName}}Dto): Promise<{{headerEntityName}}PageResult> {
+    const page = Math.max(1, Number(query.page) || 1);
+    const pageSize = Math.max(1, Math.min(200, Number(query.pageSize) || 20));
+    const qb = this.baseQuery();
 
-    applyTableFilters(qb, dto, TABLE_COLUMNS, 'voucher');
+    const keyword = query.search?.trim();
+    if (keyword && SEARCH_COLUMNS.length > 0) {
+      applyMultiKeywordMultiFieldFilter(qb, SEARCH_COLUMNS, keyword, 'global_search');
+    }
 
-    const summaries = await computeTableSummaries(
+    applyTableFilters(qb, this.readFilters(query), TABLE_COLUMNS, 'filter');
+    applyDateBounds(qb, 'e.createdAt', query.date_from, query.date_to, 'legacy');
+    applyTableSort(
       qb,
-      SUMMARY_COLUMNS,
+      query.sort,
       TABLE_COLUMNS,
-      'voucher',
+      { sql: 'e.createdAt', direction: 'DESC' },
+      'e.id',
     );
 
-    applyTableSort(qb, dto.sort, TABLE_COLUMNS, 'voucher', 'createdAt', 'DESC');
-
-    const page = Math.max(1, Number(dto.page) || 1);
-    const pageSize = Math.max(1, Math.min(200, Number(dto.pageSize) || 20));
-
-    qb.skip((page - 1) * pageSize).take(pageSize);
-
-    const [items, total] = await qb.getManyAndCount();
-
-    return {
-      items,
-      total,
+    // Tổng theo summary_keys tính trên toàn bộ dòng khớp, nên phải gọi trước khi phân trang
+    const summaries = await applyListSummaries(qb, {
+      columns: SUMMARY_COLUMNS,
+      keys: parseSummaryKeys(query.summary_keys),
       page,
       pageSize,
-      summaries,
-    };
+      tieBreaker: 'e.id',
+    });
+
+    const [items, total] = await qb
+      .skip((page - 1) * pageSize)
+      .take(pageSize)
+      .getManyAndCount();
+    return { items, total, page, pageSize, summaries };
   }
 
-  async findById(id: string): Promise<{{headerEntityName}} | null> {
+  /** Gợi ý giá trị của một cột, áp dụng bộ lọc của các cột khác. */
+  async findColumnOptions(
+    column: string,
+    search: string | undefined,
+    page: number,
+    pageSize: number,
+    filters: unknown,
+  ): Promise<TableOptionsPage> {
+    const def = resolveTableColumn(TABLE_COLUMNS, column);
+    if (!def) return { items: [], total: 0, next: null };
+
+    const qb = this.baseQuery();
+    applyTableFilters(qb, this.toPayload(filters), TABLE_COLUMNS, 'col_opt', column);
+    return findTableColumnOptions(qb, def, search, page, pageSize);
+  }
+
+  /** Chi tiết chứng từ kèm dòng hàng (sắp theo `lineNo`), chỉ dòng chưa xóa mềm. */
+  findById(id: string): Promise<{{headerEntityName}} | null> {
     return this.repo.findOne({
       where: { id, isDeleted: false },
       relations: ['lines'],
@@ -79,27 +132,28 @@ export class {{headerEntityName}}QueryService {
     });
   }
 
-  async findColumnOptions(
-    column: string,
-    search: string | undefined,
-    page: number,
-    pageSize: number,
-    filters?: string,
-  ) {
-    const baseQb = this.repo
-      .createQueryBuilder('voucher')
-      .where('voucher.isDeleted = :isDeleted', { isDeleted: false });
+  private baseQuery() {
+    return this.repo
+      .createQueryBuilder('e')
+      .where('e.isDeleted = :isDeleted', { isDeleted: false });
+  }
 
-    return findTableColumnOptions({
-      baseQb,
-      column,
-      search,
-      page,
-      pageSize,
-      filters,
-      columnConfigs: TABLE_COLUMNS,
-      alias: 'voucher',
-    });
+  private readFilters(query: Query{{headerEntityName}}Dto): TableFilterPayload {
+    return {
+      columnFilters: parseFilterRecord<Record<string, string[]>>(query.column_filters),
+      columnSearch: parseFilterRecord<Record<string, string>>(query.column_search),
+      columnOperators: parseFilterRecord<Record<string, TableOperatorFilter>>(query.column_operators),
+      dateRanges: parseFilterRecord<Record<string, TableDateRange>>(query.date_ranges),
+    };
+  }
+
+  /** Nhận cả payload đầy đủ lẫn dạng rút gọn `{ cột: [giá trị] }` từ bảng V2. */
+  private toPayload(raw: unknown): TableFilterPayload {
+    const parsed = parseFilterRecord<TableFilterPayload & Record<string, unknown>>(raw);
+    if (!parsed) return {};
+    const hasEnvelope = ['columnFilters', 'columnSearch', 'columnOperators', 'dateRanges'].some(
+      (key) => key in parsed,
+    );
+    return hasEnvelope ? parsed : { columnFilters: parsed as Record<string, string[]> };
   }
 }
-

@@ -8,7 +8,7 @@ import {
   type ExportHistoryItem,
   type ExportHistoryResult,
   type ExportProgressEvent,
-} from '../../common/export-jobs/export-job-runner';
+} from '@/v2/core/export-jobs-core';
 import type { ErpInvoiceQuery } from '../erp-invoices-core.service';
 import { InvoiceQueryService } from './invoice-query.service';
 

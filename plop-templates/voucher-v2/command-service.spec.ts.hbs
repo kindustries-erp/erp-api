@@ -2,7 +2,7 @@ import { DataSource, Repository } from 'typeorm';
 import { {{headerEntityName}} } from '../entities/{{headerEntityKebab}}.entity';
 import { Create{{headerEntityName}}Dto } from '../dto/create-{{headerEntityKebab}}.dto';
 import { {{headerEntityName}}CommandService } from './{{headerEntityKebab}}-command.service';
-import { BaseVoucherEngineService } from '../../goods-receipts-core/services/base-voucher-engine.service';
+import { BaseVoucherEngineService } from '@/v2/core/goods-receipts-core/services/base-voucher-engine.service';
 
 describe('{{headerEntityName}}CommandService', () => {
   let repo: {

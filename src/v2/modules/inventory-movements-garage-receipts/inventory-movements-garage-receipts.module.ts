@@ -1,0 +1,38 @@
+import { InventoryMovementsGarageLedgerModule } from '@/v2/modules/inventory-movements-garage-ledger/inventory-movements-garage-ledger.module';
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { ApprovalManagementModule } from '@/v2/modules/approval-management/approval-management.module';
+import { RbacCoreModule } from '@/v2/core/rbac-core';
+import { InventoryMovementsCoreModule } from '@/v2/core/inventory-movements-core';
+import { GoodsReceiptsCoreModule } from '@/v2/core/goods-receipts-core';
+import { InventoryMovementsGarageReceipt } from './entities/inventory-movements-garage-receipt.entity';
+import { InventoryMovementsGarageReceiptLine } from './entities/inventory-movements-garage-receipt-line.entity';
+import { InventoryMovementsGarageReceiptController } from './controllers/inventory-movements-garage-receipt.controller';
+import { InventoryMovementsGarageReceiptCommandService } from './services/inventory-movements-garage-receipt-command.service';
+import { InventoryMovementsGarageReceiptQueryService } from './services/inventory-movements-garage-receipt-query.service';
+import { InventoryMovementsGarageReceiptsService } from './inventory-movements-garage-receipts.service';
+import { ItemsGarageModule } from '@/v2/modules/items-garage/items-garage.module';
+
+/** Module nhập kho Garage: ghép lõi inventory-movements-core (sổ tồn) và goods-receipts-core (đánh số phiếu). */
+@Module({
+  imports: [
+    InventoryMovementsGarageLedgerModule,
+    TypeOrmModule.forFeature([
+      InventoryMovementsGarageReceipt,
+      InventoryMovementsGarageReceiptLine,
+    ]),
+    RbacCoreModule,
+    ApprovalManagementModule,
+    InventoryMovementsCoreModule,
+    ItemsGarageModule,
+    GoodsReceiptsCoreModule,
+  ],
+  controllers: [InventoryMovementsGarageReceiptController],
+  providers: [
+    InventoryMovementsGarageReceiptCommandService,
+    InventoryMovementsGarageReceiptQueryService,
+    InventoryMovementsGarageReceiptsService,
+  ],
+  exports: [InventoryMovementsGarageReceiptsService],
+})
+export class InventoryMovementsGarageReceiptsModule {}

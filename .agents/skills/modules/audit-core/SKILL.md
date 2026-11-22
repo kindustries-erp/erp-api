@@ -1,9 +1,11 @@
 ---
 name: audit-core
-description: Module tri thức Nhật ký Kiểm toán Hệ thống (Audit Logs & Zero-Trust Tracking) trong erp-api (audit-core). Chứa toàn bộ database schema (erp_audit_logs), composite indexes, DTOs, API endpoints, logic Async Batch Buffering, Payload Sanitizer, Retention Cron Scheduler và tích hợp liên module với payment-vouchers, cashflow-vouchers & frontend activity timelines.
+description: Module tri thức Nhật ký Kiểm toán Hệ thống (Audit Logs & Zero-Trust Tracking) trong erp-api (audit-core). Chứa toàn bộ database schema (audit_logs, v2), composite indexes, DTOs, API endpoints, logic Async Batch Buffering, Payload Sanitizer, Retention ScheduledJob và tích hợp liên module với payment-vouchers, cashflow-vouchers & frontend activity timelines.
 ---
 
 # 🛡️ Module Tri Thức: Audit Core & System Activity Tracking - Backend (`erp-api`)
+
+> **Trạng thái v2 (2026-11-15)**: ghi + đọc đã chuyển sang `src/v2/core/audit-core/` (base: types, sanitizer, `buildAuditDiff`, `AbstractAuditWriterService`) và `src/v2/modules/audit-logs/` (route `/api/v2/audit-logs`, bảng **`audit_logs`**). V1 `src/audit-core` chỉ còn lớp ủy quyền mỏng giữ chữ ký/route cũ (`/api/v1/audit-logs-core`), dùng **một** bộ đệm ghi duy nhất của v2. Web `auditCoreApi` gọi `/api/v2/audit-logs` (client `erp-web/src/v2/modules/audit-logs/api/auditLogsV2Api.ts`). Bảng cũ `erp_audit_logs` giữ nguyên làm bản lưu, không còn được ghi. Các mục 2-5 bên dưới mô tả v1 gốc; **mục 8 là hiện trạng v2 và có hiệu lực khi mâu thuẫn**.
 
 ## 1. Tổng quan Nghiệp vụ
 
@@ -167,3 +169,39 @@ Khi chỉnh sửa module `audit-core`:
    ```
 3. **Database Migration**:
    - Áp dụng migration index: `src/migrations/20260822140000-add-audit-logs-indexes.ts`.
+
+---
+
+## 8. Hiện trạng v2 (nguồn đúng khi mâu thuẫn với mục 2-5)
+
+**Cấu trúc**
+```text
+src/v2/core/audit-core/            # base-only: types, sanitizer(+spec), buildAuditDiff, AbstractAuditWriterService, manifest
+src/v2/modules/audit-logs/
+├── entities/audit-log.entity.ts   # @Entity('audit_logs'), cột như erp_audit_logs, 4 index IDX_audit_logs_*
+├── dto/ helpers/                  # DTO query/response, mapper, bộ lọc column_filters/column_search/sorts (giữ ngữ nghĩa V1)
+├── services/                      # AuditWriterService (buffer 50/2s), AuditLogQueryService (list, column-options, timeline)
+├── interceptors/global-audit.interceptor.ts   # APP_INTERCEPTOR (app.module trỏ vào đây)
+├── jobs/audit-retention.job.ts    # ScheduledJob 02:00 Asia/Ho_Chi_Minh, lô 2000
+├── controllers/audit-log.controller.ts        # @Controller('api/v2/audit-logs')
+└── audit-logs-v2.service.ts / audit-logs-v2.module.ts   # facade + module (hậu tố V2 tránh trùng AuditLogsModule của v1)
+```
+
+**API v2** (chỉ `JwtAuthGuard`): `GET /api/v2/audit-logs` (`{items, pagination}`), `GET /api/v2/audit-logs/column-options` (`{items, pagination}`), `GET /api/v2/audit-logs/:entityType/:entityId/timeline` (`{items}`, cũ đến mới). Route v1 đúng là `/api/v1/audit-logs-core` (các mục 4 phía trên ghi `audit-core` là sai).
+
+**Tách V1 / V2 (không dùng chung, không import chéo)**
+- V1 (`src/audit-core`, `src/audit-logs`): writer, query, interceptor, scheduler, entity `ErpAuditLog` riêng, bảng `erp_audit_logs`, route `/api/v1/audit-logs-core`. Chỉ ghi route ngoài `/api/v2`.
+- V2 (`src/v2/core/audit-core`, `src/v2/modules/audit-logs`): bảng `audit_logs`, route `/api/v2/audit-logs`. Interceptor V2 chỉ ghi route `/api/v2/*`. Caller V2 (`users-management`, `auth-sessions`) dùng `AuditWriterService` của V2, không dùng `AuditCoreService`.
+- Hai interceptor toàn cục cùng đăng ký ở `app.module.ts`, mỗi bên có `isV2Route` riêng để phân vùng. Hai bên không thấy log của nhau.
+- Guard: `src/audit-core/audit-v1-v2-isolation.spec.ts` quét import (đường dẫn phân giải thật) và fail nếu V1 import audit v2 hoặc V2 import `audit-core`/`audit-logs` của V1.
+
+**Migration**
+- `20261115140000-create-audit-logs-v2.ts`: tạo `audit_logs` + backfill từ `erp_audit_logs` (`ON CONFLICT (id) DO NOTHING`); `down()` chỉ DROP `audit_logs`. Đây là bản chuyển dữ liệu lịch sử một lần sang V2, không còn đồng bộ liên tục.
+- `20261115160000-restore-v1-audit-logs.ts`: copy ngược về `erp_audit_logs` các dòng V1 đã ghi nhầm vào `audit_logs` trong thời gian V1 ủy quyền sang v2 (không có route `/api/v2/` và `entity_type` khác `users_management`). Idempotent, `down()` không xóa dữ liệu.
+
+**Rủi ro và lưu ý**
+- **JWT-only (giữ hành vi cũ)**: ai đăng nhập cũng xem được toàn bộ nhật ký và timeline (có email, IP, snapshot). Chưa có `@RequirePermissions`. Nếu siết RBAC thì phải đổi cả v1 và v2 và báo web.
+- **Retention phụ thuộc `ENABLE_CRON`**: v1 dùng `@Cron` chạy ở mọi môi trường (dọn `erp_audit_logs`); v2 là `ScheduledJob` nên chỉ chạy khi `ENABLE_CRON=true` (dọn `audit_logs`). Môi trường không đặt biến này sẽ không xóa log V2 cũ.
+- Một request đăng nhập sinh 2 dòng (`LOGIN_*` do auth service + `POST` do interceptor): hành vi từ trước, không phải ghi trùng.
+- Caller V1 (`auth`, `users-admin`, `garage-cashflow`...) gọi `AuditCoreService.recordAction` và ghi vào `erp_audit_logs`; caller V2 gọi `AuditWriterService` và ghi vào `audit_logs`.
+- Test: `bunx jest src/v2/core/audit-core src/v2/modules/audit-logs src/audit-core src/audit-logs --forceExit`.

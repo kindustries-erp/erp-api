@@ -7,7 +7,7 @@ const logger = new Logger('KgaraCaseNetoffSyncHelper');
  * Đồng bộ hai chiều giữa cấn trừ Hóa đơn (erp_invoice_voucher_netoff)
  * và Sổ thanh toán Vụ việc Garage (kgara_case_settlements).
  *
- * Tuân thủ quy chuẩn Pattern C (/api-structure):
+ * Tuân thủ quy chuẩn Pattern C (/erp-api-structure):
  * - Pure Engine / Helper độc lập, nhận EntityManager
  * - Không phụ thuộc NestJS Container hay state
  * - Thao tác nguyên khối (atomic) trong transaction hiện tại

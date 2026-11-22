@@ -153,7 +153,7 @@ src/module-config/
 ├── helpers/
 │   ├── entity-custom-fields.helper.ts     # Shared Helper saveInTx & enrichOne/enrichMany
 │   └── entity-custom-fields.helper.spec.ts
-├── services/                              # Sub-Services chuẩn theo /api-structure
+├── services/                              # Sub-Services chuẩn theo /erp-api-structure
 │   ├── module-category.service.ts         # Quản lý CRUD Danh mục
 │   ├── module-attribute-def.service.ts    # Quản lý Định nghĩa thuộc tính & Options usage guard
 │   └── module-entity-value.service.ts     # Quản lý Giá trị thực thể & Transactions

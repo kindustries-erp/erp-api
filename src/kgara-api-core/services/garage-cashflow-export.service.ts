@@ -5,7 +5,7 @@ import { KgaraCashflowVoucher } from '../entities/kgara_cashflow_voucher.entity'
 import { GarageCashflowExportDto } from '../dto/garage-cashflow-export.dto';
 import { GarageCashflowExcelBuilder } from './garage-cashflow-excel.builder';
 import { applyMultiKeywordFilter } from '../../common/utils/query-builder.util';
-import type { ExportProgressReporter } from '../../common/export-jobs/export-job-runner';
+import type { ExportProgressReporter } from '@/v2/core/export-jobs-core';
 
 @Injectable()
 export class GarageCashflowExportService {

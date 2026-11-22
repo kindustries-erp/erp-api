@@ -2,7 +2,7 @@ import { Controller, Get, Query, Param, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
-import { ErpResource, ErpAction } from '@/rbac-core/enums';
+import { ErpResource, ErpAction } from '@/v2/core/rbac-core';
 import { BranchId } from '../decorators/branch-id.decorator';
 import { KgaraSuppliersService } from '../services/kgara-suppliers.service';
 

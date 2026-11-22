@@ -1,7 +1,13 @@
 import { Repository } from 'typeorm';
+import { applyListSummaries } from '@/common/utils/table-query';
 import { {{entityName}} } from '../entities/{{entityKebab}}.entity';
 import { Query{{entityName}}Dto } from '../dto/query-{{entityKebab}}.dto';
 import { {{entityName}}QueryService } from './{{entityKebab}}-query.service';
+
+jest.mock('@/common/utils/table-query', () => ({
+  ...jest.requireActual('@/common/utils/table-query'),
+  applyListSummaries: jest.fn(),
+}));
 
 describe('{{entityName}}QueryService', () => {
   let qb: Record<string, jest.Mock>;
@@ -28,6 +34,7 @@ describe('{{entityName}}QueryService', () => {
     };
     qb.clone = jest.fn(() => qb);
     repo = { createQueryBuilder: jest.fn(() => qb), findOne: jest.fn() };
+    (applyListSummaries as jest.Mock).mockResolvedValue({});
     service = new {{entityName}}QueryService(repo as unknown as Repository<{{entityName}}>);
   });
 
@@ -61,13 +68,17 @@ describe('{{entityName}}QueryService', () => {
 {{/if}}
 
 {{#if hasSummaryColumns}}
-  it('sums numeric columns over the filtered rows before paging', async () => {
-    qb.getRawOne.mockResolvedValue({ {{#each summaryColumnsKeys}}{{this}}: 0{{#unless @last}}, {{/unless}}{{/each}} });
+  it('computes requested summaries via the shared helper before paging', async () => {
+    const metric = { total: 9, pageSubtotal: 4, cumulative: 9 };
+    (applyListSummaries as jest.Mock).mockResolvedValue({ {{lookup summaryColumnsKeys 0}}: metric });
 
-    const result = await service.findAll({ page: 3, pageSize: 10 } as Query{{entityName}}Dto);
+    const result = await service.findAll({ page: 3, pageSize: 10, summary_keys: '{{lookup summaryColumnsKeys 0}}' } as Query{{entityName}}Dto);
 
-    expect(qb.select).toHaveBeenCalledWith(expect.stringContaining('COALESCE(SUM('), expect.any(String));
-    expect(result.summaries).toEqual({ {{#each summaryColumnsKeys}}{{this}}: 0{{#unless @last}}, {{/unless}}{{/each}} });
+    expect(applyListSummaries).toHaveBeenCalledWith(
+      qb,
+      expect.objectContaining({ keys: ['{{lookup summaryColumnsKeys 0}}'], page: 3, pageSize: 10, tieBreaker: 'e.id' }),
+    );
+    expect(result.summaries).toEqual({ {{lookup summaryColumnsKeys 0}}: metric });
   });
 {{/if}}
 

@@ -55,7 +55,7 @@ Các chức năng cốt lõi:
 
 ---
 
-## 3. Cấu trúc Source Code Backend (Chuẩn /api-structure)
+## 3. Cấu trúc Source Code Backend (Chuẩn /erp-api-structure)
 
 ```text
 src/vinfast-parts/
@@ -223,3 +223,9 @@ Khi chỉnh sửa `vinfast-parts`:
 - `POST /vinfast-parts/sync-ledger` trả 409 khi đang có lượt chạy (chặn chạy trùng trong một tiến trình API). Lượt chạy là `runFullSync`: danh mục rồi sổ cái.
 - `syncLedger` nạp trước sổ cái và danh mục theo lô, bỏ qua dòng không đổi, tiến trình theo vị trí (mỗi 200 dòng).
 - Hai luồng SSE (`sync/progress`, `stock/export/excel/progress/stream`) đặt `X-Accel-Buffering: no`, `Cache-Control: no-cache, no-transform`, nhịp ping 10 giây (`helpers/sse-headers.helper.ts`).
+
+## Job nền xuất Excel trên lõi V2 `export-jobs-core`
+- Mặc định (cờ `EXPORT_JOBS_V2` bật) VinfastPartsStockExportBackgroundService (và báo cáo tracking ở reports-core) chạy trên module `export-jobs-vinfast-parts` (lõi `src/v2/core/export-jobs-core`, `AbstractExportJobService` + `ExportJobRunner`). Tắt cờ (`false/0/off/no`) và restart thì quay về cơ chế cũ nằm dưới nhánh delegation trong service nền.
+- V2 chỉ quản lý job, tiến độ, tải file; producer, tên file và fingerprint do service cũ truyền vào nên **nội dung xlsx và tên file không đổi**. URL, quyền, SSE, bộ field `ExportProgressEvent` giữ nguyên.
+- Khác biệt chủ ý: chuỗi thông báo thống nhất theo runner, job FAILED bị dọn sau TTL, `reused` thống nhất theo runner.
+- Spec bảo toàn file: `src/v2/modules/export-jobs-vinfast-parts/export-jobs-vinfast-parts.spec.ts`.

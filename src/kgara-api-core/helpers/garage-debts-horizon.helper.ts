@@ -4,6 +4,29 @@ import {
 } from '../dto/garage-debts-analytics.dto';
 
 /**
+ * Điều kiện tuổi nợ (ngày) của các mốc thời gian phải thu/phải trả.
+ * Các mốc 0–7, 8–30, 31–60, 61–90, >90 không chồng lấn; overdue30To90 giữ để tương thích client cũ.
+ */
+function ageCondition(horizon: string, ageExpr: string): string | null {
+  switch (horizon) {
+    case 'nextWeekDue':
+      return `${ageExpr} <= 7`;
+    case 'nextMonthDue':
+      return `${ageExpr} > 7 AND ${ageExpr} <= 30`;
+    case 'overdue31To60':
+      return `${ageExpr} BETWEEN 31 AND 60`;
+    case 'overdue61To90':
+      return `${ageExpr} BETWEEN 61 AND 90`;
+    case 'overdue30To90':
+      return `${ageExpr} > 30 AND ${ageExpr} <= 90`;
+    case 'criticalOverdue90Plus':
+      return `${ageExpr} > 90`;
+    default:
+      return null;
+  }
+}
+
+/**
  * Trả về SQL condition lọc vụ việc theo từng Mốc thời gian (Time Horizon)
  */
 export function getHorizonCaseSqlCondition(
@@ -11,15 +34,10 @@ export function getHorizonCaseSqlCondition(
   alias: string = 'case',
 ): string {
   const dateExpr = `DATE(${alias}.ngay_hoan_thanh_cong_viec)`;
+  const age = `(CURRENT_DATE - ${dateExpr})`;
+  const aged = ageCondition(horizon, age);
+  if (aged) return aged;
   switch (horizon) {
-    case 'nextWeekDue':
-      return `(CURRENT_DATE - ${dateExpr}) <= 7`;
-    case 'nextMonthDue':
-      return `(CURRENT_DATE - ${dateExpr}) <= 30`;
-    case 'overdue30To90':
-      return `(CURRENT_DATE - ${dateExpr}) > 30 AND (CURRENT_DATE - ${dateExpr}) <= 90`;
-    case 'criticalOverdue90Plus':
-      return `(CURRENT_DATE - ${dateExpr}) > 90`;
     case 'forecastNext7Days':
       return `(${dateExpr} + INTERVAL '30 days')::date <= (CURRENT_DATE + INTERVAL '7 days')::date`;
     case 'forecastNext30Days':
@@ -39,15 +57,10 @@ export function getHorizonPayableSqlCondition(
   alias: string = 'p',
 ): string {
   const dateExpr = `DATE(COALESCE(${alias}.period_to, ${alias}.period_from, ${alias}.created_at))`;
+  const age = `(CURRENT_DATE - ${dateExpr})`;
+  const aged = ageCondition(horizon, age);
+  if (aged) return aged;
   switch (horizon) {
-    case 'nextWeekDue':
-      return `(CURRENT_DATE - ${dateExpr}) <= 7`;
-    case 'nextMonthDue':
-      return `(CURRENT_DATE - ${dateExpr}) <= 30`;
-    case 'overdue30To90':
-      return `(CURRENT_DATE - ${dateExpr}) > 30 AND (CURRENT_DATE - ${dateExpr}) <= 90`;
-    case 'criticalOverdue90Plus':
-      return `(CURRENT_DATE - ${dateExpr}) > 90`;
     case 'forecastNext7Days':
       return `(${dateExpr} + INTERVAL '30 days')::date <= (CURRENT_DATE + INTERVAL '7 days')::date`;
     case 'forecastNext30Days':
@@ -67,7 +80,11 @@ export function getHorizonTitle(horizon: string): string {
     case 'nextWeekDue':
       return 'Mới phát sinh (≤ 7 ngày)';
     case 'nextMonthDue':
-      return 'Trong hạn chuẩn (≤ 30 ngày)';
+      return 'Trong hạn chuẩn (8–30 ngày)';
+    case 'overdue31To60':
+      return 'Quá hạn 31-60 ngày';
+    case 'overdue61To90':
+      return 'Quá hạn 61-90 ngày';
     case 'overdue30To90':
       return 'Quá hạn 31-90 ngày';
     case 'criticalOverdue90Plus':

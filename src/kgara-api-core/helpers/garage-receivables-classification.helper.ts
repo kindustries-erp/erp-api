@@ -1,7 +1,9 @@
 /**
- * Pure Engine Helper trích xuất theo chuẩn /api-structure
+ * Pure Engine Helper trích xuất theo chuẩn /erp-api-structure
  * Tính toán 4 nhóm phân loại nghiệp vụ & chi phí (TrendItem) từ danh sách cases
  */
+import { computeCaseRemaining } from './kgara-case-remaining.helper';
+
 export interface CaseClassificationTotals {
   caseCount: number;
   billed: number;
@@ -59,6 +61,7 @@ export function buildReceivablesTrendItem(
   gpCostByCaseId: Map<string, number> = new Map(),
   caseHasInvoiceMap: Map<string, boolean> = new Map(),
   paidCostByCaseId: Map<string, number> = new Map(),
+  receiptsByCaseId: Map<string, number> = new Map(),
 ): any {
   const groups = {
     SUA_CHUA_CHUNG: emptyClassificationTotals(),
@@ -69,6 +72,7 @@ export function buildReceivablesTrendItem(
 
   let totalBilled = 0;
   let totalPaid = 0;
+  let totalRemaining = 0;
   let totalCost = 0;
   let totalPaidCost = 0;
 
@@ -85,10 +89,14 @@ export function buildReceivablesTrendItem(
     const billed = c.excludeFromDebt
       ? 0
       : Number(c.tienCoThue || c.tien_co_thue || 0);
-    const paid = c.excludeFromDebt
-      ? 0
-      : Number(c.tienDaThanhToan || c.tien_da_thanh_toan || 0);
-    const remaining = c.excludeFromDebt ? 0 : Math.max(0, billed - paid);
+    // Công thức chung với thẻ tuổi nợ: còn phải thu = max(0, ròng − đã thu) theo từng phiếu
+    const { paid, remaining } = computeCaseRemaining({
+      netRevenue: c.tienCoThue ?? c.tien_co_thue,
+      storedPaid: c.tienDaThanhToan ?? c.tien_da_thanh_toan,
+      hasReceipt: receiptsByCaseId.has(c.id),
+      receipts: receiptsByCaseId.get(c.id),
+      excludeFromDebt: c.excludeFromDebt,
+    });
 
     const cost = gpCostByCaseId.get(c.id) ?? Number(c.chiPhi || c.chi_phi || 0);
     const paidCost = paidCostByCaseId.get(c.id) ?? 0;
@@ -116,6 +124,7 @@ export function buildReceivablesTrendItem(
 
     totalBilled += billed;
     totalPaid += paid;
+    totalRemaining += remaining;
     totalCost += cost;
     totalPaidCost += paidCost;
   }
@@ -128,7 +137,7 @@ export function buildReceivablesTrendItem(
     totalBilled,
     tienCoThue: totalBilled,
     paid: totalPaid,
-    receivable: Math.max(0, totalBilled - totalPaid),
+    receivable: totalRemaining,
     collectionRate: rate(totalPaid, totalBilled),
     cost: totalCost,
     paidCost: totalPaidCost,

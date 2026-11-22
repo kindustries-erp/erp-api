@@ -1,0 +1,390 @@
+import { DataSource, SelectQueryBuilder } from 'typeorm';
+import { buildPagination } from '@/common/utils/paginated-result';
+import { applyTableFilters } from '@/common/utils/table-query/table-query.filters';
+import {
+  parseFilterRecord,
+  parseListFilterPayload,
+  resolveTableColumn,
+  type TableColumnMap,
+  type TableFilterPayload,
+} from '@/common/utils/table-query/table-query.parse';
+import type { StockLedgerConfig } from '../contracts/inventory-movements-core.contract';
+import type {
+  QueryStockBalanceColumnOptionsDto,
+  QueryStockBalanceDto,
+  QueryStockTransactionDto,
+  StockTab,
+} from '../dto/query-stock-ledger.dto';
+import type {
+  StockBalanceItemDto,
+  StockTransactionItemDto,
+} from '../dto/stock-ledger-response.dto';
+import { toNumber } from '../helpers/decimal.helper';
+import {
+  loadMovementSumsByItem,
+  loadMovementTotals,
+} from '../helpers/stock-ledger-movement-sums.helper';
+import {
+  calculateRunningStockTransactions,
+  resolveDocumentNumbers,
+} from '../helpers/stock-ledger-transaction-calc.helper';
+
+const TIME_ZONE = 'Asia/Ho_Chi_Minh';
+const SORTABLE: Record<string, string> = {
+  itemCode: 'b.itemCode',
+  itemName: 'b.itemName',
+  qtyOnHand: 'b.qtyOnHand',
+  avgCost: 'b.avgCost',
+  inventoryValue: 'b.inventoryValue',
+  updatedAt: 'b.updatedAt',
+  qtyReceived: 'COALESCE(m.qty_received, 0)',
+  qtyIssued: 'COALESCE(m.qty_issued, 0)',
+  qtyAdjusted: 'COALESCE(m.qty_adjusted, 0)',
+};
+const TAB_CONDITION: Record<StockTab, string | null> = {
+  ALL: null,
+  IN_STOCK: 'b.qtyOnHand > 0',
+  OUT_OF_STOCK: 'b.qtyOnHand = 0',
+  NEGATIVE: 'b.qtyOnHand < 0',
+};
+
+export const BALANCE_TABLE_COLUMNS: TableColumnMap = {
+  itemCode: { sql: 'b.itemCode', type: 'text' },
+  itemName: { sql: 'b.itemName', type: 'text' },
+  unit: { sql: 'b.unit', type: 'text' },
+  branchId: { sql: 'b.branchId', type: 'text' },
+  qtyOnHand: { sql: 'b.qtyOnHand', type: 'number' },
+  inventoryValue: { sql: 'b.inventoryValue', type: 'number' },
+  avgCost: { sql: 'b.avgCost', type: 'number' },
+  qtyReceived: { sql: 'COALESCE(m.qty_received, 0)', type: 'number' },
+  qtyIssued: { sql: 'COALESCE(m.qty_issued, 0)', type: 'number' },
+  qtyAdjusted: { sql: 'COALESCE(m.qty_adjusted, 0)', type: 'number' },
+};
+
+export const BALANCE_FILTERABLE: Record<string, string> = Object.fromEntries(
+  Object.entries(BALANCE_TABLE_COLUMNS).map(([k, v]) => [k, v.sql]),
+);
+
+function toFilterPayload(raw: unknown): TableFilterPayload {
+  const parsed = parseFilterRecord<
+    TableFilterPayload & Record<string, unknown>
+  >(raw);
+  if (!parsed) return {};
+  const hasEnvelope = [
+    'columnFilters',
+    'columnSearch',
+    'columnOperators',
+    'dateRanges',
+  ].some((key) => key in parsed);
+  return hasEnvelope
+    ? parsed
+    : { columnFilters: parsed as Record<string, string[]> };
+}
+
+/**
+ * Đọc số dư và thẻ kho của một ledger. Chỉ đọc. Phạm vi ledger lấy từ cấu hình của module,
+ * bảng lấy qua entity trong cấu hình nên lõi không biết tên bảng hay tên họ.
+ */
+export class StockLedgerQueryService {
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly config: StockLedgerConfig,
+  ) {}
+
+  async listBalances(query: QueryStockBalanceDto) {
+    const page = Math.max(1, query.page ?? 1);
+    const pageSize = Math.min(200, Math.max(1, query.pageSize ?? 20));
+    const filterPayload = parseListFilterPayload({
+      column_filters: query.column_filters,
+      column_operators: query.column_operators,
+    });
+    const base = (tab?: StockTab) =>
+      this.balanceBase(query.search, tab, filterPayload);
+
+    const qb = base(query.stockTab);
+    const orders = (query.sort ?? '')
+      .split(',')
+      .map((t) => t.trim())
+      .filter((t) => SORTABLE[t.replace(/^-/, '')])
+      .map((t): [string, 'ASC' | 'DESC'] => [
+        SORTABLE[t.replace(/^-/, '')],
+        t.startsWith('-') ? 'DESC' : 'ASC',
+      ]);
+    if (!orders.length) orders.push(['b.itemCode', 'ASC']);
+    orders.forEach(([col, dir], i) =>
+      i === 0 ? qb.orderBy(col, dir) : qb.addOrderBy(col, dir),
+    );
+    qb.addOrderBy('b.id', 'ASC');
+    const [rows, total] = await qb
+      .skip((page - 1) * pageSize)
+      .take(pageSize)
+      .getManyAndCount();
+    const pageMovements = await loadMovementSumsByItem(
+      this.dataSource,
+      this.config,
+      rows.map((r) => r.itemCode),
+    );
+    const matchingCodes = (
+      await base(query.stockTab)
+        .select('b.itemCode', 'itemCode')
+        .getRawMany<{ itemCode: string }>()
+    ).map((r) => r.itemCode);
+    const totalMovements = await loadMovementTotals(
+      this.dataSource,
+      this.config,
+      matchingCodes,
+    );
+
+    const sums = await base(query.stockTab)
+      .select('COALESCE(SUM(b.qtyOnHand), 0)', 'totalQty')
+      .addSelect('COALESCE(SUM(b.inventoryValue), 0)', 'totalValue')
+      .getRawOne<{ totalQty: string; totalValue: string }>();
+
+    const tabCounts: Record<string, number> = {};
+    for (const tab of Object.keys(TAB_CONDITION) as StockTab[]) {
+      tabCounts[tab] = await base(tab).getCount();
+    }
+
+    const items: StockBalanceItemDto[] = rows.map((r) => ({
+      id: r.id,
+      branchId: r.branchId,
+      itemCode: r.itemCode,
+      itemName: r.itemName,
+      unit: r.unit,
+      qtyOnHand: toNumber(r.qtyOnHand),
+      avgCost: toNumber(r.avgCost),
+      inventoryValue: toNumber(r.inventoryValue),
+      qtyReceived: pageMovements.get(r.itemCode)?.qtyReceived ?? 0,
+      qtyIssued: pageMovements.get(r.itemCode)?.qtyIssued ?? 0,
+      qtyAdjusted: pageMovements.get(r.itemCode)?.qtyAdjusted ?? 0,
+      updatedAt: r.updatedAt,
+    }));
+    const pageSum = (pick: (item: StockBalanceItemDto) => number) =>
+      items.reduce((acc, item) => acc + pick(item), 0);
+    // Cumulative bằng tổng toàn bộ (bảng không hiển thị lũy kế), cùng quy ước với chứng từ gộp
+    const metric = (total: number, pageSubtotal: number) => ({
+      total,
+      pageSubtotal,
+      cumulative: total,
+    });
+    return {
+      items,
+      pagination: buildPagination(page, pageSize, total),
+      summaries: {
+        qtyOnHand: metric(
+          toNumber(sums?.totalQty),
+          pageSum((i) => i.qtyOnHand),
+        ),
+        inventoryValue: metric(
+          toNumber(sums?.totalValue),
+          pageSum((i) => i.inventoryValue),
+        ),
+        qtyReceived: metric(
+          totalMovements.qtyReceived,
+          pageSum((i) => i.qtyReceived),
+        ),
+        qtyIssued: metric(
+          totalMovements.qtyIssued,
+          pageSum((i) => i.qtyIssued),
+        ),
+        qtyAdjusted: metric(
+          totalMovements.qtyAdjusted,
+          pageSum((i) => i.qtyAdjusted),
+        ),
+      },
+      extraData: { tabCounts },
+    };
+  }
+
+  async listTransactions(query: QueryStockTransactionDto) {
+    const page = Math.max(1, query.page ?? 1);
+    const pageSize = Math.min(500, Math.max(1, query.pageSize ?? 20));
+
+    // Lấy toàn bộ giao dịch theo thứ tự thời gian tăng dần để tính running balance & FIFO
+    const allRows = await this.dataSource
+      .getRepository(this.config.tables.transaction)
+      .createQueryBuilder('t')
+      .where('t.ledgerScope = :scope', { scope: this.config.ledgerScope })
+      .andWhere('t.itemCode = :itemCode', { itemCode: query.itemCode })
+      .orderBy('t.transactionDate', 'ASC')
+      .addOrderBy('t.createdAt', 'ASC')
+      .addOrderBy('t.id', 'ASC')
+      .getMany();
+
+    const calculated = calculateRunningStockTransactions(
+      allRows as any,
+      query.costingMethod ?? 'WEIGHTED_AVG',
+    );
+
+    let filtered = calculated;
+    if (query.dateFrom || query.dateTo) {
+      filtered = filtered.filter((r) => {
+        const d = (
+          r.transactionDate instanceof Date
+            ? r.transactionDate
+            : new Date(r.transactionDate)
+        )
+          .toISOString()
+          .split('T')[0];
+        if (query.dateFrom && d < query.dateFrom) return false;
+        if (query.dateTo && d > query.dateTo) return false;
+        return true;
+      });
+    }
+
+    const total = filtered.length;
+    const sorted = [...filtered].reverse();
+    const paged = sorted.slice((page - 1) * pageSize, page * pageSize);
+
+    const docMap = await resolveDocumentNumbers(this.dataSource, paged);
+    for (const item of paged) {
+      const docNo = docMap.get(`${item.documentType}:${item.documentId}`);
+      if (docNo) item.documentNo = docNo;
+    }
+
+    return { items: paged, pagination: buildPagination(page, pageSize, total) };
+  }
+
+  async findBalanceColumnOptions(query: QueryStockBalanceColumnOptionsDto) {
+    const column = query.column ?? '';
+    const def = resolveTableColumn(BALANCE_TABLE_COLUMNS, column);
+    const page = Math.max(1, query.page ?? 1);
+    const pageSize = Math.min(200, Math.max(1, query.pageSize ?? 20));
+
+    // Nếu cột không hỗ trợ gợi ý (ví dụ các cột tính toán động qtyReceived, qtyIssued, qtyAdjusted):
+    // Trả trang rỗng theo chuẩn V2 thay vì ném 400
+    if (!def) {
+      return {
+        items: [],
+        pagination: buildPagination(page, pageSize, 0),
+      };
+    }
+
+    const filterPayload = toFilterPayload(query.filters);
+    const countQb = this.balanceBase(
+      undefined,
+      undefined,
+      filterPayload,
+      column,
+    );
+    countQb.andWhere(`${def.sql} IS NOT NULL`);
+    const term = query.search?.trim();
+    const searchExpr =
+      def.type === 'number' ? `CAST(${def.sql} AS TEXT)` : def.sql;
+
+    if (term) {
+      countQb.andWhere(`${searchExpr} ILIKE :search`, {
+        search: `%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`,
+      });
+    }
+    const countRes = await countQb
+      .select(`COUNT(DISTINCT ${def.sql})::int`, 'count')
+      .getRawOne<{ count: number }>();
+    const total = Number(countRes?.count ?? 0);
+
+    const dataQb = this.balanceBase(
+      undefined,
+      undefined,
+      filterPayload,
+      column,
+    );
+    dataQb.andWhere(`${def.sql} IS NOT NULL`);
+    if (term) {
+      dataQb.andWhere(`${searchExpr} ILIKE :search`, {
+        search: `%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`,
+      });
+    }
+
+    if (def.type === 'number') {
+      dataQb
+        .select(`DISTINCT ${def.sql}`, 'num_val')
+        .orderBy('num_val', 'ASC')
+        .skip((page - 1) * pageSize)
+        .take(pageSize);
+      const rows = await dataQb.getRawMany<{ num_val: string | number }>();
+      return {
+        items: rows.map((r) => {
+          const num = Number(r.num_val);
+          return {
+            label: String(num),
+            value: String(num),
+          };
+        }),
+        pagination: buildPagination(page, pageSize, total),
+      };
+    }
+
+    dataQb
+      .select(`DISTINCT CAST(${def.sql} AS TEXT)`, 'value')
+      .orderBy('value', 'ASC')
+      .skip((page - 1) * pageSize)
+      .take(pageSize);
+    const rows = await dataQb.getRawMany<{ value: string }>();
+
+    return {
+      items: rows.map((r) => ({
+        label: String(r.value),
+        value: String(r.value),
+      })),
+      pagination: buildPagination(page, pageSize, total),
+    };
+  }
+
+  private getTransactionTableName(): string {
+    try {
+      return (
+        this.dataSource.getMetadata(this.config.tables.transaction).tableName ||
+        'garage_stock_transactions'
+      );
+    } catch {
+      return 'garage_stock_transactions';
+    }
+  }
+
+  private movementSubquery(): string {
+    const txTable = this.getTransactionTableName();
+    const adjustmentTypes = `('ADJUSTMENT', 'ADJUSTMENT_CANCEL')`;
+    return `(
+      SELECT 
+        t.item_code,
+        COALESCE(SUM(CASE WHEN t.transaction_type NOT IN ${adjustmentTypes} THEN t.qty_in ELSE 0 END), 0) AS qty_received,
+        COALESCE(SUM(CASE WHEN t.transaction_type NOT IN ${adjustmentTypes} THEN t.qty_out ELSE 0 END), 0) AS qty_issued,
+        COALESCE(SUM(CASE WHEN t.transaction_type IN ${adjustmentTypes} THEN t.qty_in - t.qty_out ELSE 0 END), 0) AS qty_adjusted
+      FROM ${txTable} t
+      WHERE t.ledger_scope = '${this.config.ledgerScope}'
+      GROUP BY t.item_code
+    )`;
+  }
+
+  private balanceBase(
+    search?: string,
+    tab?: StockTab,
+    filterPayload?: TableFilterPayload,
+    excludeColumn?: string,
+  ): SelectQueryBuilder<any> {
+    const qb = this.dataSource
+      .getRepository(this.config.tables.balance)
+      .createQueryBuilder('b')
+      .leftJoin(this.movementSubquery(), 'm', 'm.item_code = b.itemCode')
+      .where('b.ledgerScope = :scope', { scope: this.config.ledgerScope });
+    const term = search?.trim();
+    if (term) {
+      qb.andWhere('(b.itemCode ILIKE :q OR b.itemName ILIKE :q)', {
+        q: `%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`,
+      });
+    }
+    const cond = TAB_CONDITION[tab ?? 'ALL'];
+    if (cond) qb.andWhere(cond);
+
+    if (filterPayload) {
+      applyTableFilters(
+        qb,
+        filterPayload,
+        BALANCE_TABLE_COLUMNS,
+        'bf',
+        excludeColumn,
+      );
+    }
+    return qb;
+  }
+}

@@ -57,7 +57,12 @@ export class KgaraCaseServicesQueryService {
         'c',
         'c.hd_phieu_dich_vu_id = srv.hd_phieu_dich_vu_id',
       )
-      .leftJoin(KgaraBranch, 'b', 'b.external_id = c.branch_external_id')
+      // Chi nhánh có một dòng cho mỗi account_key (MAIN, OJ): join đủ hai cột để không nhân đôi hạng mục.
+      .leftJoin(
+        KgaraBranch,
+        'b',
+        'b.external_id = c.branch_external_id AND b.account_key = c.account_key',
+      )
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('srv.deleted_at IS NULL');
 
@@ -202,6 +207,7 @@ export class KgaraCaseServicesQueryService {
         'srv.kho_code AS "khoCode"',
         'srv.tien_phu_phi AS "tienPhuPhi"',
         'c.so_chung_tu AS "soChungTu"',
+        'c.account_key AS "accountKey"',
         'c.bien_so_xe AS "bienSoXe"',
         'c.khach_hang_code AS "khachHangCode"',
         'c.khach_hang_name AS "khachHangName"',
@@ -223,6 +229,7 @@ export class KgaraCaseServicesQueryService {
       hdPhieuDichVuChiTietId: r.hdPhieuDichVuChiTietId,
       hdPhieuDichVuId: r.hdPhieuDichVuId,
       soChungTu: r.soChungTu,
+      accountKey: r.accountKey,
       bienSoXe: r.bienSoXe,
       khachHangCode: r.khachHangCode,
       khachHangName: r.khachHangName,

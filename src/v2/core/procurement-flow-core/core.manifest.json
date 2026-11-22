@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "layer": "api",
+  "family": "procurement-flow-core",
+  "entity": "ProcurementFlow",
+  "style": "orchestrator",
+  "barrel": "src/v2/core/procurement-flow-core/index.ts",
+  "module": null,
+  "moduleFile": null,
+  "baseClasses": {
+    "contract": "ProcurementFlowEventPort",
+    "service": "AbstractProcurementFlowService"
+  },
+  "serviceFile": "abstract-procurement-flow.service.ts",
+  "permissionPattern": "procurement-flow-core",
+  "requiredModuleFiles": ["services"]
+}

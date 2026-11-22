@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "layer": "api",
+  "family": "loans-core",
+  "style": "engine",
+  "barrel": "src/v2/core/loans-core/index.ts",
+  "notes": "Lõi v2 cung cấp engine tính toán khấu hao khoản vay và dự toán dòng tiền."
+}

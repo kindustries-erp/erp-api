@@ -7,9 +7,9 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { SinvoiceService } from './sinvoice.service';
-import { NotificationsService } from '../notifications/notifications.service';
-import { CorePermission } from '../rbac-core/entities/core-permission.entity';
-import { CoreUserRole } from '../rbac-core/entities/core-user-role.entity';
+import { NotificationsPublisherService } from '@/v2/modules/notifications-inbox';
+import { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.entity';
+import { CoreUserRole } from '@/v2/core/rbac-core/entities/core-user-role.entity';
 import {
   isInvoiceCronEnabled,
   isWithinInvoiceSyncWindow,
@@ -28,7 +28,7 @@ export class SinvoiceCronService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private readonly sinvoiceService: SinvoiceService,
-    private readonly notificationsService: NotificationsService,
+    private readonly notificationsService: NotificationsPublisherService,
     @InjectRepository(CorePermission)
     private readonly permissionRepo: Repository<CorePermission>,
     @InjectRepository(CoreUserRole)
@@ -178,7 +178,7 @@ export class SinvoiceCronService implements OnModuleInit, OnModuleDestroy {
           type: 'INFO',
           title: 'Đồng bộ hóa đơn nháp thành công',
           message: `Danh sách hóa đơn nháp Viettel đã cập nhật: +${added} mới, -${removed} đã xoá. Tổng hiện tại: ${syncedCount} nháp.`,
-          metadata: {
+          extraData: {
             i18nTitleKey: 'erpInvoices:sinvoiceDraft.notifyTitle',
             i18nMessageKey: 'erpInvoices:sinvoiceDraft.notifyMessage',
             i18nParams: { added, removed, syncedCount },

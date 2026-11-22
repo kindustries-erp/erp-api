@@ -1,7 +1,10 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { Optional } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { DataSource, Repository } from 'typeorm';
 import { KgaraCase } from '../entities/kgara_case.entity';
+import { notifyCaseProjector } from '../hub/case-projector.port';
 import { ErpModuleCategory } from '../../module-config/entities/erp_module_category.entity';
 import { EntityCustomFieldsHelper } from '../../module-config/helpers/entity-custom-fields.helper';
 import { StrictCustomFieldsHelper } from '../../module-config/helpers/strict-custom-fields.helper';
@@ -22,6 +25,8 @@ export class KgaraCaseConfigService {
     @InjectRepository(ErpModuleCategory)
     private readonly categoryRepo: Repository<ErpModuleCategory>,
     private readonly dataSource: DataSource,
+    @Optional()
+    private readonly moduleRef?: ModuleRef,
   ) {}
 
   /**
@@ -162,6 +167,9 @@ export class KgaraCaseConfigService {
         );
       }
     });
+
+    // 5b. Chiếu bản ghi đã lưu sang v2 (lỗi chỉ log)
+    await notifyCaseProjector(this.moduleRef, this.logger, caseData.id);
 
     // 6. Làm giàu dữ liệu EAV Custom Fields
     await EntityCustomFieldsHelper.enrichOne(

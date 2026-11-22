@@ -17,7 +17,7 @@ export function insertAtMarker(content, { marker, snippet, tag }) {
 export const API_V2_WIRING_FILES = {
   appModule: 'src/app.module.ts',
   dataSource: 'src/db/data-source.ts',
-  rbacResource: 'src/rbac-core/enums/erp-resource.enum.ts',
+  rbacResource: 'src/v2/core/rbac-core/enums/erp-resource.enum.ts',
 };
 
 /**

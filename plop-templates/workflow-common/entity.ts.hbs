@@ -1,0 +1,8 @@
+import { CoreHeaderEntity } from '@/v2/core/base-core';
+
+/**
+ * Entity nền họ {{family}} (chứng từ có vòng đời trạng thái).
+ * Kế thừa chuỗi base chung: id, extraData, timestamps, isDeleted, status (mặc định DRAFT), createdBy.
+ * Module con extend class này, thêm `@Entity(...)` và các cột riêng.
+ */
+export abstract class {{baseEntity}} extends CoreHeaderEntity {}

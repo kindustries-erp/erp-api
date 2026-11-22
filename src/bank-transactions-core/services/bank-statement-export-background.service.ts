@@ -4,11 +4,17 @@ import {
   Logger,
   NotFoundException,
   OnModuleDestroy,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
-import { Subject } from 'rxjs';
+import { Observable, Subject } from 'rxjs';
+import {
+  formatExportTimestampNoSeconds,
+  isExportJobsV2Enabled,
+} from '@/v2/core/export-jobs-core';
+import { BankStatementsExportJobsService } from '@/v2/modules/export-jobs-bank-statements';
 import { ErpBankTransaction } from '../entities/erp_bank_transaction.entity';
 import { ErpBankAccount } from '../entities/erp_bank_account.entity';
 import { ErpCashBook } from '../entities/erp_cash_book.entity';
@@ -41,7 +47,9 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
   private readonly logger = new Logger(
     BankStatementExportBackgroundService.name,
   );
-  public readonly progress$ = new Subject<BankStatementExportProgressEvent>();
+  /** Luồng tiến độ của cơ chế cũ (chỉ dùng khi cờ `EXPORT_JOBS_V2` tắt). */
+  private readonly legacyProgress$ =
+    new Subject<BankStatementExportProgressEvent>();
 
   private readonly jobs = new Map<string, BankStatementExportJob>();
   private readonly activeJobByUser = new Map<string, string>();
@@ -56,19 +64,50 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
     private readonly cashBookRepo: Repository<ErpCashBook>,
     private readonly transactionQueryService: TransactionQueryService,
     private readonly excelBuilder: BankStatementExcelBuilder,
+    @Optional()
+    private readonly v2Jobs?: BankStatementsExportJobsService,
   ) {
     this.cleanupIntervalId = setInterval(() => {
       this.cleanupExpiredJobs();
     }, 60_000);
   }
 
+  /** Job nền V2 (lõi `export-jobs-core`) khi cờ bật và đã được cấp; ngược lại dùng cơ chế cũ bên dưới. */
+  private get v2(): BankStatementsExportJobsService | undefined {
+    return this.v2Jobs && isExportJobsV2Enabled() ? this.v2Jobs : undefined;
+  }
+
+  get progress$(): Observable<BankStatementExportProgressEvent> {
+    return (this.v2?.progress$ ??
+      this.legacyProgress$) as Observable<BankStatementExportProgressEvent>;
+  }
+
   onModuleDestroy() {
     clearInterval(this.cleanupIntervalId);
-    this.progress$.complete();
+    this.legacyProgress$.complete();
   }
 
   async startBackgroundExport(query: BankTransactionFilterDto, userId: string) {
     const queryFingerprint = this.buildQueryFingerprint(query);
+
+    if (this.v2) {
+      return this.v2.startBackgroundExport({
+        userId,
+        fingerprint: queryFingerprint,
+        fileName: await this.resolveExportFileName(query),
+        totalUnits: BankStatementExportBackgroundService.TOTAL_UNITS,
+        dateFrom: query.startDate,
+        dateTo: query.endDate,
+        producer: (onProgress) =>
+          this.generateExcelBuffer(query, (current, message) =>
+            onProgress(
+              current,
+              BankStatementExportBackgroundService.TOTAL_UNITS,
+              message,
+            ),
+          ),
+      });
+    }
 
     const runningJobId = this.activeJobByUser.get(userId);
     if (runningJobId) {
@@ -92,35 +131,7 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
       };
     }
 
-    const timestamp = new Date();
-    const dateStr = this.formatDateForFileName(timestamp);
-    let fileName: string;
-
-    if (query.sourceType === 'CASH') {
-      if (query.cashBookId) {
-        const cashBook = await this.cashBookRepo.findOne({
-          where: { id: query.cashBookId },
-        });
-        const cleanName = cashBook?.name
-          ? cashBook.name.replace(/[^a-zA-Z0-9_\u00C0-\u1EF9-]/g, '_')
-          : 'So_quy';
-        fileName = `So_quy_${cleanName}_${dateStr}.xlsx`;
-      } else {
-        fileName = `So_quy_tat_ca_${dateStr}.xlsx`;
-      }
-    } else {
-      if (query.bankAccountId) {
-        const bankAccount = await this.bankAccountRepo.findOne({
-          where: { id: query.bankAccountId },
-        });
-        const cleanAcc = bankAccount?.accountNumber
-          ? bankAccount.accountNumber.replace(/[^a-zA-Z0-9_-]/g, '')
-          : 'TK';
-        fileName = `Sao_ke_${cleanAcc}_${dateStr}.xlsx`;
-      } else {
-        fileName = `Sao_ke_tat_ca_tai_khoan_${dateStr}.xlsx`;
-      }
-    }
+    const fileName = await this.resolveExportFileName(query);
 
     const job: BankStatementExportJob = {
       id: randomUUID(),
@@ -156,11 +167,46 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
     };
   }
 
+  /** Tên file xuất: tra tên sổ quỹ hoặc số tài khoản, gắn mốc `YYYYMMDD_HHmm`. */
+  private async resolveExportFileName(
+    query: BankTransactionFilterDto,
+  ): Promise<string> {
+    const dateStr = formatExportTimestampNoSeconds(new Date());
+
+    if (query.sourceType === 'CASH') {
+      if (query.cashBookId) {
+        const cashBook = await this.cashBookRepo.findOne({
+          where: { id: query.cashBookId },
+        });
+        const cleanName = cashBook?.name
+          ? cashBook.name.replace(/[^a-zA-Z0-9_À-ỹ-]/g, '_')
+          : 'So_quy';
+        return `So_quy_${cleanName}_${dateStr}.xlsx`;
+      }
+      return `So_quy_tat_ca_${dateStr}.xlsx`;
+    }
+
+    if (query.bankAccountId) {
+      const bankAccount = await this.bankAccountRepo.findOne({
+        where: { id: query.bankAccountId },
+      });
+      const cleanAcc = bankAccount?.accountNumber
+        ? bankAccount.accountNumber.replace(/[^a-zA-Z0-9_-]/g, '')
+        : 'TK';
+      return `Sao_ke_${cleanAcc}_${dateStr}.xlsx`;
+    }
+    return `Sao_ke_tat_ca_tai_khoan_${dateStr}.xlsx`;
+  }
+
   listHistoryForUser(
     userId: string,
     page = 1,
     pageSize = 10,
   ): BankStatementExportHistoryResult {
+    if (this.v2) {
+      return this.v2.listHistoryForUser(userId, page, pageSize);
+    }
+
     const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
     const safePageSize = Number.isFinite(pageSize)
       ? Math.min(100, Math.max(1, Math.floor(pageSize)))
@@ -187,6 +233,12 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
   getJobSnapshotForUser(
     userId: string,
   ): BankStatementExportProgressEvent | null {
+    if (this.v2) {
+      return this.v2.getJobSnapshotForUser(
+        userId,
+      ) as BankStatementExportProgressEvent | null;
+    }
+
     const activeJobId = this.activeJobByUser.get(userId);
     if (!activeJobId) return null;
 
@@ -213,6 +265,10 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
   }
 
   getReadyExportFile(jobId: string, userId: string) {
+    if (this.v2) {
+      return this.v2.getReadyFile(jobId, userId);
+    }
+
     const job = this.jobs.get(jobId);
     if (!job || job.userId !== userId) {
       throw new NotFoundException('Không tìm thấy file xuất Excel.');
@@ -311,6 +367,7 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
     }
   }
 
+  /** Sinh buffer xlsx. Dùng chung cho cơ chế cũ và job V2 nên nội dung file không đổi. */
   private async generateExcelBuffer(
     query: BankTransactionFilterDto,
     onProgress: (current: number, message: string) => void,
@@ -347,7 +404,7 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
           'inv.buyer_name as "buyerName"',
           'inv.buyer_tax_code as "buyerTaxCode"',
           'inv.total_amount as "totalAmount"',
-          '(SELECT string_agg(ib.name, \', \' ORDER BY ib.name) FROM erp_branches ib WHERE ib.id = ANY(inv.branch_ids)) as "invoiceBranchName"',
+          '(SELECT string_agg(ib.name, \', \' ORDER BY ib.name) FROM branches_management ib WHERE ib.id = ANY(inv.branch_ids)) as "invoiceBranchName"',
         ])
         .where('netoff.bank_transaction_id IN (:...ids)', { ids })
         .orderBy('inv.invoice_date', 'ASC')
@@ -376,7 +433,7 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
     if (allIds.length === 0) return;
     const rows: { id: string; name: string }[] =
       await this.transactionRepo.manager.query(
-        'SELECT id, name FROM erp_branches WHERE id = ANY($1::uuid[])',
+        'SELECT id, name FROM branches_management WHERE id = ANY($1::uuid[])',
         [allIds],
       );
     const nameById = new Map(rows.map((r) => [r.id, r.name]));
@@ -415,7 +472,7 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
       message: string;
     },
   ) {
-    this.progress$.next({
+    this.legacyProgress$.next({
       processId: 'bank-statement-xlsx-export',
       userId: job.userId,
       jobId: job.id,
@@ -514,14 +571,5 @@ export class BankStatementExportBackgroundService implements OnModuleDestroy {
       sortOrder: query.sortOrder || '',
     };
     return JSON.stringify(stable);
-  }
-
-  private formatDateForFileName(date: Date): string {
-    const yyyy = date.getFullYear();
-    const mm = String(date.getMonth() + 1).padStart(2, '0');
-    const dd = String(date.getDate()).padStart(2, '0');
-    const hh = String(date.getHours()).padStart(2, '0');
-    const min = String(date.getMinutes()).padStart(2, '0');
-    return `${yyyy}${mm}${dd}_${hh}${min}`;
   }
 }

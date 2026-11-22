@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "layer": "api",
+  "family": "table-preferences-core",
+  "entity": "BaseTablePreferenceEntity",
+  "style": "v2-core",
+  "barrel": "src/v2/core/table-preferences-core/index.ts",
+  "module": null,
+  "moduleFile": null,
+  "baseClasses": {
+    "entity": "BaseTablePreferenceEntity",
+    "createDto": null,
+    "contract": null,
+    "service": null
+  },
+  "serviceFile": null,
+  "permissionPattern": null,
+  "requiredModuleFiles": ["entities"]
+}

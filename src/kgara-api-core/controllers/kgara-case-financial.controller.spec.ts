@@ -1,7 +1,7 @@
 import { Reflector } from '@nestjs/core';
 import { KgaraCaseFinancialController } from './kgara-case-financial.controller';
 import { RBAC_ANY_PERMISSIONS_KEY } from '../../auth/decorators/require-permissions.decorator';
-import { ErpResource, ErpAction } from '@/rbac-core/enums';
+import { ErpResource, ErpAction } from '@/v2/core/rbac-core';
 
 describe('KgaraCaseFinancialController RBAC Permissions', () => {
   const reflector = new Reflector();
@@ -65,5 +65,32 @@ describe('KgaraCaseFinancialController RBAC Permissions', () => {
         { resource: ErpResource.BANK_STATEMENTS, action: ErpAction.UPDATE },
       ]),
     );
+  });
+});
+
+describe('KgaraCaseFinancialController chiếu cấn trừ sang sổ nợ v2', () => {
+  it('xóa settlement: tính lại vụ việc rồi gọi projectCase; projector lỗi không làm hỏng', async () => {
+    const projector = {
+      projectCase: jest.fn().mockRejectedValue(new Error('x')),
+    };
+    const caseQueryService = {
+      recalculateCaseSettlementSummary: jest.fn().mockResolvedValue(undefined),
+    };
+    const controller = new KgaraCaseFinancialController(
+      {} as never,
+      {} as never,
+      { delete: jest.fn().mockResolvedValue(undefined) } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      caseQueryService as never,
+      { get: () => projector } as never,
+    );
+    const out = await controller.removeCaseSettlement(
+      'case-1',
+      '11111111-1111-4111-8111-111111111111',
+    );
+    expect(out).toEqual({ success: true });
+    expect(projector.projectCase).toHaveBeenCalledWith('case-1');
   });
 });

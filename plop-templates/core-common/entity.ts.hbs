@@ -1,0 +1,8 @@
+import { CoreSoftDeletableEntity } from '@/v2/core/base-core';
+
+/**
+ * Entity nền họ {{family}}. Kế thừa chuỗi base chung (id, extraData, createdAt/updatedAt, isDeleted).
+ * Module con extend class này, thêm `@Entity(...)` và các cột riêng.
+ * Xóa mềm bằng `isDeleted` theo quy chuẩn ERP.
+ */
+export abstract class {{baseEntity}} extends CoreSoftDeletableEntity {}

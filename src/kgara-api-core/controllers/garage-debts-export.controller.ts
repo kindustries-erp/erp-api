@@ -16,7 +16,7 @@ import type { Response } from 'express';
 import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
-import { ErpAction, ErpResource } from '@/rbac-core/enums';
+import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
 import { BranchId } from '../decorators/branch-id.decorator';
 import { GarageDebtsExportDto } from '../dto/garage-export.dto';
 import type { GarageDebtExportKind } from '../helpers/garage-debts-export.helper';
@@ -24,7 +24,7 @@ import { GarageExportJobsService } from '../services/garage-export-jobs.service'
 import {
   exportProgressStream,
   sendReadyExportFile,
-} from './garage-export.helper';
+} from '@/v2/core/export-jobs-core';
 
 const DEBTS_READ = {
   resource: ErpResource.GARAGE_DEBTS,

@@ -16,6 +16,8 @@ import {
   type ExcelReportColumnDef,
 } from './kgara-excel-style.helper';
 import { resolveCaseVatAmount } from './kgara-case-financial-parser.helper';
+import { KgaraCostEnricherHelper } from './kgara-cost-enricher.helper';
+import { vehicleKey } from '@/common/utils/vehicle-count-sql';
 
 export const CLASSIFICATION_LABELS: Record<string, string> = {
   KY_GUI_NOI_BO: 'Ký gửi nội bộ',
@@ -55,6 +57,14 @@ export function formatExclusionRules(item: Record<string, any>): string {
     item.excludeFromDebt ? 'Loại khỏi công nợ' : null,
   ].filter(Boolean);
   return rules.length ? rules.join('; ') : '—';
+}
+
+/** Tên nếu có, thiếu thì mã; cả hai rỗng trả `—` (dùng cho hãng xe, dòng xe, đối tượng thanh toán). */
+export function pickNameOrCode(
+  name: string | null | undefined,
+  code: string | null | undefined,
+): string {
+  return name?.trim() || code?.trim() || '—';
 }
 
 export function highlightStatusCell(
@@ -139,6 +149,8 @@ export const SHEET1_FIRST_DATA_ROW = 5;
 /** Dữ liệu từng phiếu sau khi chuẩn hóa, dùng dựng Dashboard (cùng nguồn với Sheet 1). */
 export interface CaseDashboardRow {
   caseNo: string;
+  /** Khóa XE (biển số đã chuẩn hóa; phiếu không biển là khóa theo id phiếu). */
+  vehicleKey: string;
   customerName: string;
   classification: string;
   receivedDate: Date | null;
@@ -191,7 +203,10 @@ export function buildSheet1CompletedCases(
   cases: any[],
   branchNameMap: Record<string, string>,
   linkedInvoiceSummaryMap: Record<string, string>,
-  settlementsMap: Record<string, { receipts: number; payments: number }>,
+  settlementsMap: Record<
+    string,
+    { receipts: number; payments: number; hasReceipt: boolean }
+  >,
   serviceLinesMap?: Map<string, any[]>,
   caseLedgerMap: Record<string, CaseLedgerAmounts> = {},
   selectedColumns?: string[],
@@ -270,8 +285,9 @@ export function buildSheet1CompletedCases(
 
     const setInfo = settlementsMap[c.id];
     const hasSettlement = setInfo !== undefined;
+    const hasReceipt = setInfo?.hasReceipt === true;
     const phaiThu = Number(c.tienCoThue) || rev;
-    const daThu = hasSettlement
+    const daThu = hasReceipt
       ? setInfo.receipts
       : Number(c.tienDaThanhToan) || 0;
     const conPhaiThu = phaiThu - daThu;
@@ -320,7 +336,6 @@ export function buildSheet1CompletedCases(
       const loaiChiTiet = line.loaiChiTiet ?? line.LoaiChiTiet;
       const nhomIn = (line.nhomInName || line.NhomInName || '').toLowerCase();
       const pt = Number(line.tienPhuTung ?? line.TienPhuTung ?? 0);
-      const gv = Number(line.giaVonPhuTung ?? line.GiaVonPhuTung ?? 0);
       const isPt =
         loaiCode === 'PT' ||
         loaiChiTiet === 1 ||
@@ -329,7 +344,7 @@ export function buildSheet1CompletedCases(
         nhomIn.includes('vật tư') ||
         pt > 0;
       if (isPt) {
-        gvPt += gv;
+        gvPt += KgaraCostEnricherHelper.resolveLineCost(line).total;
       }
     }
     const chiPhiPhuTung = gvPt;
@@ -368,6 +383,10 @@ export function buildSheet1CompletedCases(
 
     dashboardRows.push({
       caseNo: c.soChungTu || '—',
+      vehicleKey: vehicleKey(
+        c.bienSoXe,
+        String(c.id ?? c.soChungTu ?? `row-${idx}`),
+      ),
       customerName: c.khachHangName || '—',
       classification: classLabel,
       receivedDate: toDateOrNull(c.ngayTiepNhan),
@@ -445,6 +464,14 @@ export function buildSheet1CompletedCases(
       duThu,
       duChi,
       vatAmount,
+      soKhung: c.soKhung?.trim() || '—',
+      hangXe: pickNameOrCode(c.hangXeName, c.hangXeCode),
+      dongXe: pickNameOrCode(c.dongXeName, c.dongXeCode),
+      namSanXuat: c.namSanXuat ?? '—',
+      doiTuongThanhToan: pickNameOrCode(
+        c.doiTuongThanhToanName,
+        c.doiTuongThanhToanCode,
+      ),
       exclusionRules: formatExclusionRules(c),
       createdAt: toExcelWallClockDate(c.createdAt, true),
       updatedAt: toExcelWallClockDate(c.updatedAt, true),
@@ -569,7 +596,6 @@ export function buildSheet2PnlTracking(
       const loaiChiTiet = line.loaiChiTiet ?? line.LoaiChiTiet;
       const nhomIn = (line.nhomInName || line.NhomInName || '').toLowerCase();
       const pt = Number(line.tienPhuTung ?? line.TienPhuTung ?? 0);
-      const gv = Number(line.giaVonPhuTung ?? line.GiaVonPhuTung ?? 0);
       const dv = Number(line.tienDichVu ?? line.TienDichVu ?? 0);
       const isPt =
         loaiCode === 'PT' ||
@@ -581,7 +607,7 @@ export function buildSheet2PnlTracking(
 
       if (isPt) {
         dtPt += pt > 0 ? pt : Number(line.tienCoThue ?? line.TienCoThue ?? 0);
-        gvPt += gv;
+        gvPt += KgaraCostEnricherHelper.resolveLineCost(line).total;
       } else {
         dtDv += dv > 0 ? dv : Number(line.tienCoThue ?? line.TienCoThue ?? 0);
       }
@@ -669,15 +695,25 @@ export function buildSheet2PnlTracking(
   applyColumnGroupStyles(sheet, CASE_PNL_COLUMNS, 5, CASE_PNL_COLUMN_GROUPS);
 }
 
+/** Tùy chọn tách sheet chi tiết: tên sheet và bộ lọc dòng (mặc định: tất cả dòng, sheet 3 gốc). */
+export interface ItemizedSheetOptions {
+  sheetName?: string;
+  includeLine?: (caseRow: any, line: any) => boolean;
+}
+
 /**
- * Sheet 3: Chi tiết DV & Phụ tùng
+ * Sheet 3: Chi tiết DV & Phụ tùng. Việc tách theo công/OJ do `kgara-itemized-sheets.builder.ts`
+ * điều phối bằng `options`.
  */
 export function buildSheet3ItemizedServices(
   workbook: ExcelJS.Workbook,
   cases: any[],
   serviceLinesMap: Map<string, any[]>,
+  options: ItemizedSheetOptions = {},
 ): void {
-  const sheet = workbook.addWorksheet('Chi tiết DV & Phụ tùng');
+  const sheet = workbook.addWorksheet(
+    options.sheetName ?? 'Chi tiết DV & Phụ tùng',
+  );
   initSheetStructure(sheet, COMPLETED_CASE_SERVICES_COLUMNS);
 
   const sums = {
@@ -687,7 +723,7 @@ export function buildSheet3ItemizedServices(
     soGioCongLam: 0,
     tienDichVu: 0,
     tienPhuTung: 0,
-    giaVonPhuTung: 0,
+    tongVon: 0,
     tienChietKhauCt: 0,
   };
 
@@ -696,6 +732,7 @@ export function buildSheet3ItemizedServices(
     if (!c.hdPhieuDichVuId) continue;
     const lines = serviceLinesMap.get(c.hdPhieuDichVuId) || [];
     for (const line of lines) {
+      if (options.includeLine && !options.includeLine(c, line)) continue;
       lineIdx++;
       const loaiCode = line.loaiSanPhamCode || line.LoaiSanPhamCode || '';
       const pt = Number(line.tienPhuTung ?? line.TienPhuTung ?? 0);
@@ -721,9 +758,8 @@ export function buildSheet3ItemizedServices(
       const tienCoThue = Number(line.tienCoThue ?? line.TienCoThue ?? 0);
       const soGioCongLam = Number(line.soGioCongLam ?? line.SoGioCongLam ?? 0);
       const tienDichVu = Number(line.tienDichVu ?? line.TienDichVu ?? 0);
-      const giaVonPhuTung = Number(
-        line.giaVonPhuTung ?? line.GiaVonPhuTung ?? 0,
-      );
+      const { unit: giaVonDonVi, total: tongVon } =
+        KgaraCostEnricherHelper.resolveLineCost(line);
       const tienChietKhauCt = Number(
         line.tienChietKhauCt ??
           line.TienChietKhauCT ??
@@ -737,7 +773,7 @@ export function buildSheet3ItemizedServices(
       sums.soGioCongLam += soGioCongLam;
       sums.tienDichVu += tienDichVu;
       sums.tienPhuTung += pt;
-      sums.giaVonPhuTung += giaVonPhuTung;
+      sums.tongVon += tongVon;
       sums.tienChietKhauCt += tienChietKhauCt;
 
       const row = sheet.addRow({
@@ -762,7 +798,8 @@ export function buildSheet3ItemizedServices(
         soGioCongLam,
         tienDichVu,
         tienPhuTung: pt,
-        giaVonPhuTung,
+        giaVonPhuTung: giaVonDonVi,
+        tongVon,
         tienChietKhauCt,
         khoCode: line.khoCode || line.KhoCode || line.KhoName || '—',
         ghiChu:

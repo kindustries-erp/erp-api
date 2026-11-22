@@ -7,10 +7,10 @@ import { StringValue } from 'ms';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
-import { UsersModule } from '../users/users.module';
+import { UsersManagementModule } from '@/v2/modules/users-management/users-management.module';
 import { AuditCoreModule } from '../audit-core/audit-core.module';
 import { CoreRefreshToken } from './entities/core-refresh-token.entity';
-import { RbacCoreModule } from '../rbac-core/rbac-core.module';
+import { RbacCoreModule } from '@/v2/core/rbac-core';
 import { AppConfigModule } from '../app-config/app-config.module';
 
 @Module({
@@ -18,7 +18,7 @@ import { AppConfigModule } from '../app-config/app-config.module';
     ConfigModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     TypeOrmModule.forFeature([CoreRefreshToken]),
-    UsersModule,
+    UsersManagementModule,
     AuditCoreModule,
     RbacCoreModule,
     AppConfigModule,

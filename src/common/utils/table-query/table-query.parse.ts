@@ -117,3 +117,25 @@ export const parseFiniteNumber = (value: string | undefined): number | null => {
   const num = Number(trimmed);
   return Number.isFinite(num) ? num : null;
 };
+
+/**
+ * Bộ lọc cột của danh sách (các JSON trong query) thành envelope cho applyTableFilters.
+ * Dùng chung cho mọi list V2 dùng bộ lọc chuẩn, để service không lặp bốn lần parseFilterRecord.
+ */
+export const parseListFilterPayload = (query: {
+  column_filters?: unknown;
+  column_search?: unknown;
+  column_operators?: unknown;
+  date_ranges?: unknown;
+}): TableFilterPayload => ({
+  columnFilters: parseFilterRecord<Record<string, string[]>>(
+    query.column_filters,
+  ),
+  columnSearch: parseFilterRecord<Record<string, string>>(query.column_search),
+  columnOperators: parseFilterRecord<Record<string, TableOperatorFilter>>(
+    query.column_operators,
+  ),
+  dateRanges: parseFilterRecord<Record<string, TableDateRange>>(
+    query.date_ranges,
+  ),
+});

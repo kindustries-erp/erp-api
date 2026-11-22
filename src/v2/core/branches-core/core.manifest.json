@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "layer": "api",
+  "family": "branches-core",
+  "entity": "BaseBranchEntity",
+  "style": "v2-core",
+  "barrel": "src/v2/core/branches-core/index.ts",
+  "module": null,
+  "moduleFile": null,
+  "baseClasses": {
+    "entity": "BaseBranchEntity",
+    "createDto": null,
+    "contract": "BranchReferencePort",
+    "service": "AbstractBranchCommandService"
+  },
+  "serviceFile": "services/abstract-branch-command.service.ts",
+  "permissionPattern": null,
+  "requiredModuleFiles": ["entities", "services"]
+}

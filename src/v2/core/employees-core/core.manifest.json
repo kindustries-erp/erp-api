@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "layer": "api",
+  "family": "employees-core",
+  "entity": "BaseEmployeeEntity",
+  "style": "v2-core",
+  "barrel": "src/v2/core/employees-core/index.ts",
+  "module": null,
+  "moduleFile": null,
+  "baseClasses": {
+    "entity": "BaseEmployeeEntity",
+    "createDto": null,
+    "contract": "EmployeeRef",
+    "service": null
+  },
+  "serviceFile": null,
+  "permissionPattern": null,
+  "requiredModuleFiles": [
+    "entities"
+  ]
+}

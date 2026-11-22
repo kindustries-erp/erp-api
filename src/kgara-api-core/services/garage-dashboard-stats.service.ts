@@ -5,7 +5,13 @@ import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
 import { format, subMonths } from 'date-fns';
-import { quotationStatusSql } from '../helpers/kgara-case-filter.helper';
+import {
+  GARAGE_FUNNEL_CLASSIFICATION_KEY_SQL,
+  GARAGE_VEHICLE_COUNT_SQL,
+  GarageFunnelGroup,
+  buildGarageFunnelSelects,
+  garageFunnelGroupKeys,
+} from '../helpers/garage-dashboard-funnel.sql';
 
 @Injectable()
 export class GarageDashboardStatsService {
@@ -885,7 +891,7 @@ export class GarageDashboardStatsService {
         "COALESCE(NULLIF(c.ten_tinh_trang_dich_vu, ''), 'Khác')",
         'statusName',
       )
-      .addSelect('COUNT(c.id)', 'count')
+      .addSelect(GARAGE_VEHICLE_COUNT_SQL, 'count')
       .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'revenue')
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('(c.exclude_from_reports IS NOT TRUE)')
@@ -899,6 +905,26 @@ export class GarageDashboardStatsService {
       .addOrderBy('count', 'DESC');
 
     const rawStatus = await statusQb.getRawMany();
+
+    // Tổng toàn kỳ theo trạng thái: distinct xe trên cả kỳ (không cộng dồn các tháng)
+    const rawStatusOverall = await this.caseRepo
+      .createQueryBuilder('c')
+      .select('COALESCE(c.tinh_trang_dich_vu, 0)', 'statusCode')
+      .addSelect(
+        "COALESCE(NULLIF(c.ten_tinh_trang_dich_vu, ''), 'Khác')",
+        'statusName',
+      )
+      .addSelect(GARAGE_VEHICLE_COUNT_SQL, 'count')
+      .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'revenue')
+      .where('c.kgara_deleted_at IS NULL')
+      .andWhere('(c.exclude_from_reports IS NOT TRUE)')
+      .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
+      .andWhere(
+        'COALESCE(c.ngay_hoan_thanh_cong_viec, c.ngay_phat_sinh, c.created_at) >= :sixMonthsAgo',
+        { sixMonthsAgo },
+      )
+      .groupBy('1, 2')
+      .getRawMany();
 
     const statusDistributionByMonth: Record<string, any[]> = {};
     const statusTotalCountByMonth: Record<string, number> = {};
@@ -939,7 +965,13 @@ export class GarageDashboardStatsService {
       }
       statusTotalCountByMonth[m] += cnt;
       statusTotalRevenueByMonth[m] += rev;
+    }
 
+    for (const s of rawStatusOverall) {
+      const cnt = Number(s.count) || 0;
+      const rev = Number(s.revenue) || 0;
+      const statusCode = Number(s.statusCode) || 0;
+      const statusName = s.statusName;
       const key = statusName;
       if (!overallStatusMap[key]) {
         overallStatusMap[key] = {
@@ -985,70 +1017,40 @@ export class GarageDashboardStatsService {
       }))
       .sort((a, b) => b.revenue - a.revenue);
 
-    // 1.4.1 Phễu Chuyển đổi Dịch vụ (Conversion Funnel) theo 4 nhóm Phân loại ERP
-    // Phiếu chưa hoàn thành, chưa hủy: tách thành Báo giá và Đang xử lý
-    const openCase =
-      '(c.ngay_hoan_thanh_cong_viec IS NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9))';
-    const quotation = quotationStatusSql('c');
-    const funnelQb = this.caseRepo
-      .createQueryBuilder('c')
-      .select(
-        "TO_CHAR(COALESCE(c.ngay_hoan_thanh_cong_viec, c.ngay_phat_sinh, c.created_at), 'YYYY-MM')",
-        'month',
-      )
-      .addSelect(
-        `CASE 
-          WHEN c.classification = 'SUA_CHUA_CHUNG' THEN 'SUA_CHUA_CHUNG'
-          WHEN c.classification IN ('KY_GUI_NOI_BO', 'KY_GUI', 'NOI_BO') THEN 'KY_GUI_NOI_BO'
-          WHEN c.classification IN ('OJ', 'OJ_NGOAI') THEN 'OJ_NGOAI'
-          ELSE 'KHAC'
-        END`,
-        'classificationKey',
-      )
-      .addSelect('COUNT(c.id)', 'totalCount')
-      .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'totalAmount')
-      .addSelect(
-        'COUNT(CASE WHEN c.tinh_trang_dich_vu = 9 THEN c.id END)',
-        'cancelledCount',
-      )
-      .addSelect(
-        'SUM(CASE WHEN c.tinh_trang_dich_vu = 9 THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)',
-        'cancelledAmount',
-      )
-      .addSelect(
-        'COUNT(CASE WHEN c.ngay_hoan_thanh_cong_viec IS NOT NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9) THEN c.id END)',
-        'completedCount',
-      )
-      .addSelect(
-        'SUM(CASE WHEN c.ngay_hoan_thanh_cong_viec IS NOT NULL AND (c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9) THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)',
-        'completedAmount',
-      )
-      .addSelect(
-        `COUNT(CASE WHEN ${openCase} AND ${quotation} THEN c.id END)`,
-        'quotationCount',
-      )
-      .addSelect(
-        `SUM(CASE WHEN ${openCase} AND ${quotation} THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)`,
-        'quotationAmount',
-      )
-      .addSelect(
-        `COUNT(CASE WHEN ${openCase} AND NOT ${quotation} THEN c.id END)`,
-        'inProgressCount',
-      )
-      .addSelect(
-        `SUM(CASE WHEN ${openCase} AND NOT ${quotation} THEN COALESCE(c.tien_co_thue, 0) ELSE 0 END)`,
-        'inProgressAmount',
-      )
-      .where('c.kgara_deleted_at IS NULL')
-      .andWhere('(c.exclude_from_reports IS NOT TRUE)')
-      .andWhere(
-        'COALESCE(c.ngay_hoan_thanh_cong_viec, c.ngay_phat_sinh, c.created_at) >= :sixMonthsAgo',
-        { sixMonthsAgo },
-      )
-      .groupBy('1, 2')
-      .orderBy('month', 'DESC');
+    // 1.4.1 Phễu Chuyển đổi Dịch vụ (Conversion Funnel) theo 4 nhóm Phân loại ERP, đếm XE.
+    // Tổng toàn kỳ và tổng từng tháng lấy từ truy vấn distinct riêng (không cộng dồn các dòng nhóm).
+    const buildFunnelQb = (group: GarageFunnelGroup) => {
+      const keys = garageFunnelGroupKeys(group);
+      const selects = [...keys, ...buildGarageFunnelSelects()];
+      const qb = this.caseRepo
+        .createQueryBuilder('c')
+        .select(selects[0].expr, selects[0].alias);
+      for (const sel of selects.slice(1)) {
+        qb.addSelect(sel.expr, sel.alias);
+      }
+      qb.where('c.kgara_deleted_at IS NULL')
+        .andWhere('(c.exclude_from_reports IS NOT TRUE)')
+        .andWhere(
+          'COALESCE(c.ngay_hoan_thanh_cong_viec, c.ngay_phat_sinh, c.created_at) >= :sixMonthsAgo',
+          { sixMonthsAgo },
+        );
+      if (keys.length > 0) {
+        qb.groupBy(keys.map((_, i) => String(i + 1)).join(', '));
+      }
+      return qb;
+    };
 
-    const rawFunnel = await funnelQb.getRawMany();
+    const [
+      rawFunnelByMonth,
+      rawFunnelByMonthClass,
+      rawFunnelByClass,
+      rawFunnelTotal,
+    ] = await Promise.all([
+      buildFunnelQb('month').getRawMany(),
+      buildFunnelQb('month-class').getRawMany(),
+      buildFunnelQb('class').getRawMany(),
+      buildFunnelQb('none').getRawOne(),
+    ]);
 
     const buildFunnelObj = () => ({
       totalIntake: { count: 0, amount: 0 },
@@ -1126,78 +1128,53 @@ export class GarageDashboardStatsService {
       ReturnType<typeof buildFunnelObj>
     > = {};
 
-    for (const f of rawFunnel) {
-      const m = f.month;
-      const key = f.classificationKey || 'KHAC';
-      const totCnt = Number(f.totalCount) || 0;
-      const totAmt = Number(f.totalAmount) || 0;
-      const quoCnt = Number(f.quotationCount) || 0;
-      const quoAmt = Number(f.quotationAmount) || 0;
-      const inProgCnt = Number(f.inProgressCount) || 0;
-      const inProgAmt = Number(f.inProgressAmount) || 0;
-      const compCnt = Number(f.completedCount) || 0;
-      const compAmt = Number(f.completedAmount) || 0;
-      const cancCnt = Number(f.cancelledCount) || 0;
-      const cancAmt = Number(f.cancelledAmount) || 0;
+    const fillFunnelTotals = (
+      target: ReturnType<typeof buildFunnelObj>,
+      f: any,
+    ) => {
+      target.totalIntake.count = Number(f.totalCount) || 0;
+      target.totalIntake.amount = Number(f.totalAmount) || 0;
+      target.quotation.count = Number(f.quotationCount) || 0;
+      target.quotation.amount = Number(f.quotationAmount) || 0;
+      target.inProgress.count = Number(f.inProgressCount) || 0;
+      target.inProgress.amount = Number(f.inProgressAmount) || 0;
+      target.completed.count = Number(f.completedCount) || 0;
+      target.completed.amount = Number(f.completedAmount) || 0;
+      target.cancelled.count = Number(f.cancelledCount) || 0;
+      target.cancelled.amount = Number(f.cancelledAmount) || 0;
+    };
 
-      if (!conversionFunnelByMonth[m]) {
-        conversionFunnelByMonth[m] = buildFunnelObj();
+    const fillFunnelClassification = (
+      target: ReturnType<typeof buildFunnelObj>,
+      f: any,
+    ) => {
+      const c = target.byClassification[f.classificationKey || 'KHAC'];
+      if (!c) return;
+      c.totalCount = Number(f.totalCount) || 0;
+      c.totalAmount = Number(f.totalAmount) || 0;
+      c.quotationCount = Number(f.quotationCount) || 0;
+      c.quotationAmount = Number(f.quotationAmount) || 0;
+      c.inProgressCount = Number(f.inProgressCount) || 0;
+      c.inProgressAmount = Number(f.inProgressAmount) || 0;
+      c.completedCount = Number(f.completedCount) || 0;
+      c.completedAmount = Number(f.completedAmount) || 0;
+      c.cancelledCount = Number(f.cancelledCount) || 0;
+      c.cancelledAmount = Number(f.cancelledAmount) || 0;
+    };
+
+    if (rawFunnelTotal) fillFunnelTotals(conversionFunnel, rawFunnelTotal);
+    for (const f of rawFunnelByClass)
+      fillFunnelClassification(conversionFunnel, f);
+
+    for (const f of rawFunnelByMonth) {
+      conversionFunnelByMonth[f.month] = buildFunnelObj();
+      fillFunnelTotals(conversionFunnelByMonth[f.month], f);
+    }
+    for (const f of rawFunnelByMonthClass) {
+      if (!conversionFunnelByMonth[f.month]) {
+        conversionFunnelByMonth[f.month] = buildFunnelObj();
       }
-      const mFunnel = conversionFunnelByMonth[m];
-
-      // Month totals
-      mFunnel.totalIntake.count += totCnt;
-      mFunnel.totalIntake.amount += totAmt;
-      mFunnel.quotation.count += quoCnt;
-      mFunnel.quotation.amount += quoAmt;
-      mFunnel.inProgress.count += inProgCnt;
-      mFunnel.inProgress.amount += inProgAmt;
-      mFunnel.completed.count += compCnt;
-      mFunnel.completed.amount += compAmt;
-      mFunnel.cancelled.count += cancCnt;
-      mFunnel.cancelled.amount += cancAmt;
-
-      // Month classification
-      if (mFunnel.byClassification[key]) {
-        const c = mFunnel.byClassification[key];
-        c.totalCount += totCnt;
-        c.totalAmount += totAmt;
-        c.quotationCount += quoCnt;
-        c.quotationAmount += quoAmt;
-        c.inProgressCount += inProgCnt;
-        c.inProgressAmount += inProgAmt;
-        c.completedCount += compCnt;
-        c.completedAmount += compAmt;
-        c.cancelledCount += cancCnt;
-        c.cancelledAmount += cancAmt;
-      }
-
-      // Overall totals
-      conversionFunnel.totalIntake.count += totCnt;
-      conversionFunnel.totalIntake.amount += totAmt;
-      conversionFunnel.quotation.count += quoCnt;
-      conversionFunnel.quotation.amount += quoAmt;
-      conversionFunnel.inProgress.count += inProgCnt;
-      conversionFunnel.inProgress.amount += inProgAmt;
-      conversionFunnel.completed.count += compCnt;
-      conversionFunnel.completed.amount += compAmt;
-      conversionFunnel.cancelled.count += cancCnt;
-      conversionFunnel.cancelled.amount += cancAmt;
-
-      // Overall classification
-      if (conversionFunnel.byClassification[key]) {
-        const c = conversionFunnel.byClassification[key];
-        c.totalCount += totCnt;
-        c.totalAmount += totAmt;
-        c.quotationCount += quoCnt;
-        c.quotationAmount += quoAmt;
-        c.inProgressCount += inProgCnt;
-        c.inProgressAmount += inProgAmt;
-        c.completedCount += compCnt;
-        c.completedAmount += compAmt;
-        c.cancelledCount += cancCnt;
-        c.cancelledAmount += cancAmt;
-      }
+      fillFunnelClassification(conversionFunnelByMonth[f.month], f);
     }
 
     // Compute conversion rates
@@ -1237,7 +1214,7 @@ export class GarageDashboardStatsService {
         END`,
         'classificationKey',
       )
-      .addSelect('COUNT(c.id)', 'count')
+      .addSelect(GARAGE_VEHICLE_COUNT_SQL, 'count')
       .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'revenue')
       .where('c.kgara_deleted_at IS NULL')
       .andWhere('(c.exclude_from_reports IS NOT TRUE)')
@@ -1251,6 +1228,22 @@ export class GarageDashboardStatsService {
       .addOrderBy('count', 'DESC');
 
     const rawClassification = await classificationQb.getRawMany();
+
+    // Tổng toàn kỳ theo phân loại: distinct xe trên cả kỳ (không cộng dồn các tháng)
+    const rawClassificationOverall = await this.caseRepo
+      .createQueryBuilder('c')
+      .select(GARAGE_FUNNEL_CLASSIFICATION_KEY_SQL, 'classificationKey')
+      .addSelect(GARAGE_VEHICLE_COUNT_SQL, 'count')
+      .addSelect('SUM(COALESCE(c.tien_co_thue, 0))', 'revenue')
+      .where('c.kgara_deleted_at IS NULL')
+      .andWhere('(c.exclude_from_reports IS NOT TRUE)')
+      .andWhere('(c.tinh_trang_dich_vu IS NULL OR c.tinh_trang_dich_vu != 9)')
+      .andWhere('c.ngay_hoan_thanh_cong_viec IS NOT NULL')
+      .andWhere('c.ngay_hoan_thanh_cong_viec >= :sixMonthsAgo', {
+        sixMonthsAgo,
+      })
+      .groupBy('1')
+      .getRawMany();
 
     const classificationNames: Record<string, string> = {
       SUA_CHUA_CHUNG: 'Sửa chữa chung',
@@ -1295,7 +1288,13 @@ export class GarageDashboardStatsService {
       });
       classificationTotalCountByMonth[m] += cnt;
       classificationTotalRevenueByMonth[m] += rev;
+    }
 
+    for (const item of rawClassificationOverall) {
+      const key = item.classificationKey || 'KHAC';
+      const name = classificationNames[key] || 'Khác';
+      const cnt = Number(item.count) || 0;
+      const rev = Number(item.revenue) || 0;
       if (!overallClassificationMap[key]) {
         overallClassificationMap[key] = {
           classificationKey: key,

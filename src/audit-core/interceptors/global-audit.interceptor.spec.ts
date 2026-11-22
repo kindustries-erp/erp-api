@@ -1,4 +1,17 @@
-import { resolveAuditModule } from './global-audit.interceptor';
+import { isV2Route, resolveAuditModule } from './global-audit.interceptor';
+
+describe('isV2Route (V1 không ghi route v2)', () => {
+  it('nhận diện /api/v2 kể cả có query', () => {
+    expect(isV2Route('/api/v2/users-management?page=1')).toBe(true);
+    expect(isV2Route('/api/v2')).toBe(true);
+  });
+
+  it('không nhận route V1 hoặc không có version', () => {
+    expect(isV2Route('/api/v1/audit-logs-core')).toBe(false);
+    expect(isV2Route('/auth/login')).toBe(false);
+    expect(isV2Route('/api/v20/x')).toBe(false);
+  });
+});
 
 describe('resolveAuditModule', () => {
   it('takes the segment after the v1 version', () => {

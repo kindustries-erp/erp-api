@@ -16,13 +16,13 @@ import type { Response } from 'express';
 import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
-import { ErpAction, ErpResource } from '@/rbac-core/enums';
+import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
 import { GarageCashflowExportDto } from '../dto/garage-cashflow-export.dto';
 import { GarageExportJobsService } from '../services/garage-export-jobs.service';
 import {
   exportProgressStream,
   sendReadyExportFile,
-} from './garage-export.helper';
+} from '@/v2/core/export-jobs-core';
 
 /** Xuất Excel nền sổ thu chi garage (vouchers): job, lịch sử, tải file, SSE. */
 @ApiTags('greenway_cashflow_export')

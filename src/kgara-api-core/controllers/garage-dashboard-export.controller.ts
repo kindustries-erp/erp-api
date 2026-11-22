@@ -16,14 +16,14 @@ import type { Response } from 'express';
 import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
-import { ErpAction, ErpResource } from '@/rbac-core/enums';
+import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
 import { BranchId } from '../decorators/branch-id.decorator';
 import { GarageDashboardExportDto } from '../dto/garage-export.dto';
 import { GarageExportJobsService } from '../services/garage-export-jobs.service';
 import {
   exportProgressStream,
   sendReadyExportFile,
-} from './garage-export.helper';
+} from '@/v2/core/export-jobs-core';
 
 /** File báo cáo chứa cả công nợ nên cần quyền Garage và quyền Công nợ Garage. */
 const DASHBOARD_EXPORT_PERMISSIONS = [

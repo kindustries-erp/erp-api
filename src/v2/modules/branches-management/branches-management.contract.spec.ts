@@ -1,0 +1,232 @@
+import {
+  Global,
+  INestApplication,
+  Module,
+  ValidationPipe,
+} from '@nestjs/common';
+import { MODULE_METADATA, PATH_METADATA } from '@nestjs/common/constants';
+import { Test } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import request from 'supertest';
+
+import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
+import { AppModule } from '@/app.module';
+import { applyGlobalPrefix } from '@/common/config/global-prefix.config';
+import { DataSource } from 'typeorm';
+import { BranchManagementExternalLink } from './entities/branch-management-external-link.entity';
+import { BranchManagement } from './entities/branch-management.entity';
+
+/** DataSource do TypeOrmCoreModule (global) cung cấp ở app thật; test dựng bản giả toàn cục. */
+function dataSourceStub(query: jest.Mock) {
+  @Global()
+  @Module({
+    providers: [{ provide: DataSource, useValue: { query } }],
+    exports: [DataSource],
+  })
+  class DataSourceStubModule {}
+  return DataSourceStubModule;
+}
+
+describe('branches v2 HTTP contract', () => {
+  let app: INestApplication;
+  let repository: {
+    findAndCount: jest.Mock;
+    create: jest.Mock;
+    save: jest.Mock;
+    update: jest.Mock;
+    findOne: jest.Mock;
+  };
+  let dataSource: { query: jest.Mock };
+  const branch = {
+    id: '00000000-0000-4000-8000-000000000001',
+    extraData: {},
+    code: 'HCM',
+    name: 'Ho Chi Minh',
+    address: null,
+    isActive: false,
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+  };
+
+  beforeAll(async () => {
+    const branchesModules = (
+      Reflect.getMetadata(MODULE_METADATA.IMPORTS, AppModule) as any[]
+    ).filter((moduleType) => {
+      const controllers =
+        Reflect.getMetadata(MODULE_METADATA.CONTROLLERS, moduleType) ?? [];
+      return controllers.some(
+        (controller: any) =>
+          Reflect.getMetadata(PATH_METADATA, controller) === 'api/v2/branches',
+      );
+    });
+    expect(branchesModules).toHaveLength(1);
+    const branchesModule = branchesModules[0];
+    repository = {
+      findAndCount: jest.fn(),
+      create: jest.fn((data) => ({ ...branch, ...data })),
+      save: jest.fn(),
+      update: jest.fn(),
+      findOne: jest.fn(),
+    };
+    dataSource = { query: jest.fn() };
+    const moduleRef = await Test.createTestingModule({
+      imports: [dataSourceStub(dataSource.query), branchesModule],
+    })
+      .overrideProvider(getRepositoryToken(BranchManagement))
+      .useValue(repository)
+      .overrideProvider(getRepositoryToken(BranchManagementExternalLink))
+      .useValue({})
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
+    app = moduleRef.createNestApplication();
+    applyGlobalPrefix(app);
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    );
+    await app.init();
+  });
+
+  afterAll(async () => {
+    await app?.close();
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    repository.findAndCount.mockResolvedValue([[branch], 1]);
+    repository.save.mockResolvedValue(branch);
+    repository.findOne.mockResolvedValue(branch);
+    repository.update.mockResolvedValue({ affected: 1 });
+    dataSource.query.mockResolvedValue([{ count: '0' }]);
+  });
+
+  it('keeps GET route, query binding, defaults, sort and response shape', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/v2/branches?page=1&pageSize=20&sort=code&search=HC')
+      .expect(200);
+    expect(response.body).toEqual({
+      items: [
+        {
+          ...branch,
+          createdAt: branch.createdAt.toISOString(),
+          updatedAt: branch.updatedAt.toISOString(),
+        },
+      ],
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 1,
+        totalPages: 1,
+        next: null,
+        previous: null,
+      },
+    });
+    expect(repository.findAndCount).toHaveBeenCalledWith(
+      expect.objectContaining({
+        order: { code: 'ASC' },
+        skip: 0,
+        take: 20,
+        where: expect.arrayContaining([
+          expect.objectContaining({
+            code: expect.anything(),
+            isDeleted: false,
+          }),
+        ]),
+      }),
+    );
+    await request(app.getHttpServer()).get('/api/v2/branches').expect(200);
+    expect(repository.findAndCount).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        order: { createdAt: 'DESC' },
+        skip: 0,
+        take: 20,
+        where: [{ isDeleted: false }],
+      }),
+    );
+    await request(app.getHttpServer()).get('/api/v1/branches').expect(404);
+  });
+
+  it('keeps body extras accepted but only persists the legacy fields', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/v2/branches')
+      .send({
+        code: 'HCM',
+        name: 'Ho Chi Minh',
+        is_active: false,
+        address: 'ignored',
+        extra: 'ignored',
+      })
+      .expect(201);
+    expect(repository.create).toHaveBeenCalledWith({
+      code: 'HCM',
+      name: 'Ho Chi Minh',
+      isActive: false,
+    });
+    expect(response.body).toEqual({
+      data: {
+        ...branch,
+        createdAt: branch.createdAt.toISOString(),
+        updatedAt: branch.updatedAt.toISOString(),
+      },
+      message: 'Branch created successfully',
+    });
+  });
+
+  it('keeps PATCH null data on a missing record without writing', async () => {
+    repository.findOne.mockResolvedValueOnce(null);
+    await request(app.getHttpServer())
+      .patch('/api/v2/branches/not-a-uuid')
+      .send({ name: 'Updated', address: 'ignored', extra: true })
+      .expect(200, { data: null, message: 'Branch updated successfully' });
+    expect(repository.update).not.toHaveBeenCalled();
+  });
+
+  it('PATCH updates only the legacy fields of a live branch', async () => {
+    await request(app.getHttpServer())
+      .patch('/api/v2/branches/b1')
+      .send({ name: 'Updated', address: 'ignored', extra: true })
+      .expect(200);
+    expect(repository.update).toHaveBeenCalledWith('b1', {
+      code: undefined,
+      name: 'Updated',
+      isActive: undefined,
+    });
+  });
+
+  it('DELETE soft-deletes an unreferenced branch and keeps the success message', async () => {
+    await request(app.getHttpServer())
+      .delete('/api/v2/branches/b1')
+      .expect(200, { message: 'Branch deleted successfully' });
+    expect(repository.update).toHaveBeenCalledWith('b1', {
+      isDeleted: true,
+      isActive: false,
+    });
+  });
+
+  it('DELETE returns 409 with referencing tables and does not write', async () => {
+    dataSource.query.mockImplementation((sql: string) =>
+      Promise.resolve([
+        { count: sql.includes('erp_bank_accounts') ? '3' : '0' },
+      ]),
+    );
+    const response = await request(app.getHttpServer())
+      .delete('/api/v2/branches/b1')
+      .expect(409);
+    expect(response.body.references).toEqual([
+      { table: 'erp_bank_accounts', count: 3 },
+    ]);
+    expect(repository.update).not.toHaveBeenCalled();
+  });
+
+  it('DELETE returns 404 when the branch is missing or already soft-deleted', async () => {
+    repository.findOne.mockResolvedValueOnce(null);
+    await request(app.getHttpServer())
+      .delete('/api/v2/branches/missing')
+      .expect(404);
+    expect(repository.update).not.toHaveBeenCalled();
+  });
+});
