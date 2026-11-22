@@ -7,21 +7,20 @@ describe('TablePreferencesService (facade)', () => {
     views: {},
     updatedAt: new Date('2026-11-09T00:00:00.000Z'),
   };
-  let core: any;
+  let query: any;
+  let command: any;
   let service: TablePreferencesService;
 
   beforeEach(() => {
-    core = {
-      listForUser: jest.fn().mockResolvedValue([row]),
-      upsertForUser: jest.fn().mockResolvedValue(row),
-    };
-    service = new TablePreferencesService(core);
+    query = { listForUser: jest.fn().mockResolvedValue([row]) };
+    command = { upsert: jest.fn().mockResolvedValue(row) };
+    service = new TablePreferencesService(query, command);
   });
 
-  it('list maps core rows to response items and forwards the prefix', async () => {
+  it('list maps query rows to response items and forwards the prefix', async () => {
     const result = await service.list('u-1', { tableIdPrefix: 'procurement-' });
 
-    expect(core.listForUser).toHaveBeenCalledWith('u-1', 'procurement-');
+    expect(query.listForUser).toHaveBeenCalledWith('u-1', 'procurement-');
     expect(result).toEqual({
       items: [
         {
@@ -34,12 +33,12 @@ describe('TablePreferencesService (facade)', () => {
     });
   });
 
-  it('update forwards the patch to core and returns a response DTO', async () => {
+  it('update forwards the patch to the command service and returns a response DTO', async () => {
     const result = await service.update('u-1', 't-1', {
       columns: { order: ['a'] },
     });
 
-    expect(core.upsertForUser).toHaveBeenCalledWith('u-1', 't-1', {
+    expect(command.upsert).toHaveBeenCalledWith('u-1', 't-1', {
       columns: { order: ['a'] },
     });
     expect(result.updatedAt).toBe('2026-11-09T00:00:00.000Z');
