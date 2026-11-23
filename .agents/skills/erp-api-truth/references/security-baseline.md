@@ -51,7 +51,7 @@ Lệnh 6 chỉ thấy nội suy trên một dòng; truy vấn nhiều dòng ph�
 - Khoảng 37 chỗ `@Body()`/`@Query()` dùng `any` hoặc kiểu inline (ví dụ `operating-expenses-core`, `erp-mfg-core`). Số này là ghi nhận 2026-11-03, chưa kiểm lại; `branches-management` đã có DTO validate body qua `ParseBranchBodyPipe` (xem module skill `branches-core`).
 - 3 chỗ upload không có `limits`: `bom-core`, `files`, `bank-transactions-core`.
 - `AllExceptionsFilter` trả `exception.message` của TypeORM và `Error` cho client ở mọi môi trường.
-- Chưa thấy giới hạn tần suất, `helmet` hay khóa đăng nhập sai ở tầng ứng dụng (không có trong `package.json`). Hạ tầng phía trước (NPM/nginx) có thể đã xử lý; xác nhận rồi ghi vào Trilium trước khi thêm dependency.
+- Chưa thấy giới hạn tần suất, `helmet` hay khóa đăng nhập sai ở tầng ứng dụng (không có trong `package.json`). Hạ tầng phía trước (NPM/nginx) có thể đã xử lý; xác nhận rồi ghi vào AFFiNE trước khi thêm dependency.
 - CORS `origin: true` kèm `credentials: true`. Xác thực hiện dùng Bearer token, không dùng cookie, nên rủi ro thấp; nếu chuyển sang cookie thì phải siết `origin`.
 
 ## 4. Khi báo xong

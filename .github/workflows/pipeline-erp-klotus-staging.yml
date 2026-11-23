@@ -92,13 +92,9 @@ jobs:
       fail-fast: false
       matrix:
         target:
-          # - host: elite
-          #   server_name: elite
-          #   ip: 100.75.67.115
-          #   port: 10015
-          - host: dev
-            server_name: dev
-            ip: 100.90.103.19
+          - host: elite
+            server_name: elite
+            ip: 100.75.67.115
             port: 10015
     env:
       KOMODO_API_KEY: ${{ secrets.KOMODO_API_KEY }}
