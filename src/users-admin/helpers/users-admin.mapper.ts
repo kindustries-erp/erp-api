@@ -8,7 +8,6 @@ export function toSafeUser(user: CoreUser, employee?: ErpEmployee | null) {
     email: user.email,
     status: user.status,
     employeeId: user.employeeId,
-    legacyDirectusUserId: user.legacyDirectusUserId,
     lastLoginAt: user.lastLoginAt ?? null,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,

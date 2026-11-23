@@ -158,7 +158,6 @@ export class UsersAuthService {
           passwordHash,
           status: USER_STATUS_ACTIVE,
           employeeId: null,
-          legacyDirectusUserId: null,
           lastLoginAt: null,
           createdBy: null,
           passwordChangedAt: null,

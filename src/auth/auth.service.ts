@@ -209,7 +209,6 @@ export class AuthService implements OnModuleInit {
         email: user.email,
         status: user.status,
         employeeId: user.employeeId,
-        legacyDirectusUserId: user.legacyDirectusUserId,
       },
       preferences: {
         theme: preferences.theme,
@@ -294,7 +293,6 @@ export class AuthService implements OnModuleInit {
         email: data.email,
         status: data.status,
         employeeId: data.employeeId,
-        legacyDirectusUserId: data.legacyDirectusUserId,
       },
     };
   }
@@ -440,7 +438,6 @@ export class AuthService implements OnModuleInit {
         email: targetUser.email,
         status: targetUser.status,
         employeeId: targetUser.employeeId,
-        legacyDirectusUserId: targetUser.legacyDirectusUserId,
       },
       preferences: {
         theme: preferences.theme,
@@ -468,7 +465,6 @@ export class AuthService implements OnModuleInit {
       email: user.email,
       status: user.status,
       employeeId: user.employeeId,
-      legacyDirectusUserId: user.legacyDirectusUserId,
       employee: employee
         ? {
             id: employee.id,

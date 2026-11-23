@@ -6,7 +6,6 @@ const user = (over: Record<string, unknown> = {}) => ({
   email: 'a@x.com',
   status: 'ACTIVE',
   employeeId: 'e1',
-  legacyDirectusUserId: null,
   ...over,
 });
 

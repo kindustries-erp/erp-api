@@ -47,7 +47,7 @@ Module `sales-orders-core` chịu trách nhiệm quản lý toàn bộ vòng đ�
 | `expected_delivery_date` | `date` | YES | `NULL` | Ngày dự kiến giao hàng |
 | `status` | `varchar(255)` | NO | `'ACTIVE'` / `'DRAFT'` | Trạng thái vòng đời SO |
 | `remarks` | `text` | YES | `NULL` | Ghi chú đơn hàng |
-| `created_by` | `uuid` | YES | `NULL` | FK tham chiếu `directus_users.id` / User ID tạo đơn |
+| `created_by` | `uuid` | YES | `NULL` | User ID tạo đơn |
 | `is_deleted` | `boolean` | NO | `false` | Cờ xóa mềm (Soft Delete) |
 | `created_at` | `timestamptz` | NO | `now()` | Thời điểm tạo |
 | `updated_at` | `timestamptz` | NO | `now()` | Thời điểm cập nhật |
