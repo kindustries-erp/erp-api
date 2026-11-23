@@ -3,7 +3,7 @@
  *
  * Converts a sort query string into a TypeORM `order` object.
  *
- * Syntax accepted (mirrors Directus / FE convention):
+ * Syntax accepted (FE convention):
  *   - single field:   "createdAt"      → { createdAt: 'DESC' }  (implicit DESC)
  *   - prefix "-":    "-createdAt"     → { createdAt: 'DESC' }
  *   - prefix "+":    "+documentDate"  → { documentDate: 'ASC' }

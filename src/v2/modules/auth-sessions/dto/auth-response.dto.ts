@@ -4,7 +4,6 @@ export interface AuthUserDto {
   email: string;
   status: string;
   employeeId: string | null;
-  legacyDirectusUserId: string | null;
 }
 
 export interface AuthPreferencesDto {

@@ -17,7 +17,6 @@ export class UserResponseDto {
   @ApiProperty() email: string;
   @ApiProperty() status: string;
   @ApiPropertyOptional({ nullable: true }) employeeId: string | null;
-  @ApiPropertyOptional({ nullable: true }) legacyDirectusUserId: string | null;
   @ApiPropertyOptional({ nullable: true }) lastLoginAt: Date | null;
   @ApiPropertyOptional({ nullable: true }) passwordChangedAt: Date | null;
   @ApiProperty() createdAt: Date;

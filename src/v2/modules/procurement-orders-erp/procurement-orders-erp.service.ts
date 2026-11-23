@@ -3,7 +3,7 @@ import { ApprovalActorService } from '@/v2/modules/approval-management/services/
 import { ApprovalEventResponseDto } from '@/v2/core/approval-core/dto/approval-event-response.dto';
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import { RbacCoreService } from '@/v2/core/rbac-core';
+import { RbacAccessService } from '@/v2/core/rbac-core';
 import { toProcurementOrderResponse } from '@/v2/core/procurement-orders-core/helpers/procurement-order.mapper';
 import { resolveApprovalEmails } from '@/v2/core/approval-core/helpers/approval-people';
 import { ProcurementOrderAction } from '@/v2/core/procurement-orders-core/contracts/procurement-orders.contract';
@@ -28,7 +28,7 @@ export class ErpProcurementOrdersService {
     private readonly command: ProcurementOrderCommandService,
     private readonly fulfilment: ProcurementOrderFulfilmentService,
     private readonly query: ProcurementOrderQueryService,
-    private readonly rbac: RbacCoreService,
+    private readonly rbac: RbacAccessService,
     private readonly actors: ApprovalActorService,
     private readonly dataSource: DataSource,
   ) {}

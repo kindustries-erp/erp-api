@@ -2,8 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { KgaraSyncScheduler } from './kgara-sync.scheduler';
 import { KgaraBranch } from './entities/kgara_branch.entity';
-import { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.entity';
-import { CoreUserRole } from '@/v2/core/rbac-core/entities/core-user-role.entity';
+import { RbacPermission } from '@/v2/modules/rbac-roles/entities/rbac-permission.entity';
+import { RbacUserRole } from '@/v2/modules/rbac-roles/entities/rbac-user-role.entity';
 import { KgaraSyncService } from './kgara-sync.service';
 import { KgaraAuthService } from './kgara-auth.service';
 import { KgaraBulkSyncService } from './services/kgara-bulk-sync.service';
@@ -91,11 +91,11 @@ describe('KgaraSyncScheduler', () => {
           useValue: branchRepo,
         },
         {
-          provide: getRepositoryToken(CorePermission),
+          provide: getRepositoryToken(RbacPermission),
           useValue: permissionRepo,
         },
         {
-          provide: getRepositoryToken(CoreUserRole),
+          provide: getRepositoryToken(RbacUserRole),
           useValue: userRoleRepo,
         },
         {

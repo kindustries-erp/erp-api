@@ -23,16 +23,12 @@ import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
 import { RequirePermissions } from '@/auth/decorators/require-permissions.decorator';
 import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
-import { SubmitApprovalDto } from '@/v2/core/approval-core/dto/approval-action.dto';
 
 import {
-  CreateAndSubmitProcurementRequestDto,
   CreateProcurementRequestDto,
   ListProcurementRequestsDto,
   ReplaceRequestLinesDto,
-  UpdateAndSubmitProcurementRequestDto,
   UpdateProcurementRequestHeaderDto,
-  ReasonBodyDto,
 } from '../dto/procurement-request.dto';
 import { GarageProcurementRequestsService } from '../procurement-requests-garage.service';
 
@@ -142,13 +138,48 @@ export class GarageProcurementRequestController {
     resource: ErpResource.GARAGE_PROCUREMENT_REQUESTS,
     action: ErpAction.UPDATE,
   })
-  @ApiOperation({ summary: 'Sửa đầu đề khi còn nháp (không đổi chi nhánh)' })
+  @ApiOperation({
+    summary:
+      'Sửa đầu đề khi còn nháp. Đổi chi nhánh (409 nếu đã có đơn mua) hoặc sửa tên chi nhánh cục bộ',
+  })
   @Patch(':id')
   updateHeader(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateProcurementRequestHeaderDto,
   ) {
     return this.service.updateHeader(id, dto);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_PROCUREMENT_REQUESTS,
+    action: ErpAction.UPDATE,
+  })
+  @ApiOperation({
+    summary:
+      'Về giá trị chi nhánh đã lưu cho field liên kết (vd: branchName), khi còn nháp',
+  })
+  @Post(':id/links/:field/revert')
+  revertLink(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('field') field: string,
+  ) {
+    return this.service.revertLink(id, field);
+  }
+
+  @RequirePermissions({
+    resource: ErpResource.GARAGE_PROCUREMENT_REQUESTS,
+    action: ErpAction.UPDATE,
+  })
+  @ApiOperation({
+    summary:
+      'Đọc lại chi nhánh và lấy giá trị mới nhất cho field liên kết, khi còn nháp',
+  })
+  @Post(':id/links/:field/refresh')
+  refreshLink(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('field') field: string,
+  ) {
+    return this.service.refreshLink(id, field);
   }
 
   @RequirePermissions({
@@ -184,135 +215,5 @@ export class GarageProcurementRequestController {
   @Delete(':id/permanent')
   hardDelete(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.hardDelete(id);
-  }
-
-  @RequirePermissions(
-    {
-      resource: ErpResource.GARAGE_PROCUREMENT_REQUESTS,
-      action: ErpAction.CREATE,
-    },
-    {
-      resource: ErpResource.GARAGE_PROCUREMENT_REQUESTS,
-      action: ErpAction.UPDATE,
-    },
-  )
-  @ApiOperation({
-    summary: 'Tạo đề nghị và gửi duyệt trong một bước (một transaction)',
-  })
-  @Post('save-and-submit')
-  createAndSubmit(
-    @Body() dto: CreateAndSubmitProcurementRequestDto,
-    @Req() req: RequestWithUser,
-  ) {
-    return this.service.createAndSubmit(dto, req.user?.sub ?? '');
-  }
-
-  @RequirePermissions({
-    resource: ErpResource.GARAGE_PROCUREMENT_REQUESTS,
-    action: ErpAction.UPDATE,
-  })
-  @ApiOperation({
-    summary: 'Cập nhật đề nghị nháp và gửi duyệt trong một bước',
-  })
-  @Patch(':id/save-and-submit')
-  updateAndSubmit(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: UpdateAndSubmitProcurementRequestDto,
-    @Req() req: RequestWithUser,
-  ) {
-    return this.service.updateAndSubmit(id, dto, req.user?.sub ?? '');
-  }
-
-  @RequirePermissions({
-    resource: ErpResource.GARAGE_PROCUREMENT_REQUESTS,
-    action: ErpAction.UPDATE,
-  })
-  @Post(':id/submit')
-  submit(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: SubmitApprovalDto,
-    @Req() req: RequestWithUser,
-  ) {
-    return this.service.transition(
-      id,
-      'submit',
-      req.user?.sub ?? '',
-      undefined,
-      dto.approverId ?? null,
-    );
-  }
-
-  @RequirePermissions({
-    resource: ErpResource.GARAGE_PROCUREMENT_REQUESTS,
-    action: ErpAction.UPDATE,
-  })
-  @Post(':id/recall')
-  recall(@Param('id', ParseUUIDPipe) id: string, @Req() req: RequestWithUser) {
-    return this.service.transition(id, 'recall', req.user?.sub ?? '');
-  }
-
-  @RequirePermissions({
-    resource: ErpResource.GARAGE_PROCUREMENT_REQUESTS,
-    action: ErpAction.APPROVE,
-  })
-  @ApiOperation({ summary: 'Duyệt đề nghị (không được tự duyệt)' })
-  @Post(':id/approve')
-  approve(@Param('id', ParseUUIDPipe) id: string, @Req() req: RequestWithUser) {
-    return this.service.transition(id, 'approve', req.user?.sub ?? '');
-  }
-
-  @RequirePermissions({
-    resource: ErpResource.GARAGE_PROCUREMENT_REQUESTS,
-    action: ErpAction.REJECT,
-  })
-  @ApiOperation({ summary: 'Từ chối đề nghị, bắt buộc lý do, về nháp' })
-  @Post(':id/reject')
-  reject(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: ReasonBodyDto,
-    @Req() req: RequestWithUser,
-  ) {
-    return this.service.transition(
-      id,
-      'reject',
-      req.user?.sub ?? '',
-      dto.reason,
-    );
-  }
-
-  @RequirePermissions({
-    resource: ErpResource.GARAGE_PROCUREMENT_REQUESTS,
-    action: ErpAction.UPDATE,
-  })
-  @Post(':id/cancel')
-  cancel(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: ReasonBodyDto,
-    @Req() req: RequestWithUser,
-  ) {
-    return this.service.transition(
-      id,
-      'cancel',
-      req.user?.sub ?? '',
-      dto.reason,
-    );
-  }
-
-  @RequirePermissions({
-    resource: ErpResource.GARAGE_PROCUREMENT_REQUESTS,
-    action: ErpAction.UPDATE,
-  })
-  @Post(':id/close')
-  close(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: ReasonBodyDto,
-    @Req() req: RequestWithUser,
-  ) {
-    return this.service.transition(
-      id,
-      'close',
-      req.user?.sub ?? '',
-      dto.reason,
-    );
   }
 }

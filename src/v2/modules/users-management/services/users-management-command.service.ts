@@ -68,7 +68,6 @@ export class UsersManagementCommandService {
             passwordHash,
             status: 'ACTIVE',
             employeeId: null,
-            legacyDirectusUserId: null,
             lastLoginAt: null,
             createdBy: ctx.actorUserId,
             passwordChangedAt: null,

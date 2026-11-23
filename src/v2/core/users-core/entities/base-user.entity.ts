@@ -21,9 +21,6 @@ export abstract class BaseUserEntity extends CoreSoftDeletableEntity {
   @Column({ type: 'uuid', nullable: true, name: 'employee_id' })
   employeeId: string | null;
 
-  @Column({ type: 'uuid', nullable: true, name: 'legacy_directus_user_id' })
-  legacyDirectusUserId: string | null;
-
   @Column({ type: 'timestamptz', nullable: true, name: 'last_login_at' })
   lastLoginAt: Date | null;
 

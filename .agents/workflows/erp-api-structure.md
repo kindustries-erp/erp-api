@@ -409,6 +409,16 @@ Quy tắc (áp cho mọi họ v2 trong erp-api):
 - Không cho override: định danh/nguồn (`origin`, `externalId`, `accountKey`) và field suy ra từ sổ khác (công nợ).
 - Nối dòng với nguồn bằng `(account_key, external_id)`, không thêm cột `legacy_*` trùng id.
 
+#### Mẫu link FK + sửa cục bộ không đè nguồn (`link-override-core`)
+
+Áp dụng khi phiếu giữ FK tới bản ghi **nội bộ** (chi nhánh, nhà cung cấp, khách...) nhưng cần sửa giá trị hiển thị trên phiếu mà không ghi ngược bản ghi gốc. Dùng bộ chung, không tự viết lại `source_snapshot`/`overrides` (mẫu trên chỉ dành cho sync hệ ngoài có projector).
+- Lõi `src/v2/core/link-override-core/` (base-only): helper thuần, `LinkSourcePort`, `BaseLinkOverrideEngine` (`capture`, `applyEdit`, `revert`, `refresh`), DTO `overriddenFields`.
+- Module: thêm 2 cột jsonb `source_snapshot` và `overrides` (default `'{}'`) bằng migration có `down()`; class `*LinkSource implements LinkSourcePort` chỉ **đọc** bảng nguồn; engine con; command service ghi qua engine; endpoint `POST :id/links/:field/revert|refresh`; response có `overriddenFields` và `sourceSnapshot`.
+- Server lập snapshot (client chỉ gửi FK id và giá trị đã sửa); FK id không tồn tại trả 404; sửa về đúng snapshot tự bỏ cờ; không bao giờ ghi vào bảng FK gốc.
+- Backfill: không ghi `null` vào snapshot cho dòng cũ; lập snapshot lười ở lần sửa đầu.
+- **Chỉ** cho field liên kết FK nghiệp vụ. Không áp cho khóa cha-con (`*_line.*_id`) và FK hệ thống (user, actor, role, audit).
+- Chi tiết, pilot và danh sách module rollout: `.agents/skills/erp-api-structure/references/v2-module.md` mục 5d.
+
 **Cron và job định kỳ**: job là class trong module, kế thừa `ScheduledJob` (lớp nền trừu tượng ở `src/v2/core/scheduler-core/`), khai báo `jobName`, `cron`, `timeZone` và `run()`. Module `src/v2/modules/scheduler-jobs/` (`SchedulerJobsModule`, import một lần trong `AppModule`) tự tìm mọi job qua `DiscoveryService` và đăng ký. Không thêm `@Cron(...)` hay `setInterval` mới để chạy nền. Chi tiết: `.agents/skills/modules/scheduler-jobs/SKILL.md`.
 
 ### 🏷️ Quy tắc đặt tên bảng (v2)

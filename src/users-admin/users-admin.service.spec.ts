@@ -7,7 +7,6 @@ describe('UsersAdminService (ghi ủy quyền sang v2)', () => {
     email: 'a@x.com',
     status: 'ACTIVE',
     employeeId: null,
-    legacyDirectusUserId: null,
     lastLoginAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),

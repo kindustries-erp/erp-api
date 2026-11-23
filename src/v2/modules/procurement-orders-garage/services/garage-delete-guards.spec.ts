@@ -115,6 +115,7 @@ describe('Chặn xóa cứng của lớp con garage', () => {
       dataSource,
       {} as never,
       {} as never,
+      {} as never,
     );
 
     await expect(svc.hardDeleteDraft('o1')).rejects.toThrow(ConflictException);

@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import { RbacCoreService, ErpResource, ErpAction } from '@/v2/core/rbac-core';
+import { RbacAccessService, ErpResource, ErpAction } from '@/v2/core/rbac-core';
 import {
   TraceabilityGraphDto,
   TraceabilityNodeDto,
@@ -39,7 +39,7 @@ interface RawEdgeItem {
 export class DocumentTraceabilityService {
   constructor(
     private readonly dataSource: DataSource,
-    private readonly rbacService: RbacCoreService,
+    private readonly rbacService: RbacAccessService,
   ) {}
 
   /**

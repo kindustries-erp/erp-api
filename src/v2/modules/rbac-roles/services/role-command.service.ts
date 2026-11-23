@@ -1,17 +1,17 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { CoreRole } from '@/v2/core/rbac-core/entities/core-role.entity';
+import { RbacRole } from '@/v2/modules/rbac-roles/entities/rbac-role.entity';
 import { CreateCoreRoleDto, UpdateCoreRoleDto } from '../dto/rbac-core.dto';
 import type { RoleResponse } from '../dto/rbac-response.dto';
 import { toRoleResponse } from '../helpers/rbac-role.mapper';
 
-/** Ghi role: tạo, sửa, xóa cứng (bảng core_roles không có cột is_deleted). */
+/** Ghi role: tạo, sửa, xóa cứng (bảng rbac_roles không có cột is_deleted). */
 @Injectable()
 export class RoleCommandService {
   constructor(
-    @InjectRepository(CoreRole)
-    private readonly roleRepository: Repository<CoreRole>,
+    @InjectRepository(RbacRole)
+    private readonly roleRepository: Repository<RbacRole>,
   ) {}
 
   async createRole(dto: CreateCoreRoleDto): Promise<RoleResponse> {

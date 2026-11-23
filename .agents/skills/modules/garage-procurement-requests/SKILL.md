@@ -166,3 +166,12 @@ Quyền resource: `garage_procurement_requests`. Seed từ `garage_purchase_orde
 - Column-options trả `{ items: { label, value }[], pagination }`. Dựng bằng `findTableColumnOptions` hoặc `emptyOptionsPage` (`src/common/utils/table-query`).
 - Builder: `buildPagination` / `toPagedList` / `toPaginatedResult` (`src/common/utils/paginated-result.ts`). DTO Swagger: `PaginationMetaDto`, `ColumnOptionsResponseDto`.
 - Web phải đọc `res.pagination.*`. Xem web `src/v2/shared/utils/v2FetchOptionsAdapter.ts`.
+
+## 18. Cập nhật 2026-11-23: chi nhánh liên kết + sửa tên cục bộ (link-override)
+
+- Pilot của lõi `link-override-core` (xem `erp-api-structure/references/v2-module.md` mục 5d). `branch_id` là FK logic (không ràng buộc DB); `branch_name` là giá trị hiệu lực, sửa được mà KHÔNG ghi `branches_management`.
+- Cột mới (migration `20261123100000-add-link-override-procurement-requests-garage`): `source_snapshot` (`{ branchName }` do server lập) và `overrides` (`{ branchName: true }`), jsonb default `'{}'`. Backfill chỉ dòng có `branch_name`; dòng cũ lập snapshot lười ở lần sửa đầu.
+- `POST` và `PATCH :id`: chọn/đổi `branchId` thì server đọc chi nhánh và lập snapshot (tên thuần `branches_management.name`); `branchId` không tồn tại trả 404 (trước đây không kiểm). Gửi `branchName` khác snapshot thì đánh dấu đã chỉnh; gửi đúng snapshot thì bỏ cờ. Giữ 409 khi đổi `branchId` của PR đã có PO; sửa `branchName` thì không chặn.
+- Endpoint mới (quyền `UPDATE`, chỉ khi DRAFT): `POST :id/links/:field/revert` (về snapshot, không gọi nguồn) và `POST :id/links/:field/refresh` (đọc lại chi nhánh). `field` hợp lệ hiện chỉ `branchName`, khác trả 400. Response có `overriddenFields` và `sourceSnapshot`.
+- Web: drawer dùng `V2LinkedField` (`ProcurementBranchLinkedField`, hook `useProcurementRequestBranchLink`); API client `createProcurementApi(..., { supportsLinkOverride: true })` có `refreshLink` (không có `revertLink`: khôi phục theo nguồn làm ở client). Ô tên điền TÊN THUẦN, không phải nhãn "mã — tên".
+- Smoke: `bun run test:smoke:link-override` (24 kiểm tra). E2E web: `bun run e2e:garage-link-override` (17 kiểm tra, trong `erp-web`).

@@ -25,9 +25,6 @@ export class CoreUser {
   @Column({ type: 'uuid', name: 'employee_id', nullable: true })
   employeeId: string | null;
 
-  @Column({ type: 'uuid', name: 'legacy_directus_user_id', nullable: true })
-  legacyDirectusUserId: string | null;
-
   @Column({ type: 'timestamptz', name: 'last_login_at', nullable: true })
   lastLoginAt: Date | null;
 

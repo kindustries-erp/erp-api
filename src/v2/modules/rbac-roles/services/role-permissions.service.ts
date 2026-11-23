@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.entity';
+import { RbacPermission } from '@/v2/modules/rbac-roles/entities/rbac-permission.entity';
 import { UpdateCoreRolePermissionsDto } from '../dto/rbac-core.dto';
 import type { PermissionResponse } from '../dto/rbac-response.dto';
 import { toPermissionResponse } from '../helpers/rbac-role.mapper';
@@ -10,8 +10,8 @@ import { toPermissionResponse } from '../helpers/rbac-role.mapper';
 @Injectable()
 export class RolePermissionsService {
   constructor(
-    @InjectRepository(CorePermission)
-    private readonly permissionRepository: Repository<CorePermission>,
+    @InjectRepository(RbacPermission)
+    private readonly permissionRepository: Repository<RbacPermission>,
   ) {}
 
   async getRolePermissions(roleId: string): Promise<PermissionResponse[]> {
