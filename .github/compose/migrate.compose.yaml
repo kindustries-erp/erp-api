@@ -3,6 +3,12 @@ services:
     image: ${ERP_MIGRATE_IMAGE:?ERP_MIGRATE_IMAGE is required}
     restart: "no"
     env_file: [application.env]
+    extra_hosts:
+      - "db-elite.liouni.com:100.75.67.115"
+      - "s3-elite.liouni.com:100.75.67.115"
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     networks: [npm-network]
 networks:
   npm-network:

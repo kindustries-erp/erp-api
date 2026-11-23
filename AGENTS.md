@@ -148,7 +148,7 @@ Repo-level workflows (e.g. `erp/erp-web/.agents/workflows/standardize-drawer.md`
 ## 📋 Planning & Tracking (Plane)
 
 - Plan theo `/erp-plan`; chỉ làm sau khi người dùng trả lời `OK`. Bản chốt lưu tại `.agents/plans/<task-slug>/implementation_plan.md`.
-- Task, story, epic theo dõi trên Plane (project KINDU) bằng skill `plane-work-items`. Không lưu plan/task trong Trilium.
+- Task, story, epic theo dõi trên Plane (project KINDU) bằng skill `plane-work-items`. Không lưu plan/task trong AFFiNE (chỉ theo dõi trên Plane).
 - Antigravity Brain (`implementation_plan.md` / `walkthrough.md`, `/clean-brain`) là bản phụ, chỉ dùng khi chạy trong Antigravity.
 - **Pause**: document current state in `## ⏸️ Session Checkpoint`.
 - **Resume**: read the checkpoint to identify exactly where you left off.
