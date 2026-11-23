@@ -14,7 +14,6 @@ const makeUser = (over: Partial<UsersManagement> = {}): UsersManagement =>
     passwordHash: 'x',
     status: 'ACTIVE',
     employeeId: null,
-    legacyDirectusUserId: null,
     lastLoginAt: null,
     createdBy: null,
     passwordChangedAt: null,

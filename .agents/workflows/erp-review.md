@@ -40,6 +40,7 @@ Với file hoặc module được hỏi, áp dụng đầy đủ bảng rule c�
 - **Validation DTO**: đủ `class-validator`; không nhận param lỏng.
 - **Concurrency**: tiền, tồn kho, công nợ bọc trong QueryRunner với `setLock("pessimistic_write")`.
 - **RBAC và bảo mật**: `@RequirePermissions(...)` với hằng số chuẩn; kiểm tra cách ly tenant và đối tác. Endpoint, auth, DTO, upload, SQL: đối chiếu `erp-api-truth/references/security-baseline.md`.
+- **Field link FK sửa cục bộ**: field FK nội bộ cần sửa giá trị hiển thị không đè nguồn phải dùng `link-override-core` (port + engine), không tự viết `source_snapshot`/`overrides`; chỉ ĐỌC bảng nguồn, không ghi ngược; FK không tồn tại trả 404; chỉ cho Nhóm A (không áp cho khóa cha-con, FK hệ thống).
 - **Xóa**: soft delete với `isDeleted`; chỉ ngoại lệ đã ghi trong `erp-api-structure` mục "Chính sách xóa".
 - **Lỗi**: dùng exception chuẩn NestJS, không nuốt lỗi.
 - **Spec**: logic mới có `.spec.ts` cạnh file (integration spec cho luồng nhiều bước).

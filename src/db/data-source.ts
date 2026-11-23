@@ -7,9 +7,9 @@ import { NotificationInbox } from '@/v2/modules/notifications-inbox/entities/not
 import { FileAttachment } from '@/v2/modules/file-attachments-management/entities/file-attachment.entity';
 import { FileAttachmentSettings } from '@/v2/modules/file-attachments-management/entities/file-attachment-settings.entity';
 import { CoreRefreshToken } from '../auth/entities/core-refresh-token.entity';
-import { CoreRole } from '@/v2/core/rbac-core/entities/core-role.entity';
-import { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.entity';
-import { CoreUserRole } from '@/v2/core/rbac-core/entities/core-user-role.entity';
+import { RbacRole } from '@/v2/modules/rbac-roles/entities/rbac-role.entity';
+import { RbacPermission } from '@/v2/modules/rbac-roles/entities/rbac-permission.entity';
+import { RbacUserRole } from '@/v2/modules/rbac-roles/entities/rbac-user-role.entity';
 import { ErpEmployee } from '../employees-core/entities/erp_employee.entity';
 import { ErpBusinessPartner } from '@/v2/core/business-partners-core';
 import { EmployeeManagement } from '@/v2/modules/employees-management/entities/employee-management.entity';
@@ -150,9 +150,9 @@ const entities = [
   CoreUserPreference,
   CoreUserTablePreference,
   CoreRefreshToken,
-  CoreRole,
-  CorePermission,
-  CoreUserRole,
+  RbacRole,
+  RbacPermission,
+  RbacUserRole,
   ErpSystemOperation,
   ErpAiConfig,
   ErpAiLog,

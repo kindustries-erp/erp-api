@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ApprovalManagementModule } from '@/v2/modules/approval-management/approval-management.module';
-import { ErpResource, RbacCoreModule } from '@/v2/core/rbac-core';
+import { ErpResource } from '@/v2/core/rbac-core';
 import { createApprovalConfigController } from '@/v2/modules/approval-management/controllers/approval-config.controller';
 import { UsersManagement } from '@/v2/modules/users-management/entities/users-management.entity';
 import { GarageProcurementRequestsModule } from '@/v2/modules/procurement-requests-garage/procurement-requests-garage.module';
@@ -40,7 +40,6 @@ const GarageProcurementOrderApprovalConfigController =
       GarageProcurementRequest,
       UsersManagement,
     ]),
-    RbacCoreModule,
     ApprovalManagementModule,
     ItemsGarageModule,
     GarageProcurementRequestsModule,

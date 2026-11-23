@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "layer": "api",
+  "family": "link-override-core",
+  "entity": "LinkOverride",
+  "style": "orchestrator",
+  "barrel": "src/v2/core/link-override-core/index.ts",
+  "module": null,
+  "moduleFile": null,
+  "baseClasses": {
+    "contract": "LinkSourcePort",
+    "service": "BaseLinkOverrideEngine"
+  },
+  "serviceFile": "base-link-override.engine.ts",
+  "permissionPattern": "link-override-core",
+  "requiredModuleFiles": ["services"]
+}

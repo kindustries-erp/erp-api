@@ -10,7 +10,6 @@ import { JwtStrategy } from './jwt.strategy';
 import { UsersManagementModule } from '@/v2/modules/users-management/users-management.module';
 import { AuditCoreModule } from '../audit-core/audit-core.module';
 import { CoreRefreshToken } from './entities/core-refresh-token.entity';
-import { RbacCoreModule } from '@/v2/core/rbac-core';
 import { AppConfigModule } from '../app-config/app-config.module';
 
 @Module({
@@ -20,7 +19,6 @@ import { AppConfigModule } from '../app-config/app-config.module';
     TypeOrmModule.forFeature([CoreRefreshToken]),
     UsersManagementModule,
     AuditCoreModule,
-    RbacCoreModule,
     AppConfigModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

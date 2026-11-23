@@ -2,17 +2,17 @@
   "schemaVersion": 1,
   "layer": "api",
   "family": "rbac-core",
-  "entity": "Role",
-  "style": "engine",
+  "entity": "RbacAccess",
+  "style": "orchestrator",
   "barrel": "src/v2/core/rbac-core/index.ts",
-  "module": "RbacCoreModule",
-  "moduleFile": "rbac-core.module.ts",
+  "module": null,
+  "moduleFile": null,
   "baseClasses": {
-    "entity": "CoreRole",
-    "service": "RbacCoreService"
+    "contract": "RbacPermissionGrant",
+    "service": "RbacAccessService"
   },
-  "serviceFile": "services/rbac-core.service.ts",
-  "permissionPattern": "rbac",
-  "notes": "Lõi được viết tay từ khung plop api-core: giữ entity thật (core_roles, core_permissions, rbac_user_roles, không is_deleted, xóa cứng). Không chạy api-thin-module cho họ này.",
-  "requiredModuleFiles": ["contracts", "controllers", "dto", "entities", "services"]
+  "serviceFile": "rbac-access.service.ts",
+  "permissionPattern": "rbac-core",
+  "notes": "Lõi base-only: enums, helper khớp quyền, hợp đồng RbacPermissionGrant, RbacAccessService abstract (DI token). Entity Rbac*, TypeOrmRbacAccessService và module @Global nằm ở module rbac-roles.",
+  "requiredModuleFiles": ["services"]
 }

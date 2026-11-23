@@ -8,7 +8,7 @@ import { UsersAuthService } from '@/v2/modules/users-management/services/users-a
 import { UsersManagementService } from '@/v2/modules/users-management/users-management.service';
 import { CoreRefreshToken } from './entities/core-refresh-token.entity';
 import { AuditCoreService } from '../audit-core/audit-core.service';
-import { RbacCoreService } from '@/v2/core/rbac-core';
+import { RbacAccessService } from '@/v2/core/rbac-core';
 import { AppConfigService } from '../app-config/app-config.service';
 
 describe('AuthService', () => {
@@ -56,7 +56,7 @@ describe('AuthService', () => {
         { provide: JwtService, useValue: jwtService },
         { provide: AuditCoreService, useValue: auditCoreService },
         {
-          provide: RbacCoreService,
+          provide: RbacAccessService,
           useValue: { getUserPermissions: jest.fn().mockResolvedValue([]) },
         },
         {
@@ -111,7 +111,6 @@ describe('AuthService', () => {
       passwordHash: 'hashed',
       status: 'ACTIVE',
       employeeId: null,
-      legacyDirectusUserId: null,
     };
 
     it('should return accessToken and user on valid credentials, ghi lastLoginAt đúng một lần', async () => {
@@ -180,7 +179,6 @@ describe('AuthService', () => {
           email: payload.email,
           status: 'ACTIVE',
           employeeId: 'emp-1',
-          legacyDirectusUserId: null,
           passwordHash: 'must-not-leak',
         },
       });
@@ -194,7 +192,6 @@ describe('AuthService', () => {
           email: payload.email,
           status: 'ACTIVE',
           employeeId: 'emp-1',
-          legacyDirectusUserId: null,
         },
       });
       expect(usersManagement.create).toHaveBeenCalledWith(
@@ -211,7 +208,6 @@ describe('AuthService', () => {
         email: 'test@example.com',
         status: 'ACTIVE',
         employeeId: null,
-        legacyDirectusUserId: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       });

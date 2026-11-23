@@ -10,7 +10,6 @@ describe('AuthProfileService', () => {
     email: 'a@x.com',
     status: 'ACTIVE',
     employeeId: 'e1',
-    legacyDirectusUserId: null,
     passwordHash: 'SECRET',
     createdAt: new Date(),
     updatedAt: new Date(),

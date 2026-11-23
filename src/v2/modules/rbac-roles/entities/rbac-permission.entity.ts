@@ -8,22 +8,33 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import type { CoreRole } from './core-role.entity';
+import type { RbacRole } from './rbac-role.entity';
 
-@Entity({ name: 'core_permissions' })
-@Index(['roleId', 'resource', 'action'], { unique: true })
-export class CorePermission {
-  @PrimaryGeneratedColumn('uuid')
+@Entity({ name: 'rbac_permissions' })
+@Index(
+  'UQ_rbac_permissions_role_resource_action',
+  ['roleId', 'resource', 'action'],
+  {
+    unique: true,
+  },
+)
+export class RbacPermission {
+  @PrimaryGeneratedColumn('uuid', {
+    primaryKeyConstraintName: 'PK_rbac_permissions_id',
+  })
   id: string;
 
   @Column({ type: 'uuid', name: 'role_id' })
   roleId: string;
 
-  @ManyToOne('CoreRole', (role: any) => role.permissions, {
+  @ManyToOne('RbacRole', (role: any) => role.permissions, {
     onDelete: 'CASCADE',
   })
-  @JoinColumn({ name: 'role_id' })
-  role: CoreRole;
+  @JoinColumn({
+    name: 'role_id',
+    foreignKeyConstraintName: 'FK_rbac_permissions_role_id',
+  })
+  role: RbacRole;
 
   @Column({ type: 'varchar', length: 128 })
   resource: string;

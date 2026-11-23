@@ -2,7 +2,6 @@ import { InventoryMovementsGarageLedgerModule } from '@/v2/modules/inventory-mov
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ApprovalManagementModule } from '@/v2/modules/approval-management/approval-management.module';
-import { RbacCoreModule } from '@/v2/core/rbac-core';
 import { InventoryMovementsCoreModule } from '@/v2/core/inventory-movements-core';
 import { GoodsReceiptsCoreModule } from '@/v2/core/goods-receipts-core';
 import { InventoryMovementsGarageIssue } from './entities/inventory-movements-garage-issue.entity';
@@ -21,7 +20,6 @@ import { ItemsGarageModule } from '@/v2/modules/items-garage/items-garage.module
       InventoryMovementsGarageIssue,
       InventoryMovementsGarageIssueLine,
     ]),
-    RbacCoreModule,
     ApprovalManagementModule,
     InventoryMovementsCoreModule,
     ItemsGarageModule,

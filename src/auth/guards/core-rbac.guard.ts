@@ -6,7 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { RbacCoreService } from '@/v2/core/rbac-core';
+import { RbacAccessService } from '@/v2/core/rbac-core';
 import {
   RequiredPermission,
   RBAC_PERMISSIONS_KEY,
@@ -19,7 +19,7 @@ export class CoreRbacGuard implements CanActivate {
 
   constructor(
     private readonly reflector: Reflector,
-    private readonly rbacCoreService: RbacCoreService,
+    private readonly rbacAccessService: RbacAccessService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -51,7 +51,7 @@ export class CoreRbacGuard implements CanActivate {
 
     // 1. Check tất cả các quyền bắt buộc (AND logic)
     if (hasAndPerms) {
-      const hasAll = await this.rbacCoreService.hasAllPermissions(
+      const hasAll = await this.rbacAccessService.hasAllPermissions(
         userId,
         requiredPermissions,
       );
@@ -67,7 +67,7 @@ export class CoreRbacGuard implements CanActivate {
 
     // 2. Check ít nhất 1 trong các quyền (OR logic)
     if (hasOrPerms) {
-      const hasAny = await this.rbacCoreService.hasAnyPermission(
+      const hasAny = await this.rbacAccessService.hasAnyPermission(
         userId,
         requiredAnyPermissions,
       );

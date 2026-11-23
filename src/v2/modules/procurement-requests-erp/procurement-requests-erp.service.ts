@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { RbacCoreService } from '@/v2/core/rbac-core';
+import { RbacAccessService } from '@/v2/core/rbac-core';
 import { toPurchaseRequestResponse } from '@/v2/core/procurement-requests-core/helpers/procurement-request.mapper';
 import {
   PurchaseRequestAction,
@@ -30,7 +30,7 @@ export class ErpProcurementRequestsService {
   constructor(
     private readonly command: ProcurementRequestCommandService,
     private readonly query: ProcurementRequestQueryService,
-    private readonly rbac: RbacCoreService,
+    private readonly rbac: RbacAccessService,
     private readonly actors: ApprovalActorService,
   ) {}
 

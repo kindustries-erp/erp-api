@@ -24,7 +24,6 @@ export async function syncToLegacyCoreUser(
     passwordHash: user.passwordHash,
     status: user.status,
     employeeId: user.employeeId,
-    legacyDirectusUserId: user.legacyDirectusUserId,
     lastLoginAt: user.lastLoginAt,
     createdBy: user.createdBy,
     passwordChangedAt: user.passwordChangedAt,

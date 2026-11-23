@@ -3,14 +3,14 @@ import {
   applyMultiKeywordFilter,
   applyMultiKeywordMultiFieldFilter,
 } from '@/common/utils/query-builder.util';
-import type { CoreRole } from '@/v2/core/rbac-core/entities/core-role.entity';
+import type { RbacRole } from '@/v2/modules/rbac-roles/entities/rbac-role.entity';
 
 /**
  * Helper lọc, tìm kiếm và sắp xếp bảng role.
  * Logic giữ nguyên từ bản v1 (cùng tên tham số SQL); chỉ gom các khối lặp lại.
  */
 
-type RoleQb = SelectQueryBuilder<CoreRole>;
+type RoleQb = SelectQueryBuilder<RbacRole>;
 
 /** Ánh xạ tên cột/khóa từ UI sang cột SQL. Cột ngoài danh sách bị bỏ qua. */
 export function mapRoleColumnToSqlField(column: string): string | null {

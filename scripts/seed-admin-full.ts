@@ -3,18 +3,18 @@ import { DataSource } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import dataSource from '../src/db/data-source';
 import { CoreUser } from '../src/users/entities/core-user.entity';
-import { CoreRole } from '../src/v2/core/rbac-core/entities/core-role.entity';
-import { CorePermission } from '../src/v2/core/rbac-core/entities/core-permission.entity';
-import { CoreUserRole } from '../src/v2/core/rbac-core/entities/core-user-role.entity';
+import { RbacRole } from '../src/v2/modules/rbac-roles/entities/rbac-role.entity';
+import { RbacPermission } from '../src/v2/modules/rbac-roles/entities/rbac-permission.entity';
+import { RbacUserRole } from '../src/v2/modules/rbac-roles/entities/rbac-user-role.entity';
 
 async function seedAdminFull() {
   await dataSource.initialize();
   console.log('Database connected!');
 
   const userRepo = dataSource.getRepository(CoreUser);
-  const roleRepo = dataSource.getRepository(CoreRole);
-  const permRepo = dataSource.getRepository(CorePermission);
-  const userRoleRepo = dataSource.getRepository(CoreUserRole);
+  const roleRepo = dataSource.getRepository(RbacRole);
+  const permRepo = dataSource.getRepository(RbacPermission);
+  const userRoleRepo = dataSource.getRepository(RbacUserRole);
 
   const adminEmail = process.env.SEED_ADMIN_EMAIL;
   const adminPassword = process.env.SEED_ADMIN_PASSWORD;
@@ -97,4 +97,3 @@ seedAdminFull().catch((error) => {
   console.error(error);
   process.exit(1);
 });
-

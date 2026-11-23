@@ -31,7 +31,6 @@ describe('legacy-core-user.sync (bản sao một chiều sang core_users)', () =
       passwordHash: 'h',
       status: 'ACTIVE',
       employeeId: null,
-      legacyDirectusUserId: null,
       lastLoginAt: null,
       createdBy: null,
       passwordChangedAt: null,

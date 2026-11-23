@@ -1,5 +1,5 @@
 import { ErpAction, ErpResource } from '../enums';
-import type { CorePermission } from '../entities/core-permission.entity';
+import type { RbacPermissionGrant } from '../contracts/rbac-access.contract';
 
 /**
  * Kiểm tra một cặp (resource, action) có khớp danh sách quyền của người dùng không.
@@ -7,7 +7,7 @@ import type { CorePermission } from '../entities/core-permission.entity';
  * Hàm thuần: không truy vấn DB.
  */
 export function checkPermissionMatch(
-  userPermissions: CorePermission[],
+  userPermissions: Array<Pick<RbacPermissionGrant, 'resource' | 'action'>>,
   resource: ErpResource | string,
   action: ErpAction | string,
 ): boolean {
