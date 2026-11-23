@@ -8,7 +8,7 @@ import { UsersAuthService } from '@/v2/modules/users-management/services/users-a
 import { UsersManagementService } from '@/v2/modules/users-management/users-management.service';
 import { CoreRefreshToken } from './entities/core-refresh-token.entity';
 import { AuditCoreService } from '../audit-core/audit-core.service';
-import { RbacCoreService } from '@/v2/core/rbac-core';
+import { RbacAccessService } from '@/v2/core/rbac-core';
 import { AppConfigService } from '../app-config/app-config.service';
 
 describe('AuthService', () => {
@@ -56,7 +56,7 @@ describe('AuthService', () => {
         { provide: JwtService, useValue: jwtService },
         { provide: AuditCoreService, useValue: auditCoreService },
         {
-          provide: RbacCoreService,
+          provide: RbacAccessService,
           useValue: { getUserPermissions: jest.fn().mockResolvedValue([]) },
         },
         {

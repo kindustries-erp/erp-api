@@ -4,7 +4,7 @@ import { In, Repository } from 'typeorm';
 import { UsersManagement } from '@/v2/modules/users-management/entities/users-management.entity';
 import type { ApproverOption } from '@/v2/core/approval-core/contracts/approval.contract';
 import { ErpAction } from '@/v2/core/rbac-core/enums';
-import { RbacCoreService } from '@/v2/core/rbac-core/services/rbac-core.service';
+import { RbacAccessService } from '@/v2/core/rbac-core';
 
 /**
  * Danh sách người duyệt hợp lệ cho một resource: user đang ACTIVE và có đủ
@@ -13,7 +13,7 @@ import { RbacCoreService } from '@/v2/core/rbac-core/services/rbac-core.service'
 @Injectable()
 export class ApproverDirectoryService {
   constructor(
-    private readonly rbac: RbacCoreService,
+    private readonly rbac: RbacAccessService,
     @InjectRepository(UsersManagement)
     private readonly users: Repository<UsersManagement>,
   ) {}

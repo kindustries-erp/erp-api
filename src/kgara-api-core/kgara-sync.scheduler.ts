@@ -13,8 +13,8 @@ import { KgaraAuthService } from './kgara-auth.service';
 import { KgaraBulkSyncService } from './services/kgara-bulk-sync.service';
 import { KgaraAccountKey } from './enums/kgara-account.enum';
 import { NotificationsPublisherService } from '@/v2/modules/notifications-inbox';
-import { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.entity';
-import { CoreUserRole } from '@/v2/core/rbac-core/entities/core-user-role.entity';
+import { RbacPermission } from '@/v2/modules/rbac-roles/entities/rbac-permission.entity';
+import { RbacUserRole } from '@/v2/modules/rbac-roles/entities/rbac-user-role.entity';
 import {
   isCronEnabled,
   isWithinSyncWindow,
@@ -34,10 +34,10 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
   constructor(
     @InjectRepository(KgaraBranch)
     private readonly branchRepo: Repository<KgaraBranch>,
-    @InjectRepository(CorePermission)
-    private readonly permissionRepo: Repository<CorePermission>,
-    @InjectRepository(CoreUserRole)
-    private readonly userRoleRepo: Repository<CoreUserRole>,
+    @InjectRepository(RbacPermission)
+    private readonly permissionRepo: Repository<RbacPermission>,
+    @InjectRepository(RbacUserRole)
+    private readonly userRoleRepo: Repository<RbacUserRole>,
     private readonly syncService: KgaraSyncService,
     private readonly authService: KgaraAuthService,
     private readonly bulkSyncService: KgaraBulkSyncService,

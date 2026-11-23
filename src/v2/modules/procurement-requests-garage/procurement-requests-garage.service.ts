@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ErpResource, RbacCoreService } from '@/v2/core/rbac-core';
+import { ErpResource, RbacAccessService } from '@/v2/core/rbac-core';
 import { ApproverDirectoryService } from '@/v2/modules/approval-management/services/approver-directory.service';
 import { GarageProcurementRequestResponseDto } from './dto/garage-procurement-request-response.dto';
 import { toGarageProcurementRequestResponse } from './helpers/garage-procurement-request-response.mapper';
@@ -35,7 +35,7 @@ export class GarageProcurementRequestsService {
   constructor(
     private readonly command: GarageProcurementRequestCommandService,
     private readonly query: GarageProcurementRequestQueryService,
-    private readonly rbac: RbacCoreService,
+    private readonly rbac: RbacAccessService,
     private readonly actors: ApprovalActorService,
     private readonly approvers: ApproverDirectoryService,
     private readonly notifier: ProcurementRequestNotifierService,

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { CoreUserRole } from '@/v2/core/rbac-core/entities/core-user-role.entity';
+import { RbacUserRole } from '@/v2/modules/rbac-roles/entities/rbac-user-role.entity';
 import {
   canViewTestAccounts,
   HIDDEN_TEST_EMAILS,
@@ -15,8 +15,8 @@ import { toRoleUser } from '../helpers/rbac-role.mapper';
 @Injectable()
 export class RoleUsersService {
   constructor(
-    @InjectRepository(CoreUserRole)
-    private readonly userRoleRepository: Repository<CoreUserRole>,
+    @InjectRepository(RbacUserRole)
+    private readonly userRoleRepository: Repository<RbacUserRole>,
   ) {}
 
   async getRoleUsers(

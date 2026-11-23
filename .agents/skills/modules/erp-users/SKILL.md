@@ -235,7 +235,7 @@ Toàn bộ các API quản trị người dùng thuộc `UsersAdminController` �
    - Tham chiếu chéo giữa `core_users.employee_id` và `erp_employees.user_id`.
    - Cho phép hiển thị thông tin nhân viên (họ tên, mã NV, phòng ban) kèm theo tài khoản trên giao diện quản trị.
 3. **`rbac-core` (Phân quyền & Vai trò)**:
-   - Bảng `rbac_user_roles` liên kết nhiều-nhiều giữa `users_management.id` và `core_roles.id`.
+   - Bảng `rbac_user_roles` liên kết nhiều-nhiều giữa `users_management.id` và `rbac_roles.id`.
    - Khi kiểm tra quyền qua `CoreRbacGuard`, hệ thống nạp các quyền từ những vai trò mà user đang nắm giữ.
 4. **`audit-core` (Kiểm toán Hệ thống)**:
    - Tiếp nhận các sự kiện thay đổi dữ liệu người dùng (`CREATE_USER`, `UPDATE_USER`, `RESET_PASSWORD`, v.v.).

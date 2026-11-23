@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ApprovalManagementModule } from '@/v2/modules/approval-management/approval-management.module';
-import { RbacCoreModule } from '@/v2/core/rbac-core';
 import { UsersManagement } from '@/v2/modules/users-management/entities/users-management.entity';
 import { ErpProcurementRequestsModule } from '@/v2/modules/procurement-requests-erp/procurement-requests-erp.module';
 import { ProcurementOrder } from './entities/procurement-order.entity';
@@ -26,7 +25,6 @@ import {
       ProcurementOrderAcceptance,
       UsersManagement,
     ]),
-    RbacCoreModule,
     ApprovalManagementModule,
     ErpProcurementRequestsModule,
   ],

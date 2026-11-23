@@ -10,7 +10,7 @@ export const HIDDEN_TEST_EMAILS: readonly string[] = [
   'ai-test-admin@example.com',
 ];
 
-/** Tên role test, khớp đúng `core_roles.name`. */
+/** Tên role test, khớp đúng `rbac_roles.name`. */
 export const HIDDEN_TEST_ROLE_NAMES: readonly string[] = [
   'Test Admin',
   'Test Tạo',

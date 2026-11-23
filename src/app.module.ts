@@ -9,9 +9,9 @@ import { CoreUser } from './users/entities/core-user.entity';
 import { CoreUserPreference } from './users/entities/core-user-preference.entity';
 import { CoreUserTablePreference } from './v2/modules/table-preferences/entities/core-user-table-preference.entity';
 import { NotificationInbox } from './v2/modules/notifications-inbox/entities/notification-inbox.entity';
-import { CoreRole } from '@/v2/core/rbac-core/entities/core-role.entity';
-import { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.entity';
-import { CoreUserRole } from '@/v2/core/rbac-core/entities/core-user-role.entity';
+import { RbacRole } from '@/v2/modules/rbac-roles/entities/rbac-role.entity';
+import { RbacPermission } from '@/v2/modules/rbac-roles/entities/rbac-permission.entity';
+import { RbacUserRole } from '@/v2/modules/rbac-roles/entities/rbac-user-role.entity';
 import { EmployeesCoreModule } from './employees-core/employees-core.module';
 import { BusinessPartnersManagementModule } from './v2/modules/business-partners-management/business-partners-management.module';
 import { EmployeesManagementModule } from './v2/modules/employees-management/employees-management.module';
@@ -39,7 +39,6 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AuditLogsV2Module } from './v2/modules/audit-logs/audit-logs-v2.module';
 import { GlobalAuditInterceptor as GlobalAuditInterceptorV1 } from './audit-core/interceptors/global-audit.interceptor';
 import { GlobalAuditInterceptor as GlobalAuditInterceptorV2 } from './v2/modules/audit-logs/interceptors/global-audit.interceptor';
-import { RbacCoreModule } from '@/v2/core/rbac-core';
 import { RbacRolesModule } from './v2/modules/rbac-roles/rbac-roles.module';
 import { BasicMastersCoreModule } from './basic-masters-core/basic-masters-core.module';
 import { DocumentDependenciesCoreModule } from './document-dependencies-core/document-dependencies-core.module';
@@ -116,9 +115,9 @@ import { AuthSessionsModule } from './v2/modules/auth-sessions/auth-sessions.mod
               CoreUserPreference,
               CoreUserTablePreference,
               NotificationInbox,
-              CoreRole,
-              CorePermission,
-              CoreUserRole,
+              RbacRole,
+              RbacPermission,
+              RbacUserRole,
             ],
             synchronize: false,
             ssl: isSslDisabled ? false : { rejectUnauthorized: false },
@@ -141,9 +140,9 @@ import { AuthSessionsModule } from './v2/modules/auth-sessions/auth-sessions.mod
             CoreUserPreference,
             CoreUserTablePreference,
             NotificationInbox,
-            CoreRole,
-            CorePermission,
-            CoreUserRole,
+            RbacRole,
+            RbacPermission,
+            RbacUserRole,
           ],
           synchronize: false,
           ssl:
@@ -187,7 +186,6 @@ import { AuthSessionsModule } from './v2/modules/auth-sessions/auth-sessions.mod
     AuditCoreModule,
     AuditLogsV2Module,
     UsersAdminModule,
-    RbacCoreModule,
     RbacRolesModule,
     BasicMastersCoreModule,
     DocumentDependenciesCoreModule,
