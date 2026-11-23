@@ -8,6 +8,7 @@ dist/
 .env
 .env.local*
 .env.production
+.env.demo
 .env.klotus-*
 .env.greenway-*
 .env.blueway-*
