@@ -1,13 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { RbacCoreService } from './rbac-core.service';
-import { CoreRole } from '../entities/core-role.entity';
-import { CorePermission } from '../entities/core-permission.entity';
-import { CoreUserRole } from '../entities/core-user-role.entity';
-import { ErpResource, ErpAction } from '../enums';
+import { TypeOrmRbacAccessService } from './rbac-access.service';
+import { RbacRole } from '@/v2/modules/rbac-roles/entities/rbac-role.entity';
+import { RbacPermission } from '@/v2/modules/rbac-roles/entities/rbac-permission.entity';
+import { RbacUserRole } from '@/v2/modules/rbac-roles/entities/rbac-user-role.entity';
+import { ErpResource, ErpAction } from '@/v2/core/rbac-core';
 
-describe('RbacCoreService', () => {
-  let service: RbacCoreService;
+describe('TypeOrmRbacAccessService', () => {
+  let service: TypeOrmRbacAccessService;
   let roleRepo: any;
   let permissionRepo: any;
   let userRoleRepo: any;
@@ -38,17 +38,17 @@ describe('RbacCoreService', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        RbacCoreService,
-        { provide: getRepositoryToken(CoreRole), useValue: roleRepo },
+        TypeOrmRbacAccessService,
+        { provide: getRepositoryToken(RbacRole), useValue: roleRepo },
         {
-          provide: getRepositoryToken(CorePermission),
+          provide: getRepositoryToken(RbacPermission),
           useValue: permissionRepo,
         },
-        { provide: getRepositoryToken(CoreUserRole), useValue: userRoleRepo },
+        { provide: getRepositoryToken(RbacUserRole), useValue: userRoleRepo },
       ],
     }).compile();
 
-    service = module.get<RbacCoreService>(RbacCoreService);
+    service = module.get<TypeOrmRbacAccessService>(TypeOrmRbacAccessService);
   });
 
   describe('hasPermission', () => {

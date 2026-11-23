@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, SelectQueryBuilder } from 'typeorm';
-import { CoreRole } from '@/v2/core/rbac-core/entities/core-role.entity';
+import { RbacRole } from '@/v2/modules/rbac-roles/entities/rbac-role.entity';
 import { applyMultiKeywordFilter } from '@/common/utils/query-builder.util';
 import {
   buildPagination,
@@ -31,7 +31,7 @@ import {
 
 /** Ẩn role test khỏi danh sách và gợi ý cột với người không có quyền. */
 function applyHiddenRoleFilter(
-  qb: SelectQueryBuilder<CoreRole>,
+  qb: SelectQueryBuilder<RbacRole>,
   viewerEmail?: string | null,
 ): void {
   if (canViewTestAccounts(viewerEmail)) return;
@@ -49,8 +49,8 @@ export interface RoleColumnOptionsResponse {
 @Injectable()
 export class RoleQueryService {
   constructor(
-    @InjectRepository(CoreRole)
-    private readonly roleRepository: Repository<CoreRole>,
+    @InjectRepository(RbacRole)
+    private readonly roleRepository: Repository<RbacRole>,
   ) {}
 
   async getRolesPaginated(

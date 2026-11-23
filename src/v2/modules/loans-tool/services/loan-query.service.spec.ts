@@ -6,7 +6,7 @@ import { applyListSummaries } from '@/common/utils/table-query';
 import { LoanQueryService } from './loan-query.service';
 import { LoanEntity } from '../entities';
 import { AmortizationMethod, LoanStatus } from '@/v2/core/loans-core';
-import { RbacCoreService } from '@/v2/core/rbac-core';
+import { RbacAccessService } from '@/v2/core/rbac-core';
 
 jest.mock('@/common/utils/table-query', () => {
   const actual = jest.requireActual('@/common/utils/table-query');
@@ -66,7 +66,7 @@ describe('LoanQueryService', () => {
           useValue: repo,
         },
         {
-          provide: RbacCoreService,
+          provide: RbacAccessService,
           useValue: {
             hasAnyPermission: jest.fn().mockResolvedValue(true),
           },
@@ -260,7 +260,7 @@ describe('LoanQueryService', () => {
   });
 
   it('áp dụng filter loan.createdBy cho user thông thường và bỏ qua cho super admin', async () => {
-    const mockRbac = (service as any).rbacCoreService;
+    const mockRbac = (service as any).rbacAccessService;
 
     // 1. User thường
     mockRbac.hasAnyPermission.mockResolvedValueOnce(false);
@@ -280,7 +280,7 @@ describe('LoanQueryService', () => {
   });
 
   it('getCashflowProjection lọc theo createdBy khi là user thông thường', async () => {
-    const mockRbac = (service as any).rbacCoreService;
+    const mockRbac = (service as any).rbacAccessService;
     mockRbac.hasAnyPermission.mockResolvedValueOnce(false);
     repo.find.mockResolvedValueOnce([]);
 

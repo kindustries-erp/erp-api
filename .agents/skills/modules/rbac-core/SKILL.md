@@ -1,6 +1,6 @@
 ---
 name: rbac-core
-description: Module tri thức Quản lý Phân quyền, Vai trò & RBAC Core (Roles, Permissions & User Role Assignments) trong erp-api (rbac-core) và erp-web. Chứa toàn bộ database schema (core_roles, core_permissions, core_user_roles), DTOs, API endpoints, logic kiểm tra quyền (hasPermission, hasAnyPermission, hasAllPermissions), decorator RequirePermissions, CoreRbacGuard, phân nhóm quyền (Resource Groups) và tích hợp liên module toàn hệ thống.
+description: Module tri thức Quản lý Phân quyền, Vai trò & RBAC Core (Roles, Permissions & User Role Assignments) trong erp-api (rbac-core) và erp-web. Chứa toàn bộ database schema (rbac_roles, rbac_permissions, rbac_user_roles), DTOs, API endpoints, logic kiểm tra quyền (RbacAccessService: hasPermission, hasAnyPermission, hasAllPermissions), decorator RequirePermissions, CoreRbacGuard, phân nhóm quyền (Resource Groups) và tích hợp liên module toàn hệ thống.
 ---
 
 # 📦 Module Tri Thức: Quản Lý Phân Quyền & Vai Trò (RBAC Core) - Backend & Frontend
@@ -8,8 +8,8 @@ description: Module tri thức Quản lý Phân quyền, Vai trò & RBAC Core (R
 ## 1. Tổng quan Nghiệp vụ
 
 Module Phân quyền & Vai trò Core (`rbac-core`) là hạt nhân an ninh và ủy quyền (Authorization) của ERP, quản lý toàn bộ cơ chế phân quyền dựa trên vai trò (Role-Based Access Control - RBAC) lưu trữ trực tiếp trên Core DB (PostgreSQL):
-- **Vai trò (Roles - `core_roles`)**: Nhóm các quyền hạn nghiệp vụ cụ thể (vd: Kế toán, Thủ kho, Giám đốc, Nhân viên kinh doanh). Hỗ trợ kích hoạt / ngưng hoạt động (`is_active`).
-- **Phân quyền Tài nguyên (Permissions - `core_permissions`)**: Ánh xạ cặp `(resource, action)` vào từng vai trò, kèm điều kiện tùy chọn `conditions (JSONB)`.
+- **Vai trò (Roles - `rbac_roles`)**: Nhóm các quyền hạn nghiệp vụ cụ thể (vd: Kế toán, Thủ kho, Giám đốc, Nhân viên kinh doanh). Hỗ trợ kích hoạt / ngưng hoạt động (`is_active`).
+- **Phân quyền Tài nguyên (Permissions - `rbac_permissions`)**: Ánh xạ cặp `(resource, action)` vào từng vai trò, kèm điều kiện tùy chọn `conditions (JSONB)`.
 - **Gán người dùng vào vai trò (User Role Assignments - `rbac_user_roles`)**: Cho phép một người dùng (`users_management`) sở hữu một hoặc nhiều vai trò trong hệ thống.
 - **Hệ thống Kiểm tra Quyền Zero-Trust**:
   - `CoreRbacGuard`: Guard toàn cục bảo vệ các Controller NestJS thông qua decorator `@RequirePermissions({ resource, action })`.
@@ -23,12 +23,12 @@ Module Phân quyền & Vai trò Core (`rbac-core`) là hạt nhân an ninh và �
 
 ```mermaid
 erDiagram
-    core_roles ||--o{ core_permissions : "has many"
-    core_roles ||--o{ rbac_user_roles : "assigned to"
+    rbac_roles ||--o{ rbac_permissions : "has many"
+    rbac_roles ||--o{ rbac_user_roles : "assigned to"
     users_management ||--o{ rbac_user_roles : "possesses"
 ```
 
-### 2.1. Bảng `core_roles` (Vai trò)
+### 2.1. Bảng `rbac_roles` (Vai trò; trước đây `core_roles`, đổi tên bằng migration `20261123110000`)
 
 | Cột | Kiểu | Nullable | Mặc định | Ghi chú |
 | :--- | :--- | :--- | :--- | :--- |
@@ -39,19 +39,19 @@ erDiagram
 | `created_at` | `timestamptz` | NO | `now()` | Thời gian tạo |
 | `updated_at` | `timestamptz` | NO | `now()` | Thời gian cập nhật |
 
-### 2.2. Bảng `core_permissions` (Quyền truy cập tài nguyên)
+### 2.2. Bảng `rbac_permissions` (Quyền truy cập tài nguyên; trước đây `core_permissions`)
 
 | Cột | Kiểu | Nullable | Mặc định | Ghi chú |
 | :--- | :--- | :--- | :--- | :--- |
 | `id` | `uuid` | NO | `gen_random_uuid()` | Khóa chính (PK) |
-| `role_id` | `uuid` | NO | — | FK tham chiếu `core_roles.id` (ON DELETE CASCADE) |
+| `role_id` | `uuid` | NO | — | FK tham chiếu `rbac_roles.id` (ON DELETE CASCADE) |
 | `resource` | `varchar(128)` | NO | — | Tên tài nguyên (vd: `purchase_orders`, `invoices`, `*`) |
 | `action` | `varchar(64)` | NO | — | Thao tác (`read`, `create`, `update`, `delete`, `manage`, `*`) |
 | `conditions` | `jsonb` | YES | `NULL` | Điều kiện bổ sung / lọc dữ liệu theo ngữ cảnh |
 | `created_at` | `timestamptz` | NO | `now()` | Thời gian tạo |
 | `updated_at` | `timestamptz` | NO | `now()` | Thời gian cập nhật |
 
-> **Ràng buộc duy nhất**: Composite Index `(role_id, resource, action)` là unique để chống trùng lặp quyền.
+> **Ràng buộc duy nhất**: Unique index `UQ_rbac_permissions_role_resource_action` trên `(role_id, resource, action)` để chống trùng lặp quyền.
 
 ### 2.3. Bảng `rbac_user_roles` (Gán người dùng vào vai trò; trước đây `core_user_roles`, đổi tên bằng migration `20261115120100`)
 
@@ -59,38 +59,38 @@ erDiagram
 | :--- | :--- | :--- | :--- | :--- |
 | `id` | `uuid` | NO | `gen_random_uuid()` | Khóa chính (PK) |
 | `user_id` | `uuid` | NO | — | FK tham chiếu `users_management.id` (ON DELETE CASCADE) |
-| `role_id` | `uuid` | NO | — | FK tham chiếu `core_roles.id` (ON DELETE CASCADE) |
+| `role_id` | `uuid` | NO | — | FK tham chiếu `rbac_roles.id` (ON DELETE CASCADE) |
 | `created_at` | `timestamptz` | NO | `now()` | Thời gian gán |
 
-> **Ràng buộc duy nhất**: `UQ_rbac_user_roles_user_role` trên `(user_id, role_id)`. Xóa cứng, không có `is_deleted`. `core_roles` và `core_permissions` vẫn mang tiền tố `core_` (chưa đổi tên).
+> **Ràng buộc duy nhất**: `UQ_rbac_user_roles_user_role` trên `(user_id, role_id)`. Xóa cứng, không có `is_deleted`.
 
 ---
 
 ## 3. Cấu trúc Source Code
 
 ### 3.1. Backend (kiến trúc v2)
-Lõi kiểm quyền và module quản trị tách riêng. Enums nằm tại `src/v2/core/rbac-core/enums/` và được export trực tiếp qua `@/v2/core/rbac-core`. Thư mục cũ `src/rbac-core` đã được xóa bỏ hoàn toàn.
+Lõi kiểm quyền và module quản trị tách riêng. Enums nằm tại `src/v2/core/rbac-core/enums/` và được export trực tiếp qua `@/v2/core/rbac-core`. Thư mục cũ `src/rbac-core` đã được xóa bỏ hoàn toàn. Nơi cần kiểm quyền inject `RbacAccessService` (từ `@/v2/core/rbac-core`); `RbacCoreService`/`RbacCoreModule` đã bị xóa.
 ```text
-erp-api/src/v2/core/rbac-core/                       # Lõi họ rbac (@Global)
+erp-api/src/v2/core/rbac-core/                       # Lõi họ rbac (base-only, style orchestrator, không @Entity/@Module/provider)
 ├── enums/
 │   ├── erp-action.enum.ts            # ErpAction (READ, CREATE, UPDATE, DELETE, PURGE...)
 │   ├── erp-resource.enum.ts          # ErpResource (tất cả resources hệ thống)
 │   └── index.ts                      # Barrel export enums
-├── entities/
-│   ├── core-role.entity.ts           # Entity bảng core_roles (xóa cứng, không có is_deleted)
-│   ├── core-permission.entity.ts     # Entity bảng core_permissions
-│   └── core-user-role.entity.ts      # Entity bảng rbac_user_roles
+├── contracts/
+│   └── rbac-access.contract.ts       # RbacPermissionGrant, RbacPermissionRequirement
 ├── helpers/
 │   └── permission-match.helper.ts    # checkPermissionMatch: hàm thuần, wildcard * / SUPER_ADMIN / ALL
 ├── services/
-│   └── rbac-core.service.ts          # RbacCoreService: hasPermission, hasAny/AllPermissions, getUserPermissions, getUserRoleNames
-├── rbac-core.module.ts               # RbacCoreModule (@Global), export RbacCoreService
-└── core.manifest.json, index.ts      # index.ts export toàn bộ enums, entities, helper, service, module
+│   ├── rbac-access.service.ts        # RbacAccessService abstract (DI token): hasPermission/hasAny/hasAll là logic thuần; 3 hook trừu tượng getUserPermissions, getUserRoleNames, findUserIdsWithPermissions
+│   └── rbac-access.service.spec.ts
+└── core.manifest.json, index.ts      # index.ts export enums, contracts, helper, RbacAccessService
 
 erp-api/src/v2/modules/rbac-roles/              # Module quản trị role (API /api/v2/rbac-roles)
 ├── controllers/rbac-roles.controller.ts        # 10 route, RBAC ADMIN_USERS/MANAGE, ParseUUIDPipe cho id/roleId
+├── entities/                                   # RbacRole (rbac_roles), RbacPermission (rbac_permissions), RbacUserRole (rbac_user_roles)
 ├── rbac-roles.service.ts                       # Facade: delegate sang 4 sub-service, trả response DTO
 ├── services/
+│   ├── rbac-access.service.ts        # TypeOrmRbacAccessService: cài đặt engine kiểm quyền (đọc rbac_*), cung cấp token RbacAccessService
 │   ├── role-query.service.ts         # Danh sách role (phân trang, tìm kiếm, lọc, sắp xếp) và column-options
 │   ├── role-command.service.ts       # Tạo, sửa, xóa role
 │   ├── role-permissions.service.ts   # Đọc và thay toàn bộ quyền của role
@@ -102,7 +102,7 @@ erp-api/src/v2/modules/rbac-roles/              # Module quản trị role (API 
 ├── dto/
 │   ├── rbac-core.dto.ts              # ListCoreRolesDto, CreateCoreRoleDto, UpdateCoreRoleDto, UpdateCoreRolePermissionsDto, UpdateCoreRoleUsersDto
 │   └── rbac-response.dto.ts          # Response DTO: RoleListResponse, RoleResponse, PermissionResponse, RoleUserResponse
-└── rbac-roles.module.ts
+└── rbac-roles.module.ts                        # @Global: cung cấp và export RbacAccessService cho toàn app (không cần import RbacCoreModule)
 ```
 
 Enums: `erp-api/src/v2/core/rbac-core/enums/` (`erp-resource.enum.ts`, `erp-action.enum.ts`, `index.ts`), import qua `@/v2/core/rbac-core`.
@@ -111,7 +111,7 @@ Enums: `erp-api/src/v2/core/rbac-core/enums/` (`erp-resource.enum.ts`, `erp-acti
 ```text
 erp-api/src/auth/
 ├── guards/
-│   └── core-rbac.guard.ts            # CoreRbacGuard kiểm tra @RequirePermissions qua RbacCoreService (@/v2/core/rbac-core)
+│   └── core-rbac.guard.ts            # CoreRbacGuard kiểm tra @RequirePermissions qua RbacAccessService (@/v2/core/rbac-core)
 └── decorators/
     └── require-permissions.decorator.ts # Decorator khai báo { resource, action } trên endpoint
 ```
@@ -224,7 +224,7 @@ Các tài nguyên được gom thành 9 nhóm nghiệp vụ chính:
   cd erp/erp-api
   bunx jest src/v2/core/rbac-core src/v2/modules/rbac-roles
   ```
-  Gồm: spec kiểm quyền của lõi, spec hợp đồng route/RBAC/response, spec HTTP kiểm tra UUID (400), spec mapper và facade.
+  Gồm: spec logic thuần của lõi (`RbacAccessService`), spec `TypeOrmRbacAccessService`, spec hợp đồng route/RBAC/response, spec HTTP kiểm tra UUID (400), spec mapper và facade.
 - **CI / Type Check Frontend**:
   ```bash
   cd erp/erp-web

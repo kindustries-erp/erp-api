@@ -10,7 +10,7 @@ import { LessThan, Repository } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { AuditCoreService } from '../audit-core/audit-core.service';
 import { ChangePasswordSelfDto } from '../users-admin/dto/user-admin.dto';
-import { RbacCoreService } from '@/v2/core/rbac-core';
+import { RbacAccessService } from '@/v2/core/rbac-core';
 import {
   generateRefreshToken,
   hashToken,
@@ -32,7 +32,7 @@ export class AuthService implements OnModuleInit {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly auditCoreService: AuditCoreService,
-    private readonly rbacCoreService: RbacCoreService,
+    private readonly rbac: RbacAccessService,
     private readonly appConfigService: AppConfigService,
     @InjectRepository(CoreRefreshToken)
     private readonly refreshTokenRepo: Repository<CoreRefreshToken>,
@@ -209,7 +209,6 @@ export class AuthService implements OnModuleInit {
         email: user.email,
         status: user.status,
         employeeId: user.employeeId,
-        legacyDirectusUserId: user.legacyDirectusUserId,
       },
       preferences: {
         theme: preferences.theme,
@@ -294,7 +293,6 @@ export class AuthService implements OnModuleInit {
         email: data.email,
         status: data.status,
         employeeId: data.employeeId,
-        legacyDirectusUserId: data.legacyDirectusUserId,
       },
     };
   }
@@ -440,7 +438,6 @@ export class AuthService implements OnModuleInit {
         email: targetUser.email,
         status: targetUser.status,
         employeeId: targetUser.employeeId,
-        legacyDirectusUserId: targetUser.legacyDirectusUserId,
       },
       preferences: {
         theme: preferences.theme,
@@ -460,7 +457,7 @@ export class AuthService implements OnModuleInit {
 
     const employee = await this.usersService.getEmployee(user.employeeId);
 
-    const permissions = await this.rbacCoreService.getUserPermissions(user.id);
+    const permissions = await this.rbac.getUserPermissions(user.id);
     const preferences = await this.appConfigService.getUserPreferences(user.id);
 
     return {
@@ -468,7 +465,6 @@ export class AuthService implements OnModuleInit {
       email: user.email,
       status: user.status,
       employeeId: user.employeeId,
-      legacyDirectusUserId: user.legacyDirectusUserId,
       employee: employee
         ? {
             id: employee.id,

@@ -7,7 +7,6 @@ describe('auth.mapper', () => {
       email: 'a@x.com',
       status: 'ACTIVE',
       employeeId: null,
-      legacyDirectusUserId: null,
       passwordHash: 'SECRET',
     } as never);
     expect(res).toEqual({
@@ -15,7 +14,6 @@ describe('auth.mapper', () => {
       email: 'a@x.com',
       status: 'ACTIVE',
       employeeId: null,
-      legacyDirectusUserId: null,
     });
   });
 

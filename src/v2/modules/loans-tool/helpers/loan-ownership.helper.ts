@@ -1,16 +1,16 @@
 import { ForbiddenException } from '@nestjs/common';
-import { ErpAction, ErpResource, RbacCoreService } from '@/v2/core/rbac-core';
+import { ErpAction, ErpResource, RbacAccessService } from '@/v2/core/rbac-core';
 import { LoanEntity } from '../entities';
 
 /**
  * Kiểm tra xem người dùng có quyền quản trị cấp cao trên module khoản vay hoặc hệ thống không.
  */
 export async function isLoanSuperAdmin(
-  rbacCoreService: RbacCoreService,
+  rbacAccessService: RbacAccessService,
   userId?: string,
 ): Promise<boolean> {
   if (!userId) return false;
-  return rbacCoreService.hasAnyPermission(userId, [
+  return rbacAccessService.hasAnyPermission(userId, [
     { resource: ErpResource.SUPER_ADMIN, action: ErpAction.ALL },
     { resource: ErpResource.ADMIN_USERS, action: ErpAction.MANAGE },
     { resource: ErpResource.LOANS, action: ErpAction.MANAGE },

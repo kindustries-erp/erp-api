@@ -29,7 +29,6 @@ export function toUserResponse(
     email: entity.email,
     status: entity.status,
     employeeId: entity.employeeId ?? null,
-    legacyDirectusUserId: entity.legacyDirectusUserId ?? null,
     lastLoginAt: entity.lastLoginAt ?? null,
     passwordChangedAt: entity.passwordChangedAt ?? null,
     createdAt: entity.createdAt,

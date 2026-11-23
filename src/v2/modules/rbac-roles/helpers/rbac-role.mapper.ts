@@ -1,5 +1,5 @@
-import type { CoreRole } from '@/v2/core/rbac-core/entities/core-role.entity';
-import type { CorePermission } from '@/v2/core/rbac-core/entities/core-permission.entity';
+import type { RbacRole } from '@/v2/modules/rbac-roles/entities/rbac-role.entity';
+import type { RbacPermission } from '@/v2/modules/rbac-roles/entities/rbac-permission.entity';
 import type { UsersManagement } from '@/v2/modules/users-management/entities/users-management.entity';
 import type {
   PermissionResponse,
@@ -16,7 +16,7 @@ export function toRoleUser(
 }
 
 /** Dòng danh sách role: giữ tên trường `is_active` như v1. */
-export function toRoleListItem(role: CoreRole): RoleListItemResponse {
+export function toRoleListItem(role: RbacRole): RoleListItemResponse {
   return {
     id: role.id,
     name: role.name,
@@ -27,7 +27,7 @@ export function toRoleListItem(role: CoreRole): RoleListItemResponse {
   };
 }
 
-export function toRoleResponse(role: CoreRole): RoleResponse {
+export function toRoleResponse(role: RbacRole): RoleResponse {
   return {
     id: role.id,
     name: role.name,
@@ -38,7 +38,7 @@ export function toRoleResponse(role: CoreRole): RoleResponse {
   };
 }
 
-export function toPermissionResponse(p: CorePermission): PermissionResponse {
+export function toPermissionResponse(p: RbacPermission): PermissionResponse {
   return {
     id: p.id,
     roleId: p.roleId,

@@ -118,17 +118,26 @@ export class ReasonBodyDto {
   reason: string;
 }
 
-/** Sửa đầu đề khi còn nháp. Mọi trường tùy chọn; chỉ trường được gửi mới được ghi. Không đổi chi nhánh. */
+/**
+ * Sửa đầu đề khi còn nháp. Mọi trường tùy chọn; chỉ trường được gửi mới được ghi.
+ * `branchId` là FK chi nhánh; `branchName` là giá trị cục bộ sửa được, không ghi vào chi nhánh gốc.
+ * Server tự lập snapshot từ chi nhánh để biết `branchName` có khác nguồn (override) hay không.
+ */
 export class UpdateProcurementRequestHeaderDto {
   @ApiPropertyOptional({
     nullable: true,
-    description: 'Chi nhánh (null = bỏ trống). Chỉ khi DRAFT.',
+    description:
+      'Chi nhánh (null = bỏ trống). Chỉ khi DRAFT; đổi bị chặn khi đã có đơn mua.',
   })
   @IsOptional()
   @IsUUID()
   branchId?: string | null;
 
-  @ApiPropertyOptional({ nullable: true })
+  @ApiPropertyOptional({
+    nullable: true,
+    description:
+      'Tên chi nhánh hiển thị trên phiếu (sửa cục bộ được, không đổi chi nhánh gốc)',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(255)
