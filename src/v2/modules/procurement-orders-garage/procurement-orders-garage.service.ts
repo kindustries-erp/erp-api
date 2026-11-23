@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { GarageProcurementRequest } from '../procurement-requests-garage/entities/procurement-request.entity';
-import { ErpResource, RbacCoreService } from '@/v2/core/rbac-core';
+import { ErpResource, RbacAccessService } from '@/v2/core/rbac-core';
 import { ApproverDirectoryService } from '@/v2/modules/approval-management/services/approver-directory.service';
 import { resolveApprovalEmails } from '@/v2/core/approval-core/helpers/approval-people';
 import { ProcurementOrderAction } from '@/v2/core/procurement-orders-core/contracts/procurement-orders.contract';
@@ -38,7 +38,7 @@ export class GarageProcurementOrdersService {
     private readonly command: GarageProcurementOrderCommandService,
     private readonly fulfilment: GarageProcurementOrderFulfilmentService,
     private readonly query: GarageProcurementOrderQueryService,
-    private readonly rbac: RbacCoreService,
+    private readonly rbac: RbacAccessService,
     private readonly actors: ApprovalActorService,
     private readonly dataSource: DataSource,
     private readonly approvers: ApproverDirectoryService,

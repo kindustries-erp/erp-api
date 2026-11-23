@@ -123,5 +123,5 @@ Quy trình chi tiết (commit, pull, push, rebase, conflict) nằm trong skill `
 
 ### Historical warning
 
-If a file mentions Directus-first flows, Gitea deploys, old dev domains, or `erp-core`, classify it first.
+If a file mentions legacy flows, Gitea deploys, old dev domains, or `erp-core`, classify it first.
 Only repo-local current-truth docs should drive new implementation by default.

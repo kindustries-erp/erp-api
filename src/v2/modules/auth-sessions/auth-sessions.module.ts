@@ -5,7 +5,6 @@ import { AppConfigModule } from '@/app-config/app-config.module';
 import { AuditLogsV2Module } from '@/v2/modules/audit-logs/audit-logs-v2.module';
 import { AuthModule } from '@/auth/auth.module';
 import { CoreRefreshToken } from '@/auth/entities/core-refresh-token.entity';
-import { RbacCoreModule } from '@/v2/core/rbac-core';
 import { UsersManagementModule } from '../users-management/users-management.module';
 import { AuthSessionsService } from './auth-sessions.service';
 import { AuthSessionsController } from './controllers/auth-sessions.controller';
@@ -27,7 +26,6 @@ import { LegacyRefreshTokenExchange } from './services/legacy-refresh-token.exch
     AuthModule,
     UsersManagementModule,
     AuditLogsV2Module,
-    RbacCoreModule,
     AppConfigModule,
   ],
   controllers: [AuthSessionsController],

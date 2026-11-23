@@ -1,6 +1,6 @@
 # ERP API (NestJS + PostgreSQL)
 
-Backend cho lane ERP active hiện tại (`erp-master`) — thuần **PostgreSQL**, không phụ thuộc Directus runtime.
+Backend cho lane ERP active hiện tại (`erp-master`) — thuần **PostgreSQL**, không có phụ thuộc runtime ngoài.
 
 ## Runtime hiện tại (2026-06-14)
 
@@ -40,7 +40,7 @@ Backend cho lane ERP active hiện tại (`erp-master`) — thuần **PostgreSQL
 
 ```
 src/
-├── auth/                     # JWT local auth (không dùng Directus)
+├── auth/                     # JWT local auth
 ├── users-admin/              # User management với RBAC
 ├── rbac-core/                # Role-Based Access Control (core lane)
 ├── audit-core/               # Audit logging

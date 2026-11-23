@@ -82,7 +82,6 @@ erDiagram
         varchar password_hash
         varchar status
         uuid employee_id FK
-        uuid legacy_directus_user_id
         timestamptz last_login_at
         uuid created_by
         timestamptz password_changed_at
@@ -119,7 +118,6 @@ erDiagram
 | `password_hash` | `varchar(255)` | NO | — | Chuỗi hash mật khẩu bcrypt (salt = 10) |
 | `status` | `varchar(50)` | NO | `'ACTIVE'` | Trạng thái (`ACTIVE`, `INACTIVE`) |
 | `employee_id` | `uuid` | YES | `NULL` | FK logic liên kết `erp_employees.id` |
-| `legacy_directus_user_id` | `uuid` | YES | `NULL` | ID tham chiếu lịch sử từ hệ thống Directus cũ |
 | `last_login_at` | `timestamptz` | YES | `NULL` | Thời điểm đăng nhập thành công gần nhất |
 | `created_by` | `uuid` | YES | `NULL` | ID người dùng tạo tài khoản này |
 | `password_changed_at` | `timestamptz` | YES | `NULL` | Thời điểm đổi hoặc reset mật khẩu gần nhất |
@@ -235,7 +233,7 @@ Toàn bộ các API quản trị người dùng thuộc `UsersAdminController` �
    - Tham chiếu chéo giữa `core_users.employee_id` và `erp_employees.user_id`.
    - Cho phép hiển thị thông tin nhân viên (họ tên, mã NV, phòng ban) kèm theo tài khoản trên giao diện quản trị.
 3. **`rbac-core` (Phân quyền & Vai trò)**:
-   - Bảng `rbac_user_roles` liên kết nhiều-nhiều giữa `users_management.id` và `core_roles.id`.
+   - Bảng `rbac_user_roles` liên kết nhiều-nhiều giữa `users_management.id` và `rbac_roles.id`.
    - Khi kiểm tra quyền qua `CoreRbacGuard`, hệ thống nạp các quyền từ những vai trò mà user đang nắm giữ.
 4. **`audit-core` (Kiểm toán Hệ thống)**:
    - Tiếp nhận các sự kiện thay đổi dữ liệu người dùng (`CREATE_USER`, `UPDATE_USER`, `RESET_PASSWORD`, v.v.).

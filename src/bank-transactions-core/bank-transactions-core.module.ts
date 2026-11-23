@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { RbacCoreModule } from '@/v2/core/rbac-core';
 import { BankTransactionsCoreService } from './bank-transactions-core.service';
 import { BankTransactionsCoreController } from './bank-transactions-core.controller';
 import { ErpBankAccount } from './entities/erp_bank_account.entity';
@@ -33,7 +32,6 @@ import { ExportJobsBankStatementsModule } from '@/v2/modules/export-jobs-bank-st
       ErpCashBookBalance,
       ErpBankStatementFile,
     ]),
-    RbacCoreModule,
     AccountingCoreModule,
     BusinessPartnersCoreModule,
   ],

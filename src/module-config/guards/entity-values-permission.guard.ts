@@ -4,7 +4,7 @@ import {
   ForbiddenException,
   Injectable,
 } from '@nestjs/common';
-import { RbacCoreService, ErpAction, ErpResource } from '@/v2/core/rbac-core';
+import { RbacAccessService, ErpAction, ErpResource } from '@/v2/core/rbac-core';
 
 /** entityType (EAV) → resource RBAC của module sở hữu thực thể. */
 export const ENTITY_TYPE_RESOURCE: Readonly<Record<string, ErpResource>> = {
@@ -26,7 +26,7 @@ export const ENTITY_TYPE_RESOURCE: Readonly<Record<string, ErpResource>> = {
  */
 @Injectable()
 export class EntityValuesPermissionGuard implements CanActivate {
-  constructor(private readonly rbac: RbacCoreService) {}
+  constructor(private readonly rbac: RbacAccessService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();

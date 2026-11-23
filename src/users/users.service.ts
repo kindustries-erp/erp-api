@@ -52,7 +52,6 @@ export class UsersService {
       passwordHash: this.hashPassword(password),
       status: 'ACTIVE',
       employeeId: null,
-      legacyDirectusUserId: null,
     });
     return this.usersRepository.save(user);
   }
@@ -84,7 +83,6 @@ export class UsersService {
         passwordHash: this.hashPassword(input.password),
         status: 'ACTIVE',
         employeeId: employee?.id ?? null,
-        legacyDirectusUserId: null,
       }),
     );
 
@@ -103,7 +101,6 @@ export class UsersService {
         email: savedUser.email,
         status: savedUser.status,
         employeeId: savedUser.employeeId,
-        legacyDirectusUserId: savedUser.legacyDirectusUserId,
       },
     };
   }

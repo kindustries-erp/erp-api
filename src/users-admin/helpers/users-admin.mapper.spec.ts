@@ -6,7 +6,6 @@ describe('toSafeUser', () => {
     email: 'a@x.com',
     status: 'ACTIVE',
     employeeId: 'e1',
-    legacyDirectusUserId: null,
     lastLoginAt: undefined,
     createdAt: new Date(),
     updatedAt: new Date(),

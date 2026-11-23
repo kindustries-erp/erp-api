@@ -15,7 +15,7 @@ import {
 import { LoanResponseDto } from '../dto/loan-response.dto';
 import { LoanMapper } from '../helpers/loan.mapper';
 import { LoanStatus } from '@/v2/core/loans-core';
-import { RbacCoreService } from '@/v2/core/rbac-core';
+import { RbacAccessService } from '@/v2/core/rbac-core';
 import {
   assertLoanOwnership,
   generateLoanCode,
@@ -27,7 +27,7 @@ import {
 export class LoanCommandService {
   constructor(
     private readonly dataSource: DataSource,
-    private readonly rbacCoreService: RbacCoreService,
+    private readonly rbac: RbacAccessService,
   ) {}
 
   /** Mỗi kỳ của một khoản vay chỉ được có một thanh toán (gọi sau khi đã khóa khoản vay). */
@@ -127,7 +127,7 @@ export class LoanCommandService {
       throw new NotFoundException(`Loan with ID "${id}" not found`);
     }
 
-    const isSuperAdmin = await isLoanSuperAdmin(this.rbacCoreService, userId);
+    const isSuperAdmin = await isLoanSuperAdmin(this.rbac, userId);
     assertLoanOwnership(loan, userId, isSuperAdmin);
 
     if (dto.loanCode !== undefined && dto.loanCode.trim()) {
@@ -183,7 +183,7 @@ export class LoanCommandService {
       throw new NotFoundException(`Loan with ID "${id}" not found`);
     }
 
-    const isSuperAdmin = await isLoanSuperAdmin(this.rbacCoreService, userId);
+    const isSuperAdmin = await isLoanSuperAdmin(this.rbac, userId);
     assertLoanOwnership(loan, userId, isSuperAdmin);
 
     loan.isDeleted = true;
@@ -202,7 +202,7 @@ export class LoanCommandService {
         throw new NotFoundException(`Loan with ID "${id}" not found`);
       }
 
-      const isSuperAdmin = await isLoanSuperAdmin(this.rbacCoreService, userId);
+      const isSuperAdmin = await isLoanSuperAdmin(this.rbac, userId);
       assertLoanOwnership(loan, userId, isSuperAdmin);
 
       if (!loan.isDeleted) {
@@ -243,7 +243,7 @@ export class LoanCommandService {
         throw new NotFoundException(`Loan with ID "${loanId}" not found`);
       }
 
-      const isSuperAdmin = await isLoanSuperAdmin(this.rbacCoreService, userId);
+      const isSuperAdmin = await isLoanSuperAdmin(this.rbac, userId);
       assertLoanOwnership(loan, userId, isSuperAdmin);
 
       const totalPaid = dto.principalPaid + dto.interestPaid;
@@ -317,7 +317,7 @@ export class LoanCommandService {
         throw new NotFoundException(`Loan with ID "${loanId}" not found`);
       }
 
-      const isSuperAdmin = await isLoanSuperAdmin(this.rbacCoreService, userId);
+      const isSuperAdmin = await isLoanSuperAdmin(this.rbac, userId);
       assertLoanOwnership(loan, userId, isSuperAdmin);
 
       const payment = await qr.manager.findOne(LoanPaymentEntity, {
@@ -429,7 +429,7 @@ export class LoanCommandService {
         throw new NotFoundException(`Loan with ID "${loanId}" not found`);
       }
 
-      const isSuperAdmin = await isLoanSuperAdmin(this.rbacCoreService, userId);
+      const isSuperAdmin = await isLoanSuperAdmin(this.rbac, userId);
       assertLoanOwnership(loan, userId, isSuperAdmin);
 
       const payment = await qr.manager.findOne(LoanPaymentEntity, {

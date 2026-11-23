@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { AppConfigService } from '@/app-config/app-config.service';
 import { AuditWriterService } from '@/v2/modules/audit-logs/services/audit-writer.service';
-import { RbacCoreService } from '@/v2/core/rbac-core';
+import { RbacAccessService } from '@/v2/core/rbac-core';
 import { UsersAuthService } from '../../users-management/services/users-auth.service';
 import type { UpdateProfileDto } from '../dto/update-profile.dto';
 import type { ProfileDto, UpdatedProfileDto } from '../dto/auth-response.dto';
@@ -24,7 +24,7 @@ export interface AuthRequestMeta {
 export class AuthProfileService {
   constructor(
     private readonly users: UsersAuthService,
-    private readonly rbac: RbacCoreService,
+    private readonly rbac: RbacAccessService,
     private readonly appConfig: AppConfigService,
     private readonly audit: AuditWriterService,
   ) {}

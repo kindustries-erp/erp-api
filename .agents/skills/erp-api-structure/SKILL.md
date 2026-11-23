@@ -74,6 +74,7 @@ Cấu trúc chuẩn (vd: `src/v2/modules/<module>/`):
 - Quyền dùng enum `ErpAction` và `ErpResource` (trong `src/v2/core/rbac-core/enums/`, xuất qua `@/v2/core/rbac-core`), không dùng chuỗi literal.
 - Import trong module dùng alias `@/`. Generator tự sinh đúng vị trí `src/v2/modules/...`.
 - Core dùng chung nằm ở `src/v2/core/<core-name>/` (ví dụ `goods-receipts`, base voucher engine).
+- Field FK cần sửa cục bộ mà không đè bản ghi nguồn: dùng lõi `link-override-core` (port + engine), không tự viết lại `source_snapshot`/`overrides`. Xem `references/v2-module.md` mục 5d.
 - Module v1 nằm riêng (`src/<module>-core/`), không trộn vào v2.
 
 Sinh module:

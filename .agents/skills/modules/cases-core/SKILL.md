@@ -23,5 +23,5 @@ Chỉ dùng được cho một ngành thì ở module, chỗ phát sinh sau ghi 
 
 ## Quy tắc
 - Code/response camelCase, cột DB snake_case bằng `name:`.
-- Mẫu override cho module đồng bộ từ hệ ngoài: xem `../cases-garage/SKILL.md` mục 4.
+- Mẫu override cho module đồng bộ từ hệ ngoài: xem `../cases-garage/SKILL.md` mục 4. Helper override thuần nay nằm ở lõi `link-override-core` (`src/v2/core/link-override-core/`), `cases-garage` chỉ giữ re-export mỏng; cột `source_snapshot`/`overrides` vẫn khai báo ở entity module, không vào `cases-core`.
 - Test `plop-helpers/apiCoreLayout.test.mjs` chặn `@Entity` trong lõi.

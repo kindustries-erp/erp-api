@@ -12,7 +12,6 @@ export function toAuthUser(user: UsersManagement): AuthUserDto {
     email: user.email,
     status: user.status,
     employeeId: user.employeeId,
-    legacyDirectusUserId: user.legacyDirectusUserId,
   };
 }
 

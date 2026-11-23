@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { RbacCoreModule } from '@/v2/core/rbac-core';
 import { InventoryMovementsGarageLedgerController } from './controllers/inventory-movements-garage-ledger.controller';
 import { InventoryMovementsGarageBalance } from './entities/inventory-movements-garage-balance.entity';
 import { InventoryMovementsGarageCostLayer } from './entities/inventory-movements-garage-cost-layer.entity';
@@ -13,7 +12,6 @@ import { InventoryMovementsGarageLedgerService } from './inventory-movements-gar
  */
 @Module({
   imports: [
-    RbacCoreModule,
     TypeOrmModule.forFeature([
       InventoryMovementsGarageBalance,
       InventoryMovementsGarageTransaction,

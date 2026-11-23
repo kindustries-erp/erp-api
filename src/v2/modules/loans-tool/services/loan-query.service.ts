@@ -31,7 +31,7 @@ import {
 } from '../dto';
 import { LoanMapper } from '../helpers/loan.mapper';
 import { LoanAmortizationEngine, LoanStatus } from '@/v2/core/loans-core';
-import { RbacCoreService } from '@/v2/core/rbac-core';
+import { RbacAccessService } from '@/v2/core/rbac-core';
 import {
   assertLoanOwnership,
   isLoanSuperAdmin,
@@ -50,7 +50,7 @@ export class LoanQueryService {
   constructor(
     @InjectRepository(LoanEntity)
     private readonly loanRepo: Repository<LoanEntity>,
-    private readonly rbacCoreService: RbacCoreService,
+    private readonly rbacAccessService: RbacAccessService,
   ) {}
 
   async findAll(
@@ -66,7 +66,7 @@ export class LoanQueryService {
         deleted: query.deleted === 'only',
       });
 
-    const isSuperAdmin = await isLoanSuperAdmin(this.rbacCoreService, userId);
+    const isSuperAdmin = await isLoanSuperAdmin(this.rbacAccessService, userId);
     if (!isSuperAdmin && userId) {
       qb.andWhere('loan.createdBy = :userId', { userId });
     }
@@ -146,7 +146,7 @@ export class LoanQueryService {
       .createQueryBuilder('loan')
       .where('loan.isDeleted = :deleted', { deleted: deleted === 'only' });
 
-    const isSuperAdmin = await isLoanSuperAdmin(this.rbacCoreService, userId);
+    const isSuperAdmin = await isLoanSuperAdmin(this.rbacAccessService, userId);
     if (!isSuperAdmin && userId) {
       qb.andWhere('loan.createdBy = :userId', { userId });
     }
@@ -172,7 +172,7 @@ export class LoanQueryService {
       throw new NotFoundException(`Loan with ID "${id}" not found`);
     }
 
-    const isSuperAdmin = await isLoanSuperAdmin(this.rbacCoreService, userId);
+    const isSuperAdmin = await isLoanSuperAdmin(this.rbacAccessService, userId);
     assertLoanOwnership(loan, userId, isSuperAdmin);
 
     return LoanMapper.toDto(loan, true);
@@ -182,7 +182,7 @@ export class LoanQueryService {
     includeAllPeriods = false,
     userId?: string,
   ): Promise<CashflowProjectionResponseDto> {
-    const isSuperAdmin = await isLoanSuperAdmin(this.rbacCoreService, userId);
+    const isSuperAdmin = await isLoanSuperAdmin(this.rbacAccessService, userId);
     const whereCondition: any = { isDeleted: false, status: LoanStatus.ACTIVE };
     if (!isSuperAdmin && userId) {
       whereCondition.createdBy = userId;

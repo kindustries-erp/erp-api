@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { RbacCoreModule } from '@/v2/core/rbac-core';
 import { UsersManagement } from '@/v2/modules/users-management/entities/users-management.entity';
 import { ApprovalEvent } from './entities/approval-event.entity';
 import { ApprovalSetting } from './entities/approval-setting.entity';
@@ -18,7 +17,6 @@ import { ApproverDirectoryService } from './services/approver-directory.service'
 @Module({
   imports: [
     TypeOrmModule.forFeature([ApprovalEvent, ApprovalSetting, UsersManagement]),
-    RbacCoreModule,
   ],
   providers: [
     ApprovalEventService,
