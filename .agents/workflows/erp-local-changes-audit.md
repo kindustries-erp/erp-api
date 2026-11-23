@@ -33,6 +33,7 @@ Kỹ năng chi tiết nằm ở skill `erp-local-changes-audit`. Nạp `erp-api-
 | Spec co-located | Logic mới có `.spec.ts` cạnh file | `erp-api-structure` mục 4 |
 | Route v2 | `api/v2/<module>`, không alias v1 | `erp-api-structure` Phần B |
 | Response list v2 | `{ items, pagination, summaries?, extraData? }` | `erp-api-structure` Phần B |
+| Field link FK dùng bộ chung | Field FK nội bộ sửa cục bộ dùng `link-override-core` (`LinkSourcePort` + `BaseLinkOverrideEngine`), không tự lặp `source_snapshot`/`overrides`; link-source chỉ đọc; FK không tồn tại trả 404; chỉ Nhóm A (không khóa cha-con, không FK hệ thống) | `erp-api-structure` Phần B, `v2-module.md` mục 5d |
 | Script độc lập | Không đường dẫn tuyệt đối, dry-run mặc định | `erp-api-structure` mục "Script độc lập" |
 
 ## Quy tắc

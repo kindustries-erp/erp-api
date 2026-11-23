@@ -1,6 +1,7 @@
 import { RBAC_PERMISSIONS_KEY } from '@/auth/decorators/require-permissions.decorator';
 import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
 import { GarageProcurementRequestController } from './controllers/procurement-request.controller';
+import { GarageProcurementRequestWorkflowController } from './controllers/procurement-request-workflow.controller';
 
 const perm = (fn: (...args: never[]) => unknown) =>
   Reflect.getMetadata(RBAC_PERMISSIONS_KEY, fn) as Array<{
@@ -10,15 +11,16 @@ const perm = (fn: (...args: never[]) => unknown) =>
 
 describe('GarageProcurementRequestController RBAC', () => {
   const c = GarageProcurementRequestController.prototype;
+  const w = GarageProcurementRequestWorkflowController.prototype;
 
   it('approve dùng quyền riêng APPROVE, reject dùng REJECT, không dùng UPDATE', () => {
-    expect(perm(c.approve as never)).toEqual([
+    expect(perm(w.approve as never)).toEqual([
       {
         resource: ErpResource.GARAGE_PROCUREMENT_REQUESTS,
         action: ErpAction.APPROVE,
       },
     ]);
-    expect(perm(c.reject as never)).toEqual([
+    expect(perm(w.reject as never)).toEqual([
       {
         resource: ErpResource.GARAGE_PROCUREMENT_REQUESTS,
         action: ErpAction.REJECT,
@@ -31,8 +33,19 @@ describe('GarageProcurementRequestController RBAC', () => {
     expect(perm(c.list as never)[0].action).toBe(ErpAction.READ);
     expect(perm(c.columnOptions as never)[0].action).toBe(ErpAction.READ);
     expect(perm(c.findOne as never)[0].action).toBe(ErpAction.READ);
-    expect(perm(c.submit as never)[0].action).toBe(ErpAction.UPDATE);
-    expect(perm(c.cancel as never)[0].action).toBe(ErpAction.UPDATE);
+    expect(perm(w.submit as never)[0].action).toBe(ErpAction.UPDATE);
+    expect(perm(w.cancel as never)[0].action).toBe(ErpAction.UPDATE);
+  });
+
+  it('revert/refresh field liên kết cần quyền UPDATE', () => {
+    for (const handler of [c.revertLink, c.refreshLink]) {
+      expect(perm(handler as never)).toEqual([
+        {
+          resource: ErpResource.GARAGE_PROCUREMENT_REQUESTS,
+          action: ErpAction.UPDATE,
+        },
+      ]);
+    }
   });
 
   it('nhật ký duyệt và bản nháp PO chỉ cần READ', () => {

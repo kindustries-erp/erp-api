@@ -1,15 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { ErpResource, RbacCoreService } from '@/v2/core/rbac-core';
 import { ApproverDirectoryService } from '@/v2/modules/approval-management/services/approver-directory.service';
-import { toPurchaseRequestResponse } from '@/v2/core/procurement-requests-core/helpers/procurement-request.mapper';
+import { GarageProcurementRequestResponseDto } from './dto/garage-procurement-request-response.dto';
+import { toGarageProcurementRequestResponse } from './helpers/garage-procurement-request-response.mapper';
 import {
   PurchaseRequestAction,
   PurchaseRequestStatus,
 } from '@/v2/core/procurement-requests-core/contracts/procurement-requests.contract';
-import {
-  PurchaseRequestPoDraftDto,
-  PurchaseRequestResponseDto,
-} from '@/v2/core/procurement-requests-core/dto/procurement-request-response.dto';
+import { PurchaseRequestPoDraftDto } from '@/v2/core/procurement-requests-core/dto/procurement-request-response.dto';
 import { PurchaseRequestListResponseDto } from '@/v2/core/procurement-requests-core/dto/procurement-request-list-response.dto';
 import { toPaginatedResult } from '@/common/utils/paginated-result';
 import { resolveApprovalEmails } from '@/v2/core/approval-core/helpers/approval-people';
@@ -48,7 +46,7 @@ export class GarageProcurementRequestsService {
   async create(
     dto: CreateProcurementRequestDto,
     actorId: string,
-  ): Promise<PurchaseRequestResponseDto> {
+  ): Promise<GarageProcurementRequestResponseDto> {
     const { lines, ...header } = dto;
     const saved = await this.command.createDraft(
       { id: actorId, roles: await this.roles(actorId) },
@@ -62,7 +60,7 @@ export class GarageProcurementRequestsService {
   async clone(
     id: string,
     actorId: string,
-  ): Promise<PurchaseRequestResponseDto> {
+  ): Promise<GarageProcurementRequestResponseDto> {
     const saved = await this.command.cloneDraft(
       id,
       { id: actorId, roles: await this.roles(actorId) },
@@ -79,7 +77,12 @@ export class GarageProcurementRequestsService {
     const related = await this.orderRef.forRequests(out.rows.map((h) => h.id));
     return toPaginatedResult(
       out.rows.map((h) =>
-        toPurchaseRequestResponse(h, [], emailOf, related.get(h.id) ?? []),
+        toGarageProcurementRequestResponse(
+          h,
+          [],
+          emailOf,
+          related.get(h.id) ?? [],
+        ),
       ),
       out.page,
       out.pageSize,
@@ -106,24 +109,42 @@ export class GarageProcurementRequestsService {
     );
   }
 
-  async findOne(id: string): Promise<PurchaseRequestResponseDto> {
+  async findOne(id: string): Promise<GarageProcurementRequestResponseDto> {
     const { header, lines } = await this.query.findOne(id);
     const emailOf = await resolveApprovalEmails(this.actors, [header]);
-    return toPurchaseRequestResponse(header, lines, emailOf);
+    return toGarageProcurementRequestResponse(header, lines, emailOf);
   }
 
   async updateHeader(
     id: string,
     dto: UpdateProcurementRequestHeaderDto,
-  ): Promise<PurchaseRequestResponseDto> {
+  ): Promise<GarageProcurementRequestResponseDto> {
     await this.command.updateHeader(id, dto);
+    return this.findOne(id);
+  }
+
+  /** Về giá trị chi nhánh đã lưu cho `field`; trả phiếu sau khi cập nhật. */
+  async revertLink(
+    id: string,
+    field: string,
+  ): Promise<GarageProcurementRequestResponseDto> {
+    await this.command.revertLink(id, field);
+    return this.findOne(id);
+  }
+
+  /** Đọc lại chi nhánh và lấy giá trị mới nhất cho `field`; trả phiếu sau khi cập nhật. */
+  async refreshLink(
+    id: string,
+    field: string,
+  ): Promise<GarageProcurementRequestResponseDto> {
+    await this.command.refreshLink(id, field);
     return this.findOne(id);
   }
 
   async replaceLines(
     id: string,
     dto: ReplaceRequestLinesDto,
-  ): Promise<PurchaseRequestResponseDto> {
+  ): Promise<GarageProcurementRequestResponseDto> {
     await this.command.replaceDraftLines(id, dto.lines);
     return this.findOne(id);
   }
@@ -134,7 +155,7 @@ export class GarageProcurementRequestsService {
     actorId: string,
     reason?: string,
     approverId?: string | null,
-  ): Promise<PurchaseRequestResponseDto> {
+  ): Promise<GarageProcurementRequestResponseDto> {
     if (approverId) {
       await this.approvers.assertEligible(
         ErpResource.GARAGE_PROCUREMENT_REQUESTS,
@@ -173,7 +194,7 @@ export class GarageProcurementRequestsService {
   createAndSubmit(
     dto: CreateAndSubmitProcurementRequestDto,
     actorId: string,
-  ): Promise<PurchaseRequestResponseDto> {
+  ): Promise<GarageProcurementRequestResponseDto> {
     const { lines, approverId, ...header } = dto;
     return this.saveAndSubmit(null, header, lines, approverId, actorId);
   }
@@ -183,7 +204,7 @@ export class GarageProcurementRequestsService {
     id: string,
     dto: UpdateAndSubmitProcurementRequestDto,
     actorId: string,
-  ): Promise<PurchaseRequestResponseDto> {
+  ): Promise<GarageProcurementRequestResponseDto> {
     const { lines, approverId, ...header } = dto;
     return this.saveAndSubmit(id, header, lines, approverId, actorId);
   }
@@ -194,7 +215,7 @@ export class GarageProcurementRequestsService {
     lines: CreateProcurementRequestDto['lines'],
     approverId: string | undefined,
     actorId: string,
-  ): Promise<PurchaseRequestResponseDto> {
+  ): Promise<GarageProcurementRequestResponseDto> {
     if (approverId) {
       await this.approvers.assertEligible(
         ErpResource.GARAGE_PROCUREMENT_REQUESTS,
