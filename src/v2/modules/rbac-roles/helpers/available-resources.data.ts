@@ -28,6 +28,10 @@ export const AVAILABLE_RBAC_RESOURCES: AvailableRbacResource[] = [
   { resource: 'email_ingest', label: 'Email Ingest / Hộp thư' },
   { resource: 'journal_entries', label: 'Journal Entries (Kế toán)' },
   { resource: 'garage', label: 'Garage (Xưởng dịch vụ)' },
+  {
+    resource: ErpResource.GARAGE_WORKSHOP,
+    label: 'Tiến độ xưởng Garage (công đoạn, nhật ký, người làm)',
+  },
   { resource: 'garage_debts', label: 'Công nợ Garage' },
   { resource: 'garage_cashflow', label: 'Thu chi xưởng (Garage Cashflow)' },
   {

@@ -18,6 +18,8 @@ import {
 import { assertHeaderPatchAllowed } from '../helpers/case-origin.guard';
 import { markOverrides } from '../helpers/case-override.helper';
 import { CASE_OVERRIDABLE_KEYS } from '../helpers/case-override.keys';
+import { closeOpenStage } from '../helpers/case-progress-stage.closer';
+import { isStageOf } from '../helpers/case-progress-stage.map';
 import { canTransition, statusToKgaraCode } from '../helpers/kgara-status.map';
 import { CaseLineWriter } from './case-line-writer.service';
 
@@ -148,8 +150,10 @@ export class CaseCommandService {
     branchExternalId: string,
     id: string,
     status: CaseStatus,
+    actorId = '',
+    outer?: EntityManager,
   ): Promise<CaseGarage> {
-    return this.dataSource.transaction(async (m) => {
+    return runInOptionalTransaction(this.dataSource, outer, async (m) => {
       const current = await this.findOwned(m, branchExternalId, id, true);
       if (!canTransition(current.status, status, current.origin)) {
         throw new BadRequestException(
@@ -177,6 +181,11 @@ export class CaseCommandService {
           kgaraStatusCode: statusToKgaraCode(status),
           ...completed,
         } as never);
+      }
+      // Status nhỏ thuộc status cũ: đóng công đoạn đang mở, bỏ mã không còn hợp lệ.
+      await closeOpenStage(m, id, new Date(), actorId);
+      if (current.progressStage && !isStageOf(status, current.progressStage)) {
+        await m.update(CaseGarage, { id }, { progressStage: null } as never);
       }
       return this.reload(m, id);
     });

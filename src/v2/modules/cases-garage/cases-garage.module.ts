@@ -7,10 +7,17 @@ import { KgaraCaseSettlement } from '@/kgara-api-core/entities/kgara_case_settle
 import { KgaraGrossProfit } from '@/kgara-api-core/entities/kgara_gross_profit.entity';
 import { CaseGarage } from './entities/case-garage.entity';
 import { CaseLineGarage } from './entities/case-line-garage.entity';
+import { CaseProgressLogGarage } from './entities/case-progress-log-garage.entity';
 import { GARAGE_CASE_PROJECTOR } from '@/kgara-api-core/hub/case-projector.port';
 import { CasesGarageService } from './cases-garage.service';
 import { CasesGarageCommandsController } from './controllers/cases-garage-commands.controller';
 import { CasesGarageController } from './controllers/cases-garage.controller';
+import { CasesGarageWorkshopController } from './controllers/cases-garage-workshop.controller';
+import { CaseProgressLogCommandService } from './services/case-progress-log-command.service';
+import { CaseWorkshopQueryService } from './services/case-workshop-query.service';
+import { CaseWorkshopCandidatesService } from './services/case-workshop-candidates.service';
+import { CaseWorkshopTrackService } from './services/case-workshop-track.service';
+import { CaseWorkshopWorkersService } from './services/case-workshop-workers.service';
 import { CaseCommandService } from './services/case-command.service';
 import { CaseProgressCommandService } from './services/case-progress-command.service';
 import { CaseProgressQueryService } from './services/case-progress-query.service';
@@ -40,10 +47,15 @@ import { GrossProfitReportService } from './services/gross-profit-report.service
       KgaraBranch,
       CaseGarage,
       CaseLineGarage,
+      CaseProgressLogGarage,
     ]),
   ],
   // Controller ghi đứng trước để route tĩnh (`next-code`) không bị `GET :id` nuốt.
-  controllers: [CasesGarageCommandsController, CasesGarageController],
+  controllers: [
+    CasesGarageWorkshopController,
+    CasesGarageCommandsController,
+    CasesGarageController,
+  ],
   providers: [
     CaseListEnrichmentService,
     CaseListQueryService,
@@ -57,6 +69,11 @@ import { GrossProfitReportService } from './services/gross-profit-report.service
     CaseLineWriter,
     CaseRevertService,
     CaseProgressCommandService,
+    CaseProgressLogCommandService,
+    CaseWorkshopQueryService,
+    CaseWorkshopWorkersService,
+    CaseWorkshopCandidatesService,
+    CaseWorkshopTrackService,
     CaseProgressQueryService,
     CaseProjectorService,
     { provide: GARAGE_CASE_PROJECTOR, useExisting: CaseProjectorService },

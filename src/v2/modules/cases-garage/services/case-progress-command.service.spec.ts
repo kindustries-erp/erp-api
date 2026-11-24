@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { CaseOrigin } from '../entities/case-garage.enums';
+import { CaseOrigin, CaseStatus } from '../entities/case-garage.enums';
 import { CaseProgressCommandService } from './case-progress-command.service';
 
 const make = (
@@ -26,7 +26,12 @@ const E1 = '11111111-1111-4111-8111-111111111111';
 describe('CaseProgressCommandService', () => {
   it('ghi KTV, công đoạn, % và dấu cập nhật; xe NATIVE không có overrides', async () => {
     const { svc, manager } = make(
-      { id: 'c1', origin: CaseOrigin.NATIVE, branchId: 'b1' },
+      {
+        id: 'c1',
+        origin: CaseOrigin.NATIVE,
+        branchId: 'b1',
+        status: CaseStatus.IN_PROGRESS,
+      },
       { id: E1, branchId: 'b1' },
     );
     await svc.update(
@@ -95,5 +100,17 @@ describe('CaseProgressCommandService', () => {
     const patch = manager.update.mock.calls[0][2] as Record<string, unknown>;
     expect(patch.assigneeId).toBeNull();
     expect(patch).not.toHaveProperty('progressStage');
+  });
+
+  it('công đoạn không thuộc status cha → 400, không ghi', async () => {
+    const { svc, manager } = make({
+      id: 'c1',
+      origin: CaseOrigin.NATIVE,
+      status: CaseStatus.INTAKE,
+    });
+    await expect(
+      svc.update('B1', 'c1', { progressStage: 'PAINTING' } as never, 'u'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(manager.update).not.toHaveBeenCalled();
   });
 });

@@ -184,6 +184,50 @@ describe('CaseCommandService', () => {
     expect(native.manager.update).not.toHaveBeenCalled();
   });
 
+  it('updateStatus: đóng công đoạn đang mở và bỏ status nhỏ không thuộc status mới', async () => {
+    const current = {
+      ...owned(CaseOrigin.NATIVE, CaseStatus.IN_PROGRESS),
+      progressStage: 'READY_FOR_DELIVERY',
+    };
+    const open = {
+      id: 'log-1',
+      startedAt: new Date('2020-01-01T00:00:00Z'),
+    };
+    const { svc, manager } = make(current);
+    manager.findOne.mockImplementation((entity: { name: string }) =>
+      Promise.resolve(entity.name === 'CaseProgressLogGarage' ? open : current),
+    );
+    await svc.updateStatus('B1', 'c1', CaseStatus.COMPLETED, 'u9');
+    const byTarget = (name: string) =>
+      manager.update.mock.calls.filter(
+        (c) => (c[0] as { name: string }).name === name,
+      );
+    const [closeCall] = byTarget('CaseProgressLogGarage');
+    expect(closeCall[1]).toEqual({ id: 'log-1' });
+    expect(closeCall[2]).toMatchObject({ updatedBy: 'u9' });
+    expect((closeCall[2] as { endedAt: Date }).endedAt).toBeInstanceOf(Date);
+    expect(byTarget('CaseGarage')).toContainEqual([
+      expect.anything(),
+      { id: 'c1' },
+      { progressStage: null },
+    ]);
+  });
+
+  it('updateStatus: status nhỏ vẫn hợp lệ hoặc không có công đoạn mở thì không đổi thêm', async () => {
+    const current = {
+      ...owned(CaseOrigin.KGARA_SYNC, CaseStatus.INTAKE),
+      progressStage: null,
+      sourceSnapshot: {},
+      overrides: {},
+    };
+    const { svc, manager } = make(current);
+    manager.findOne.mockImplementation((entity: { name: string }) =>
+      Promise.resolve(entity.name === 'CaseProgressLogGarage' ? null : current),
+    );
+    await svc.updateStatus('B1', 'c1', CaseStatus.QUOTED);
+    expect(manager.update).toHaveBeenCalledTimes(1);
+  });
+
   it('updateStatus: xe sync đổi về đúng trạng thái KGara thì bỏ dấu override', async () => {
     const sync = make({
       ...owned(CaseOrigin.KGARA_SYNC, CaseStatus.INTAKE),

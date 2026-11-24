@@ -53,10 +53,15 @@ export class CasesGarageService {
     );
   }
 
-  async updateStatus(branch: string, id: string, status: CaseStatus) {
+  async updateStatus(
+    branch: string,
+    id: string,
+    status: CaseStatus,
+    actorId = '',
+  ) {
     return wrap(
       'Đã đổi trạng thái',
-      await this.commands.updateStatus(branch, id, status),
+      await this.commands.updateStatus(branch, id, status, actorId),
     );
   }
 

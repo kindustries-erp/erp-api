@@ -13,7 +13,7 @@ import {
 } from 'class-validator';
 import type { PaginationMeta } from '@/common/utils/paginated-result';
 import { CaseProgressStage } from '../entities/case-progress.enums';
-import type { CaseStatus } from '../entities/case-garage.enums';
+import type { CaseOrigin, CaseStatus } from '../entities/case-garage.enums';
 
 /** Cập nhật tiến độ một xe. Gửi `null` để xóa giá trị; bỏ field thì giữ nguyên. */
 export class UpdateCaseProgressDto {
@@ -92,7 +92,12 @@ export interface CaseProgressItem {
   progressPercent: number | null;
   expectedCompletionAt: string | null;
   status: CaseStatus;
+  /** Nguồn vụ việc: `KGARA_SYNC` đổi trạng thái tự do (ghi đè ở ERP), `NATIVE` theo bảng chuyển. */
+  origin: CaseOrigin;
   statusName: string | null;
+  completedAt: string | null;
+  /** Lúc xe được đưa vào bảng tiến độ xưởng; null là không có trên bảng. */
+  workshopTrackedAt: string | null;
   /** Số phút đã làm: (hoàn thành hoặc hiện tại) − (bắt đầu sửa hoặc tiếp nhận). */
   elapsedMinutes: number | null;
   isOverdue: boolean;

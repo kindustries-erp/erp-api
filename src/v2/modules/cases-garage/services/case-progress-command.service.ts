@@ -6,6 +6,7 @@ import { CaseGarage } from '../entities/case-garage.entity';
 import { CaseOrigin } from '../entities/case-garage.enums';
 import { markOverrides } from '../helpers/case-override.helper';
 import { CASE_OVERRIDABLE_KEYS } from '../helpers/case-override.keys';
+import { isStageOf } from '../helpers/case-progress-stage.map';
 import { CaseCommandService } from './case-command.service';
 
 /**
@@ -28,6 +29,11 @@ export class CaseProgressCommandService {
   ) {
     return this.dataSource.transaction(async (m) => {
       const current = await this.cases.findOwned(m, branch, id, true);
+      if (!isStageOf(current.status, dto.progressStage)) {
+        throw new BadRequestException(
+          `Công đoạn ${dto.progressStage} không thuộc trạng thái ${current.status}.`,
+        );
+      }
       if (dto.assigneeId) {
         const emp = await m.findOne(EmployeeManagement, {
           where: { id: dto.assigneeId, isDeleted: false },
