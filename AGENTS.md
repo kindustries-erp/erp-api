@@ -67,7 +67,7 @@ git push github-industries [target-branch]
 
 ## 📋 Workflow Catalog (single source of truth)
 
-Each workflow is a slash command (e.g. `/erp-plan`, `/erp-git-workflow`). Claude command stubs in `.claude/commands/` are generated from the canonical file; only edit the originals in `.agents/workflows/`. After changing anything in `.agents/`, run `/sync-agents`.
+Each workflow is a slash command (e.g. `/erp-plan`, `/erp-git-workflow`). Claude command stubs in `.claude/commands/` are generated from the canonical file; only edit the originals in `.agents/workflows/`. After changing anything in `.agents/`, run `/sync-agents`. When creating or updating a skill or workflow, also update the matching AFFiNE note in the same task (if one exists) so repo and AFFiNE stay consistent; the repo is the detailed source, AFFiNE the summary.
 
 Global workflows in `./.agents/workflows/`:
 
@@ -223,6 +223,8 @@ Workflow ERP nằm ở `./.agents/workflows/`:
 - `routing.md`, `clean-brain.md`, `erp-api-structure.md`, `erp-ui-structure.md`.
 
 Workflow global (`erp-plan.md`, `erp-continue.md`, `erp-git-workflow.md`, `standardize-table.md`, `erp-api-structure.md`, `erp-ui-structure.md`, ...) xem catalog ở `../AGENTS.md`.
+
+Khi tạo hoặc cập nhật skill/workflow trong repo, đồng thời cập nhật note AFFiNE tương ứng (nếu có, ví dụ `[ERP] erp-structure-standards`) trong cùng task để hai bên đồng nhất; repo là nguồn chi tiết, AFFiNE là bản tóm tắt. Chưa có note thì ghi rõ trong báo cáo.
 
 Kế hoạch trình trong hội thoại và được `OK` trước khi làm; task theo dõi trên Plane (project KINDU) bằng skill `plane-work-items`. Antigravity Brain (`implementation_plan.md` -> `walkthrough.md`) là bản phụ khi chạy trong Antigravity.
 
