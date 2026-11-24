@@ -161,4 +161,40 @@ describe('CaseCommandService', () => {
       { status: 'QUOTED', overrides: { status: true } },
     );
   });
+
+  it('updateStatus: xe sync lùi QUOTED → INTAKE, giữ trạng thái KGara; xe NATIVE bị chặn', async () => {
+    const sync = make({
+      ...owned(CaseOrigin.KGARA_SYNC, CaseStatus.QUOTED),
+      kgaraStatusCode: 1,
+      sourceSnapshot: { status: 'QUOTED' },
+      overrides: {},
+    });
+    await sync.svc.updateStatus('B1', 'c1', CaseStatus.INTAKE);
+    const patch = sync.manager.update.mock.calls[0][2] as Record<
+      string,
+      unknown
+    >;
+    expect(patch).toEqual({ status: 'INTAKE', overrides: { status: true } });
+    expect(patch).not.toHaveProperty('kgaraStatusCode');
+
+    const native = make(owned(CaseOrigin.NATIVE, CaseStatus.QUOTED));
+    await expect(
+      native.svc.updateStatus('B1', 'c1', CaseStatus.INTAKE),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(native.manager.update).not.toHaveBeenCalled();
+  });
+
+  it('updateStatus: xe sync đổi về đúng trạng thái KGara thì bỏ dấu override', async () => {
+    const sync = make({
+      ...owned(CaseOrigin.KGARA_SYNC, CaseStatus.INTAKE),
+      sourceSnapshot: { status: 'QUOTED' },
+      overrides: { status: true },
+    });
+    await sync.svc.updateStatus('B1', 'c1', CaseStatus.QUOTED);
+    expect(sync.manager.update).toHaveBeenCalledWith(
+      expect.anything(),
+      { id: 'c1' },
+      { status: 'QUOTED', overrides: {} },
+    );
+  });
 });

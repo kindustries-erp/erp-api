@@ -95,6 +95,22 @@ describe('CaseProjectorService', () => {
     expect(patch.sourceSnapshot).toMatchObject({ licensePlate: '30A-1' });
   });
 
+  it('chạy lại: status đã override ở v2 không bị sync ghi đè, snapshot và mã KGara vẫn cập nhật', async () => {
+    const { svc, manager } = make({
+      existing: {
+        id: 'c1',
+        origin: CaseOrigin.KGARA_SYNC,
+        status: 'INTAKE',
+        overrides: { status: true },
+      },
+    });
+    await svc.project('c1');
+    const patch = manager.update.mock.calls[0][2] as Record<string, unknown>;
+    expect(patch).not.toHaveProperty('status');
+    expect(patch).toHaveProperty('kgaraStatusCode', 3);
+    expect(patch.sourceSnapshot).toMatchObject({ status: 'COMPLETED' });
+  });
+
   it('chạy lại: update, không insert (không nhân đôi), không ghi đè id/createdAt', async () => {
     const { svc, manager } = make({
       existing: { id: 'c1', origin: CaseOrigin.KGARA_SYNC },

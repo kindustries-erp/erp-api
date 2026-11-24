@@ -151,7 +151,7 @@ export class CaseCommandService {
   ): Promise<CaseGarage> {
     return this.dataSource.transaction(async (m) => {
       const current = await this.findOwned(m, branchExternalId, id, true);
-      if (!canTransition(current.status, status)) {
+      if (!canTransition(current.status, status, current.origin)) {
         throw new BadRequestException(
           `Không chuyển được trạng thái ${current.status} → ${status}.`,
         );

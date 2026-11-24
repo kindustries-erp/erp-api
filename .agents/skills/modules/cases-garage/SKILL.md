@@ -19,7 +19,7 @@ Chi nhánh: header `x-kgara-branch-id` bắt buộc (thiếu 400). Mọi đọc/
 
 ## 3. Quy tắc
 - Mã xe NATIVE: `VV-YYYYMMDD-NNN` (tái dùng `nextDocumentNo`). Unique `(branchExternalId, accountKey, caseCode)` khi chưa xóa (`UQ_cases_garage_case_code_active`).
-- Trạng thái `CaseStatus` (`INTAKE`, `QUOTED`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`) map từ `tinh_trang_dich_vu` 0/1/2/3/9 ở `kgara-status.map.ts`; `canTransition` giới hạn chuyển trạng thái của NATIVE.
+- Trạng thái `CaseStatus` (`INTAKE`, `QUOTED`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`) map từ `tinh_trang_dich_vu` 0/1/2/3/9 ở `kgara-status.map.ts`; `canTransition(from, to, origin)`: NATIVE theo bảng `TRANSITIONS` (chặn bước lùi như QUOTED→INTAKE); `KGARA_SYNC` đổi tự do (chỉ cấm cùng trạng thái), vì status của xe sync là override (mục 4): ghi `status` + `overrides.status`, không đổi `kgaraStatusCode` và `source_snapshot`; projector giữ status đã ghi đè khi KGara đổi mã; `POST :id/revert {fields:['status']}` trả về trạng thái KGara.
 - Dòng NATIVE: thành tiền do server tính (`computeLineAmounts`), DTO không nhận `amountBeforeTax`/`amountWithTax`. Sửa dòng khóa `pessimistic_write` header.
 - Gross profit join `kgara_gross_profit.vu_viec_code = caseCode` cho SYNC; không join theo id KGara.
 - Sort theo biểu thức SQL + phân trang: truy vấn hai bước (id có sort rồi entity). Filter/sort/summary dùng `common/utils/table-query`.
@@ -41,8 +41,9 @@ Dòng: `noi_dung_chi_tiet`→`description`, `san_pham_code/name`, `loai_san_pham
 ## 6. Chưa làm / follow-up
 - Công nợ, thu chi, cấn trừ, hóa đơn liên kết vẫn ở V1; `paidAmount` NATIVE chưa nối. Projector không có `raw_data` nên list bỏ tách phải thu bảo hiểm/khách (cần khi cutover công nợ).
 - **Web follow-up (breaking đã báo)**: tên field response đổi từ tiếng Việt sang EN (`soChungTu`→`caseCode`, `bienSoXe`→`licensePlate`...); `phaiThuKhachHang`/`phaiThuBaoHiem` đã bỏ. Web chưa gọi `api/v2/cases-garage`; type `GarageCaseVehicleFields` (`erp-web/src/v2/core/garage-cases/vehicle/`) còn dùng tên V1, phải sửa khi nối Web.
+- Smoke Kanban: `E2E_SYNC_BRANCH=<branch_external_id> bun run test:smoke:cases-garage-kanban` (xe sync QUOTED→INTAKE→revert, NATIVE bị chặn lùi, đổi công đoạn; luôn hoàn trạng thái). Lưu ý header `x-kgara-branch-id` là `branch_external_id` (một external id có thể dùng chung cho nhiều chi nhánh ERP như GR và CN2), không phải `branch_id`.
 - Smoke: `bun run test:smoke:cases-garage` (chi nhánh giả `smoke-<tag>`, xóa mềm cuối chạy; thêm `E2E_SYNC_BRANCH=<branch_external_id có xe KGARA_SYNC>` để chạy kịch bản override/revert trên xe sync, tự trả lại nguyên trạng).
-- Web follow-up: chỉ báo "đã sửa ở V2" (`overriddenFields`), nút về giá trị KGara, bảng theo dõi tiến độ.
+- Web: Kanban "Tiến độ công việc" (drawer dashboard garage) đã dùng `GET /progress`, `PATCH :id/status`, `PATCH :id/progress`, `POST :id/revert`; xem skill web `garage-dashboard`. Id phiếu V1 (`kgara_cases.id`) trùng `cases_garage.id`. Bảng theo dõi tiến độ riêng và chỉ báo "đã sửa ở V2" ngoài Kanban vẫn là follow-up.
 
 ## 7. Liên quan: báo cáo theo xe
 `cases_garage` mỗi dòng là một phiếu (không có khóa xe). Báo cáo/drill-down theo XE nằm ở module `cases-dashboard-garage` (`GET api/v2/cases-dashboard-garage`, mỗi dòng một xe; tổng/phễu ở `GET …/overview`; khóa xe = `normalizedPlateSql('license_plate')` trong `src/common/utils/license-plate.ts`: bỏ dấu tiếng Việt, Đ thành D, chỉ giữ `A-Z0-9`; phiếu không biển khóa theo id). Danh sách phiếu `cases-garage` vẫn theo phiếu; đừng dùng `COUNT(id)` làm "số xe".

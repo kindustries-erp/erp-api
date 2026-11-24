@@ -54,6 +54,21 @@ describe('CaseRevertService', () => {
     );
   });
 
+  it('về trạng thái KGara: chép status từ snapshot, bỏ dấu override', async () => {
+    const { svc, manager } = make({
+      id: 'c1',
+      status: 'INTAKE',
+      sourceSnapshot: { status: 'QUOTED' },
+      overrides: { status: true },
+    });
+    await svc.revertCase('B1', 'c1', ['status']);
+    expect(manager.update).toHaveBeenCalledWith(
+      expect.anything(),
+      { id: 'c1' },
+      { status: 'QUOTED', overrides: {} },
+    );
+  });
+
   it('field chưa bị override → 400, không ghi', async () => {
     const { svc, manager } = make(header);
     await expect(
