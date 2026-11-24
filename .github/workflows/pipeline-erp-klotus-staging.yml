@@ -13,6 +13,10 @@ env:
   MIGRATE_IMAGE_NAME: ghcr.io/kindustries-erp/erp-api-klotus-staging-migrate
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Tạm tắt: đã kiểm thử chuẩn chỉnh trên erp-master, không chạy lại khi merge vào downstream
   # ci:
@@ -226,20 +230,51 @@ jobs:
             done
           fi
 
-          # 2. Execute migration container (image already pulled)
+          # 2. Execute migration container with retry on Resource is busy
           echo "Running migration service for $MIGRATE_STACK..."
-          update="$(call /execute/RunStackService "$(jq -n --arg stack "$MIGRATE_STACK" '{stack:$stack,service:"migrate"}')")"
-          update_id="$(jq -r '.id // ._id."$oid" // empty' <<<"$update")"
-          test -n "$update_id"
-          for i in $(seq 1 120); do
-            state="$(call /read/GetUpdate "$(jq -nc --arg id "$update_id" '{id:$id}')")"
-            status="$(jq -r '.status // empty' <<<"$state")"
-            success="$(jq -r '.success // false' <<<"$state")"
-            echo "migration $i/120: status=$status success=$success"
-            if [ "$status" = Complete ]; then test "$success" = true; exit 0; fi
-            sleep 5
+          migration_success=false
+          for run_attempt in $(seq 1 10); do
+            update="$(call /execute/RunStackService "$(jq -n --arg stack "$MIGRATE_STACK" '{stack:$stack,service:"migrate"}')" || true)"
+            update_id="$(jq -r '.id // ._id."$oid" // empty' <<<"$update")"
+            if [ -z "$update_id" ]; then
+              echo "Failed to initiate RunStackService on attempt $run_attempt/10, retrying in 10s..."
+              sleep 10
+              continue
+            fi
+
+            resource_busy=false
+            for i in $(seq 1 120); do
+              state="$(call /read/GetUpdate "$(jq -nc --arg id "$update_id" '{id:$id}')" || true)"
+              status="$(jq -r '.status // empty' <<<"$state")"
+              success="$(jq -r '.success // false' <<<"$state")"
+              stderr="$(jq -r '.logs[]?.stderr // empty' <<<"$state")"
+              echo "migration attempt $run_attempt (poll $i/120): status=$status success=$success"
+
+              if [ "$status" = "Complete" ]; then
+                if [ "$success" = "true" ]; then
+                  migration_success=true
+                  break 2
+                elif [[ "$stderr" == *"Resource is busy"* ]]; then
+                  echo "::warning::Komodo reported 'Resource is busy' on attempt $run_attempt/10. Waiting 10s before retry..."
+                  resource_busy=true
+                  break
+                else
+                  echo "::error::Migration failed with status=$status success=$success stderr=$stderr"
+                  exit 1
+                fi
+              fi
+              sleep 5
+            done
+
+            if [ "$resource_busy" = "true" ]; then
+              sleep 10
+            fi
           done
-          exit 1
+
+          if [ "$migration_success" != "true" ]; then
+            echo "::error::Migration failed after retries."
+            exit 1
+          fi
 
       - name: Pull and deploy API through Komodo
         env:
