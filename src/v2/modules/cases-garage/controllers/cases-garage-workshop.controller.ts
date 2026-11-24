@@ -31,6 +31,7 @@ import {
 import { CaseProgressLogCommandService } from '../services/case-progress-log-command.service';
 import { CaseWorkshopCandidatesService } from '../services/case-workshop-candidates.service';
 import { CaseWorkshopQueryService } from '../services/case-workshop-query.service';
+import { CaseStatus } from '../entities/case-garage.enums';
 import { CaseWorkshopTrackService } from '../services/case-workshop-track.service';
 import { CaseWorkshopWorkersService } from '../services/case-workshop-workers.service';
 
@@ -132,11 +133,20 @@ export class CasesGarageWorkshopController {
     @BranchId() branch: string,
     @Req() req: RequestWithUser,
   ) {
-    const data = await this.tracker.trackNew(
-      requireBranch(branch),
-      dto,
-      req.user?.sub ?? '',
-    );
+    const userId = req.user?.sub ?? '';
+    // Tạo xe ở trạng thái khác Tiếp nhận là đổi trạng thái: cần thêm garage:update.
+    const canChangeStatus =
+      dto.status && dto.status !== CaseStatus.INTAKE
+        ? await this.rbac.hasPermission(
+            userId,
+            ErpResource.GARAGE,
+            ErpAction.UPDATE,
+          )
+        : false;
+    const data = await this.tracker.trackNew(requireBranch(branch), dto, {
+      id: userId,
+      canChangeStatus,
+    });
     return { message: 'Đã tạo xe và đưa vào bảng tiến độ', data };
   }
 

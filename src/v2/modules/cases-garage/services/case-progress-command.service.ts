@@ -6,6 +6,7 @@ import { CaseGarage } from '../entities/case-garage.entity';
 import { CaseOrigin } from '../entities/case-garage.enums';
 import { markOverrides } from '../helpers/case-override.helper';
 import { CASE_OVERRIDABLE_KEYS } from '../helpers/case-override.keys';
+import { switchStageLog } from '../helpers/case-progress-stage.closer';
 import { isStageOf } from '../helpers/case-progress-stage.map';
 import { CaseCommandService } from './case-command.service';
 
@@ -74,6 +75,13 @@ export class CaseProgressCommandService {
           current.overrides,
           CASE_OVERRIDABLE_KEYS,
         );
+      }
+      // Đổi công đoạn từ đây cũng ghi nhật ký để trang tiến độ xưởng khớp.
+      if (
+        dto.progressStage !== undefined &&
+        dto.progressStage !== current.progressStage
+      ) {
+        await switchStageLog(m, current, dto.progressStage, actorId);
       }
       await m.update(CaseGarage, { id }, {
         ...patch,

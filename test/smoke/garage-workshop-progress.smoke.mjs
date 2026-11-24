@@ -189,6 +189,22 @@ if (id) {
       badEnd.status === 400,
       `${badEnd.status}`,
     );
+    const reopen = await api('PATCH', `/progress-logs/${s1.d?.id}`, {
+      endedAt: null,
+    });
+    check(
+      'endedAt null (mở lại công đoạn đã đóng) -> 400',
+      reopen.status === 400,
+      `${reopen.status}`,
+    );
+    const overlap = await api('PATCH', `/progress-logs/${s1.d?.id}`, {
+      endedAt: minutesAgo(5),
+    });
+    check(
+      'giờ kết thúc chồng lên công đoạn sau -> 400',
+      overlap.status === 400,
+      `${overlap.status}`,
+    );
 
     const del = await api('DELETE', `/progress-logs/${note.d?.id}`);
     const tl2 = (await api('GET', `/${id}/progress-logs`)).d?.items ?? [];
@@ -209,6 +225,18 @@ if (id) {
         row2?.progressStage === null &&
         row2?.stageStartedAt === null,
       short({ s: mv.status, row2, tl3 }),
+    );
+
+    const pg = await api('PATCH', `/${id}/progress`, {
+      progressStage: 'AWAITING_APPROVAL',
+    });
+    const tl4 = (await api('GET', `/${id}/progress-logs`)).d?.items ?? [];
+    check(
+      'PATCH progress đổi công đoạn: mở dòng STAGE mới trong nhật ký',
+      ok(pg) &&
+        tl4.length === 3 &&
+        tl4.some((x) => x.stage === 'AWAITING_APPROVAL' && x.endedAt === null),
+      short({ s: pg.status, tl4 }),
     );
 
     const bad = await api('POST', '/workshop/track', {
@@ -246,7 +274,7 @@ if (id) {
         !(await boardRow(id)) &&
         cand2.d?.items?.find((x) => x.id === id)?.onBoard === false &&
         ((await api('GET', `/${id}/progress-logs`)).d?.items ?? []).length ===
-          2,
+          3,
       short({ un, cand2 }),
     );
   } finally {
@@ -292,6 +320,14 @@ try {
     short(tnIp),
   );
   if (tnIp.d?.caseId) await api('DELETE', `/${tnIp.d.caseId}`);
+  const tnBad = await api('POST', '/workshop/track-new', {
+    licensePlate: ' -- ',
+  });
+  check(
+    'track-new biển số không có chữ/số -> 400',
+    tnBad.status === 400,
+    short(tnBad),
+  );
 } finally {
   if (newId) await api('DELETE', `/${newId}`);
 }

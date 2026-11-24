@@ -162,6 +162,33 @@ describe('CaseCommandService', () => {
     );
   });
 
+  it('updateStatus: xe ERP mở lại từ Hoàn thành bỏ completedAt cũ; xe KGara giữ giá trị nguồn', async () => {
+    const native = make({
+      ...owned(CaseOrigin.NATIVE),
+      status: CaseStatus.COMPLETED,
+      completedAt: new Date('2026-11-20T10:00:00.000Z'),
+    });
+    await native.svc.updateStatus('B1', 'c1', CaseStatus.IN_PROGRESS);
+    expect(native.manager.update).toHaveBeenCalledWith(
+      expect.anything(),
+      { id: 'c1' },
+      expect.objectContaining({ status: 'IN_PROGRESS', completedAt: null }),
+    );
+    const sync = make({
+      ...owned(CaseOrigin.KGARA_SYNC),
+      status: CaseStatus.COMPLETED,
+      completedAt: new Date('2026-11-20T10:00:00.000Z'),
+      sourceSnapshot: { status: 'COMPLETED' },
+      overrides: {},
+    });
+    await sync.svc.updateStatus('B1', 'c1', CaseStatus.IN_PROGRESS);
+    expect(sync.manager.update).toHaveBeenCalledWith(
+      expect.anything(),
+      { id: 'c1' },
+      { status: 'IN_PROGRESS', overrides: { status: true } },
+    );
+  });
+
   it('updateStatus: xe sync lùi QUOTED → INTAKE, giữ trạng thái KGara; xe NATIVE bị chặn', async () => {
     const sync = make({
       ...owned(CaseOrigin.KGARA_SYNC, CaseStatus.QUOTED),

@@ -1,3 +1,4 @@
+import { Brackets } from 'typeorm';
 import { CaseOrigin, CaseStatus } from '../entities/case-garage.enums';
 import {
   CaseWorkshopCandidatesService,
@@ -31,6 +32,21 @@ describe('CaseWorkshopCandidatesService', () => {
     expect(qb.andWhere).toHaveBeenCalledWith('c.external_deleted_at IS NULL');
     expect(qb.orderBy).toHaveBeenCalledWith('finished_rank', 'ASC');
     expect(qb.limit).toHaveBeenCalledWith(20);
+  });
+
+  it('thoát % và _ trong từ khóa tìm theo mã/khách', async () => {
+    const { svc, qb } = make([]);
+    await svc.search('B1', { search: '_1%' });
+    const bracket = qb.andWhere.mock.calls
+      .map((c) => c[0])
+      .find((a) => a instanceof Brackets) as Brackets;
+    const w = { where: jest.fn(), orWhere: jest.fn() };
+    w.where.mockReturnValue(w);
+    w.orWhere.mockReturnValue(w);
+    bracket.whereFactory(w as never);
+    expect(w.where).toHaveBeenCalledWith('c.case_code ILIKE :s', {
+      s: '%\\_1\\%%',
+    });
   });
 
   it('limit theo yêu cầu', async () => {

@@ -53,7 +53,10 @@ describe('toWorkshopBoardItem', () => {
 
   it('chưa ghi công đoạn: null; xe đã xong tính tổng tới completedAt', () => {
     const out = toWorkshopBoardItem(
-      item({ completedAt: '2026-11-24T07:00:00.000Z' }),
+      item({
+        status: CaseStatus.COMPLETED,
+        completedAt: '2026-11-24T07:00:00.000Z',
+      }),
       undefined,
       undefined,
       NOW,
@@ -61,6 +64,14 @@ describe('toWorkshopBoardItem', () => {
     expect(out.stageStartedAt).toBeNull();
     expect(out.stageElapsedMinutes).toBeNull();
     expect(out.totalElapsedMinutes).toBe(60);
+    // Mở lại sang Đang làm: không chốt ở completedAt cũ.
+    const reopened = toWorkshopBoardItem(
+      item({ completedAt: '2026-11-24T07:00:00.000Z' }),
+      undefined,
+      undefined,
+      NOW,
+    );
+    expect(reopened.totalElapsedMinutes).toBeGreaterThan(60);
     expect(out.lastNote).toBeNull();
   });
 

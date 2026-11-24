@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -67,10 +68,24 @@ export class CaseWorkshopTrackService {
   trackNew(
     branch: string,
     dto: TrackNewWorkshopCaseDto,
-    actorId: string,
+    actor: TrackActor,
   ): Promise<CaseWorkshopTrackResult> {
+    const actorId = actor.id;
     const plate = dto.licensePlate.trim().toUpperCase();
     const key = normalizePlate(plate);
+    if (!key) {
+      return Promise.reject(
+        new BadRequestException('Biển số phải có chữ hoặc số.'),
+      );
+    }
+    const target = dto.status ?? CaseStatus.INTAKE;
+    if (target !== CaseStatus.INTAKE && !actor.canChangeStatus) {
+      return Promise.reject(
+        new ForbiddenException(
+          'Bạn không có quyền tạo xe ở trạng thái khác Tiếp nhận.',
+        ),
+      );
+    }
     return this.dataSource.transaction(async (m) => {
       // Khóa theo chi nhánh + biển số để hai người cùng tạo một xe không ra hai vụ việc.
       await m.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
@@ -93,7 +108,6 @@ export class CaseWorkshopTrackService {
         actorId,
         m,
       );
-      const target = dto.status ?? CaseStatus.INTAKE;
       const changed = target !== created.status;
       if (changed) {
         created = await this.cases.updateStatus(

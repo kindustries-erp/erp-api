@@ -1,4 +1,8 @@
-import { ConflictException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { CaseGarage } from '../entities/case-garage.entity';
 import { CaseOrigin, CaseStatus } from '../entities/case-garage.enums';
 import { CaseWorkshopTrackService } from './case-workshop-track.service';
@@ -125,7 +129,7 @@ describe('CaseWorkshopTrackService', () => {
     const res = await svc.trackNew(
       'B1',
       { licensePlate: ' 30a-999.99 ', customerName: ' Anh Ba ' },
-      'u1',
+      { id: 'u1', canChangeStatus: false },
     );
     expect(m.query).toHaveBeenCalledWith(
       'SELECT pg_advisory_xact_lock(hashtext($1))',
@@ -161,7 +165,7 @@ describe('CaseWorkshopTrackService', () => {
     const res = await svc.trackNew(
       'B1',
       { licensePlate: '30A-99999', status: CaseStatus.IN_PROGRESS },
-      'u1',
+      { id: 'u1', canChangeStatus: true },
     );
     expect(cases.updateStatus).toHaveBeenCalledWith(
       'B1',
@@ -178,8 +182,32 @@ describe('CaseWorkshopTrackService', () => {
       open: caseRow({ caseCode: 'KG-9' }),
     });
     await expect(
-      svc.trackNew('B1', { licensePlate: '51G12345' }, 'u1'),
+      svc.trackNew(
+        'B1',
+        { licensePlate: '51G12345' },
+        { id: 'u1', canChangeStatus: false },
+      ),
     ).rejects.toThrow(ConflictException);
+    expect(cases.create).not.toHaveBeenCalled();
+  });
+
+  it('xe mới khác INTAKE mà không có garage:update → 403; biển số không có chữ/số → 400; không tạo', async () => {
+    const { svc, cases, m } = make();
+    await expect(
+      svc.trackNew(
+        'B1',
+        { licensePlate: '30A-1', status: CaseStatus.CANCELLED },
+        { id: 'u1', canChangeStatus: false },
+      ),
+    ).rejects.toThrow(ForbiddenException);
+    await expect(
+      svc.trackNew(
+        'B1',
+        { licensePlate: ' -- ' },
+        { id: 'u1', canChangeStatus: true },
+      ),
+    ).rejects.toThrow(BadRequestException);
+    expect(m.query).not.toHaveBeenCalled();
     expect(cases.create).not.toHaveBeenCalled();
   });
 

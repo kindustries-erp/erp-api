@@ -108,10 +108,15 @@ export class CasesGarageService {
     );
   }
 
-  async revertCase(branch: string, id: string, fields?: string[]) {
+  async revertCase(
+    branch: string,
+    id: string,
+    fields?: string[],
+    actorId = '',
+  ) {
     return wrap(
       'Đã về giá trị KGara',
-      await this.reverts.revertCase(branch, id, fields),
+      await this.reverts.revertCase(branch, id, fields, actorId),
     );
   }
 

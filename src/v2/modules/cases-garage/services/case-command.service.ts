@@ -18,8 +18,7 @@ import {
 import { assertHeaderPatchAllowed } from '../helpers/case-origin.guard';
 import { markOverrides } from '../helpers/case-override.helper';
 import { CASE_OVERRIDABLE_KEYS } from '../helpers/case-override.keys';
-import { closeOpenStage } from '../helpers/case-progress-stage.closer';
-import { isStageOf } from '../helpers/case-progress-stage.map';
+import { syncStageOnStatusChange } from '../helpers/case-progress-stage.closer';
 import { canTransition, statusToKgaraCode } from '../helpers/kgara-status.map';
 import { CaseLineWriter } from './case-line-writer.service';
 
@@ -160,8 +159,13 @@ export class CaseCommandService {
           `Không chuyển được trạng thái ${current.status} → ${status}.`,
         );
       }
+      // Xe ERP rời Hoàn thành thì bỏ mốc xong cũ; xe KGara giữ giá trị nguồn (mapper chỉ dùng khi đang Hoàn thành).
       const completed =
-        status === CaseStatus.COMPLETED ? { completedAt: new Date() } : {};
+        status === CaseStatus.COMPLETED
+          ? { completedAt: new Date() }
+          : current.origin !== CaseOrigin.KGARA_SYNC && current.completedAt
+            ? { completedAt: null }
+            : {};
       if (current.origin === CaseOrigin.KGARA_SYNC) {
         // Trạng thái KGara giữ ở snapshot; v2 đổi trạng thái hiệu lực và đánh dấu override.
         const overrides = markOverrides(
@@ -183,10 +187,7 @@ export class CaseCommandService {
         } as never);
       }
       // Status nhỏ thuộc status cũ: đóng công đoạn đang mở, bỏ mã không còn hợp lệ.
-      await closeOpenStage(m, id, new Date(), actorId);
-      if (current.progressStage && !isStageOf(status, current.progressStage)) {
-        await m.update(CaseGarage, { id }, { progressStage: null } as never);
-      }
+      await syncStageOnStatusChange(m, current, status, actorId);
       return this.reload(m, id);
     });
   }

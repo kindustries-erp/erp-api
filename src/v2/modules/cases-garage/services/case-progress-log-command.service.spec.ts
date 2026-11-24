@@ -13,6 +13,9 @@ interface Setup {
   employee?: Record<string, unknown> | null;
   openStage?: Record<string, unknown> | null;
   log?: Record<string, unknown> | null;
+  /** Công đoạn kề trước/sau (truy vấn có `startedAt`). */
+  prev?: Record<string, unknown> | null;
+  next?: Record<string, unknown> | null;
 }
 
 const make = ({
@@ -20,6 +23,8 @@ const make = ({
   employee = null,
   openStage = null,
   log = null,
+  prev = null,
+  next = null,
 }: Setup = {}) => {
   const manager = {
     update: jest.fn(),
@@ -29,7 +34,18 @@ const make = ({
       ...v,
     })),
     findOne: jest.fn(
-      (entity: unknown, opts: { where: Record<string, unknown> }) => {
+      (
+        entity: unknown,
+        opts: {
+          where: Record<string, unknown>;
+          order?: Record<string, string>;
+        },
+      ) => {
+        if (entity === CaseProgressLogGarage && 'startedAt' in opts.where) {
+          return Promise.resolve(
+            opts.order?.startedAt === 'DESC' ? prev : next,
+          );
+        }
         if (entity === CaseProgressLogGarage) {
           return Promise.resolve('kind' in opts.where ? openStage : log);
         }
@@ -267,6 +283,67 @@ describe('CaseProgressLogCommandService.update / remove', () => {
         NOW,
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('endedAt null (mở lại công đoạn đã đóng) → 400, không ghi', async () => {
+    const { svc, manager } = make({ log: closed });
+    await expect(
+      svc.update('B1', 'l1', { endedAt: null } as never, 'u', NOW),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(callsFor(manager, CaseProgressLogGarage)).toHaveLength(0);
+  });
+
+  it('sửa giờ chồng lên công đoạn trước hoặc sau → 400; không đổi giờ thì không kiểm', async () => {
+    const prev = {
+      ...closed,
+      id: 'l0',
+      startedAt: new Date('2026-11-24T05:00:00.000Z'),
+      endedAt: new Date('2026-11-24T06:45:00.000Z'),
+    };
+    const next = {
+      ...closed,
+      id: 'l2',
+      startedAt: new Date('2026-11-24T08:15:00.000Z'),
+      endedAt: null,
+    };
+    const a = make({ log: closed, prev, next });
+    await expect(
+      a.svc.update(
+        'B1',
+        'l1',
+        { startedAt: '2026-11-24T06:30:00.000Z' } as never,
+        'u',
+        NOW,
+      ),
+    ).rejects.toThrow('công đoạn trước');
+    await expect(
+      a.svc.update(
+        'B1',
+        'l1',
+        { endedAt: '2026-11-24T08:30:00.000Z' } as never,
+        'u',
+        NOW,
+      ),
+    ).rejects.toThrow('công đoạn sau');
+    await expect(
+      a.svc.update(
+        'B1',
+        'l1',
+        {
+          startedAt: '2026-11-24T06:50:00.000Z',
+          endedAt: '2026-11-24T08:10:00.000Z',
+        } as never,
+        'u',
+        NOW,
+      ),
+    ).resolves.toMatchObject({ durationMinutes: 80 });
+    const b = make({
+      log: closed,
+      prev: { ...prev, endedAt: new Date('2026-11-24T07:30:00.000Z') },
+    });
+    await expect(
+      b.svc.update('B1', 'l1', { note: 'chỉ sửa mô tả' } as never, 'u', NOW),
+    ).resolves.toBeDefined();
   });
 
   it('đổi người làm: chọn nhân viên mới lấy tên nguồn; chỉ sửa tên thì giữ id', async () => {

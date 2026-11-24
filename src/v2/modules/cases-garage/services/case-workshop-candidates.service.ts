@@ -5,7 +5,11 @@ import type {
   QueryWorkshopCandidatesDto,
 } from '../dto/case-workshop-track.dto';
 import { CaseGarage } from '../entities/case-garage.entity';
-import { normalizePlate, PLATE_SQL } from '../helpers/case-workshop-plate';
+import {
+  escapeLike,
+  normalizePlate,
+  PLATE_SQL,
+} from '../helpers/case-workshop-plate';
 
 const DEFAULT_LIMIT = 20;
 
@@ -52,9 +56,9 @@ export class CaseWorkshopCandidatesService {
       .andWhere('c.branch_external_id = :branch', { branch })
       .andWhere(
         new Brackets((w) => {
-          w.where('c.case_code ILIKE :s', { s: `%${term}%` }).orWhere(
-            'c.customer_name ILIKE :s',
-          );
+          w.where('c.case_code ILIKE :s', {
+            s: `%${escapeLike(term)}%`,
+          }).orWhere('c.customer_name ILIKE :s');
           if (plate) w.orWhere(`${PLATE_SQL} LIKE :p`, { p: `%${plate}%` });
         }),
       )

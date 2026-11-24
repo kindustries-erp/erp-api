@@ -2,6 +2,7 @@ import { KgaraCase } from '@/kgara-api-core/entities/kgara_case.entity';
 import { CaseGarage } from '../entities/case-garage.entity';
 import { CaseOrigin } from '../entities/case-garage.enums';
 import { CaseLineGarage } from '../entities/case-line-garage.entity';
+import { CaseProgressLogGarage } from '../entities/case-progress-log-garage.entity';
 import { CaseProjectorService } from './case-projector.service';
 
 const v1Case = (over: Record<string, unknown> = {}) => ({
@@ -26,12 +27,14 @@ function make(opts: {
   lines?: Record<string, unknown>[];
   current?: Record<string, unknown>[];
   links?: Record<string, unknown>[];
+  openStage?: Record<string, unknown> | null;
 }) {
   const manager = {
     findOne: jest.fn(async (entity: unknown) => {
       if (entity === KgaraCase)
         return opts.v1 === undefined ? v1Case() : opts.v1;
       if (entity === CaseGarage) return opts.existing ?? null;
+      if (entity === CaseProgressLogGarage) return opts.openStage ?? null;
       return null;
     }),
     find: jest.fn(async (entity: unknown) => {
@@ -109,6 +112,30 @@ describe('CaseProjectorService', () => {
     expect(patch).not.toHaveProperty('status');
     expect(patch).toHaveProperty('kgaraStatusCode', 3);
     expect(patch.sourceSnapshot).toMatchObject({ status: 'COMPLETED' });
+  });
+
+  it('KGara đổi status (chưa override): đóng công đoạn mở, bỏ công đoạn không thuộc status mới', async () => {
+    const { svc, manager } = make({
+      existing: {
+        id: 'c1',
+        origin: CaseOrigin.KGARA_SYNC,
+        status: 'IN_PROGRESS',
+        progressStage: 'PAINTING',
+        overrides: {},
+      },
+      openStage: { id: 'l1', startedAt: new Date('2026-11-24T07:00:00.000Z') },
+    });
+    await svc.project('c1');
+    expect(manager.update).toHaveBeenCalledWith(
+      CaseProgressLogGarage,
+      { id: 'l1' },
+      expect.objectContaining({ endedAt: expect.any(Date) }),
+    );
+    expect(manager.update).toHaveBeenCalledWith(
+      CaseGarage,
+      { id: 'c1' },
+      { progressStage: null },
+    );
   });
 
   it('chạy lại: update, không insert (không nhân đôi), không ghi đè id/createdAt', async () => {

@@ -6,13 +6,14 @@ import { KgaraGrossProfit } from '@/kgara-api-core/entities/kgara_gross_profit.e
 import type { GarageCaseProjectorPort } from '@/kgara-api-core/hub/case-projector.port';
 import { BranchManagementExternalLink } from '@/v2/modules/branches-management/entities/branch-management-external-link.entity';
 import { CaseGarage } from '../entities/case-garage.entity';
-import { CaseOrigin } from '../entities/case-garage.enums';
+import { CaseOrigin, type CaseStatus } from '../entities/case-garage.enums';
 import { CaseLineGarage } from '../entities/case-line-garage.entity';
 import {
   applyProjection,
   isLineDeleted,
   type OverrideMap,
 } from '../helpers/case-override.helper';
+import { syncStageOnStatusChange } from '../helpers/case-progress-stage.closer';
 import { resolveKgaraCaseMoney } from '../helpers/kgara-case-money';
 import {
   kgaraCaseToCaseGarage,
@@ -71,6 +72,11 @@ export class CaseProjectorService implements GarageCaseProjectorPort {
           ...fields,
           sourceSnapshot: snapshot,
         } as never);
+        // Status KGara đổi (không bị override ở v2): đồng bộ công đoạn như đổi tay.
+        const nextStatus = fields.status as CaseStatus | undefined;
+        if (nextStatus && nextStatus !== existing.status) {
+          await syncStageOnStatusChange(m, existing, nextStatus, '');
+        }
       } else {
         await m.insert(CaseGarage, {
           ...mapped,

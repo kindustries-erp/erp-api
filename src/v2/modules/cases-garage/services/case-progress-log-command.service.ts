@@ -14,7 +14,10 @@ import { CaseGarage } from '../entities/case-garage.entity';
 import { CaseProgressLogGarage } from '../entities/case-progress-log-garage.entity';
 import { CaseProgressLogKind } from '../entities/case-progress.enums';
 import { toProgressLogItem } from '../helpers/case-progress-log.mapper';
-import { closeOpenStage } from '../helpers/case-progress-stage.closer';
+import {
+  assertStageWindow,
+  closeOpenStage,
+} from '../helpers/case-progress-stage.closer';
 import { isStageOf } from '../helpers/case-progress-stage.map';
 import { CaseCommandService } from './case-command.service';
 
@@ -114,6 +117,11 @@ export class CaseProgressLogCommandService {
       }
       const startedAt = parseTime(dto.startedAt, now) ?? log.startedAt;
       let endedAt = log.endedAt;
+      if (dto.endedAt === null) {
+        throw new BadRequestException(
+          'Không bỏ được giờ kết thúc của công đoạn đã đóng.',
+        );
+      }
       if (dto.endedAt !== undefined) {
         if (log.kind !== CaseProgressLogKind.STAGE || !log.endedAt) {
           throw new BadRequestException(
@@ -124,6 +132,12 @@ export class CaseProgressLogCommandService {
       }
       if (endedAt && endedAt.getTime() < startedAt.getTime()) {
         throw new BadRequestException('Giờ kết thúc trước giờ bắt đầu.');
+      }
+      const timeChanged =
+        startedAt.getTime() !== log.startedAt.getTime() ||
+        endedAt?.getTime() !== log.endedAt?.getTime();
+      if (log.kind === CaseProgressLogKind.STAGE && timeChanged) {
+        await assertStageWindow(m, log, startedAt, endedAt);
       }
       patch.startedAt = startedAt;
       patch.endedAt = endedAt;

@@ -171,7 +171,7 @@ describe('CasesGarageWorkshopController', () => {
   });
 
   it('candidates, track-new và untrack chuyển xuống service', async () => {
-    const { c, candidates, tracker } = make();
+    const { c, candidates, tracker, rbac } = make();
     expect(await c.candidates({ search: '51G' }, 'B1')).toEqual({
       items: [{ id: 'c1' }],
     });
@@ -181,7 +181,18 @@ describe('CasesGarageWorkshopController', () => {
       message: 'Đã tạo xe và đưa vào bảng tiến độ',
       data: { caseId: 'c2' },
     });
-    expect(tracker.trackNew).toHaveBeenCalledWith('B1', dto, 'u1');
+    expect(tracker.trackNew).toHaveBeenCalledWith('B1', dto, {
+      id: 'u1',
+      canChangeStatus: false,
+    });
+    rbac.hasPermission.mockResolvedValueOnce(true);
+    const dtoIp = { licensePlate: '51G-1', status: 'IN_PROGRESS' } as never;
+    await c.trackNew(dtoIp, 'B1', { user: { sub: 'u1' } });
+    expect(rbac.hasPermission).toHaveBeenCalledWith('u1', 'garage', 'update');
+    expect(tracker.trackNew).toHaveBeenLastCalledWith('B1', dtoIp, {
+      id: 'u1',
+      canChangeStatus: true,
+    });
     await c.untrack('c1', 'B1');
     expect(tracker.untrack).toHaveBeenCalledWith('B1', 'c1');
     expect(() => c.untrack('c1', undefined as never)).rejects.toThrow(
