@@ -213,7 +213,7 @@ Skills nằm ở `erp-api/.agents/skills/` và `erp-web/.agents/skills/`, đăng
 4. **Tooling**: Chỉ dùng `bun` / `bunx`. Không dùng `npm` hay `yarn`.
 5. **Local Dev Only**: Dev local chạy `bun run start:dev` / `bun run dev` (API chạy theo `PORT` trong `erp/erp-api/.env`). Không build container thủ công.
 6. **Isolation**: ERP dùng nhánh `erp-master`, Klotus dùng `master`. Không trộn database, `.env`, schema hay collection (`klotus_*`) giữa hai hệ.
-7. **Final Gate**: chạy `bun run verify:final` một lần trên commit cuối; push theo workflow bằng `--no-verify`.
+7. **Final Gate**: `pre-push` chỉ chạy `bun run type:check` (bypass `SKIP_TESTS=1` chỉ khi đã verify thủ công, không bypass hook để bỏ qua lỗi type). Full test/build/check:ci chạy trên GitHub CI; CI của commit cuối phải xanh. `bun run verify:final` là lệnh local tùy chọn.
 
 ## ERP Workflows
 
