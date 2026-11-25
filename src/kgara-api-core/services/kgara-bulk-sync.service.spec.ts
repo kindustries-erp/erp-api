@@ -59,6 +59,7 @@ describe('KgaraBulkSyncService', () => {
           name: 'Chi nhánh B',
         },
       ]),
+      manager: { query: jest.fn().mockResolvedValue([]) },
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -240,6 +241,21 @@ describe('KgaraBulkSyncService', () => {
         skipBranchSync: true,
       }),
     );
+  });
+
+  it('chỉ quét chi nhánh đã liên kết chi nhánh ERP khi có liên kết', async () => {
+    branchRepo.manager.query.mockResolvedValue([
+      { external_id: 'b-oj', account_key: KgaraAccountKey.OJ },
+    ]);
+
+    service.start({ scope: 'cases' });
+    await waitUntilDone(service);
+
+    const branches = syncService.syncCasesForBranch.mock.calls.map(
+      (c: unknown[]) => c[0],
+    );
+    expect(branches).toEqual(['b-oj']);
+    expect(service.getStatus().totalBranches).toBe(1);
   });
 
   it('rejects a second start while a job is running', async () => {

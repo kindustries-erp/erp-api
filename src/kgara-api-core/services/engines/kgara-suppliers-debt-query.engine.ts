@@ -739,7 +739,7 @@ export class KgaraSuppliersDebtQueryEngine {
   }
 
   async getSuppliersDebtColumnOptions(
-    branchId: string,
+    branchId: string | undefined,
     column: string,
     search: string = '',
     page: string | number = 1,

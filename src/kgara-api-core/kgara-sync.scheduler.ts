@@ -8,6 +8,7 @@ import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { KgaraBranch } from './entities/kgara_branch.entity';
+import { findSyncableBranches } from './helpers/syncable-branches.helper';
 import { KgaraSyncService } from './kgara-sync.service';
 import { KgaraAuthService } from './kgara-auth.service';
 import { KgaraBulkSyncService } from './services/kgara-bulk-sync.service';
@@ -181,7 +182,14 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
             this.lastBranchSyncAlertKey = null;
           }
 
-          const branches = await this.branchRepo.find();
+          const { branches, linked } = await findSyncableBranches(
+            this.branchRepo,
+          );
+          if (!linked) {
+            this.logger.warn(
+              'Chưa có chi nhánh KGara nào liên kết chi nhánh ERP: quét tất cả chi nhánh KGara.',
+            );
+          }
 
           for (const branch of branches) {
             if (!branch.externalId) continue;

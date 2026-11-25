@@ -17,7 +17,6 @@ import { RequirePermissions } from '../../auth/decorators/require-permissions.de
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
-import { BranchId } from '../decorators/branch-id.decorator';
 import { GarageDebtsExportDto } from '../dto/garage-export.dto';
 import type { GarageDebtExportKind } from '../helpers/garage-debts-export.helper';
 import { GarageExportJobsService } from '../services/garage-export-jobs.service';
@@ -45,10 +44,14 @@ export class GarageDebtsExportController {
   private start(
     kind: GarageDebtExportKind,
     dto: GarageDebtsExportDto,
-    branchId: string,
     req: any,
   ) {
-    return this.exportJobs.startDebtsExport(kind, dto, branchId, req.user?.sub);
+    return this.exportJobs.startDebtsExport(
+      kind,
+      dto,
+      undefined,
+      req.user?.sub,
+    );
   }
 
   private history(
@@ -70,12 +73,8 @@ export class GarageDebtsExportController {
 
   @Post('cases/customers-debt/export/background')
   @RequirePermissions(DEBTS_READ)
-  startCustomers(
-    @Body() dto: GarageDebtsExportDto,
-    @BranchId() branchId: string,
-    @Request() req: any,
-  ) {
-    return this.start('customers', dto, branchId, req);
+  startCustomers(@Body() dto: GarageDebtsExportDto, @Request() req: any) {
+    return this.start('customers', dto, req);
   }
 
   @Get('cases/customers-debt/export/background/history')
@@ -116,12 +115,8 @@ export class GarageDebtsExportController {
 
   @Post('payables/suppliers-debt/export/background')
   @RequirePermissions(DEBTS_READ)
-  startSuppliers(
-    @Body() dto: GarageDebtsExportDto,
-    @BranchId() branchId: string,
-    @Request() req: any,
-  ) {
-    return this.start('suppliers', dto, branchId, req);
+  startSuppliers(@Body() dto: GarageDebtsExportDto, @Request() req: any) {
+    return this.start('suppliers', dto, req);
   }
 
   @Get('payables/suppliers-debt/export/background/history')
@@ -162,12 +157,8 @@ export class GarageDebtsExportController {
 
   @Post('debts/all/export/background')
   @RequirePermissions(DEBTS_READ)
-  startAll(
-    @Body() dto: GarageDebtsExportDto,
-    @BranchId() branchId: string,
-    @Request() req: any,
-  ) {
-    return this.start('all', dto, branchId, req);
+  startAll(@Body() dto: GarageDebtsExportDto, @Request() req: any) {
+    return this.start('all', dto, req);
   }
 
   @Get('debts/all/export/background/history')

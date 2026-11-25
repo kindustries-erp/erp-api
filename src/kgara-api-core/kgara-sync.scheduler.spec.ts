@@ -30,6 +30,7 @@ describe('KgaraSyncScheduler', () => {
         .mockResolvedValue([
           { id: 'b1', externalId: 'BRANCH-HN', name: 'Chi nhánh Hà Nội' },
         ]),
+      manager: { query: jest.fn().mockResolvedValue([]) },
     };
 
     permissionRepo = {

@@ -50,7 +50,6 @@ describe('KgaraSuppliersController (Facade Delegate)', () => {
 
   it('should delegate getSuppliersDebt to KgaraSuppliersService', async () => {
     await controller.getSuppliersDebt(
-      'BR-01',
       '1',
       '20',
       'test',
@@ -63,7 +62,6 @@ describe('KgaraSuppliersController (Facade Delegate)', () => {
     );
 
     expect(service.getSuppliersDebt).toHaveBeenCalledWith({
-      branchId: 'BR-01',
       page: '1',
       pageSize: '20',
       q: 'test',
@@ -78,7 +76,6 @@ describe('KgaraSuppliersController (Facade Delegate)', () => {
 
   it('should delegate getSuppliersDebtColumnOptions to service', async () => {
     await controller.getSuppliersDebtColumnOptions(
-      'BR-01',
       'supplierName',
       'A',
       '1',
@@ -86,7 +83,7 @@ describe('KgaraSuppliersController (Facade Delegate)', () => {
     );
 
     expect(service.getSuppliersDebtColumnOptions).toHaveBeenCalledWith(
-      'BR-01',
+      undefined,
       'supplierName',
       'A',
       '1',
@@ -96,8 +93,11 @@ describe('KgaraSuppliersController (Facade Delegate)', () => {
   });
 
   it('should delegate getCasesBySupplier to service', async () => {
-    await controller.getCasesBySupplier('BR-01', 'SUPP-01');
+    await controller.getCasesBySupplier('SUPP-01');
 
-    expect(service.getCasesBySupplier).toHaveBeenCalledWith('BR-01', 'SUPP-01');
+    expect(service.getCasesBySupplier).toHaveBeenCalledWith(
+      undefined,
+      'SUPP-01',
+    );
   });
 });

@@ -109,33 +109,19 @@ export class KgaraCaseLookupService {
   }
 
   /**
-   * Tra cứu chi tiết vụ việc theo externalId (hdPhieuDichVuId hoặc UUID), tự động đồng bộ từ KGara nếu chưa có
+   * Tra cứu chi tiết vụ việc theo externalId (hdPhieuDichVuId hoặc UUID). Chỉ đọc DB;
+   * phiếu chưa có thì 404 (phiếu mới vào qua đồng bộ, không gọi KGara theo chi nhánh ở đây).
    */
-  async findCaseByExternalId(
-    externalId: string,
-    branchId?: string,
-  ): Promise<KgaraCase> {
+  async findCaseByExternalId(externalId: string): Promise<KgaraCase> {
     const isUuid = UUID_REGEX.test(externalId);
     const whereConditions = isUuid
       ? [{ id: externalId }, { hdPhieuDichVuId: externalId }]
       : [{ hdPhieuDichVuId: externalId }, { soChungTu: externalId }];
 
-    let caseData = await this.caseRepo.findOne({
+    const caseData = await this.caseRepo.findOne({
       where: whereConditions,
       relations: ['category'],
     });
-    if (!caseData && branchId) {
-      const freshData = await this.client.getCaseDetail(externalId, branchId);
-      if (freshData) {
-        const payload = freshData.data || freshData;
-        caseData = this.caseRepo.create({
-          hdPhieuDichVuId: externalId,
-          branchExternalId: branchId,
-          rawData: payload,
-        });
-        await this.caseRepo.save(caseData);
-      }
-    }
     if (!caseData) {
       throw new NotFoundException(
         `Case with externalId ${externalId} not found`,

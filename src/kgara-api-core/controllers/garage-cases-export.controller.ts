@@ -17,7 +17,6 @@ import { RequirePermissions } from '../../auth/decorators/require-permissions.de
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
-import { BranchId } from '../decorators/branch-id.decorator';
 import { GarageCasesExportDto } from '../dto/garage-export.dto';
 import { GarageExportJobsService } from '../services/garage-export-jobs.service';
 import {
@@ -35,12 +34,8 @@ export class GarageCasesExportController {
 
   @Post('background')
   @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
-  start(
-    @Body() dto: GarageCasesExportDto,
-    @BranchId() branchId: string,
-    @Request() req: any,
-  ) {
-    return this.exportJobs.startCasesExport(dto, branchId, req.user?.sub);
+  start(@Body() dto: GarageCasesExportDto, @Request() req: any) {
+    return this.exportJobs.startCasesExport(dto, undefined, req.user?.sub);
   }
 
   @Get('background/history')

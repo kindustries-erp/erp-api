@@ -129,17 +129,16 @@ describe('Garage export controllers', () => {
       }
     });
 
-    it('khởi tạo job với chi nhánh + kỳ, lưu lịch sử theo user và tải đúng file', async () => {
+    it('khởi tạo job theo kỳ (không chi nhánh), lưu lịch sử theo user và tải đúng file', async () => {
       const result = dashboardController.start(
         { from: '2026-10-01', to: '2026-10-31' },
-        'CN1',
         req('u1'),
       );
       expect(result).toMatchObject({ reused: false });
       await flush();
 
       expect(periodReport.exportExcel).toHaveBeenCalledWith(
-        'CN1',
+        '',
         { from: '2026-10-01', to: '2026-10-31' },
         expect.any(Function),
       );
@@ -163,18 +162,17 @@ describe('Garage export controllers', () => {
     });
 
     it('reportType tới service, tên file có nhãn loại và không dùng lại file của loại khác', async () => {
-      const all = dashboardController.start({}, 'CN1', req('u1'));
+      const all = dashboardController.start({}, req('u1'));
       await flush();
       const business = dashboardController.start(
         { reportType: 'business' },
-        'CN1',
         req('u1'),
       );
       await flush();
 
       expect(business.jobId).not.toBe(all.jobId);
       expect(periodReport.exportExcel).toHaveBeenLastCalledWith(
-        'CN1',
+        '',
         { reportType: 'business' },
         expect.any(Function),
       );
@@ -188,21 +186,20 @@ describe('Garage export controllers', () => {
     });
 
     it('reportType=all tường minh dùng lại file của yêu cầu không truyền reportType', async () => {
-      const first = dashboardController.start({}, 'CN1', req('u1'));
+      const first = dashboardController.start({}, req('u1'));
       await flush();
-      const same = dashboardController.start(
-        { reportType: 'all' },
-        'CN1',
-        req('u1'),
-      );
+      const same = dashboardController.start({ reportType: 'all' }, req('u1'));
       expect(same).toMatchObject({ jobId: first.jobId, reused: true });
     });
 
-    it('có runner riêng: không dùng lại file của chi nhánh khác', async () => {
-      const a = dashboardController.start({}, 'CN1', req('u1'));
+    it('không nhận chi nhánh KGara: cùng kỳ dùng lại file, kỳ khác tạo job mới', async () => {
+      const a = dashboardController.start({}, req('u1'));
       await flush();
-      const same = dashboardController.start({}, 'CN1', req('u1'));
-      const other = dashboardController.start({}, 'CN2', req('u1'));
+      const same = dashboardController.start({}, req('u1'));
+      const other = dashboardController.start(
+        { from: '2026-10-01' },
+        req('u1'),
+      );
       expect(same).toMatchObject({ jobId: a.jobId, reused: true });
       expect(other.jobId).not.toBe(a.jobId);
       await flush();
@@ -210,10 +207,9 @@ describe('Garage export controllers', () => {
   });
 
   describe('cases export', () => {
-    it('khởi tạo job, truyền branch + filter, lưu lịch sử theo user', async () => {
+    it('khởi tạo job, không truyền chi nhánh, truyền filter, lưu lịch sử theo user', async () => {
       const result = casesController.start(
         { mode: 'by-current-filter', sorts: ['-doanhThu'], filtersStr: '{}' },
-        'CN1',
         req('u1'),
       );
       expect(result).toMatchObject({ reused: false });
@@ -222,7 +218,7 @@ describe('Garage export controllers', () => {
       expect(casesExport.exportCompletedCasesExcel).toHaveBeenCalledWith(
         expect.objectContaining({
           mode: 'by-current-filter',
-          branchId: 'CN1',
+          branchId: undefined,
           sorts: ['-doanhThu'],
         }),
       );
@@ -236,11 +232,11 @@ describe('Garage export controllers', () => {
       expect(casesController.history(req('u2')).total).toBe(0);
     });
 
-    it('fingerprint gồm branchId: không dùng lại file của chi nhánh khác', async () => {
-      const a = casesController.start({}, 'CN1', req('u1'));
+    it('không nhận chi nhánh KGara: cùng bộ lọc dùng lại file, bộ lọc khác tạo job mới', async () => {
+      const a = casesController.start({}, req('u1'));
       await flush();
-      const same = casesController.start({}, 'CN1', req('u1'));
-      const other = casesController.start({}, 'CN2', req('u1'));
+      const same = casesController.start({}, req('u1'));
+      const other = casesController.start({ q: 'x' }, req('u1'));
 
       expect(same).toMatchObject({ jobId: a.jobId, reused: true });
       expect(other.jobId).not.toBe(a.jobId);
@@ -248,7 +244,7 @@ describe('Garage export controllers', () => {
     });
 
     it('tải file: đúng user nhận buffer, user khác bị chặn', async () => {
-      const { jobId } = casesController.start({}, 'CN1', req('u1'));
+      const { jobId } = casesController.start({}, req('u1'));
       await flush();
 
       const res: any = { setHeader: jest.fn(), send: jest.fn() };
@@ -268,8 +264,8 @@ describe('Garage export controllers', () => {
         .progressStream(req('u1'))
         .subscribe((e: any) => received.push(JSON.parse(e.data)));
 
-      casesController.start({ q: 'a' }, 'CN1', req('u2'));
-      casesController.start({ q: 'b' }, 'CN1', req('u1'));
+      casesController.start({ q: 'a' }, req('u2'));
+      casesController.start({ q: 'b' }, req('u1'));
       await flush();
       sub.unsubscribe();
 
@@ -287,12 +283,10 @@ describe('Garage export controllers', () => {
     it('khách hàng và NCC có runner độc lập, gọi đúng kind', async () => {
       const customers = debtsController.startCustomers(
         { from: '2026-07-01' },
-        'CN1',
         req('u1'),
       );
       const suppliers = debtsController.startSuppliers(
         { from: '2026-07-01' },
-        'CN1',
         req('u1'),
       );
 
@@ -301,13 +295,13 @@ describe('Garage export controllers', () => {
 
       expect(debtsExport.exportExcel).toHaveBeenCalledWith(
         'customers',
-        'CN1',
+        '',
         expect.anything(),
         expect.any(Function),
       );
       expect(debtsExport.exportExcel).toHaveBeenCalledWith(
         'suppliers',
-        'CN1',
+        '',
         expect.anything(),
         expect.any(Function),
       );
@@ -321,7 +315,7 @@ describe('Garage export controllers', () => {
     });
 
     it('tải file công nợ theo đúng runner', async () => {
-      const { jobId } = debtsController.startCustomers({}, 'CN1', req('u1'));
+      const { jobId } = debtsController.startCustomers({}, req('u1'));
       await flush();
 
       const res: any = { setHeader: jest.fn(), send: jest.fn() };

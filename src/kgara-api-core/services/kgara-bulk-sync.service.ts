@@ -2,6 +2,7 @@ import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { KgaraBranch } from '../entities/kgara_branch.entity';
+import { findSyncableBranches } from '../helpers/syncable-branches.helper';
 import { KgaraSyncService } from '../kgara-sync.service';
 import { KgaraAuthService } from '../kgara-auth.service';
 import { KgaraAccountKey } from '../enums/kgara-account.enum';
@@ -150,10 +151,15 @@ export class KgaraBulkSyncService {
         }),
       );
 
-      const branches = await this.branchRepo.find({
-        where: { accountKey: In(accountKeys) },
-        order: { name: 'ASC' },
-      });
+      const { branches, linked } = await findSyncableBranches(
+        this.branchRepo,
+        accountKeys,
+      );
+      if (!linked) {
+        this.logger.warn(
+          'Chưa có chi nhánh KGara nào liên kết chi nhánh ERP: quét tất cả chi nhánh KGara.',
+        );
+      }
       this.state.totalBranches = branches.length;
 
       // Có đủ from/to: tách theo tháng và quét đúng từng tháng. Thiếu: một lượt như cũ.
