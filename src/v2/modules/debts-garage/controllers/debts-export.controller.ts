@@ -22,7 +22,7 @@ import {
   exportProgressStream,
   sendReadyExportFile,
 } from '@/v2/core/export-jobs-core';
-import { BranchId } from '@/kgara-api-core/decorators/branch-id.decorator';
+import { ErpBranchId } from '@/v2/core/branches-core';
 import { GarageDebtsExportDto } from '@/kgara-api-core/dto/garage-export.dto';
 import type { GarageDebtExportKind } from '@/kgara-api-core/helpers/garage-debts-export.helper';
 import {
@@ -65,10 +65,10 @@ export class DebtsExportController {
   start(
     @Param('kind', KIND_PIPE) kind: GarageDebtExportKind,
     @Body() dto: GarageDebtsExportDto,
-    @BranchId() branchId: string,
+    @ErpBranchId() branchId: string | undefined,
     @Request() req: AuthedRequest,
   ) {
-    return this.jobs.start(kind, dto, branchId, this.userId(req));
+    return this.jobs.startForErpBranch(kind, dto, branchId, this.userId(req));
   }
 
   @RequirePermissions(DEBTS_READ)

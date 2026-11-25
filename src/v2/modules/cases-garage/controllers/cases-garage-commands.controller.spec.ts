@@ -32,12 +32,11 @@ describe('CasesGarageCommandsController', () => {
     expect(toJson('create')).toContain(ErpResource.GARAGE);
   });
 
-  it('thiếu header chi nhánh → 400, có header thì chuyển xuống facade', () => {
+  it('không gửi chi nhánh → facade nhận undefined (mọi chi nhánh); có thì chuyển xuống', () => {
     const service = { create: jest.fn(), remove: jest.fn() };
     const c = new CasesGarageCommandsController(service as never);
-    expect(() =>
-      c.create({} as never, undefined as never, { user: { sub: 'u' } }),
-    ).toThrow(BadRequestException);
+    c.create({} as never, undefined, { user: { sub: 'u' } });
+    expect(service.create).toHaveBeenCalledWith(undefined, {}, 'u');
     c.remove('id', 'B1');
     expect(service.remove).toHaveBeenCalledWith('B1', 'id');
   });

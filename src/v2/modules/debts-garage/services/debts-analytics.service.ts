@@ -12,9 +12,11 @@ import {
 } from '../helpers/garage-debt-sql.helper';
 import { buildAnalyticsResponse } from '../helpers/garage-debts-analytics.mapper';
 import { parseDebtDate } from '../helpers/garage-debt-date.helper';
+import { caseInErpBranchSql } from '../helpers/erp-branch-case.sql';
 
 export interface DebtsAnalyticsFilter {
-  branchId: string;
+  /** Chi nhánh ERP (không bắt buộc); không có thì mọi chi nhánh. */
+  branchId?: string;
   dateFrom?: string;
   dateTo?: string;
 }
@@ -33,16 +35,20 @@ const CASE_FROM_GP = `FROM kgara_cases c
   ${PAYMENT_BY_CASE_JOIN}`;
 
 /** Điều kiện + tham số `$n` cho một biểu thức ngày; mốc theo dõi, chi nhánh, đến ngày. */
-function scope(f: DebtsAnalyticsFilter, dateSql: string, branchSql: string) {
+function scope(f: DebtsAnalyticsFilter, dateSql: string, caseAlias = 'c') {
   const from =
     f.dateFrom && f.dateFrom > GARAGE_DEBT_BASELINE_DATE
       ? f.dateFrom
       : GARAGE_DEBT_BASELINE_DATE;
-  const params: unknown[] = [from, f.branchId];
-  let where = `${dateSql} >= $1 AND ${branchSql} = $2`;
+  const params: unknown[] = [from];
+  let where = `${dateSql} >= $1`;
+  if (f.branchId) {
+    params.push(f.branchId);
+    where += ` AND ${caseInErpBranchSql(caseAlias, `$${params.length}`)}`;
+  }
   if (f.dateTo) {
     params.push(f.dateTo.length === 10 ? `${f.dateTo} 23:59:59.999` : f.dateTo);
-    where += ` AND ${dateSql} <= $3`;
+    where += ` AND ${dateSql} <= $${params.length}`;
   }
   return { where, params };
 }
@@ -60,12 +66,8 @@ export class DebtsAnalyticsService {
       dateFrom: parseDebtDate(input.dateFrom, 'date_from'),
       dateTo: parseDebtDate(input.dateTo, 'date_to'),
     };
-    const rec = scope(f, RECEIVABLE_DATE, 'c.branch_external_id');
-    const pay = scope(
-      f,
-      P.date,
-      'COALESCE(c.branch_external_id, gp.branch_external_id)',
-    );
+    const rec = scope(f, RECEIVABLE_DATE);
+    const pay = scope(f, P.date);
     const recWhere = `${SUPPLIER_CASE_CONDITIONS.join(' AND ')} AND ${RECEIVABLE_DATE} IS NOT NULL AND ${rec.where}`;
     const payWhere = `${SUPPLIER_CASE_CONDITIONS.join(' AND ')} AND ${P.hasPayable} AND ${pay.where}`;
     const age = `(CURRENT_DATE - DATE(${P.date}))`;

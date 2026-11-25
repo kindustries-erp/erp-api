@@ -27,8 +27,14 @@ export class CaseProgressLogGarage extends CoreSoftDeletableEntity {
   @JoinColumn({ name: 'case_id' })
   case?: Relation<CaseGarage>;
 
-  @Column({ type: 'varchar', length: 100, name: 'branch_external_id' })
-  branchExternalId: string;
+  /** Cột cũ (UUID KGara); bản ghi mới để null, lọc chi nhánh qua vụ việc cha. */
+  @Column({
+    type: 'varchar',
+    length: 100,
+    name: 'branch_external_id',
+    nullable: true,
+  })
+  branchExternalId: string | null;
 
   @Column({ type: 'varchar', length: 10 })
   kind: CaseProgressLogKind;

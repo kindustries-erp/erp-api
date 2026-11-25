@@ -375,7 +375,7 @@ export class KgaraCaseServicesQueryService {
    * Lấy danh sách Distinct Filter Options cho cột của Hạng mục Dịch vụ
    */
   async getCaseServiceColumnOptions(
-    branchId: string,
+    branchId: string | undefined,
     column: string,
     search: string = '',
     page: number = 1,

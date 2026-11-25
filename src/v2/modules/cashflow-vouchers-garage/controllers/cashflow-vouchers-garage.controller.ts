@@ -15,7 +15,7 @@ import {
   RequirePermissions,
 } from '@/auth/decorators/require-permissions.decorator';
 import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
-import { BranchId } from '@/kgara-api-core/decorators/branch-id.decorator';
+import { ErpBranchId } from '@/v2/core/branches-core';
 import {
   CheckCashflowDuplicateGarageDto,
   QueryCashflowVoucherGarageDto,
@@ -25,11 +25,6 @@ import { CashflowVoucherGarageQueryService } from '../services/cashflow-voucher-
 
 const CASHFLOW = ErpResource.GARAGE_CASHFLOW;
 const READ = { resource: CASHFLOW, action: ErpAction.READ };
-
-function requireBranch(branchId: string | undefined): string {
-  if (!branchId) throw new BadRequestException('Thiếu chi nhánh.');
-  return branchId;
-}
 
 /**
  * Phiếu thu chi garage v2 (chỉ đọc). Lệnh ghi đi qua orchestrator `debts-flow-garage`.
@@ -50,9 +45,9 @@ export class CashflowVouchersGarageController {
   @Get()
   list(
     @Query() q: QueryCashflowVoucherGarageDto,
-    @BranchId() branchId: string,
+    @ErpBranchId() branchId: string | undefined,
   ) {
-    return this.query.findPage({ ...q, branchId: requireBranch(branchId) });
+    return this.query.findPage({ ...q, branchId });
   }
 
   @RequirePermissions(READ)
@@ -60,7 +55,7 @@ export class CashflowVouchersGarageController {
   @Get('column-options')
   columnOptions(
     @Query('column') column: string,
-    @BranchId() branchId: string,
+    @ErpBranchId() branchId: string | undefined,
     @Query('search') search?: string,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
@@ -68,7 +63,7 @@ export class CashflowVouchersGarageController {
     return this.query.findColumnOptions(
       column,
       { search, page, pageSize },
-      { branchId: requireBranch(branchId) },
+      { branchId },
     );
   }
 
@@ -76,11 +71,11 @@ export class CashflowVouchersGarageController {
   @ApiOperation({ summary: 'Số tổng thu chi của kỳ' })
   @Get('dashboard')
   dashboard(
-    @BranchId() branchId: string,
+    @ErpBranchId() branchId: string | undefined,
     @Query('date_from') dateFrom?: string,
     @Query('date_to') dateTo?: string,
   ) {
-    return this.insight.getDashboard(requireBranch(branchId), {
+    return this.insight.getDashboard(branchId, {
       from: dateFrom,
       to: dateTo,
     });
@@ -94,15 +89,18 @@ export class CashflowVouchersGarageController {
   @Get('duplicate-check')
   duplicateCheck(
     @Query() q: CheckCashflowDuplicateGarageDto,
-    @BranchId() branchId: string,
+    @ErpBranchId() branchId: string | undefined,
   ) {
-    return this.insight.findPotentialDuplicates(requireBranch(branchId), q);
+    return this.insight.findPotentialDuplicates(branchId, q);
   }
 
   @RequirePermissions(READ)
   @ApiOperation({ summary: 'Chi tiết một phiếu' })
   @Get(':id')
-  detail(@Param('id', ParseUUIDPipe) id: string, @BranchId() branchId: string) {
-    return this.query.findOne(requireBranch(branchId), id);
+  detail(
+    @Param('id', ParseUUIDPipe) id: string,
+    @ErpBranchId() branchId: string | undefined,
+  ) {
+    return this.query.findOne(branchId, id);
   }
 }

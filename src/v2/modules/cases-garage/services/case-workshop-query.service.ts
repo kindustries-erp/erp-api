@@ -29,19 +29,20 @@ export class CaseWorkshopQueryService {
   ) {}
 
   async board(
-    branch: string,
+    branchId: string | undefined,
     q: QueryWorkshopBoardDto,
     now = new Date(),
   ): Promise<CaseWorkshopBoardResponse> {
     const days = q.finishedDays ?? DEFAULT_FINISHED_DAYS;
     const page = await this.progress.findPage(
-      branch,
+      branchId,
       {
         status: 'ALL',
         page: q.page ?? 1,
         pageSize: q.pageSize ?? DEFAULT_PAGE_SIZE,
         search: q.search,
         assigneeId: q.assigneeId,
+        classification: q.classification,
       },
       now,
       {
@@ -67,17 +68,17 @@ export class CaseWorkshopQueryService {
     };
   }
 
-  /** Timeline mới nhất trước; kiểm xe thuộc chi nhánh. */
+  /** Timeline mới nhất trước; có chọn chi nhánh ERP thì kiểm xe thuộc chi nhánh. */
   async timeline(
-    branch: string,
+    branchId: string | undefined,
     caseId: string,
     now = new Date(),
   ): Promise<CaseProgressLogItem[]> {
-    await this.cases.findOwned(this.dataSource.manager, branch, caseId);
+    await this.cases.findOwned(this.dataSource.manager, branchId, caseId);
     const logs = await this.dataSource
       .getRepository(CaseProgressLogGarage)
       .find({
-        where: { caseId, branchExternalId: branch, isDeleted: false },
+        where: { caseId, isDeleted: false },
         order: { startedAt: 'DESC', createdAt: 'DESC' },
       });
     return logs.map((l) => toProgressLogItem(l, now));

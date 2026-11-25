@@ -51,6 +51,21 @@ describe('GarageDebtLedgerProjector', () => {
     });
   });
 
+  it('nợ gốc mang chi nhánh ERP của vụ việc v2 cùng id', async () => {
+    const { projector, origins, manager } = setup(kase);
+    (manager.query as jest.Mock).mockImplementation((sql: string) =>
+      Promise.resolve(
+        sql.includes('FROM cases_garage') ? [{ branch_id: 'erp-gr' }] : [],
+      ),
+    );
+    await projector.projectCase(manager, 'c1');
+    const calls = origins.upsertOrigin.mock.calls.map((c) => c[1]);
+    expect(calls.length).toBeGreaterThan(0);
+    for (const c of calls) {
+      expect(c).toMatchObject({ branchId: 'erp-gr', branchExternalId: 'B1' });
+    }
+  });
+
   it('vụ việc bị xóa hoặc không còn: void cả ba khoản', async () => {
     const { projector, origins, manager } = setup(null);
     const out = await projector.projectCase(manager, 'c1');

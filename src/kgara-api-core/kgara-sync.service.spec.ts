@@ -797,6 +797,7 @@ describe('KgaraSyncService', () => {
         '2026-10-31',
         undefined,
         'MAIN',
+        { exactRange: undefined },
       );
       expect(service.syncGrossProfitForBranch).toHaveBeenCalledWith(
         'br-test',
@@ -812,6 +813,37 @@ describe('KgaraSyncService', () => {
       });
       expect(res.grossProfitSuccess).toBe(true);
       expect(res.detailsResult?.totalLinesSynced).toBe(12);
+    });
+
+    it('exactRange truyền xuống syncCasesForBranch', async () => {
+      jest.spyOn(service, 'syncBranches').mockResolvedValue(undefined);
+      jest.spyOn(service, 'syncCasesForBranch').mockResolvedValue({
+        deletedCount: 0,
+        withLinkedInvoices: [],
+      });
+      jest.spyOn(service, 'syncGrossProfitForBranch').mockResolvedValue({
+        journalCases: 0,
+        enrichedCases: 0,
+        projected: 0,
+        failed: 0,
+      });
+
+      await service.syncAllInOne('br-test', {
+        from: '2026-08-01',
+        to: '2026-08-31',
+        skipBranchSync: true,
+        exactRange: true,
+      });
+
+      expect(service.syncBranches).not.toHaveBeenCalled();
+      expect(service.syncCasesForBranch).toHaveBeenCalledWith(
+        'br-test',
+        '2026-08-01',
+        '2026-08-31',
+        undefined,
+        'MAIN',
+        { exactRange: true },
+      );
     });
   });
 });

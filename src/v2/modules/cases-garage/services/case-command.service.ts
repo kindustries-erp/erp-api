@@ -6,6 +6,12 @@ import {
 } from '@nestjs/common';
 import { DataSource, EntityManager, IsNull } from 'typeorm';
 import { nextDocumentNo } from '@/common/numbering/document-numbering';
+import { assertErpBranchExists, branchWhere } from '@/v2/core/branches-core';
+import {
+  assertOjClassificationEdit,
+  findOjCategoryId,
+  isOjAccount,
+} from '../helpers/case-oj-classification.helper';
 import { assertValidExtraData } from '@/v2/core/base-core/helpers/extra-data.util';
 import { runInOptionalTransaction } from '@/v2/core/base-core/helpers/run-in-optional-transaction.util';
 import type { CreateCaseDto, UpdateCaseDto } from '../dto/case-write.dto';
@@ -43,12 +49,15 @@ function headerFields(dto: Record<string, unknown>): Partial<CaseGarage> {
 
 function rethrowUnique(e: unknown): never {
   if ((e as { code?: string })?.code === '23505') {
-    throw new ConflictException('Số chứng từ đã tồn tại trong chi nhánh này.');
+    throw new ConflictException('Số chứng từ đã tồn tại.');
   }
   throw e;
 }
 
-/** Ghi header vụ việc v2. Mọi truy vấn kèm `branchExternalId` (cách ly chi nhánh, AC-8). */
+/**
+ * Ghi header vụ việc v2. `branchId` là chi nhánh ERP đang chọn (không bắt buộc): có thì chỉ thao tác trên
+ * vụ việc của chi nhánh đó, không có thì mọi chi nhánh. Không dùng UUID KGara (GR/GN dùng chung UUID).
+ */
 @Injectable()
 export class CaseCommandService {
   constructor(
@@ -56,17 +65,17 @@ export class CaseCommandService {
     private readonly lines: CaseLineWriter,
   ) {}
 
-  /** Tìm vụ việc đang hoạt động của đúng chi nhánh; khác chi nhánh coi như không tồn tại. */
+  /** Tìm vụ việc đang hoạt động; có chọn chi nhánh thì khác chi nhánh coi như không tồn tại. */
   async findOwned(
     manager: EntityManager,
-    branchExternalId: string,
+    branchId: string | undefined,
     id: string,
     lock = false,
   ): Promise<CaseGarage> {
     const found = await manager.findOne(CaseGarage, {
       where: {
         id,
-        branchExternalId,
+        ...branchWhere(branchId),
         isDeleted: false,
         externalDeletedAt: IsNull(),
       },
@@ -77,20 +86,22 @@ export class CaseCommandService {
   }
 
   async create(
-    branchExternalId: string,
+    branchId: string | undefined,
     dto: CreateCaseDto,
     actorId: string,
     outer?: EntityManager,
   ): Promise<CaseGarage> {
     if (dto.extraData !== undefined) assertValidExtraData(dto.extraData);
     return runInOptionalTransaction(this.dataSource, outer, async (m) => {
+      await assertErpBranchExists(m, branchId);
       const caseCode =
         dto.caseCode?.trim() ||
         (await nextDocumentNo(m, CaseGarage, 'caseCode', CASE_NO_PREFIX));
       const header = m.create(CaseGarage, {
         ...headerFields(dto as unknown as Record<string, unknown>),
         caseCode,
-        branchExternalId,
+        branchId: branchId ?? null,
+        branchExternalId: null,
         accountKey: DEFAULT_CASE_ACCOUNT_KEY,
         origin: CaseOrigin.NATIVE,
         status: CaseStatus.INTAKE,
@@ -111,16 +122,23 @@ export class CaseCommandService {
   }
 
   async update(
-    branchExternalId: string,
+    branchId: string | undefined,
     id: string,
     dto: UpdateCaseDto,
     outer?: EntityManager,
   ): Promise<CaseGarage> {
     if (dto.extraData !== undefined) assertValidExtraData(dto.extraData);
     return runInOptionalTransaction(this.dataSource, outer, async (m) => {
-      const current = await this.findOwned(m, branchExternalId, id, true);
+      const current = await this.findOwned(m, branchId, id, true);
       const patch = dto as unknown as Record<string, unknown>;
       assertHeaderPatchAllowed(current.origin, patch);
+      if (isOjAccount(current.accountKey)) {
+        assertOjClassificationEdit(
+          current.accountKey,
+          patch,
+          await findOjCategoryId(m),
+        );
+      }
       const fields = headerFields(patch);
       try {
         if (current.origin === CaseOrigin.KGARA_SYNC) {
@@ -146,14 +164,14 @@ export class CaseCommandService {
   }
 
   async updateStatus(
-    branchExternalId: string,
+    branchId: string | undefined,
     id: string,
     status: CaseStatus,
     actorId = '',
     outer?: EntityManager,
   ): Promise<CaseGarage> {
     return runInOptionalTransaction(this.dataSource, outer, async (m) => {
-      const current = await this.findOwned(m, branchExternalId, id, true);
+      const current = await this.findOwned(m, branchId, id, true);
       if (!canTransition(current.status, status, current.origin)) {
         throw new BadRequestException(
           `Không chuyển được trạng thái ${current.status} → ${status}.`,
@@ -192,9 +210,9 @@ export class CaseCommandService {
     });
   }
 
-  async softDelete(branchExternalId: string, id: string): Promise<void> {
+  async softDelete(branchId: string | undefined, id: string): Promise<void> {
     await this.dataSource.transaction(async (m) => {
-      const current = await this.findOwned(m, branchExternalId, id, true);
+      const current = await this.findOwned(m, branchId, id, true);
       await m.update(CaseGarage, { id }, { isDeleted: true } as never);
     });
   }

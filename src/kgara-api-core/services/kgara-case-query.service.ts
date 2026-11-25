@@ -139,7 +139,7 @@ export class KgaraCaseQueryService {
   }
 
   async getCaseServiceColumnOptions(
-    branchId: string,
+    branchId: string | undefined,
     column: string,
     search: string = '',
     page: number = 1,

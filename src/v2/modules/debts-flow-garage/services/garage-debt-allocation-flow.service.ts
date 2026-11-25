@@ -4,6 +4,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+
+import { branchWhere } from '@/v2/core/branches-core';
 import {
   AbstractDebtFlowService,
   toMoney,
@@ -34,14 +36,14 @@ export class GarageDebtAllocationFlowService extends AbstractDebtFlowService {
   }
 
   allocate(
-    branchId: string,
+    branchId: string | undefined,
     dto: AllocateDebtDto,
     idempotencyKey: string,
     actorId: string | null,
   ): Promise<DebtSettlementResult> {
     return this.runInTransaction(async (manager, emit) => {
       const debt = await manager.getRepository(DebtGarage).findOne({
-        where: { id: dto.debtId, branchExternalId: branchId, isDeleted: false },
+        where: { id: dto.debtId, ...branchWhere(branchId), isDeleted: false },
       });
       if (!debt) throw new NotFoundException('Không có khoản nợ');
 
@@ -94,7 +96,7 @@ export class GarageDebtAllocationFlowService extends AbstractDebtFlowService {
   }
 
   reverseAllocation(
-    branchId: string,
+    branchId: string | undefined,
     allocationId: string,
     idempotencyKey: string,
     actorId: string | null,
@@ -102,7 +104,7 @@ export class GarageDebtAllocationFlowService extends AbstractDebtFlowService {
     return this.runInTransaction(async (manager, emit) => {
       const allocation = await manager
         .getRepository(DebtAllocationGarage)
-        .findOne({ where: { id: allocationId, branchExternalId: branchId } });
+        .findOne({ where: { id: allocationId, ...branchWhere(branchId) } });
       if (!allocation) throw new NotFoundException('Không có phân bổ');
       const debt = await manager
         .getRepository(DebtGarage)

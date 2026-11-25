@@ -28,7 +28,7 @@ export class KgaraSuppliersService {
   }
 
   async getSuppliersDebtColumnOptions(
-    branchId: string,
+    branchId: string | undefined,
     column: string,
     search: string = '',
     page: string | number = 1,
@@ -45,7 +45,7 @@ export class KgaraSuppliersService {
     );
   }
 
-  async getCasesBySupplier(branchId: string, supplierId: string) {
+  async getCasesBySupplier(_branchId: string | undefined, supplierId: string) {
     const cases = await this.caseRepo
       .createQueryBuilder('c')
       .where('(c.khachHangCode = :id OR c.id = :id OR c.soChungTu = :id)', {

@@ -28,9 +28,9 @@ export class CaseLineCommandService {
     private readonly lines: CaseLineWriter,
   ) {}
 
-  add(branch: string, caseId: string, dto: CaseServiceLineDto) {
+  add(branchId: string | undefined, caseId: string, dto: CaseServiceLineDto) {
     return this.dataSource.transaction(async (m) => {
-      const header = await this.cases.findOwned(m, branch, caseId, true);
+      const header = await this.cases.findOwned(m, branchId, caseId, true);
       await this.lines.add(
         m,
         header,
@@ -42,13 +42,13 @@ export class CaseLineCommandService {
   }
 
   replace(
-    branch: string,
+    branchId: string | undefined,
     caseId: string,
     lineId: string,
     dto: CaseServiceLineDto,
   ) {
     return this.dataSource.transaction(async (m) => {
-      const header = await this.cases.findOwned(m, branch, caseId, true);
+      const header = await this.cases.findOwned(m, branchId, caseId, true);
       const line = await this.lines.findLine(m, caseId, lineId);
       if (isSyncLine(line)) {
         const fields: Record<string, unknown> = { ...this.lines.toFields(dto) };
@@ -61,9 +61,9 @@ export class CaseLineCommandService {
     });
   }
 
-  remove(branch: string, caseId: string, lineId: string) {
+  remove(branchId: string | undefined, caseId: string, lineId: string) {
     return this.dataSource.transaction(async (m) => {
-      await this.cases.findOwned(m, branch, caseId, true);
+      await this.cases.findOwned(m, branchId, caseId, true);
       const line = await this.lines.findLine(m, caseId, lineId);
       if (isSyncLine(line)) {
         const overrides: OverrideMap = {
@@ -80,13 +80,13 @@ export class CaseLineCommandService {
 
   /** Sửa giá vốn phụ tùng. Dòng sync: ghi đè ở v2; dòng nhập tay: ghi thẳng và tính lại tổng. */
   updatePartsCost(
-    branch: string,
+    branchId: string | undefined,
     caseId: string,
     lineId: string,
     partsCost: number,
   ) {
     return this.dataSource.transaction(async (m) => {
-      await this.cases.findOwned(m, branch, caseId, true);
+      await this.cases.findOwned(m, branchId, caseId, true);
       const line = await this.lines.findLine(m, caseId, lineId);
       const patch = { partsCost: partsCost.toFixed(2) };
       if (isSyncLine(line)) {

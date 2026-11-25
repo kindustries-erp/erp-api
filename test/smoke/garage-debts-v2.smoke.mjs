@@ -1,13 +1,13 @@
 // Smoke chỉ đọc: đối chiếu V1 (/api/v1/greenway/...) với v2 (/api/v2/debts-garage, /api/v2/cases-garage).
-// Env: E2E_API_URL (mặc định suy từ PORT), E2E_TAO_EMAIL (mặc định ai-test-tao), E2E_PASSWORD, E2E_BRANCH_ID (branch_external_id trong kgara_cases, ví dụ 0b4d6d3a-55df-492b-abaf-377d84b61d05; KHÔNG phải branches_management.id).
+// Env: E2E_API_URL (mặc định suy từ PORT), E2E_TAO_EMAIL (mặc định ai-test-tao), E2E_PASSWORD, E2E_BRANCH_ID (tùy chọn, id chi nhánh ERP `branches_management`; bỏ trống là mọi chi nhánh).
 import { resolveApiUrl } from './e2e-ports.mjs';
 
 const BASE = resolveApiUrl();
 const { E2E_BRANCH_ID: BRANCH } = process.env;
 const EMAIL = process.env.E2E_TAO_EMAIL ?? 'ai-test-tao@example.com';
 const PASSWORD = process.env.E2E_PASSWORD;
-if (!EMAIL || !PASSWORD || !BRANCH) {
-  console.error('Thiếu E2E_PASSWORD hoặc E2E_BRANCH_ID.');
+if (!EMAIL || !PASSWORD) {
+  console.error('Thiếu E2E_PASSWORD.');
   process.exit(2);
 }
 const results = [];
@@ -23,7 +23,10 @@ const login = await fetch(`${BASE}/api/v2/auth-sessions/login`, {
 });
 if (login.status !== 200 && login.status !== 201) { console.error(`login -> ${login.status}`); process.exit(1); }
 const token = (await login.json()).data?.accessToken;
-const headers = { Authorization: `Bearer ${token}`, 'x-kgara-branch-id': BRANCH };
+const headers = {
+  Authorization: `Bearer ${token}`,
+  ...(BRANCH ? { 'x-erp-branch-id': BRANCH } : {}),
+};
 
 async function get(path, h = headers) {
   const r = await fetch(`${BASE}${path}`, { headers: h });
@@ -37,10 +40,10 @@ const num = (v) => Math.round(Number(v ?? 0));
 const rows = (b) => b?.items ?? (Array.isArray(b?.data) ? b.data : []);
 const total1 = (b) => b?.pagination?.total ?? b?.total;
 
-// 1. Cách ly chi nhánh: thiếu header thì v2 trả 400, không lộ dữ liệu.
+// 1. Chi nhánh không bắt buộc: không gửi header thì v2 trả 200 (mọi chi nhánh).
 for (const p of ['debts-garage/customers', 'debts-garage/suppliers', 'debts-garage/analytics', 'cases-garage', 'cases-garage/services', 'cases-garage/gross-profit-report']) {
   const r = await get(`/api/v2/${p}`, { Authorization: headers.Authorization });
-  check(`v2 ${p} thiếu chi nhánh -> 400`, r.status === 400, `status ${r.status}`);
+  check(`v2 ${p} không header chi nhánh -> 200`, r.status === 200, `status ${r.status}`);
 }
 // 2. Không token -> 401.
 check('v2 không token -> 401', (await fetch(`${BASE}/api/v2/cases-garage`)).status === 401);
@@ -105,7 +108,7 @@ console.log('gross-profit v1 status', p1.status, 'v2 total rows', p2.body?.pagin
 const first = rows(k2.body)[0];
 if (first) {
   const d1 = await get(`/api/v2/cases-garage/${first.id}`);
-  const d2 = await get(`/api/v2/cases-garage/by-code/${encodeURIComponent(first.soChungTu)}`);
+  const d2 = await get(`/api/v2/cases-garage/by-code/${encodeURIComponent(first.caseCode ?? first.soChungTu)}`);
   check('chi tiết theo id và theo mã cùng vụ việc', d1.status === 200 && d2.status === 200 && unwrap(d1.body)?.id === unwrap(d2.body)?.id, `${d1.status}/${d2.status}`);
 }
 const nf = await get('/api/v2/cases-garage/00000000-0000-0000-0000-000000000000');

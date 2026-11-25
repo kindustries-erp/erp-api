@@ -5,6 +5,7 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
+import { applyBranchScope } from '@/v2/core/branches-core';
 import type { CreateCaseDto } from '../dto/case-write.dto';
 import type {
   CaseWorkshopTrackResult,
@@ -29,8 +30,8 @@ export interface TrackActor {
  * 1. Xe có sẵn, giữ trạng thái: chỉ đánh dấu.
  * 2. Xe có sẵn, khác trạng thái: đổi qua `CaseCommandService.updateStatus` (xe KGara ghi đè ở v2,
  *    xe NATIVE theo bảng chuyển trạng thái), cùng transaction với việc đánh dấu.
- * 3. Xe chưa có: tạo vụ việc NATIVE (biển số, tiếp nhận lúc này) rồi đánh dấu; chặn khi biển số đã
- *    có vụ việc đang mở trong chi nhánh.
+ * 3. Xe chưa có: tạo vụ việc NATIVE (biển số, tiếp nhận lúc này, chi nhánh ERP đang chọn hoặc không)
+ *    rồi đánh dấu; chặn khi biển số đã có vụ việc đang mở (trong chi nhánh nếu có chọn, không thì mọi nơi).
  */
 @Injectable()
 export class CaseWorkshopTrackService {
@@ -40,12 +41,12 @@ export class CaseWorkshopTrackService {
   ) {}
 
   track(
-    branch: string,
+    branchId: string | undefined,
     dto: TrackWorkshopCaseDto,
     actor: TrackActor,
   ): Promise<CaseWorkshopTrackResult> {
     return this.dataSource.transaction(async (m) => {
-      let current = await this.cases.findOwned(m, branch, dto.caseId, true);
+      let current = await this.cases.findOwned(m, branchId, dto.caseId, true);
       const changed = Boolean(dto.status) && dto.status !== current.status;
       if (changed) {
         if (!actor.canChangeStatus) {
@@ -54,7 +55,7 @@ export class CaseWorkshopTrackService {
           );
         }
         current = await this.cases.updateStatus(
-          branch,
+          branchId,
           current.id,
           dto.status as CaseStatus,
           actor.id,
@@ -66,7 +67,7 @@ export class CaseWorkshopTrackService {
   }
 
   trackNew(
-    branch: string,
+    branchId: string | undefined,
     dto: TrackNewWorkshopCaseDto,
     actor: TrackActor,
   ): Promise<CaseWorkshopTrackResult> {
@@ -87,18 +88,18 @@ export class CaseWorkshopTrackService {
       );
     }
     return this.dataSource.transaction(async (m) => {
-      // Khóa theo chi nhánh + biển số để hai người cùng tạo một xe không ra hai vụ việc.
+      // Khóa theo biển số để hai người cùng tạo một xe không ra hai vụ việc.
       await m.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
-        `workshop:${branch}:${key}`,
+        `workshop:${key}`,
       ]);
-      const open = await this.findOpenByPlate(m, branch, key);
+      const open = await this.findOpenByPlate(m, branchId, key);
       if (open) {
         throw new ConflictException(
           `Xe ${plate} đã có vụ việc ${open.caseCode} đang mở. Hãy chọn xe trong danh sách.`,
         );
       }
       let created = await this.cases.create(
-        branch,
+        branchId,
         {
           licensePlate: plate,
           customerName: dto.customerName?.trim() || undefined,
@@ -111,7 +112,7 @@ export class CaseWorkshopTrackService {
       const changed = target !== created.status;
       if (changed) {
         created = await this.cases.updateStatus(
-          branch,
+          branchId,
           created.id,
           target,
           actorId,
@@ -123,9 +124,9 @@ export class CaseWorkshopTrackService {
   }
 
   /** Bỏ xe khỏi bảng: chỉ xóa dấu, giữ nguyên vụ việc và nhật ký. */
-  async untrack(branch: string, caseId: string): Promise<void> {
+  async untrack(branchId: string | undefined, caseId: string): Promise<void> {
     await this.dataSource.transaction(async (m) => {
-      await this.cases.findOwned(m, branch, caseId, true);
+      await this.cases.findOwned(m, branchId, caseId, true);
       await m.update(CaseGarage, { id: caseId }, {
         workshopTrackedAt: null,
         workshopTrackedBy: null,
@@ -133,16 +134,20 @@ export class CaseWorkshopTrackService {
     });
   }
 
-  private findOpenByPlate(m: EntityManager, branch: string, key: string) {
-    return m
+  private findOpenByPlate(
+    m: EntityManager,
+    branchId: string | undefined,
+    key: string,
+  ) {
+    const qb = m
       .getRepository(CaseGarage)
       .createQueryBuilder('c')
       .where('c.is_deleted = false')
       .andWhere('c.external_deleted_at IS NULL')
-      .andWhere('c.branch_external_id = :branch', { branch })
       .andWhere('c.status NOT IN (:...finished)', { finished: FINISHED })
-      .andWhere(`${PLATE_SQL} = :key`, { key })
-      .getOne();
+      .andWhere(`${PLATE_SQL} = :key`, { key });
+    applyBranchScope(qb, 'c', branchId);
+    return qb.getOne();
   }
 
   /** Đánh dấu; xe đã có trên bảng giữ mốc và người đưa vào ban đầu. */

@@ -96,7 +96,7 @@ export async function syncStageOnStatusChange(
  */
 export async function switchStageLog(
   m: EntityManager,
-  c: Pick<CaseGarage, 'id' | 'branchExternalId' | 'status'>,
+  c: Pick<CaseGarage, 'id' | 'status'>,
   stage: string | null,
   actorId: string,
   at = new Date(),
@@ -105,7 +105,7 @@ export async function switchStageLog(
   if (!stage) return;
   await m.insert(CaseProgressLogGarage, {
     caseId: c.id,
-    branchExternalId: c.branchExternalId,
+    branchExternalId: null,
     kind: CaseProgressLogKind.STAGE,
     caseStatus: c.status,
     stage,

@@ -5,7 +5,7 @@ description: Module phiếu thu chi garage v2 (api/v2/cashflow-vouchers-garage) 
 
 # cashflow-vouchers-garage (src/v2/modules/cashflow-vouchers-garage)
 
-Bảng `cashflow_vouchers_garage` (entity `CashflowVoucherGarage`, kế thừa `BaseCashflowVoucherEntity`). Chi nhánh bắt buộc qua header. Đăng ký ở `app.module.ts`.
+Bảng `cashflow_vouchers_garage` (entity `CashflowVoucherGarage`, kế thừa `BaseCashflowVoucherEntity`). Chi nhánh: header `x-erp-branch-id` (id `branches_management`, decorator `@ErpBranchId()` ở `@/v2/core/branches-core`) KHÔNG bắt buộc: không gửi = mọi chi nhánh; gửi thì lọc `branch_id` (helper `applyBranchScope`/`branchWhere`); sai UUID = 400. Đăng ký ở `app.module.ts`.
 
 ## 1. Route (đọc, quyền `GARAGE_CASHFLOW:READ`)
 `GET /` (list), `GET column-options`, `GET dashboard`, `GET duplicate-check`, `GET :id`. Route ghi (POST/PATCH/status/cancel) do `debts-flow-garage` cung cấp trên cùng prefix.

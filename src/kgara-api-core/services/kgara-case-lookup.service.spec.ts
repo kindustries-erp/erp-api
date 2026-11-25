@@ -103,6 +103,32 @@ describe('KgaraCaseLookupService', () => {
     });
   });
 
+  describe('findCaseByExternalId', () => {
+    it('chỉ đọc DB, không gọi KGara theo chi nhánh', async () => {
+      const mockCase = { id: 'c1', hdPhieuDichVuId: 'ext-1', rawData: null };
+      caseRepoMock.findOne.mockResolvedValue(mockCase);
+
+      const result = await service.findCaseByExternalId('ext-1');
+
+      expect(caseRepoMock.findOne).toHaveBeenCalledWith({
+        where: [{ hdPhieuDichVuId: 'ext-1' }, { soChungTu: 'ext-1' }],
+        relations: ['category'],
+      });
+      expect(clientMock.getCaseDetail).not.toHaveBeenCalled();
+      expect(result).toBe(mockCase);
+    });
+
+    it('phiếu chưa có trong DB thì 404, không tạo phiếu mới', async () => {
+      caseRepoMock.findOne.mockResolvedValue(null);
+
+      await expect(service.findCaseByExternalId('ext-missing')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(clientMock.getCaseDetail).not.toHaveBeenCalled();
+      expect(caseRepoMock.save).not.toHaveBeenCalled();
+    });
+  });
+
   describe('findGrossProfitByCodeOrId', () => {
     it('should resolve gross profit using case when queried with UUID', async () => {
       const uuid = '4fab3f01-4fb6-4852-a891-d805d18675de';

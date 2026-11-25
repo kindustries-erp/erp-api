@@ -34,7 +34,7 @@ export class KgaraCustomerCasesDetailService {
   ) {}
 
   async getCasesByCustomer(
-    branchId: string,
+    branchId: string | undefined,
     customerCode: string,
     licensePlate?: string,
   ): Promise<EnrichedCustomerCaseItem[]> {

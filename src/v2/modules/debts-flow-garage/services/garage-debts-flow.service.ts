@@ -2,7 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
 import type { CashflowVoucherStatus } from '@/v2/core/cashflow-vouchers-core';
 import { AbstractDebtFlowService } from '@/v2/core/debts-core';
-import { KgaraCase } from '@/kgara-api-core/entities/kgara_case.entity';
+import { assertErpBranchExists, branchWhere } from '@/v2/core/branches-core';
+import { CaseGarage } from '../../cases-garage/entities/case-garage.entity';
 import type { CashflowVoucherGarageRow } from '../../cashflow-vouchers-garage/dto/cashflow-voucher-garage.types';
 import type {
   CreateCashflowVoucherGarageDto,
@@ -35,23 +36,26 @@ export class GarageDebtsFlowService extends AbstractDebtFlowService {
   }
 
   recordVoucher(
-    branchId: string,
+    branchId: string | undefined,
     dto: CreateCashflowVoucherGarageDto,
     actorId: string | null,
   ): Promise<CashflowVoucherGarageRow> {
     return this.runInTransaction(async (manager, emit) => {
       const kase = await this.findCase(manager, branchId, dto.caseId);
+      if (!kase) await assertErpBranchExists(manager, branchId);
       const voucher = (await this.vouchers.create(manager, {
         ...dto,
-        branchExternalId: branchId,
-        licensePlate: dto.licensePlate ?? kase?.bienSoXe ?? null,
+        // Chi nhánh ERP theo vụ việc (nếu có), không thì chi nhánh đang chọn; UUID KGara chỉ theo vụ việc.
+        branchId: kase?.branchId ?? branchId ?? null,
+        branchExternalId: kase?.branchExternalId ?? null,
+        licensePlate: dto.licensePlate ?? kase?.licensePlate ?? null,
         // Mặc định như V1: phiếu thu đã thu, phiếu chi chờ duyệt.
         status:
           dto.status ?? (dto.voucherType === 'RECEIPT' ? 'PAID' : 'PENDING'),
         payerType:
           dto.payerType ??
           (dto.voucherType === 'RECEIPT'
-            ? await this.allocations.resolvePayer(manager, branchId, dto.caseId)
+            ? await this.allocations.resolvePayer(manager, dto.caseId)
             : 'KH'),
         createdBy: actorId,
         source: 'MANUAL',
@@ -64,7 +68,7 @@ export class GarageDebtsFlowService extends AbstractDebtFlowService {
   }
 
   updateVoucher(
-    branchId: string,
+    branchId: string | undefined,
     id: string,
     dto: UpdateCashflowVoucherGarageDto,
     actorId: string | null,
@@ -99,7 +103,7 @@ export class GarageDebtsFlowService extends AbstractDebtFlowService {
 
   /** Duyệt, thu chi (PAID: áp phân bổ) hoặc hủy (CANCELLED: đảo phân bổ). */
   changeVoucherStatus(
-    branchId: string,
+    branchId: string | undefined,
     id: string,
     next: CashflowVoucherStatus,
     actorId: string | null,
@@ -118,15 +122,16 @@ export class GarageDebtsFlowService extends AbstractDebtFlowService {
     });
   }
 
+  /** Vụ việc v2; có chọn chi nhánh ERP thì phải cùng chi nhánh. */
   private async findCase(
     manager: EntityManager,
-    branchId: string,
+    branchId: string | undefined,
     caseId?: string | null,
-  ): Promise<KgaraCase | null> {
+  ): Promise<CaseGarage | null> {
     if (!caseId) return null;
-    const found = await manager
-      .getRepository(KgaraCase)
-      .findOne({ where: { id: caseId, branchExternalId: branchId } });
+    const found = await manager.getRepository(CaseGarage).findOne({
+      where: { id: caseId, ...branchWhere(branchId), isDeleted: false },
+    });
     if (!found) throw new NotFoundException('Không có vụ việc trong chi nhánh');
     return found;
   }

@@ -3,7 +3,6 @@ import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
 import { ErpResource, ErpAction } from '@/v2/core/rbac-core';
-import { BranchId } from '../decorators/branch-id.decorator';
 import { KgaraSuppliersService } from '../services/kgara-suppliers.service';
 
 @UseGuards(JwtAuthGuard, CoreRbacGuard)
@@ -17,7 +16,6 @@ export class KgaraSuppliersController {
     action: ErpAction.READ,
   })
   async getSuppliersDebt(
-    @BranchId() branchId: string,
     @Query('page') page: string = '1',
     @Query('pageSize') pageSize: string = '20',
     @Query('q') q: string = '',
@@ -29,7 +27,6 @@ export class KgaraSuppliersController {
     @Query('column_search') columnSearchParam?: string,
   ) {
     return this.suppliersService.getSuppliersDebt({
-      branchId,
       page,
       pageSize,
       q,
@@ -48,7 +45,6 @@ export class KgaraSuppliersController {
     action: ErpAction.READ,
   })
   async getSuppliersDebtColumnOptions(
-    @BranchId() branchId: string,
     @Query('column') column: string,
     @Query('search') search: string = '',
     @Query('page') page: string = '1',
@@ -56,7 +52,7 @@ export class KgaraSuppliersController {
     @Query('filtersStr') filtersStr?: string,
   ) {
     return this.suppliersService.getSuppliersDebtColumnOptions(
-      branchId,
+      undefined,
       column,
       search,
       page,
@@ -70,10 +66,7 @@ export class KgaraSuppliersController {
     resource: ErpResource.GARAGE_DEBTS,
     action: ErpAction.READ,
   })
-  async getCasesBySupplier(
-    @BranchId() branchId: string,
-    @Param('supplierId') supplierId: string,
-  ) {
-    return this.suppliersService.getCasesBySupplier(branchId, supplierId);
+  async getCasesBySupplier(@Param('supplierId') supplierId: string) {
+    return this.suppliersService.getCasesBySupplier(undefined, supplierId);
   }
 }

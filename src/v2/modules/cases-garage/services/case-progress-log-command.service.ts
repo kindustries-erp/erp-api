@@ -42,14 +42,14 @@ export class CaseProgressLogCommandService {
   ) {}
 
   create(
-    branch: string,
+    branchId: string | undefined,
     caseId: string,
     dto: CreateCaseProgressLogDto,
     actorId: string,
     now = new Date(),
   ): Promise<CaseProgressLogItem> {
     return this.dataSource.transaction(async (m) => {
-      const current = await this.cases.findOwned(m, branch, caseId, true);
+      const current = await this.cases.findOwned(m, branchId, caseId, true);
       const worker = await this.resolveWorker(m, current, dto);
       const startedAt = parseTime(dto.startedAt, now) ?? now;
       const isStage = dto.kind === CaseProgressLogKind.STAGE;
@@ -66,7 +66,7 @@ export class CaseProgressLogCommandService {
       const saved = await m.save(
         m.create(CaseProgressLogGarage, {
           caseId,
-          branchExternalId: branch,
+          branchExternalId: null,
           kind: dto.kind,
           caseStatus: current.status,
           stage: isStage ? (dto.stage ?? null) : null,
@@ -90,15 +90,15 @@ export class CaseProgressLogCommandService {
   }
 
   update(
-    branch: string,
+    branchId: string | undefined,
     logId: string,
     dto: UpdateCaseProgressLogDto,
     actorId: string,
     now = new Date(),
   ): Promise<CaseProgressLogItem> {
     return this.dataSource.transaction(async (m) => {
-      const log = await this.findLog(m, branch, logId);
-      const current = await this.cases.findOwned(m, branch, log.caseId);
+      const log = await this.findLog(m, logId);
+      const current = await this.cases.findOwned(m, branchId, log.caseId);
       const patch: Partial<CaseProgressLogGarage> = {};
       if (dto.note !== undefined) patch.note = dto.note?.trim() || null;
       if (dto.workerId !== undefined || dto.workerName !== undefined) {
@@ -150,9 +150,14 @@ export class CaseProgressLogCommandService {
     });
   }
 
-  remove(branch: string, logId: string, actorId: string): Promise<void> {
+  remove(
+    branchId: string | undefined,
+    logId: string,
+    actorId: string,
+  ): Promise<void> {
     return this.dataSource.transaction(async (m) => {
-      const log = await this.findLog(m, branch, logId);
+      const log = await this.findLog(m, logId);
+      await this.cases.findOwned(m, branchId, log.caseId);
       await m.update(CaseProgressLogGarage, { id: log.id }, {
         isDeleted: true,
         updatedBy: actorId || null,
@@ -169,13 +174,13 @@ export class CaseProgressLogCommandService {
     });
   }
 
+  /** Chi nhánh kiểm qua vụ việc cha (`findOwned`), không theo UUID KGara của nhật ký. */
   private async findLog(
     m: EntityManager,
-    branch: string,
     logId: string,
   ): Promise<CaseProgressLogGarage> {
     const log = await m.findOne(CaseProgressLogGarage, {
-      where: { id: logId, branchExternalId: branch, isDeleted: false },
+      where: { id: logId, isDeleted: false },
       lock: { mode: 'pessimistic_write' },
     });
     if (!log) throw new NotFoundException('Không tìm thấy nhật ký tiến độ.');

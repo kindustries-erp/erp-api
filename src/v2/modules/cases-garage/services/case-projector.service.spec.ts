@@ -28,6 +28,7 @@ function make(opts: {
   current?: Record<string, unknown>[];
   links?: Record<string, unknown>[];
   openStage?: Record<string, unknown> | null;
+  ojCategory?: Record<string, unknown> | null;
 }) {
   const manager = {
     findOne: jest.fn(async (entity: unknown) => {
@@ -35,6 +36,8 @@ function make(opts: {
         return opts.v1 === undefined ? v1Case() : opts.v1;
       if (entity === CaseGarage) return opts.existing ?? null;
       if (entity === CaseProgressLogGarage) return opts.openStage ?? null;
+      if ((entity as { name?: string }).name === 'ErpModuleCategory')
+        return opts.ojCategory ?? null;
       return null;
     }),
     find: jest.fn(async (entity: unknown) => {
@@ -81,6 +84,51 @@ describe('CaseProjectorService', () => {
       status: 'COMPLETED',
     });
     expect(row.sourceSnapshot).not.toHaveProperty('origin');
+  });
+
+  it('xe tài khoản OJ: luôn phân loại OJ + danh mục OJ, kể cả khi V1 ghi loại khác', async () => {
+    const { svc, manager } = make({
+      v1: v1Case({ classification: 'BH' }),
+      ojCategory: { id: 'cat-oj' },
+    });
+    await svc.project('c1');
+    expect(manager.insert.mock.calls[0][1]).toMatchObject({
+      classification: 'OJ',
+      categoryId: 'cat-oj',
+      classificationManuallyCleared: false,
+    });
+  });
+
+  it('xe OJ chạy lại: bỏ override phân loại ở v2 rồi ghi lại OJ, giữ override khác', async () => {
+    const { svc, manager } = make({
+      existing: {
+        id: 'c1',
+        origin: CaseOrigin.KGARA_SYNC,
+        overrides: { classification: true, licensePlate: true },
+      },
+    });
+    await svc.project('c1');
+    const patch = manager.update.mock.calls[0][2] as Record<string, unknown>;
+    expect(patch).toMatchObject({
+      classification: 'OJ',
+      overrides: { licensePlate: true },
+    });
+    expect(patch).not.toHaveProperty('licensePlate');
+  });
+
+  it('xe tài khoản MAIN: không ép phân loại, không ghi lại overrides', async () => {
+    const { svc, manager } = make({
+      v1: v1Case({ accountKey: 'MAIN', classification: 'BH' }),
+      existing: {
+        id: 'c1',
+        origin: CaseOrigin.KGARA_SYNC,
+        overrides: { classification: true },
+      },
+    });
+    await svc.project('c1');
+    const patch = manager.update.mock.calls[0][2] as Record<string, unknown>;
+    expect(patch).not.toHaveProperty('classification');
+    expect(patch).not.toHaveProperty('overrides');
   });
 
   it('chạy lại: field đã override không bị ghi đè nhưng snapshot vẫn cập nhật', async () => {

@@ -41,11 +41,8 @@ export class GarageVoucherAllocationService {
     if (!voucherSettlesDebt(voucher) || !voucher.caseId) return 0;
     await this.projector.projectCase(manager, voucher.caseId);
     const debts = await manager.getRepository(DebtGarage).find({
-      where: {
-        caseId: voucher.caseId,
-        branchExternalId: voucher.branchExternalId,
-        isDeleted: false,
-      },
+      // Công nợ thuộc vụ việc; không lọc theo UUID KGara (GR/GN dùng chung UUID).
+      where: { caseId: voucher.caseId, isDeleted: false },
       order: { id: 'ASC' },
     });
     const plan = planVoucherAllocation({
@@ -107,14 +104,12 @@ export class GarageVoucherAllocationService {
   /** Bên trả mặc định của phiếu thu gắn vụ việc: còn nợ bảo hiểm thì BH trước (như V1), không thì KH. */
   async resolvePayer(
     manager: EntityManager,
-    branchId: string,
     caseId: string | null | undefined,
   ): Promise<'KH' | 'BH'> {
     if (!caseId) return 'KH';
     const insurer = await manager.getRepository(DebtGarage).findOne({
       where: {
         caseId,
-        branchExternalId: branchId,
         direction: 'RECEIVABLE',
         partyType: 'INSURER',
         isDeleted: false,

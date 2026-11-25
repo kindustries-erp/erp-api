@@ -11,7 +11,7 @@ import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
 import { RequirePermissions } from '@/auth/decorators/require-permissions.decorator';
 import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
-import { BranchId } from '@/kgara-api-core/decorators/branch-id.decorator';
+import { ErpBranchId } from '@/v2/core/branches-core';
 import { QueryGarageDebtDto } from '../dto/query-garage-debt.dto';
 import { QueryTimeHorizonCasesDto } from '../dto/query-time-horizon-cases.dto';
 import { parseOptionsFilters } from '../helpers/column-options-filters.helper';
@@ -39,12 +39,6 @@ export const TIME_HORIZONS = [
   'defaultRiskProvision',
 ] as const;
 
-/** Chi nhánh lấy từ header; công nợ luôn phải cách ly theo chi nhánh. */
-function requireBranch(branchId: string | undefined): string {
-  if (!branchId) throw new BadRequestException('Thiếu chi nhánh.');
-  return branchId;
-}
-
 /**
  * Công nợ garage v2 (chỉ đọc). Route cố định (`column-options`, `analytics`) đứng trước route có tham số.
  * Response list: `{ items, pagination, summaries }`.
@@ -66,11 +60,11 @@ export class DebtsGarageController {
   @Get('customers')
   customersList(
     @Query() query: QueryGarageDebtDto,
-    @BranchId() branchId: string,
+    @ErpBranchId() branchId: string | undefined,
   ) {
     return this.customers.findPage({
       ...query,
-      branchId: requireBranch(branchId),
+      branchId,
       from: query.date_from,
       to: query.date_to,
     });
@@ -81,7 +75,7 @@ export class DebtsGarageController {
   @Get('customers/column-options')
   customersColumnOptions(
     @Query('column') column: string,
-    @BranchId() branchId: string,
+    @ErpBranchId() branchId: string | undefined,
     @Query('search') search?: string,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
@@ -90,7 +84,7 @@ export class DebtsGarageController {
     return this.customers.findColumnOptions(
       column,
       { search, page, pageSize, filters: parseOptionsFilters(filters) },
-      { branchId: requireBranch(branchId) },
+      { branchId },
     );
   }
 
@@ -99,11 +93,11 @@ export class DebtsGarageController {
   @Get('suppliers')
   suppliersList(
     @Query() query: QueryGarageDebtDto,
-    @BranchId() branchId: string,
+    @ErpBranchId() branchId: string | undefined,
   ) {
     return this.suppliers.findPage({
       ...query,
-      branchId: requireBranch(branchId),
+      branchId,
       from: query.date_from,
       to: query.date_to,
     });
@@ -114,7 +108,7 @@ export class DebtsGarageController {
   @Get('suppliers/column-options')
   suppliersColumnOptions(
     @Query('column') column: string,
-    @BranchId() branchId: string,
+    @ErpBranchId() branchId: string | undefined,
     @Query('search') search?: string,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
@@ -123,7 +117,7 @@ export class DebtsGarageController {
     return this.suppliers.findColumnOptions(
       column,
       { search, page, pageSize, filters: parseOptionsFilters(filters) },
-      { branchId: requireBranch(branchId) },
+      { branchId },
     );
   }
 
@@ -131,12 +125,12 @@ export class DebtsGarageController {
   @ApiOperation({ summary: 'Tổng quan phân tích công nợ phải thu và phải trả' })
   @Get('analytics')
   analyticsOverview(
-    @BranchId() branchId: string,
+    @ErpBranchId() branchId: string | undefined,
     @Query('date_from') dateFrom?: string,
     @Query('date_to') dateTo?: string,
   ) {
     return this.analytics.getAnalytics({
-      branchId: requireBranch(branchId),
+      branchId,
       dateFrom,
       dateTo,
     });
@@ -148,14 +142,14 @@ export class DebtsGarageController {
   horizonCases(
     @Param('horizon') horizon: string,
     @Query() query: QueryTimeHorizonCasesDto,
-    @BranchId() branchId: string,
+    @ErpBranchId() branchId: string | undefined,
   ) {
     if (!(TIME_HORIZONS as readonly string[]).includes(horizon)) {
       throw new BadRequestException('Mốc thời gian không hợp lệ.');
     }
     return this.horizons.findCases({
       horizon,
-      branchId: requireBranch(branchId),
+      branchId,
       dateFrom: query.date_from,
       dateTo: query.date_to,
       search: query.search,

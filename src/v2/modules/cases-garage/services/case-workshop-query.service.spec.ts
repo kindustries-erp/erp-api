@@ -125,6 +125,14 @@ describe('CaseWorkshopQueryService', () => {
     expect(res.pagination.total).toBe(2);
   });
 
+  it('board: chuyển bộ lọc phân loại và chi nhánh không bắt buộc xuống truy vấn tiến độ', async () => {
+    const { svc, progress } = make();
+    await svc.board(undefined, { classification: 'OJ' }, NOW);
+    const [branch, q] = progress.findPage.mock.calls[0];
+    expect(branch).toBeUndefined();
+    expect(q).toMatchObject({ status: 'ALL', classification: 'OJ' });
+  });
+
   it('board: finishedDays tùy chỉnh', async () => {
     const { svc, progress } = make();
     await svc.board('B1', { finishedDays: 1 }, NOW);
@@ -138,7 +146,7 @@ describe('CaseWorkshopQueryService', () => {
     const items = await svc.timeline('B1', 'c1', NOW);
     expect(cases.findOwned).toHaveBeenCalledWith({}, 'B1', 'c1');
     expect(find.mock.calls[0][0]).toMatchObject({
-      where: { caseId: 'c1', branchExternalId: 'B1', isDeleted: false },
+      where: { caseId: 'c1', isDeleted: false },
       order: { startedAt: 'DESC' },
     });
     expect(items[0]).toMatchObject({ id: 'l2', durationMinutes: 60 });

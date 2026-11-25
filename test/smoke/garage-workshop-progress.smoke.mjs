@@ -1,8 +1,8 @@
 // Smoke trang tiến độ xưởng `api/v2/cases-garage` (quyền garage_workshop): board, nhật ký công đoạn/ghi chú,
 // sửa tay giờ, đổi status cha đóng công đoạn mở; đưa xe vào/bỏ khỏi bảng (giữ trạng thái, đổi trạng thái,
 // tạo xe mới). Xe KGara đổi trạng thái (ghi đè) phủ ở unit spec vì chi nhánh giả không có xe sync. Chỉ chạy trên staging/dev, KHÔNG production.
-// Dùng xe NATIVE trên chi nhánh giả `smoke-<tag>`, xóa mềm ở cuối.
-// Env: E2E_API_URL (mặc định suy từ PORT), E2E_TAO_EMAIL, E2E_PASSWORD (bắt buộc).
+// Dùng xe NATIVE (chi nhánh ERP theo E2E_ERP_BRANCH_ID, bỏ trống là không chi nhánh), xóa mềm ở cuối.
+// Env: E2E_API_URL (mặc định suy từ PORT), E2E_TAO_EMAIL, E2E_PASSWORD (bắt buộc), E2E_ERP_BRANCH_ID (tùy chọn, id `branches_management`).
 import { resolveApiUrl } from './e2e-ports.mjs';
 
 const BASE = resolveApiUrl();
@@ -13,7 +13,7 @@ if (!PASSWORD) {
   process.exit(2);
 }
 const tag = Date.now();
-const BR = `smoke-${tag}`;
+const BR = process.env.E2E_ERP_BRANCH_ID;
 const results = [];
 const check = (name, ok, detail = '') => {
   results.push(ok);
@@ -38,7 +38,7 @@ async function api(method, path, body) {
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
-      'x-kgara-branch-id': BR,
+      ...(BR ? { 'x-erp-branch-id': BR } : {}),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });

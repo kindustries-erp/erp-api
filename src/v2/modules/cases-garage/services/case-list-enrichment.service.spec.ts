@@ -7,7 +7,10 @@ import { ErpModuleCategory } from '@/module-config/entities/erp_module_category.
 import { KgaraGrossProfit } from '@/kgara-api-core/entities/kgara_gross_profit.entity';
 import { KgaraCaseLinkedInvoice } from '@/kgara-api-core/entities/kgara_case_linked_invoice.entity';
 import { KgaraCaseSettlement } from '@/kgara-api-core/entities/kgara_case_settlement.entity';
-import { CaseListEnrichmentService } from './case-list-enrichment.service';
+import {
+  CaseListEnrichmentService,
+  grossProfitKey,
+} from './case-list-enrichment.service';
 
 describe('CaseListEnrichmentService', () => {
   let cap: SqlCapture;
@@ -80,10 +83,39 @@ describe('CaseListEnrichmentService', () => {
     expect(cap.calls[0].params).toEqual(['k1']);
   });
 
-  it('grossProfitByCode: lọc chi nhánh + mã, không truy vấn khi không có mã', async () => {
-    expect((await service.grossProfitByCode('b1', [])).size).toBe(0);
+  it('grossProfitByCase: khớp mã + đơn vị KGara của vụ việc, không truy vấn khi rỗng', async () => {
+    expect((await service.grossProfitByCase([])).size).toBe(0);
     expect(cap.calls).toHaveLength(0);
-    await service.grossProfitByCode('b1', ['PS1']);
-    expect(cap.calls[0].params).toEqual(expect.arrayContaining(['b1', 'PS1']));
+    await service.grossProfitByCase([
+      { caseCode: 'PS1', branchExternalId: 'KG1' },
+      { caseCode: 'PS1', branchExternalId: 'KG1' },
+    ]);
+    expect(cap.calls[0].params).toEqual(['PS1']);
+  });
+
+  it('grossProfitByCase: hai đơn vị KGara trùng mã không đè nhau; đơn vị không yêu cầu bị bỏ', async () => {
+    const gp = (ext: string, doanhThu: number) => ({
+      vuViecCode: 'VV1',
+      branchExternalId: ext,
+      doanhThu,
+      chiPhi: 0,
+      loiNhuan: doanhThu,
+    });
+    const find = jest
+      .fn()
+      .mockResolvedValue([gp('KG1', 100), gp('KG2', 200), gp('KG3', 300)]);
+    const svc = new CaseListEnrichmentService(
+      {} as never,
+      {} as never,
+      {} as never,
+      { find } as never,
+    );
+    const map = await svc.grossProfitByCase([
+      { caseCode: 'VV1', branchExternalId: 'KG1' },
+      { caseCode: 'VV1', branchExternalId: 'KG2' },
+    ]);
+    expect(map.size).toBe(2);
+    expect(map.get(grossProfitKey('VV1', 'KG1'))?.revenue).toBe(100);
+    expect(map.get(grossProfitKey('VV1', 'KG2'))?.revenue).toBe(200);
   });
 });

@@ -19,7 +19,6 @@ import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
 import { ErpResource, ErpAction } from '@/v2/core/rbac-core';
-import { BranchId } from '../decorators/branch-id.decorator';
 import { KgaraCaseConfigService } from '../services/kgara-case-config.service';
 import { UpdateCaseConfigDto } from '../dto/update-case-config.dto';
 import { KgaraCaseLookupService } from '../services/kgara-case-lookup.service';
@@ -52,13 +51,10 @@ export class KgaraCasesController {
   @ApiQuery({ name: 'date_to', required: false })
   @ApiQuery({ name: 'date_type', required: false })
   @ApiQuery({ name: 'classification', required: false })
-  @ApiQuery({ name: 'branch_id', required: false })
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'q', required: false })
   async exportCasesExcel(
     @Res() res: Response,
-    @BranchId() headerBranchId: string,
-    @Query('branch_id') queryBranchId?: string,
     @Query('date_from') dateFrom?: string,
     @Query('date_to') dateTo?: string,
     @Query('date_type') dateType?: 'completion_date' | 'case_date',
@@ -66,9 +62,7 @@ export class KgaraCasesController {
     @Query('status') status?: string,
     @Query('q') q?: string,
   ) {
-    const effectiveBranchId = queryBranchId || headerBranchId;
     const buffer = await this.caseQueryService.exportCompletedCasesExcel({
-      branchId: effectiveBranchId || undefined,
       date_from: dateFrom,
       date_to: dateTo,
       date_type: dateType,
@@ -97,12 +91,9 @@ export class KgaraCasesController {
   @ApiQuery({ name: 'serviceType', required: false })
   @ApiQuery({ name: 'filtersStr', required: false })
   @ApiQuery({ name: 'sorts', required: false })
-  @ApiQuery({ name: 'branch_id', required: false })
   @ApiQuery({ name: 'q', required: false })
   async exportCaseServicesExcel(
     @Res() res: Response,
-    @BranchId() headerBranchId: string,
-    @Query('branch_id') queryBranchId?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('serviceType') serviceType?: string,
@@ -110,9 +101,7 @@ export class KgaraCasesController {
     @Query('sorts') sorts?: string | string[],
     @Query('q') q?: string,
   ) {
-    const effectiveBranchId = queryBranchId || headerBranchId;
     const buffer = await this.caseQueryService.exportCaseServicesExcel({
-      branchId: effectiveBranchId || undefined,
       from,
       to,
       serviceType,
@@ -139,8 +128,6 @@ export class KgaraCasesController {
   @Get('cases/services/column-options')
   @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getCaseServiceColumnOptions(
-    @BranchId() headerBranchId: string,
-    @Query('branch_id') queryBranchId: string,
     @Query('column') column: string,
     @Query('search') search: string = '',
     @Query('page') page: string = '1',
@@ -148,9 +135,8 @@ export class KgaraCasesController {
     @Query('filtersStr') filtersStr?: string,
     @Query('serviceType') serviceType?: string,
   ) {
-    const effectiveBranchId = queryBranchId || headerBranchId;
     return this.caseQueryService.getCaseServiceColumnOptions(
-      effectiveBranchId,
+      undefined,
       column,
       search,
       parseInt(page, 10) || 1,
@@ -163,8 +149,6 @@ export class KgaraCasesController {
   @Get('cases/services')
   @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getCaseServices(
-    @BranchId() headerBranchId: string,
-    @Query('branch_id') queryBranchId: string,
     @Query('page') page: string = '1',
     @Query('pageSize') pageSize: string = '20',
     @Query('q') q: string = '',
@@ -174,9 +158,7 @@ export class KgaraCasesController {
     @Query('filtersStr') filtersStr?: string,
     @Query('sorts') sorts?: string | string[],
   ) {
-    const effectiveBranchId = queryBranchId || headerBranchId;
     return this.caseQueryService.findCaseServices({
-      branchId: effectiveBranchId,
       page,
       pageSize,
       q,
@@ -191,7 +173,6 @@ export class KgaraCasesController {
   @Get('cases')
   @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getCases(
-    @BranchId() branchId: string,
     @Query('page') page: string = '1',
     @Query('pageSize') pageSize: string = '20',
     @Query('q') q: string = '',
@@ -202,7 +183,6 @@ export class KgaraCasesController {
     @Query('sorts') sorts?: string | string[],
   ) {
     return this.caseQueryService.findCases({
-      branchId,
       page,
       pageSize,
       q,
@@ -217,7 +197,6 @@ export class KgaraCasesController {
   @Get('cases/column-options')
   @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getCaseColumnOptions(
-    @BranchId() branchId: string,
     @Query('column') column: string,
     @Query('search') search: string = '',
     @Query('page') page: string = '1',
@@ -225,7 +204,6 @@ export class KgaraCasesController {
     @Query('filtersStr') filtersStr?: string,
   ) {
     return this.caseQueryService.getCaseColumnOptions({
-      branchId,
       column,
       search,
       page,
@@ -237,12 +215,10 @@ export class KgaraCasesController {
   @Get('cases/gross-profit-report')
   @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getGrossProfitReport(
-    @BranchId() branchId: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
   ) {
     return this.caseQueryService.getGrossProfitReport({
-      branchId,
       from,
       to,
     });
@@ -262,11 +238,8 @@ export class KgaraCasesController {
 
   @Get('cases/external/:externalId')
   @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
-  async getCaseByExternalId(
-    @Param('externalId') externalId: string,
-    @BranchId() branchId: string,
-  ) {
-    return this.caseLookupService.findCaseByExternalId(externalId, branchId);
+  async getCaseByExternalId(@Param('externalId') externalId: string) {
+    return this.caseLookupService.findCaseByExternalId(externalId);
   }
 
   @Get('cases/:id')

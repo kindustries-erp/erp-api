@@ -72,18 +72,14 @@ describe('CasesGarageController', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('thiếu chi nhánh thì từ chối, không chạm service', () => {
+  it('không gửi chi nhánh → service nhận undefined, không từ chối', async () => {
     const { controller, list, detail, grossProfit } = makeController();
-    expect(() => controller.listCases({}, '')).toThrow(BadRequestException);
-    expect(() => controller.byId('x', undefined as never)).toThrow(
-      BadRequestException,
-    );
-    expect(() => controller.grossProfitReport({}, '')).toThrow(
-      BadRequestException,
-    );
-    expect(list.findPage).not.toHaveBeenCalled();
-    expect(detail.findById).not.toHaveBeenCalled();
-    expect(grossProfit.getReport).not.toHaveBeenCalled();
+    await controller.listCases({}, undefined);
+    expect(list.findPage.mock.calls[0][0].branchId).toBeUndefined();
+    await controller.byId('x', undefined);
+    expect(detail.findById).toHaveBeenCalledWith(undefined, 'x');
+    await controller.grossProfitReport({}, undefined);
+    expect(grossProfit.getReport.mock.calls[0][0].branchId).toBeUndefined();
   });
 
   it('list đổi tên tham số query sang filter của service', async () => {

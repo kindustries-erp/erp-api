@@ -8,6 +8,7 @@ import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { KgaraBranch } from './entities/kgara_branch.entity';
+import { findSyncableBranches } from './helpers/syncable-branches.helper';
 import { KgaraSyncService } from './kgara-sync.service';
 import { KgaraAuthService } from './kgara-auth.service';
 import { KgaraBulkSyncService } from './services/kgara-bulk-sync.service';
@@ -20,8 +21,22 @@ import {
   isWithinSyncWindow,
   getNextSyncSlot,
   getSyncSlotKey,
+  getVnDateTimeParts,
   runSafeCronJob,
+  SYNC_HOURS,
 } from '../common/utils/cron.util';
+import {
+  KGARA_RECENT_SYNC_MONTHS,
+  recentMonthsRange,
+  splitMonthlyRanges,
+  type SyncDateRange,
+} from './helpers/sync-range-chunks.helper';
+
+interface BranchSyncStats {
+  deleted: number;
+  withInvoices: number;
+  detailsSynced: number;
+}
 
 @Injectable()
 export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
@@ -136,6 +151,16 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
           const from = firstDayTwoMonthsAgo.toLocaleDateString('en-CA');
           const to = now.toLocaleDateString('en-CA');
 
+          // Lượt cuối ngày: quét sâu 6 tháng gần nhất, tách theo tháng, mỗi tháng đúng khoảng.
+          const deepRanges = this.isLastSlotOfDay(now)
+            ? this.recentMonthlyRanges(now)
+            : null;
+          if (deepRanges) {
+            this.logger.log(
+              `Last slot of the day: deep sync ${deepRanges.length} monthly ranges (${deepRanges.at(-1)?.from} → ${deepRanges[0]?.to}).`,
+            );
+          }
+
           // Chỉ xử lý các tài khoản có credentials trong env (MAIN, OJ nếu có *_2)
           const configuredAccounts = this.authService.getConfiguredAccounts();
 
@@ -157,7 +182,14 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
             this.lastBranchSyncAlertKey = null;
           }
 
-          const branches = await this.branchRepo.find();
+          const { branches, linked } = await findSyncableBranches(
+            this.branchRepo,
+          );
+          if (!linked) {
+            this.logger.warn(
+              'Chưa có chi nhánh KGara nào liên kết chi nhánh ERP: quét tất cả chi nhánh KGara.',
+            );
+          }
 
           for (const branch of branches) {
             if (!branch.externalId) continue;
@@ -168,55 +200,21 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
               `Syncing cases and deletion check for branch ${branch.externalId} (account: ${accountKey}, ${from} to ${to})`,
             );
 
-            // Watermark incremental sync
-            const watermark = await this.syncService.getIncrementalWatermark(
-              branch.externalId,
-              '/api/v1/gr/cases/list',
-              accountKey,
-            );
-
-            // 1. Sync cases, gross profit, and soft deletion
-            const result = await this.syncService.syncCasesForBranch(
-              branch.externalId,
-              from,
-              to,
-              watermark,
-              accountKey,
-            );
-
-            if (result) {
-              totalDeleted += result.deletedCount;
-              totalWithInvoices += result.withLinkedInvoices.length;
-            }
-
-            // 2. Sync gross profit report across the sync window
-            try {
-              await this.syncService.syncGrossProfitForBranch(
-                branch.externalId,
-                from,
-                to,
-                accountKey,
-              );
-            } catch (gpErr: any) {
-              this.logger.warn(
-                `Gross profit sync for branch ${branch.externalId} (account: ${accountKey}) skipped: ${gpErr?.message}`,
-              );
-            }
-
-            // 3. Batch sync parts & labor details for cases that lack details
-            try {
-              const detailsRes = await this.syncService.syncCaseDetailsBatch(
-                branch.externalId,
-                { from, to, force: false, accountKey },
-              );
-              if (detailsRes) {
-                totalDetailsSynced += detailsRes.totalLinesSynced;
-              }
-            } catch (detailErr: any) {
-              this.logger.warn(
-                `Batch case details sync for branch ${branch.externalId} (account: ${accountKey}) skipped: ${detailErr?.message}`,
-              );
-            }
+            const stats = deepRanges
+              ? await this.syncBranchDeep(
+                  branch.externalId,
+                  accountKey,
+                  deepRanges,
+                )
+              : await this.syncBranchWindow(
+                  branch.externalId,
+                  accountKey,
+                  from,
+                  to,
+                );
+            totalDeleted += stats.deleted;
+            totalWithInvoices += stats.withInvoices;
+            totalDetailsSynced += stats.detailsSynced;
           }
 
           this.logger.log(
@@ -261,6 +259,126 @@ export class KgaraSyncScheduler implements OnModuleInit, OnModuleDestroy {
         `Không thể phân giải danh sách User nhận thông báo KGara: ${err?.message}`,
       );
       return [];
+    }
+  }
+
+  /** Lượt cuối ngày theo giờ VN (giờ lớn nhất trong `SYNC_HOURS`). */
+  protected isLastSlotOfDay(now: Date): boolean {
+    return getVnDateTimeParts(now).hour === Math.max(...SYNC_HOURS);
+  }
+
+  /** 6 tháng gần nhất tính từ hôm nay (giờ VN), tách theo tháng, tháng mới trước. */
+  private recentMonthlyRanges(now: Date): SyncDateRange[] {
+    const { year, month, day } = getVnDateTimeParts(now);
+    const range = recentMonthsRange(
+      `${year}-${month}-${day}`,
+      KGARA_RECENT_SYNC_MONTHS,
+    );
+    return range ? splitMonthlyRanges(range.from, range.to) : [];
+  }
+
+  /** Lượt thường: cửa sổ ngắn + watermark gia tăng, như trước. */
+  private async syncBranchWindow(
+    branchExternalId: string,
+    accountKey: KgaraAccountKey,
+    from: string,
+    to: string,
+  ): Promise<BranchSyncStats> {
+    const watermark = await this.syncService.getIncrementalWatermark(
+      branchExternalId,
+      '/api/v1/gr/cases/list',
+      accountKey,
+    );
+    const result = await this.syncService.syncCasesForBranch(
+      branchExternalId,
+      from,
+      to,
+      watermark,
+      accountKey,
+    );
+    const stats: BranchSyncStats = {
+      deleted: result?.deletedCount ?? 0,
+      withInvoices: result?.withLinkedInvoices.length ?? 0,
+      detailsSynced: 0,
+    };
+    stats.detailsSynced = await this.syncGpAndDetails(
+      branchExternalId,
+      accountKey,
+      { from, to },
+    );
+    return stats;
+  }
+
+  /**
+   * Lượt cuối ngày: từng tháng quét đúng khoảng (`exactRange`), kèm lợi nhuận gộp và chi tiết.
+   * Tháng lỗi chỉ ghi log rồi chạy tiếp tháng sau.
+   */
+  private async syncBranchDeep(
+    branchExternalId: string,
+    accountKey: KgaraAccountKey,
+    ranges: SyncDateRange[],
+  ): Promise<BranchSyncStats> {
+    const stats: BranchSyncStats = {
+      deleted: 0,
+      withInvoices: 0,
+      detailsSynced: 0,
+    };
+    for (const range of ranges) {
+      try {
+        const result = await this.syncService.syncCasesForBranch(
+          branchExternalId,
+          range.from,
+          range.to,
+          undefined,
+          accountKey,
+          { exactRange: true },
+        );
+        stats.deleted += result?.deletedCount ?? 0;
+        stats.withInvoices += result?.withLinkedInvoices.length ?? 0;
+      } catch (err: any) {
+        this.logger.warn(
+          `Deep sync ${range.from}..${range.to} for branch ${branchExternalId} (account: ${accountKey}) failed: ${err?.message}`,
+        );
+        continue;
+      }
+      stats.detailsSynced += await this.syncGpAndDetails(
+        branchExternalId,
+        accountKey,
+        range,
+      );
+    }
+    return stats;
+  }
+
+  /** Lợi nhuận gộp và chi tiết vật tư cho một khoảng; lỗi chỉ ghi log. Trả số dòng chi tiết đã sync. */
+  private async syncGpAndDetails(
+    branchExternalId: string,
+    accountKey: KgaraAccountKey,
+    { from, to }: SyncDateRange,
+  ): Promise<number> {
+    try {
+      await this.syncService.syncGrossProfitForBranch(
+        branchExternalId,
+        from,
+        to,
+        accountKey,
+      );
+    } catch (gpErr: any) {
+      this.logger.warn(
+        `Gross profit sync for branch ${branchExternalId} (account: ${accountKey}) skipped: ${gpErr?.message}`,
+      );
+    }
+    try {
+      const detailsRes = await this.syncService.syncCaseDetailsBatch(
+        branchExternalId,
+        { from, to, force: false, accountKey },
+      );
+      return detailsRes?.totalLinesSynced ?? 0;
+    } catch (detailErr: any) {
+      this.logger.warn(
+        `Batch case details sync for branch ${branchExternalId} (account: ${accountKey}) skipped: ${detailErr?.message}`,
+      );
+      return 0;
     }
   }
 

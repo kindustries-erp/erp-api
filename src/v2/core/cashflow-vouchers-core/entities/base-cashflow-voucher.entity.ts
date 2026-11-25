@@ -22,8 +22,18 @@ export type CashflowVoucherStatus =
  */
 export abstract class BaseCashflowVoucherEntity extends CoreSoftDeletableEntity {
   @Index()
-  @Column({ type: 'varchar', length: 100, name: 'branch_external_id' })
-  branchExternalId: string;
+  /** Đơn vị KGara (nguồn sync); null với chứng từ nhập ở ERP. Lọc chi nhánh dùng `branchId`. */
+  @Column({
+    type: 'varchar',
+    length: 100,
+    name: 'branch_external_id',
+    nullable: true,
+  })
+  branchExternalId: string | null;
+
+  /** Chi nhánh ERP (không bắt buộc); lọc chi nhánh trên V2 dùng cột này. */
+  @Column({ type: 'uuid', name: 'branch_id', nullable: true })
+  branchId: string | null;
 
   @Index({ unique: true })
   @Column({ type: 'varchar', length: 50, name: 'voucher_code' })

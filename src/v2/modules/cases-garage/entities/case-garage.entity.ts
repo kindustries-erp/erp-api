@@ -18,19 +18,13 @@ import type { CaseLineGarage } from './case-line-garage.entity';
   unique: true,
   where: '"external_id" IS NOT NULL',
 })
-@Index(
-  'UQ_cases_garage_case_code_active',
-  ['branchExternalId', 'accountKey', 'caseCode'],
-  {
-    unique: true,
-    where: '"is_deleted" = false AND "external_deleted_at" IS NULL',
-  },
-)
-@Index(
-  'IDX_cases_garage_workshop_tracked',
-  ['branchExternalId', 'workshopTrackedAt'],
-  { where: '"workshop_tracked_at" IS NOT NULL' },
-)
+@Index('UQ_cases_garage_case_code_active', ['accountKey', 'caseCode'], {
+  unique: true,
+  where: '"is_deleted" = false AND "external_deleted_at" IS NULL',
+})
+@Index('IDX_cases_garage_branch_tracked', ['branchId', 'workshopTrackedAt'], {
+  where: '"workshop_tracked_at" IS NOT NULL',
+})
 export class CaseGarage extends BaseCaseEntity<CaseStatus> {
   // ── Định danh và nguồn ────────────────────────────────────────────────────
   @Index()
@@ -41,10 +35,16 @@ export class CaseGarage extends BaseCaseEntity<CaseStatus> {
   @Column({ type: 'varchar', length: 100, name: 'external_id', nullable: true })
   externalId: string | null;
 
-  // ── Chi nhánh (giống V1: chi nhánh KGara + tài khoản) ─────────────────────
+  // ── Nguồn KGara (chỉ dùng khi đồng bộ; lọc chi nhánh dùng `branchId` ERP) ──
+  /** Đơn vị KGara (DonViID) của phiếu sync; null với xe nhập tay. GR/GN dùng chung UUID nên không dùng để lọc. */
   @Index()
-  @Column({ type: 'varchar', length: 100, name: 'branch_external_id' })
-  branchExternalId: string;
+  @Column({
+    type: 'varchar',
+    length: 100,
+    name: 'branch_external_id',
+    nullable: true,
+  })
+  branchExternalId: string | null;
 
   @Column({
     type: 'varchar',

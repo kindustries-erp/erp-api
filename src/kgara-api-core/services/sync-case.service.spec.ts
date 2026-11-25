@@ -265,6 +265,66 @@ describe('SyncCaseService (Kgara account scope)', () => {
     expect(ctx.caseRepo.save).not.toHaveBeenCalled();
   });
 
+  it('exactRange: gọi KGara đúng from..to (không lùi 2 tháng) và phát hiện xóa đúng khoảng đó', async () => {
+    const ctx = buildService();
+    ctx.client.getCases.mockResolvedValue({
+      data: [],
+      pagination: { totalPages: 1 },
+    });
+
+    await ctx.service.syncCasesForBranch(
+      BRANCH,
+      '2026-08-01',
+      '2026-08-31',
+      undefined,
+      KgaraAccountKey.MAIN,
+      { exactRange: true },
+    );
+
+    expect(ctx.client.getCases).toHaveBeenCalledWith(
+      BRANCH,
+      '2026-08-01',
+      '2026-08-31',
+      undefined,
+      1,
+      200,
+      KgaraAccountKey.MAIN,
+    );
+    expect(ctx.syncDeletion.detectAndMarkDeletedCases).toHaveBeenCalledWith(
+      BRANCH,
+      '2026-08-01',
+      '2026-08-31',
+      expect.any(Set),
+      KgaraAccountKey.MAIN,
+    );
+  });
+
+  it('không exactRange: vẫn lùi 2 tháng từ đầu tháng của from', async () => {
+    const ctx = buildService();
+    ctx.client.getCases.mockResolvedValue({
+      data: [],
+      pagination: { totalPages: 1 },
+    });
+
+    await ctx.service.syncCasesForBranch(
+      BRANCH,
+      '2026-09-01',
+      '2026-09-30',
+      undefined,
+      KgaraAccountKey.MAIN,
+    );
+
+    expect(ctx.client.getCases).toHaveBeenCalledWith(
+      BRANCH,
+      '2026-07-01',
+      '2026-09-30',
+      undefined,
+      1,
+      200,
+      KgaraAccountKey.MAIN,
+    );
+  });
+
   it('skips deletion detection when rows were skipped, so unmapped rows are not marked deleted', async () => {
     const ctx = buildService();
     ctx.client.getCases.mockResolvedValue({

@@ -14,6 +14,12 @@ import type {
   CaseSettlementSums,
 } from '../helpers/case-list.mapper';
 
+/** Khóa lãi gộp của một vụ việc: mã chứng từ chỉ duy nhất trong một đơn vị KGara nên ghép kèm `branch_external_id`. */
+export const grossProfitKey = (
+  caseCode: string,
+  branchExternalId: string | null,
+): string => `${branchExternalId ?? ''}|${caseCode}`;
+
 /** Số liệu phụ của một trang vụ việc: tổng cấn trừ (RECEIPT/PAYMENT) và hóa đơn liên kết, mỗi loại một truy vấn gộp. */
 @Injectable()
 export class CaseListEnrichmentService {
@@ -48,19 +54,27 @@ export class CaseListEnrichmentService {
     return map;
   }
 
-  /** Lãi gộp KGara theo `branch|mã chứng từ`, lấy dòng mới nhất mỗi mã. */
-  async grossProfitByCode(
-    branchId: string,
-    codes: string[],
+  /**
+   * Lãi gộp KGara của các vụ việc, lấy dòng mới nhất mỗi vụ việc. Khớp theo mã chứng từ và đơn vị KGara
+   * (`branch_external_id`) của chính vụ việc, để hai đơn vị trùng mã không đè nhau. Khóa map: `grossProfitKey`.
+   */
+  async grossProfitByCase(
+    cases: { caseCode: string; branchExternalId: string | null }[],
   ): Promise<Map<string, CaseGrossProfitRef>> {
     const map = new Map<string, CaseGrossProfitRef>();
+    const codes = [...new Set(cases.map((c) => c.caseCode))];
     if (!codes.length) return map;
+    const wanted = new Set(
+      cases.map((c) => grossProfitKey(c.caseCode, c.branchExternalId)),
+    );
     const rows = await this.grossProfits.find({
-      where: { branchExternalId: branchId, vuViecCode: In(codes) },
+      where: { vuViecCode: In(codes) },
       order: { updatedAt: 'ASC' },
     });
     for (const g of rows) {
-      map.set(g.vuViecCode as string, {
+      const key = grossProfitKey(g.vuViecCode as string, g.branchExternalId);
+      if (!wanted.has(key)) continue;
+      map.set(key, {
         revenue: g.doanhThu,
         cost: g.chiPhi,
         profit: g.loiNhuan,

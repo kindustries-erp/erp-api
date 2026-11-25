@@ -36,7 +36,7 @@ export interface CaseResponse {
   origin: CaseOrigin;
   caseCode: string;
   externalId: string | null;
-  branchExternalId: string;
+  branchExternalId: string | null;
   accountKey: string;
   branchId: string | null;
   licensePlate: string | null;

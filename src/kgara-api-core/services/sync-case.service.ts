@@ -147,6 +147,7 @@ export class SyncCaseService {
     to?: string,
     updatedSince?: string,
     accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
+    options?: { exactRange?: boolean },
   ): Promise<{ deletedCount: number; withLinkedInvoices: string[] }> {
     this.logger.log(
       `Syncing cases for branch ${branchExternalId} (account: ${accountKey})...`,
@@ -159,14 +160,17 @@ export class SyncCaseService {
     let skippedCount = 0;
     let conflictCount = 0;
 
-    // Compute effective lookback date range (look back 2 months to catch cross-month ongoing service cases)
+    // Compute effective lookback date range (look back 2 months to catch cross-month ongoing service cases).
+    // `exactRange` (đồng bộ tách theo tháng): gọi KGara đúng from..to, không lùi.
     let effectiveFrom: string | undefined = from;
     let effectiveTo: string | undefined = to;
 
     const parsedFrom = parseSafeDate(from);
     const parsedTo = parseSafeDate(to);
 
-    if (parsedFrom) {
+    if (options?.exactRange && from && to) {
+      // giữ nguyên from..to
+    } else if (parsedFrom) {
       const lookbackFrom = new Date(
         parsedFrom.getFullYear(),
         parsedFrom.getMonth() - 2,

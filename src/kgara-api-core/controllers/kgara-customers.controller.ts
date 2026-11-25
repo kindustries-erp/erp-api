@@ -8,7 +8,6 @@ import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CoreRbacGuard } from '../../auth/guards/core-rbac.guard';
 import { RequirePermissions } from '../../auth/decorators/require-permissions.decorator';
 import { ErpResource, ErpAction } from '@/v2/core/rbac-core';
-import { BranchId } from '../decorators/branch-id.decorator';
 import { KgaraCustomerCasesDetailService } from '../services/kgara-customer-cases-detail.service';
 import { KgaraCustomersDebtQueryService } from '../services/kgara-customers-debt-query.service';
 
@@ -30,7 +29,6 @@ export class KgaraCustomersController {
     action: ErpAction.READ,
   })
   async getCustomersDebt(
-    @BranchId() branchId: string,
     @Query('page') page: string = '1',
     @Query('pageSize') pageSize: string = '20',
     @Query('q') q: string = '',
@@ -41,7 +39,7 @@ export class KgaraCustomersController {
     @Query('column_filters') columnFiltersParam?: string,
     @Query('column_search') columnSearchParam?: string,
   ) {
-    return this.customersDebtQueryService.getCustomersDebt(branchId, {
+    return this.customersDebtQueryService.getCustomersDebt(undefined, {
       page,
       pageSize,
       q,
@@ -60,7 +58,6 @@ export class KgaraCustomersController {
     action: ErpAction.READ,
   })
   async getCustomersDebtColumnOptions(
-    @BranchId() branchId: string,
     @Query('column') column: string,
     @Query('search') search: string = '',
     @Query('page') page: string = '1',
@@ -104,9 +101,6 @@ export class KgaraCustomersController {
       };
     }
     if (column === 'caseCount') {
-      const branchCond = branchId
-        ? `AND "branch_external_id" = '${branchId.replace(/'/g, "''")}'`
-        : '';
       const rawCounts = await this.caseRepo.manager.query(`
         SELECT so_phieu::text AS value FROM (
           SELECT COUNT("id") AS so_phieu
@@ -117,7 +111,6 @@ export class KgaraCustomersController {
             AND ("tinh_trang_dich_vu" = 3 OR "ten_tinh_trang_dich_vu" = 'Kết thúc' OR "ten_tinh_trang_dich_vu" ILIKE '%kết thúc%' OR "ten_tinh_trang_dich_vu" ILIKE '%hoàn tất%')
             AND "ngay_hoan_thanh_cong_viec" IS NOT NULL
             AND "ngay_hoan_thanh_cong_viec" >= '2026-07-01'
-            ${branchCond}
           GROUP BY COALESCE(NULLIF(TRIM("bien_so_xe"), ''), 'CHUA_CO_BKS')
         ) sub
         GROUP BY so_phieu
@@ -198,9 +191,6 @@ export class KgaraCustomersController {
       .createQueryBuilder('case')
       .select(`DISTINCT ${selectExpr}`, 'value');
 
-    if (branchId) {
-      query.andWhere('case.branchExternalId = :branchId', { branchId });
-    }
     query.andWhere('case.kgaraDeletedAt IS NULL');
     query.andWhere('case.excludeFromReports IS NOT TRUE');
     query.andWhere('case.excludeFromDebt IS NOT TRUE');
@@ -418,12 +408,11 @@ export class KgaraCustomersController {
     action: ErpAction.READ,
   })
   async getCasesByCustomer(
-    @BranchId() branchId: string,
     @Param('customerCode') customerCode: string,
     @Query('licensePlate') licensePlate?: string,
   ) {
     return this.customerCasesDetailService.getCasesByCustomer(
-      branchId,
+      undefined,
       customerCode,
       licensePlate,
     );

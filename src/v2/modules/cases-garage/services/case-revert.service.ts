@@ -26,9 +26,14 @@ export class CaseRevertService {
   ) {}
 
   /** `fields` rỗng hoặc bỏ trống: về hết mọi field đang override của header. */
-  revertCase(branch: string, id: string, fields?: string[], actorId?: string) {
+  revertCase(
+    branchId: string | undefined,
+    id: string,
+    fields?: string[],
+    actorId?: string,
+  ) {
     return this.dataSource.transaction(async (m) => {
-      const current = await this.cases.findOwned(m, branch, id, true);
+      const current = await this.cases.findOwned(m, branchId, id, true);
       const keys = this.pickKeys(current.overrides, fields);
       const { values, overrides } = revertFields(
         keys,
@@ -47,13 +52,13 @@ export class CaseRevertService {
   }
 
   revertLine(
-    branch: string,
+    branchId: string | undefined,
     caseId: string,
     lineId: string,
     fields?: string[],
   ) {
     return this.dataSource.transaction(async (m) => {
-      await this.cases.findOwned(m, branch, caseId, true);
+      await this.cases.findOwned(m, branchId, caseId, true);
       const line = await m.findOne(CaseLineGarage, {
         where: { id: lineId, caseId },
       });

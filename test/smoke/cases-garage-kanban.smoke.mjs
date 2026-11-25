@@ -1,6 +1,6 @@
 // Smoke Kanban `api/v2/cases-garage`: đổi status xe sync tự do (QUOTED -> INTAKE), revert, đổi công đoạn,
 // và NATIVE vẫn bị chặn bước lùi. Chỉ chạy trên staging/dev, KHÔNG production. Luôn hoàn trạng thái cũ ở cuối.
-// Env: E2E_API_URL (mặc định suy từ PORT), E2E_TAO_EMAIL, E2E_PASSWORD (bắt buộc), E2E_SYNC_BRANCH (bắt buộc, chi nhánh có xe KGARA_SYNC).
+// Env: E2E_API_URL (mặc định suy từ PORT), E2E_TAO_EMAIL, E2E_PASSWORD (bắt buộc), E2E_SYNC_BRANCH (bắt buộc, id chi nhánh ERP `branches_management` có xe KGARA_SYNC).
 import { resolveApiUrl } from './e2e-ports.mjs';
 
 const BASE = resolveApiUrl();
@@ -12,7 +12,8 @@ if (!PASSWORD || !SYNC_BR) {
   process.exit(2);
 }
 const tag = Date.now();
-const BR = `smoke-${tag}`;
+// Xe NATIVE tạo trên cùng chi nhánh ERP với xe sync.
+const BR = SYNC_BR;
 const results = [];
 const check = (name, ok, detail = '') => {
   results.push(ok);
@@ -36,7 +37,7 @@ async function api(method, path, branch, body) {
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
-      'x-kgara-branch-id': branch,
+      'x-erp-branch-id': branch,
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });

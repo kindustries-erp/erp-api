@@ -35,7 +35,7 @@ export class ErpBranchController {
     return this.service.findAll(query);
   }
 
-  /** Liên kết nguồn ngoài của chi nhánh (Kgara: `externalId`), để web gửi `x-kgara-branch-id`. */
+  /** Liên kết nguồn ngoài của chi nhánh (Kgara: `externalId`, `accountKey`), dùng khi đối chiếu với đơn vị KGara. */
   @Get(':id/external-links')
   async findExternalLinks(@Param('id') id: string) {
     const links = await this.externalLinks.findByBranch(id);

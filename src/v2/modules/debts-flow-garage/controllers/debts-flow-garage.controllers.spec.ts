@@ -47,16 +47,21 @@ describe('CashflowVoucherCommandsController', () => {
     }
   });
 
-  it('thiếu chi nhánh thì 400, không chạm flow', () => {
+  it('không gửi chi nhánh → flow nhận undefined', async () => {
     const { c, flow } = makeVoucher();
-    const none = undefined as never;
-    expect(() => c.create({} as never, none, req)).toThrow(BadRequestException);
-    expect(() => c.update(ID, {}, none, req)).toThrow(BadRequestException);
-    expect(() => c.changeStatus(ID, { status: 'PAID' }, none, req)).toThrow(
-      BadRequestException,
+    await c.create({ amount: 1 } as never, undefined, req);
+    expect(flow.recordVoucher).toHaveBeenCalledWith(
+      undefined,
+      { amount: 1 },
+      'u1',
     );
-    expect(() => c.cancel(ID, none, req)).toThrow(BadRequestException);
-    expect(flow.recordVoucher).not.toHaveBeenCalled();
+    await c.cancel(ID, undefined, req);
+    expect(flow.changeVoucherStatus).toHaveBeenCalledWith(
+      undefined,
+      ID,
+      'CANCELLED',
+      'u1',
+    );
   });
 
   it('chuyển chi nhánh và người thao tác; hủy dùng trạng thái CANCELLED', async () => {
@@ -96,17 +101,21 @@ describe('DebtAllocationsController', () => {
     }
   });
 
-  it('bắt buộc Idempotency-Key và chi nhánh, không chạm flow khi thiếu', () => {
+  it('bắt buộc Idempotency-Key; chi nhánh không bắt buộc', async () => {
     const { c, flow } = makeAlloc();
     expect(() => c.allocate({} as never, undefined, 'B1', req)).toThrow(
-      BadRequestException,
-    );
-    expect(() => c.allocate({} as never, 'k', undefined as never, req)).toThrow(
       BadRequestException,
     );
     expect(() => c.reverse(ID, '  ', 'B1', req)).toThrow(BadRequestException);
     expect(flow.allocate).not.toHaveBeenCalled();
     expect(flow.reverseAllocation).not.toHaveBeenCalled();
+    await c.allocate({ debtId: ID, amount: 5 } as never, 'k', undefined, req);
+    expect(flow.allocate).toHaveBeenCalledWith(
+      undefined,
+      { debtId: ID, amount: 5 },
+      'k',
+      'u1',
+    );
   });
 
   it('chuyển khóa, chi nhánh, người thao tác xuống flow', async () => {

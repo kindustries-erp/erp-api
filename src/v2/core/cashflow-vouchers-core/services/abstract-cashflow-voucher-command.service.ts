@@ -57,9 +57,9 @@ export abstract class AbstractCashflowVoucherCommandService {
     manager: EntityManager,
     id: string,
     patch: UpdateCashflowVoucherInput,
-    branchExternalId?: string,
+    branchId?: string,
   ): Promise<BaseCashflowVoucherEntity> {
-    const row = await this.load(manager, id, branchExternalId);
+    const row = await this.load(manager, id, branchId);
     if (!DRAFT.includes(row.status)) {
       throw new BadRequestException(`Phiếu ${row.status} không sửa được`);
     }
@@ -74,22 +74,22 @@ export abstract class AbstractCashflowVoucherCommandService {
     manager: EntityManager,
     id: string,
     patch: UpdateCashflowVoucherInput,
-    branchExternalId?: string,
+    branchId?: string,
   ): Promise<BaseCashflowVoucherEntity> {
-    const row = await this.load(manager, id, branchExternalId);
+    const row = await this.load(manager, id, branchId);
     if (row.status === 'CANCELLED') {
       throw new BadRequestException('Phiếu đã hủy không sửa được');
     }
     return this.applyPatch(manager, row, patch);
   }
 
-  /** Khóa dòng phiếu (`pessimistic_write`); khác chi nhánh coi như không tồn tại. */
+  /** Khóa dòng phiếu (`pessimistic_write`); có chọn chi nhánh ERP thì khác chi nhánh coi như không tồn tại. */
   lock(
     manager: EntityManager,
     id: string,
-    branchExternalId?: string,
+    branchId?: string,
   ): Promise<BaseCashflowVoucherEntity> {
-    return this.load(manager, id, branchExternalId);
+    return this.load(manager, id, branchId);
   }
 
   private applyPatch(
@@ -110,9 +110,9 @@ export abstract class AbstractCashflowVoucherCommandService {
     manager: EntityManager,
     id: string,
     next: CashflowVoucherStatus,
-    branchExternalId?: string,
+    branchId?: string,
   ): Promise<BaseCashflowVoucherEntity> {
-    const row = await this.load(manager, id, branchExternalId);
+    const row = await this.load(manager, id, branchId);
     if (!CASHFLOW_VOUCHER_TRANSITIONS[row.status].includes(next)) {
       throw new BadRequestException(`Không chuyển ${row.status} sang ${next}`);
     }
@@ -123,18 +123,14 @@ export abstract class AbstractCashflowVoucherCommandService {
   protected async load(
     manager: EntityManager,
     id: string,
-    branchExternalId?: string,
+    branchId?: string,
   ): Promise<BaseCashflowVoucherEntity> {
     const qb = manager
       .getRepository(this.voucherTarget)
       .createQueryBuilder('v')
       .setLock('pessimistic_write')
       .where('v.id = :id AND v.isDeleted = false', { id });
-    if (branchExternalId) {
-      qb.andWhere('v.branchExternalId = :branchExternalId', {
-        branchExternalId,
-      });
-    }
+    if (branchId) qb.andWhere('v.branchId = :branchId', { branchId });
     const row = await qb.getOne();
     if (!row) throw new NotFoundException('Không có phiếu thu chi');
     return row;

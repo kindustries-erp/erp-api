@@ -34,6 +34,7 @@ export abstract class AbstractDebtOriginService implements DebtOriginPort {
 
     const fields = {
       branchExternalId: c.branchExternalId,
+      ...(c.branchId !== undefined ? { branchId: c.branchId } : {}),
       caseId: c.caseId ?? null,
       partnerId: c.partnerId ?? null,
       partyCode: c.partyCode,

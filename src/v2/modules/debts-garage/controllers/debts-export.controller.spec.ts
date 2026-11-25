@@ -5,7 +5,7 @@ import type { DebtsExportJobsService } from '../services/debts-export-jobs.servi
 function makeController() {
   const history = jest.fn().mockReturnValue({ items: [] });
   const jobs = {
-    start: jest.fn().mockReturnValue({ jobId: 'j1' }),
+    startForErpBranch: jest.fn().mockResolvedValue({ jobId: 'j1' }),
     runner: jest.fn().mockReturnValue({ listHistoryForUser: history }),
   };
   const controller = new DebtsExportController(
@@ -15,15 +15,20 @@ function makeController() {
 }
 
 describe('DebtsExportController', () => {
-  it('start chuyển kind, chi nhánh và user cho service', () => {
+  it('start chuyển kind, chi nhánh ERP và user cho service (service đổi sang đơn vị KGara)', async () => {
     const { controller, jobs } = makeController();
 
-    const res = controller.start('customers', {}, 'b1', {
+    const res = await controller.start('customers', {}, 'b1', {
       user: { sub: 'u1' },
     });
 
     expect(res).toEqual({ jobId: 'j1' });
-    expect(jobs.start).toHaveBeenCalledWith('customers', {}, 'b1', 'u1');
+    expect(jobs.startForErpBranch).toHaveBeenCalledWith(
+      'customers',
+      {},
+      'b1',
+      'u1',
+    );
   });
 
   it('thiếu user trong token thì từ chối', () => {

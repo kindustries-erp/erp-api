@@ -12,7 +12,7 @@ import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
 import { RequirePermissions } from '@/auth/decorators/require-permissions.decorator';
 import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
-import { BranchId } from '@/kgara-api-core/decorators/branch-id.decorator';
+import { ErpBranchId } from '@/v2/core/branches-core';
 import { QueryCaseProgressDto } from '../dto/case-progress.dto';
 import { QueryCasesGarageDto } from '../dto/query-cases-garage.dto';
 import { CaseColumnOptionsService } from '../services/case-column-options.service';
@@ -23,12 +23,6 @@ import { CaseServicesQueryService } from '../services/case-services-query.servic
 import { GrossProfitReportService } from '../services/gross-profit-report.service';
 
 const GARAGE_READ = { resource: ErpResource.GARAGE, action: ErpAction.READ };
-
-/** Chi nhánh lấy từ header; vụ việc luôn phải cách ly theo chi nhánh. */
-function requireBranch(branchId: string | undefined): string {
-  if (!branchId) throw new BadRequestException('Thiếu chi nhánh.');
-  return branchId;
-}
 
 /**
  * Vụ việc Kgara v2 (chỉ đọc). Route cố định khai báo trước `:id` để không bị `:id` nuốt.
@@ -51,9 +45,12 @@ export class CasesGarageController {
   @RequirePermissions(GARAGE_READ)
   @ApiOperation({ summary: 'Danh sách vụ việc' })
   @Get()
-  listCases(@Query() q: QueryCasesGarageDto, @BranchId() branchId: string) {
+  listCases(
+    @Query() q: QueryCasesGarageDto,
+    @ErpBranchId() branchId: string | undefined,
+  ) {
     return this.list.findPage({
-      branchId: requireBranch(branchId),
+      branchId,
       page: q.page,
       pageSize: q.pageSize,
       search: q.search,
@@ -74,9 +71,9 @@ export class CasesGarageController {
   @Get('progress')
   progressBoard(
     @Query() q: QueryCaseProgressDto,
-    @BranchId() branchId: string,
+    @ErpBranchId() branchId: string | undefined,
   ) {
-    return this.progress.findPage(requireBranch(branchId), q);
+    return this.progress.findPage(branchId, q);
   }
 
   @RequirePermissions(GARAGE_READ)
@@ -84,13 +81,13 @@ export class CasesGarageController {
   @Get('column-options')
   columnOptions(
     @Query('column') column: string,
-    @BranchId() branchId: string,
+    @ErpBranchId() branchId: string | undefined,
     @Query('search') search?: string,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
     @Query('filters') filters?: string,
   ) {
-    return this.options.findOptions(requireBranch(branchId), column, {
+    return this.options.findOptions(branchId, column, {
       search,
       page: Number(page) || undefined,
       pageSize: Number(pageSize) || undefined,
@@ -101,9 +98,12 @@ export class CasesGarageController {
   @RequirePermissions(GARAGE_READ)
   @ApiOperation({ summary: 'Hạng mục dịch vụ và phụ tùng của vụ việc' })
   @Get('services')
-  listServices(@Query() q: QueryCasesGarageDto, @BranchId() branchId: string) {
+  listServices(
+    @Query() q: QueryCasesGarageDto,
+    @ErpBranchId() branchId: string | undefined,
+  ) {
     return this.services.findPage({
-      branchId: requireBranch(branchId),
+      branchId,
       page: q.page,
       pageSize: q.pageSize,
       search: q.search,
@@ -125,10 +125,10 @@ export class CasesGarageController {
   @Get('gross-profit-report')
   grossProfitReport(
     @Query() q: QueryCasesGarageDto,
-    @BranchId() branchId: string,
+    @ErpBranchId() branchId: string | undefined,
   ) {
     return this.grossProfit.getReport({
-      branchId: requireBranch(branchId),
+      branchId,
       from: q.date_from,
       to: q.date_to,
       page: q.page,
@@ -139,8 +139,11 @@ export class CasesGarageController {
   @RequirePermissions(GARAGE_READ)
   @ApiOperation({ summary: 'Chi tiết vụ việc theo mã chứng từ' })
   @Get('by-code/:code')
-  byCode(@Param('code') code: string, @BranchId() branchId: string) {
-    return this.detail.findByCode(requireBranch(branchId), code);
+  byCode(
+    @Param('code') code: string,
+    @ErpBranchId() branchId: string | undefined,
+  ) {
+    return this.detail.findByCode(branchId, code);
   }
 
   @RequirePermissions(GARAGE_READ)
@@ -148,8 +151,8 @@ export class CasesGarageController {
   @Get(':id')
   byId(
     @Param('id', new ParseUUIDPipe()) id: string,
-    @BranchId() branchId: string,
+    @ErpBranchId() branchId: string | undefined,
   ) {
-    return this.detail.findById(requireBranch(branchId), id);
+    return this.detail.findById(branchId, id);
   }
 }
