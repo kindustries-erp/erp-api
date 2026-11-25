@@ -263,7 +263,7 @@ Plane: [KINDU-xx / không theo dõi]
 - **Rollback Strategy**: hoàn tác migration và code an toàn khi có sự cố.
 
 ### Quy tắc backend bắt buộc
-- Mỗi file dưới 180 dòng. Tách Controller/Service vượt ngưỡng theo `/erp-api-structure`.
+- Ngưỡng file: Controller 300 / Service 500 / Engine 800 dòng. Tách file vượt ngưỡng theo `/erp-api-structure`.
 - Không trả Entity thẳng từ Controller.
 - Test runner duy nhất là `jest`. **Cấm** gõ `vitest` trong `erp-api`.
 

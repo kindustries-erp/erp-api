@@ -26,6 +26,11 @@ import type { CaseLineGarage } from './case-line-garage.entity';
     where: '"is_deleted" = false AND "external_deleted_at" IS NULL',
   },
 )
+@Index(
+  'IDX_cases_garage_workshop_tracked',
+  ['branchExternalId', 'workshopTrackedAt'],
+  { where: '"workshop_tracked_at" IS NOT NULL' },
+)
 export class CaseGarage extends BaseCaseEntity<CaseStatus> {
   // ── Định danh và nguồn ────────────────────────────────────────────────────
   @Index()
@@ -164,6 +169,15 @@ export class CaseGarage extends BaseCaseEntity<CaseStatus> {
     nullable: true,
   })
   advisorName: string | null;
+
+  // ── Bảng tiến độ xưởng ────────────────────────────────────────────────────
+  /** Thời điểm nhân viên xưởng đưa xe vào bảng tiến độ; NULL là không có trên bảng. */
+  @Column({ type: 'timestamptz', name: 'workshop_tracked_at', nullable: true })
+  workshopTrackedAt: Date | null;
+
+  /** Người đưa xe vào bảng (`users.id`, trỏ mềm, không FK). */
+  @Column({ type: 'uuid', name: 'workshop_tracked_by', nullable: true })
+  workshopTrackedBy: string | null;
 
   // ── Override v2 trên dữ liệu sync ─────────────────────────────────────────
   /** Giá trị mới nhất sync từ v1 (khóa camelCase). */

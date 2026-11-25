@@ -53,10 +53,15 @@ export class CasesGarageService {
     );
   }
 
-  async updateStatus(branch: string, id: string, status: CaseStatus) {
+  async updateStatus(
+    branch: string,
+    id: string,
+    status: CaseStatus,
+    actorId = '',
+  ) {
     return wrap(
       'Đã đổi trạng thái',
-      await this.commands.updateStatus(branch, id, status),
+      await this.commands.updateStatus(branch, id, status, actorId),
     );
   }
 
@@ -103,10 +108,15 @@ export class CasesGarageService {
     );
   }
 
-  async revertCase(branch: string, id: string, fields?: string[]) {
+  async revertCase(
+    branch: string,
+    id: string,
+    fields?: string[],
+    actorId = '',
+  ) {
     return wrap(
       'Đã về giá trị KGara',
-      await this.reverts.revertCase(branch, id, fields),
+      await this.reverts.revertCase(branch, id, fields, actorId),
     );
   }
 

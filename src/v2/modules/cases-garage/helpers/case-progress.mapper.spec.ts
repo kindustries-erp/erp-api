@@ -1,4 +1,4 @@
-import { CaseStatus } from '../entities/case-garage.enums';
+import { CaseOrigin, CaseStatus } from '../entities/case-garage.enums';
 import {
   computeElapsedMinutes,
   computeIsOverdue,
@@ -12,13 +12,19 @@ describe('case-progress.mapper', () => {
     const started = new Date('2026-11-22T08:30:00Z');
     expect(
       computeElapsedMinutes(
-        { startedAt: started, receivedAt: null, completedAt: null },
+        {
+          status: CaseStatus.IN_PROGRESS,
+          startedAt: started,
+          receivedAt: null,
+          completedAt: null,
+        },
         now,
       ),
     ).toBe(90);
     expect(
       computeElapsedMinutes(
         {
+          status: CaseStatus.COMPLETED,
           startedAt: null,
           receivedAt: new Date('2026-11-22T09:00:00Z'),
           completedAt: new Date('2026-11-22T09:30:00Z'),
@@ -26,9 +32,26 @@ describe('case-progress.mapper', () => {
         now,
       ),
     ).toBe(30);
+    // Xe mở lại (không còn Hoàn thành) đếm tiếp tới hiện tại dù còn completedAt cũ.
     expect(
       computeElapsedMinutes(
-        { startedAt: null, receivedAt: null, completedAt: null },
+        {
+          status: CaseStatus.IN_PROGRESS,
+          startedAt: null,
+          receivedAt: new Date('2026-11-22T09:00:00Z'),
+          completedAt: new Date('2026-11-22T09:30:00Z'),
+        },
+        now,
+      ),
+    ).toBe(60);
+    expect(
+      computeElapsedMinutes(
+        {
+          status: CaseStatus.INTAKE,
+          startedAt: null,
+          receivedAt: null,
+          completedAt: null,
+        },
         now,
       ),
     ).toBeNull();
@@ -88,5 +111,21 @@ describe('case-progress.mapper', () => {
         now,
       ).workSummary,
     ).toBe('dòng');
+  });
+
+  it('origin: trả nguồn vụ việc để web tính trạng thái được đổi', () => {
+    const item = toCaseProgressItem(
+      {
+        id: 'c1',
+        caseCode: 'VV1',
+        status: CaseStatus.QUOTED,
+        origin: CaseOrigin.KGARA_SYNC,
+        overrides: {},
+      } as never,
+      null,
+      null,
+      now,
+    );
+    expect(item.origin).toBe(CaseOrigin.KGARA_SYNC);
   });
 });

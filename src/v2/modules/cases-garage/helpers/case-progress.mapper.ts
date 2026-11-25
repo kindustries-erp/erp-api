@@ -9,14 +9,18 @@ const FINISHED: ReadonlySet<CaseStatus> = new Set([
   CaseStatus.CANCELLED,
 ]);
 
-/** Số phút đã làm. Hiệu hai instant tuyệt đối nên không phụ thuộc múi giờ; null khi thiếu mốc bắt đầu. */
+/**
+ * Số phút đã làm. Hiệu hai instant tuyệt đối nên không phụ thuộc múi giờ; null khi thiếu mốc bắt đầu.
+ * Chỉ chốt ở `completedAt` khi xe đang Hoàn thành (xe mở lại thì đếm tiếp tới hiện tại).
+ */
 export function computeElapsedMinutes(
-  c: Pick<CaseGarage, 'startedAt' | 'receivedAt' | 'completedAt'>,
+  c: Pick<CaseGarage, 'status' | 'startedAt' | 'receivedAt' | 'completedAt'>,
   now: Date,
 ): number | null {
   const start = c.startedAt ?? c.receivedAt;
   if (!start) return null;
-  const end = c.completedAt ?? now;
+  const end =
+    c.status === CaseStatus.COMPLETED && c.completedAt ? c.completedAt : now;
   return Math.max(0, Math.floor((end.getTime() - start.getTime()) / 60000));
 }
 
@@ -56,7 +60,10 @@ export function toCaseProgressItem(
     progressPercent: c.progressPercent ?? null,
     expectedCompletionAt: iso(c.expectedCompletionAt),
     status: c.status,
+    origin: c.origin,
     statusName: c.statusName ?? null,
+    completedAt: iso(c.completedAt),
+    workshopTrackedAt: iso(c.workshopTrackedAt),
     elapsedMinutes: computeElapsedMinutes(c, now),
     isOverdue: computeIsOverdue(c, now),
     overriddenFields: overriddenFields(c.overrides),

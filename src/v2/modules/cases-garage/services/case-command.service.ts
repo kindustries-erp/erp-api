@@ -18,6 +18,7 @@ import {
 import { assertHeaderPatchAllowed } from '../helpers/case-origin.guard';
 import { markOverrides } from '../helpers/case-override.helper';
 import { CASE_OVERRIDABLE_KEYS } from '../helpers/case-override.keys';
+import { syncStageOnStatusChange } from '../helpers/case-progress-stage.closer';
 import { canTransition, statusToKgaraCode } from '../helpers/kgara-status.map';
 import { CaseLineWriter } from './case-line-writer.service';
 
@@ -148,16 +149,23 @@ export class CaseCommandService {
     branchExternalId: string,
     id: string,
     status: CaseStatus,
+    actorId = '',
+    outer?: EntityManager,
   ): Promise<CaseGarage> {
-    return this.dataSource.transaction(async (m) => {
+    return runInOptionalTransaction(this.dataSource, outer, async (m) => {
       const current = await this.findOwned(m, branchExternalId, id, true);
-      if (!canTransition(current.status, status)) {
+      if (!canTransition(current.status, status, current.origin)) {
         throw new BadRequestException(
           `Không chuyển được trạng thái ${current.status} → ${status}.`,
         );
       }
+      // Xe ERP rời Hoàn thành thì bỏ mốc xong cũ; xe KGara giữ giá trị nguồn (mapper chỉ dùng khi đang Hoàn thành).
       const completed =
-        status === CaseStatus.COMPLETED ? { completedAt: new Date() } : {};
+        status === CaseStatus.COMPLETED
+          ? { completedAt: new Date() }
+          : current.origin !== CaseOrigin.KGARA_SYNC && current.completedAt
+            ? { completedAt: null }
+            : {};
       if (current.origin === CaseOrigin.KGARA_SYNC) {
         // Trạng thái KGara giữ ở snapshot; v2 đổi trạng thái hiệu lực và đánh dấu override.
         const overrides = markOverrides(
@@ -178,6 +186,8 @@ export class CaseCommandService {
           ...completed,
         } as never);
       }
+      // Status nhỏ thuộc status cũ: đóng công đoạn đang mở, bỏ mã không còn hợp lệ.
+      await syncStageOnStatusChange(m, current, status, actorId);
       return this.reload(m, id);
     });
   }

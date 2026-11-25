@@ -22,7 +22,7 @@ Chỉ dùng trong repo `erp/erp-api`. Skill này chỉ giữ ngữ cảnh ngắn
 ## 3. Hợp đồng DB và runtime
 
 - Nguồn sự thật về schema là Postgres runtime, truy cập qua `DATABASE_URL`. Mẫu cấu hình nằm trong `.env.example`. Không ghi credential thật vào repo.
-- Endpoint PostgreSQL chuẩn (cập nhật 2026-11-19): mọi DB (dev, staging, production, klotus) đang chạy trên `db-dev.liouni.com:5433`; các DB khác nhau bằng tên database trong `DATABASE_URL` của từng file env (ví dụ `erp_greenway_staging`, `erp_greenway_production`). `db-elite.liouni.com:5432` (Elite) và `db.liouni.com` là cơ chế cũ, không dùng. Xác nhận DB thực tế trước khi ghi theo `.agents/AGENTS.md`; không suy ra từ tên file hay host.
+- Endpoint PostgreSQL chuẩn (cập nhật 2026-11-24): các môi trường **staging** (`erp-greenway-staging`, `erp-klotus-staging`) và **demo** (môi trường do CI/CD của `erp-master` deploy, stack `erp-master-elite-*`, env `.env.demo`) chạy trọn bộ trên **Elite**: DB, S3 (RustFS), API và Web; `DATABASE_URL` của file `.env.*-staging` trỏ host Elite. Đã kiểm container demo 2026-11-24: DB `db-elite.liouni.com:5432` (database `erp_demo`), S3/RustFS `s3-elite.liouni.com` (bucket `demo`). Lưu ý `.env.demo` ở máy dev có thể khác giá trị container; luôn xác nhận DB thực tế trước khi ghi. DB master (`.env`) và production (`.env.*-production`) vẫn trên `db-dev.liouni.com:5433`. Các DB khác nhau bằng tên database trong `DATABASE_URL` của từng file env. `db.liouni.com` là cơ chế cũ, không dùng. Xác nhận DB thực tế trước khi ghi theo `.agents/AGENTS.md`; không suy ra từ tên file hay host.
 - Đổi DTO, filter, persistence hoặc business rule phải đối chiếu schema thật (mandate DB-First). Skill hỗ trợ: `erp-gate-0-precheck`.
 
 ## 4. Tooling

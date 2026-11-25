@@ -114,8 +114,14 @@ export class CasesGarageCommandsController {
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: RevertFieldsDto,
     @BranchId() branch: string,
+    @Req() req: RequestWithUser,
   ) {
-    return this.service.revertCase(requireBranch(branch), id, dto.fields);
+    return this.service.revertCase(
+      requireBranch(branch),
+      id,
+      dto.fields,
+      req.user?.sub ?? '',
+    );
   }
 
   @RequirePermissions(perm(ErpAction.UPDATE))
@@ -145,8 +151,14 @@ export class CasesGarageCommandsController {
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdateCaseStatusDto,
     @BranchId() branch: string,
+    @Req() req: RequestWithUser,
   ) {
-    return this.service.updateStatus(requireBranch(branch), id, dto.status);
+    return this.service.updateStatus(
+      requireBranch(branch),
+      id,
+      dto.status,
+      req.user?.sub ?? '',
+    );
   }
 
   @RequirePermissions(perm(ErpAction.DELETE))

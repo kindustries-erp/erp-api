@@ -20,10 +20,16 @@ const SUMMARY_LINES = 3;
 export class CaseProgressQueryService {
   constructor(private readonly dataSource: DataSource) {}
 
+  /**
+   * `opts.finishedSince`: xe COMPLETED/CANCELLED chỉ lấy khi xong (hoặc cập nhật) từ mốc này, để board
+   * xưởng không tải toàn bộ lịch sử; xe chưa xong luôn được lấy.
+   * `opts.trackedOnly`: chỉ xe nhân viên xưởng đã đưa vào bảng (`workshop_tracked_at` khác NULL).
+   */
   async findPage(
     branch: string,
     q: QueryCaseProgressDto,
     now = new Date(),
+    opts: { finishedSince?: Date; trackedOnly?: boolean } = {},
   ): Promise<CaseProgressListResponse> {
     const page = q.page ?? 1;
     const pageSize = q.pageSize ?? DEFAULT_PAGE_SIZE;
@@ -42,6 +48,16 @@ export class CaseProgressQueryService {
         'c.status NOT IN (:...done)',
         {
           done: [CaseStatus.COMPLETED, CaseStatus.CANCELLED],
+        },
+      );
+    }
+    if (opts.trackedOnly) qb.andWhere('c.workshop_tracked_at IS NOT NULL');
+    if (opts.finishedSince) {
+      qb.andWhere(
+        '(c.status NOT IN (:...finished) OR COALESCE(c.completed_at, c.updated_at) >= :since)',
+        {
+          finished: [CaseStatus.COMPLETED, CaseStatus.CANCELLED],
+          since: opts.finishedSince,
         },
       );
     }

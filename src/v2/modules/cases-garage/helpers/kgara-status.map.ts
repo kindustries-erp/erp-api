@@ -1,4 +1,4 @@
-import { CaseStatus } from '../entities/case-garage.enums';
+import { CaseOrigin, CaseStatus } from '../entities/case-garage.enums';
 
 /** `tinh_trang_dich_vu` của KGara → trạng thái v2. */
 const KGARA_TO_STATUS: Readonly<Record<number, CaseStatus>> = {
@@ -39,6 +39,15 @@ const TRANSITIONS: Readonly<Record<CaseStatus, readonly CaseStatus[]>> = {
   [CaseStatus.CANCELLED]: [CaseStatus.INTAKE],
 };
 
-export function canTransition(from: CaseStatus, to: CaseStatus): boolean {
+/**
+ * Xe `KGARA_SYNC` đổi trạng thái tự do (trừ đổi sang chính nó): v2 chỉ ghi đè, trạng thái KGara vẫn
+ * giữ ở snapshot và hoàn lại được bằng revert. Xe `NATIVE` (mặc định) theo bảng `TRANSITIONS`.
+ */
+export function canTransition(
+  from: CaseStatus,
+  to: CaseStatus,
+  origin: CaseOrigin = CaseOrigin.NATIVE,
+): boolean {
+  if (origin === CaseOrigin.KGARA_SYNC) return from !== to;
   return TRANSITIONS[from]?.includes(to) ?? false;
 }
