@@ -70,6 +70,7 @@ export class KgaraSyncService {
     to?: string,
     updatedSince?: string,
     accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
+    options?: { exactRange?: boolean },
   ): Promise<{ deletedCount: number; withLinkedInvoices: string[] }> {
     return this.syncCaseService.syncCasesForBranch(
       branchExternalId,
@@ -77,6 +78,7 @@ export class KgaraSyncService {
       to,
       updatedSince,
       accountKey,
+      options,
     );
   }
 
@@ -188,6 +190,8 @@ export class KgaraSyncService {
       forceDetails?: boolean;
       accountKey?: KgaraAccountKey;
       skipBranchSync?: boolean;
+      /** Quét đúng from..to, không lùi 2 tháng (đồng bộ tách theo tháng). */
+      exactRange?: boolean;
     },
   ): Promise<{
     casesResult: { deletedCount: number; withLinkedInvoices: string[] };
@@ -217,6 +221,7 @@ export class KgaraSyncService {
       options?.to,
       undefined,
       accountKey,
+      { exactRange: options?.exactRange },
     );
 
     let grossProfitSuccess = false;

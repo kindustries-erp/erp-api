@@ -5,6 +5,10 @@ import { KgaraBranch } from '../entities/kgara_branch.entity';
 import { KgaraSyncService } from '../kgara-sync.service';
 import { KgaraAuthService } from '../kgara-auth.service';
 import { KgaraAccountKey } from '../enums/kgara-account.enum';
+import {
+  splitMonthlyRanges,
+  type SyncDateRange,
+} from '../helpers/sync-range-chunks.helper';
 
 export type KgaraBulkSyncScope =
   | 'all'
@@ -27,6 +31,13 @@ export interface KgaraBulkSyncBranchResult {
   error?: string;
 }
 
+/** Một tháng của một chi nhánh bị lỗi khi đồng bộ tách theo tháng. */
+export interface KgaraBulkSyncFailedChunk extends SyncDateRange {
+  branchExternalId: string;
+  accountKey: string;
+  error: string;
+}
+
 export interface KgaraBulkSyncState {
   status: 'idle' | 'running' | 'completed' | 'failed';
   scope: KgaraBulkSyncScope | null;
@@ -35,6 +46,11 @@ export interface KgaraBulkSyncState {
   totalBranches: number;
   completedBranches: number;
   currentBranch: { branchExternalId: string; accountKey: string } | null;
+  /** Tổng số đoạn (chi nhánh × tháng) và số đoạn đã chạy xong (kể cả lỗi). */
+  totalChunks: number;
+  completedChunks: number;
+  currentChunk: SyncDateRange | null;
+  failedChunks: KgaraBulkSyncFailedChunk[];
   accounts: { accountKey: KgaraAccountKey; ok: boolean; error?: string }[];
   results: KgaraBulkSyncBranchResult[];
   message: string | null;
@@ -48,6 +64,10 @@ const idleState = (): KgaraBulkSyncState => ({
   totalBranches: 0,
   completedBranches: 0,
   currentBranch: null,
+  totalChunks: 0,
+  completedChunks: 0,
+  currentChunk: null,
+  failedChunks: [],
   accounts: [],
   results: [],
   message: null,
@@ -55,13 +75,16 @@ const idleState = (): KgaraBulkSyncState => ({
 
 /**
  * Đồng bộ mọi chi nhánh của các tài khoản đã cấu hình, chạy nền.
- * Trạng thái và khóa nằm trong bộ nhớ (một instance), cùng khóa dùng với cron.
+ * Có `from`/`to` thì tách theo tháng dương lịch (tháng mới trước), mỗi tháng quét đúng khoảng của nó;
+ * tháng lỗi được ghi lại và job chạy tiếp. Trạng thái và khóa nằm trong bộ nhớ (một instance), cùng khóa dùng với cron.
  */
 @Injectable()
 export class KgaraBulkSyncService {
   private readonly logger = new Logger(KgaraBulkSyncService.name);
   private locked = false;
   private state: KgaraBulkSyncState = idleState();
+  /** Nghỉ giữa hai lượt gọi KGara liên tiếp để giảm tải; test đặt 0. */
+  chunkDelayMs = 1000;
 
   constructor(
     private readonly syncService: KgaraSyncService,
@@ -86,6 +109,7 @@ export class KgaraBulkSyncService {
       ...this.state,
       accounts: [...this.state.accounts],
       results: [...this.state.results],
+      failedChunks: [...this.state.failedChunks],
     };
   }
 
@@ -132,30 +156,56 @@ export class KgaraBulkSyncService {
       });
       this.state.totalBranches = branches.length;
 
+      // Có đủ from/to: tách theo tháng và quét đúng từng tháng. Thiếu: một lượt như cũ.
+      const chunked = Boolean(options.from && options.to);
+      const chunks: (SyncDateRange | null)[] = chunked
+        ? splitMonthlyRanges(options.from!, options.to!)
+        : [null];
+      this.state.totalChunks = branches.length * chunks.length;
+
+      let first = true;
       for (const branch of branches) {
         const accountKey = branch.accountKey as KgaraAccountKey;
         this.state.currentBranch = {
           branchExternalId: branch.externalId,
           accountKey,
         };
-        try {
-          await this.syncBranch(branch.externalId, accountKey, options);
-          this.state.results.push({
-            branchExternalId: branch.externalId,
-            accountKey,
-            ok: true,
-          });
-        } catch (error: any) {
-          this.logger.warn(
-            `Bulk sync failed for branch ${branch.externalId} (account: ${accountKey}): ${error?.message}`,
-          );
-          this.state.results.push({
-            branchExternalId: branch.externalId,
-            accountKey,
-            ok: false,
-            error: error?.message || 'Unknown error',
-          });
+        const errors: string[] = [];
+        for (const chunk of chunks) {
+          if (!first && this.chunkDelayMs > 0) await sleep(this.chunkDelayMs);
+          first = false;
+          this.state.currentChunk = chunk;
+          try {
+            await this.syncBranch(branch.externalId, accountKey, {
+              ...options,
+              ...(chunk ?? {}),
+              exactRange: chunk !== null,
+            });
+          } catch (error: any) {
+            const message = error?.message || 'Unknown error';
+            this.logger.warn(
+              `Bulk sync failed for branch ${branch.externalId} (account: ${accountKey})${chunk ? ` ${chunk.from}..${chunk.to}` : ''}: ${message}`,
+            );
+            errors.push(
+              chunk ? `${chunk.from}..${chunk.to}: ${message}` : message,
+            );
+            if (chunk) {
+              this.state.failedChunks.push({
+                branchExternalId: branch.externalId,
+                accountKey,
+                ...chunk,
+                error: message,
+              });
+            }
+          }
+          this.state.completedChunks++;
         }
+        this.state.results.push({
+          branchExternalId: branch.externalId,
+          accountKey,
+          ok: errors.length === 0,
+          ...(errors.length ? { error: errors.join('; ') } : {}),
+        });
         this.state.completedBranches++;
       }
 
@@ -168,6 +218,7 @@ export class KgaraBulkSyncService {
       this.state.message = error?.message || 'Unknown error';
     } finally {
       this.state.currentBranch = null;
+      this.state.currentChunk = null;
       this.state.finishedAt = new Date().toISOString();
       this.unlock();
     }
@@ -176,9 +227,9 @@ export class KgaraBulkSyncService {
   private async syncBranch(
     branchExternalId: string,
     accountKey: KgaraAccountKey,
-    options: KgaraBulkSyncOptions,
+    options: KgaraBulkSyncOptions & { exactRange: boolean },
   ): Promise<void> {
-    const { from, to, includeDetails, forceDetails } = options;
+    const { from, to, includeDetails, forceDetails, exactRange } = options;
 
     switch (options.scope) {
       case 'cases':
@@ -188,6 +239,7 @@ export class KgaraBulkSyncService {
           to,
           undefined,
           accountKey,
+          { exactRange },
         );
         return;
       case 'gross-profit':
@@ -214,8 +266,12 @@ export class KgaraBulkSyncService {
           forceDetails,
           accountKey,
           skipBranchSync: true,
+          exactRange,
         });
         return;
     }
   }
 }
+
+const sleep = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));

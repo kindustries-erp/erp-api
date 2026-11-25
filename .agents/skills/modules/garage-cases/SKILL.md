@@ -229,7 +229,7 @@ src/kgara-api-core/
 ├── kgara-api-core.module.ts                # Module NestJS đăng ký TypeORM, Sub-Controllers và Providers
 ├── kgara-auth.service.ts                   # Service quản lý xác thực token KGara và mutex refresh
 ├── kgara-client.service.ts                 # HTTP Client giao tiếp API KGara (kèm retry khi 401, gross profit proxies)
-├── kgara-sync.scheduler.ts                 # Cron Scheduler định kỳ hàng giờ quét dữ liệu 2 tháng và gửi thông báo
+├── kgara-sync.scheduler.ts                 # Cron Scheduler: 2 tháng mỗi lượt, lượt 21:15 quét 6 tháng tách tháng; gửi thông báo
 ├── kgara-sync.service.ts                   # Facade Service đồng bộ dữ liệu KGara
 ├── kgara-sync.service.spec.ts              # Bộ Unit Test kiểm thử logic sync và soft-delete
 └── services/
@@ -383,13 +383,14 @@ Cơ chế dùng chung `ExportJobRunner` (`src/common/export-jobs/export-job-runn
 5. Nếu `kgara_delete_count >= 2`: Đánh dấu `kgara_deleted_at = now()`.
 6. Nếu một vụ việc đã bị xóa mềm sau đó xuất hiện trở lại trong danh sách sync: Hệ thống tự động đặt lại `kgara_deleted_at = null` và `kgara_delete_count = 0` (Restoration).
 
-### 5.4. Lịch Quét Tự Động 5 Mốc Giờ 2 Tháng Gần Nhất & Cảnh Báo An Toàn (`KgaraSyncScheduler`)
+### 5.4. Lịch Quét Tự Động 5 Mốc Giờ (2 tháng; lượt 21:15 quét 6 tháng tách tháng) & Cảnh Báo An Toàn (`KgaraSyncScheduler`)
 - Chạy tự động tại 5 mốc thời gian cố định: **`09:15`**, **`15:15`**, **`16:15`**, **`17:15`**, **`21:15`** (Asia/Ho_Chi_Minh).
 - **Cơ chế lập lịch kép (Heartbeat 30s + @Cron)**:
   - Heartbeat `setInterval` (30s) trong `onModuleInit()` kiểm tra `isWithinSyncWindow()` với cửa sổ 45 phút giúp bù giờ nếu server khởi động lại trễ.
   - Decorator `@Cron('0 15 9,15,16,17,21 * * *')` làm lớp kích hoạt dự phòng song song với khóa slot `lastExecutedSlotKey` chống chạy lặp.
-- **Cửa sổ đồng bộ 2 tháng gần nhất & Kéo chi tiết**:
-  - Quét dữ liệu trong phạm vi 2 tháng gần nhất tính từ thời điểm chạy (`firstDayTwoMonthsAgo` đến `now`) cho tất cả chi nhánh.
+- **Cửa sổ đồng bộ & Kéo chi tiết**:
+  - Lượt thường (mọi giờ trừ giờ cuối): quét từ đầu tháng của 2 tháng trước đến `now` cho tất cả chi nhánh, kèm watermark (`syncBranchWindow`).
+  - Lượt cuối ngày (giờ lớn nhất trong `SYNC_HOURS`, hiện **21:15**, `isLastSlotOfDay`): quét **6 tháng gần nhất** (`recentMonthsRange`, từ đúng ngày này 6 tháng trước đến hôm nay), tách theo tháng dương lịch bằng `splitMonthlyRanges` (`helpers/sync-range-chunks.helper.ts`), tháng mới trước (`syncBranchDeep`). Mỗi tháng gọi `syncCasesForBranch(..., { exactRange: true })`, không watermark, rồi GP + chi tiết cho đúng tháng đó (`syncGpAndDetails`). Tháng lỗi được ghi log và bỏ qua, các tháng sau vẫn chạy.
   - Tự động gọi `syncCaseDetailsBatch` (`force: false`) nạp dòng phụ tùng & công thợ cho các vụ việc chưa có chi tiết.
 - **Cảnh báo Thông minh Zero-Crash**:
   - Tra cứu người nhận thông báo an toàn thông qua quyền RBAC `CorePermission` (`resource IN ('garage', '*')`) và `CoreUserRole`. Bọc `try/catch` độc lập không làm gián đoạn luồng sync DB chính.
@@ -978,8 +979,9 @@ Nhằm tinh gọn tối đa thanh công cụ (Toolbar) và đồng bộ trải n
 
 - **Hợp đồng đồng bộ (cập nhật)**:
   - `POST /greenway/sync/branches[?account=MAIN|OJ]` trả `{ success, accounts: [{ accountKey, ok, error? }], message }`. `success=false` khi có tài khoản lỗi; scheduler gom lỗi này và gửi thông báo ERROR cho admin.
-  - `POST /greenway/sync/all-branches` `{ scope: all|cases|gross-profit|case-details, from?, to?, includeDetails?, forceDetails? }` (GARAGE CREATE): khởi động job nền trên mọi chi nhánh của tài khoản đã cấu hình, trả ngay trạng thái. Job làm mới chi nhánh trước (`syncBranchesForAccounts`), rồi chạy tuần tự từng chi nhánh theo `scope`; lỗi một chi nhánh không dừng các chi nhánh còn lại.
-  - `GET /greenway/sync/all-branches/status` (GARAGE READ): `{ status: idle|running|completed|failed, scope, startedAt, finishedAt, totalBranches, completedBranches, currentBranch, accounts, results[], message }`.
+  - `POST /greenway/sync/all-branches` `{ scope: all|cases|gross-profit|case-details, from?, to?, includeDetails?, forceDetails? }` (GARAGE CREATE): khởi động job nền trên mọi chi nhánh của tài khoản đã cấu hình, trả ngay trạng thái. Job làm mới chi nhánh trước (`syncBranchesForAccounts`), rồi chạy tuần tự từng chi nhánh theo `scope`; lỗi một chi nhánh không dừng các chi nhánh còn lại. Có `from` + `to`: khoảng được tách theo tháng dương lịch (`splitMonthlyRanges`, tháng mới trước, nghỉ `chunkDelayMs` = 1s giữa các đoạn); mỗi đoạn chạy với `exactRange: true` nên `syncCasesForBranch` gọi KGara và phát hiện xóa đúng khoảng của tháng đó, không lùi thêm 2 tháng. Tháng lỗi ghi vào `failedChunks` và job chạy tiếp; chi nhánh chỉ `ok` khi không tháng nào lỗi. Không có `from`/`to`: một lượt như cũ (`exactRange: false`).
+  - `GET /greenway/sync/all-branches/status` (GARAGE READ): `{ status: idle|running|completed|failed, scope, startedAt, finishedAt, totalBranches, completedBranches, currentBranch, totalChunks, completedChunks, currentChunk: {from,to}|null, failedChunks: [{ branchExternalId, accountKey, from, to, error }], accounts, results[], message }`.
+  - `syncCasesForBranch(branch, from, to, updatedSince, accountKey, options?: { exactRange?: boolean })`: mặc định lùi về đầu tháng của 2 tháng trước `from`; `exactRange` giữ nguyên `from..to`. `syncAllInOne` nhận `exactRange` và chuyển xuống. Đo trên staging (2026-11-25): 6 tháng × 5 cặp chi nhánh/tài khoản = 35 đoạn, khoảng 5 phút.
   - Khóa `KgaraBulkSyncService.tryLock()` dùng chung với cron: đang có job thì `start` trả 409 `Conflict`, cron bỏ qua lượt. Trạng thái nằm trong bộ nhớ (một instance).
 
 - **Cơ chế Phân loại Tự động & Quản lý Công nợ Phân khúc OJ**:
