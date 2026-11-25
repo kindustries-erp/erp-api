@@ -147,4 +147,34 @@ describe('CaseProgressQueryService', () => {
       'c.workshop_tracked_at IS NOT NULL',
     );
   });
+
+  it('chi nhánh ERP: có thì lọc branch_id, không thì không lọc', async () => {
+    const a = make([]);
+    await a.svc.findPage('B1', {}, now);
+    expect(a.qb.andWhere).toHaveBeenCalledWith('c.branch_id = :scopeBranchId', {
+      scopeBranchId: 'B1',
+    });
+    const b = make([]);
+    await b.svc.findPage(undefined, {}, now);
+    const sqls = b.qb.andWhere.mock.calls.map((c) => String(c[0]));
+    expect(sqls.some((x) => x.includes('branch'))).toBe(false);
+  });
+
+  it('lọc phân loại theo danh mục hoặc cột classification, tham số bind', async () => {
+    const a = make([]);
+    await a.svc.findPage(
+      undefined,
+      { status: 'ALL', classification: ' OJ ' },
+      now,
+    );
+    const call = a.qb.andWhere.mock.calls.find((c) =>
+      String(c[0]).includes('c.classification'),
+    );
+    expect(String(call?.[0])).toContain('erp_module_categories');
+    expect(call?.[1]).toEqual({ cls: 'OJ' });
+    const b = make([]);
+    await b.svc.findPage(undefined, { status: 'ALL' }, now);
+    const sqls = b.qb.andWhere.mock.calls.map((c) => String(c[0]));
+    expect(sqls.some((x) => x.includes('classification'))).toBe(false);
+  });
 });

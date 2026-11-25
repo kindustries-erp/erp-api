@@ -26,8 +26,7 @@ function fakeManager(rows: Row[]) {
             rows.find(
               (r) =>
                 r.id === params.id &&
-                (!params.branchExternalId ||
-                  r.branchExternalId === params.branchExternalId),
+                (!params.branchId || r.branchId === params.branchId),
             ) ?? null,
         };
         return qb;
@@ -45,7 +44,7 @@ class TestCommand extends AbstractCashflowVoucherCommandService {
 }
 
 const input = {
-  branchExternalId: 'B1',
+  branchId: 'B1',
   voucherType: 'RECEIPT' as const,
   transDate: '2026-11-17',
   amount: 500,

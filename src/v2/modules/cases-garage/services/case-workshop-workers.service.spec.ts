@@ -1,6 +1,6 @@
 import { CaseWorkshopWorkersService } from './case-workshop-workers.service';
 
-function make(links: { branchId: string }[]) {
+function make() {
   const qb: Record<string, jest.Mock> = {};
   for (const m of ['where', 'andWhere', 'orderBy', 'take']) {
     qb[m] = jest.fn().mockReturnValue(qb);
@@ -13,30 +13,22 @@ function make(links: { branchId: string }[]) {
       jobTitle: 'KTV',
     },
   ]);
-  const find = jest.fn().mockResolvedValue(links);
-  const ds = {
-    getRepository: (e: { name: string }) =>
-      e.name === 'BranchManagementExternalLink'
-        ? { find }
-        : { createQueryBuilder: () => qb },
-  };
-  return { svc: new CaseWorkshopWorkersService(ds as never), qb, find };
+  const ds = { getRepository: () => ({ createQueryBuilder: () => qb }) };
+  return { svc: new CaseWorkshopWorkersService(ds as never), qb };
 }
 
 const sqls = (qb: Record<string, jest.Mock>) =>
   qb.andWhere.mock.calls.map((c) => String(c[0]));
 
 describe('CaseWorkshopWorkersService', () => {
-  it('lọc theo chi nhánh ERP liên kết KGara (kèm nhân viên chưa gán), tìm tên/mã, chỉ ACTIVE', async () => {
-    const { svc, qb, find } = make([{ branchId: 'b1' }, { branchId: 'b1' }]);
-    const res = await svc.list('KG1', ' an ');
-    expect(find.mock.calls[0][0]).toMatchObject({
-      where: { source: 'KGARA', externalId: 'KG1', isDeleted: false },
-    });
+  it('có chọn chi nhánh ERP: nhân viên chi nhánh đó hoặc chưa gán, tìm tên/mã, chỉ ACTIVE', async () => {
+    const { svc, qb } = make();
+    const res = await svc.list('b1', ' an ');
     const branchCall = qb.andWhere.mock.calls.find((c) =>
-      String(c[0]).includes('e.branch_id IN'),
+      String(c[0]).includes('e.branch_id ='),
     );
-    expect(branchCall?.[1]).toEqual({ branchIds: ['b1'] });
+    expect(String(branchCall?.[0])).toContain('e.branch_id IS NULL');
+    expect(branchCall?.[1]).toEqual({ branchId: 'b1' });
     expect(sqls(qb)).toContain(`e.status = 'ACTIVE'`);
     const searchCall = qb.andWhere.mock.calls.find((c) =>
       String(c[0]).includes('ILIKE'),
@@ -48,9 +40,9 @@ describe('CaseWorkshopWorkersService', () => {
     ]);
   });
 
-  it('chưa có liên kết chi nhánh và không tìm: không lọc chi nhánh, không ILIKE', async () => {
-    const { svc, qb } = make([]);
-    await svc.list('KG1');
+  it('không chọn chi nhánh và không tìm: không lọc chi nhánh, không ILIKE', async () => {
+    const { svc, qb } = make();
+    await svc.list(undefined);
     expect(sqls(qb).some((s) => s.includes('branch_id'))).toBe(false);
     expect(sqls(qb).some((s) => s.includes('ILIKE'))).toBe(false);
   });

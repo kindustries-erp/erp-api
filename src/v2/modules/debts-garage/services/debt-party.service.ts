@@ -9,6 +9,7 @@ import { AssignDebtPartyDto } from '../dto/assign-debt-party.dto';
 import type { DebtLedgerRow } from '../dto/debt-ledger.types';
 import { DebtGarage } from '../entities/debt-garage.entity';
 import { toDebtLedgerRow } from '../helpers/debt-ledger-row.mapper';
+import { applyBranchScope } from '@/v2/core/branches-core';
 
 /** Loại đối tượng nợ được gán tay (khách hàng lấy theo vụ việc, không gán). */
 const ASSIGNABLE_PARTY_TYPES = ['INSURER', 'SUPPLIER'];
@@ -19,20 +20,18 @@ export class DebtPartyService {
   constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
 
   assignParty(
-    branchId: string,
+    branchId: string | undefined,
     debtId: string,
     dto: AssignDebtPartyDto,
   ): Promise<DebtLedgerRow> {
     return this.dataSource.transaction(async (manager) => {
       const repo = manager.getRepository(DebtGarage);
-      const debt = await repo
+      const qb = repo
         .createQueryBuilder('d')
         .setLock('pessimistic_write')
-        .where(
-          'd.id = :debtId AND d.branchExternalId = :branchId AND d.isDeleted = false',
-          { debtId, branchId },
-        )
-        .getOne();
+        .where('d.id = :debtId AND d.isDeleted = false', { debtId });
+      applyBranchScope(qb, 'd', branchId);
+      const debt = await qb.getOne();
       if (!debt) throw new NotFoundException('Không có khoản nợ');
       if (!ASSIGNABLE_PARTY_TYPES.includes(debt.partyType)) {
         throw new ConflictException('Chỉ gán được hãng bảo hiểm hoặc NCC');

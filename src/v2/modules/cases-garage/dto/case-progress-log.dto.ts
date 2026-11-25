@@ -118,6 +118,13 @@ export class QueryWorkshopBoardDto {
   @ApiPropertyOptional() @IsOptional() @IsString() search?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() assigneeId?: string;
 
+  /** Mã phân loại (ví dụ `OJ`): khớp danh mục (`category.code`) hoặc cột `classification`. */
+  @ApiPropertyOptional({ example: 'OJ' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  classification?: string;
+
   /** Xe đã hoàn thành/hủy chỉ hiện trong số ngày này (mặc định 7). */
   @ApiPropertyOptional({ minimum: 1, maximum: 90, default: 7 })
   @IsOptional()

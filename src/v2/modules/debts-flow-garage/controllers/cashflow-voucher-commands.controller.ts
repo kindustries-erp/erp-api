@@ -14,18 +14,14 @@ import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
 import { RequirePermissions } from '@/auth/decorators/require-permissions.decorator';
 import { AuditLog } from '@/v2/core/audit-core/decorators/audit-log.decorator';
 import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
-import { BranchId } from '@/kgara-api-core/decorators/branch-id.decorator';
+import { ErpBranchId } from '@/v2/core/branches-core';
 import {
   CreateCashflowVoucherGarageDto,
   UpdateCashflowVoucherGarageDto,
 } from '../../cashflow-vouchers-garage/dto/create-cashflow-voucher-garage.dto';
 import { ChangeVoucherStatusDto } from '../dto/allocate-debt.dto';
 import { GarageDebtsFlowService } from '../services/garage-debts-flow.service';
-import {
-  actorOf,
-  requireBranch,
-  type RequestWithUser,
-} from './flow-controller.helper';
+import { actorOf, type RequestWithUser } from './flow-controller.helper';
 
 const perm = (action: ErpAction) => ({
   resource: ErpResource.GARAGE_CASHFLOW,
@@ -52,10 +48,10 @@ export class CashflowVoucherCommandsController {
   @Post()
   create(
     @Body() dto: CreateCashflowVoucherGarageDto,
-    @BranchId() branchId: string,
+    @ErpBranchId() branchId: string | undefined,
     @Req() req: RequestWithUser,
   ) {
-    return this.flow.recordVoucher(requireBranch(branchId), dto, actorOf(req));
+    return this.flow.recordVoucher(branchId, dto, actorOf(req));
   }
 
   @RequirePermissions(perm(ErpAction.UPDATE))
@@ -65,15 +61,10 @@ export class CashflowVoucherCommandsController {
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateCashflowVoucherGarageDto,
-    @BranchId() branchId: string,
+    @ErpBranchId() branchId: string | undefined,
     @Req() req: RequestWithUser,
   ) {
-    return this.flow.updateVoucher(
-      requireBranch(branchId),
-      id,
-      dto,
-      actorOf(req),
-    );
+    return this.flow.updateVoucher(branchId, id, dto, actorOf(req));
   }
 
   @RequirePermissions(perm(ErpAction.UPDATE))
@@ -83,11 +74,11 @@ export class CashflowVoucherCommandsController {
   changeStatus(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ChangeVoucherStatusDto,
-    @BranchId() branchId: string,
+    @ErpBranchId() branchId: string | undefined,
     @Req() req: RequestWithUser,
   ) {
     return this.flow.changeVoucherStatus(
-      requireBranch(branchId),
+      branchId,
       id,
       dto.status,
       actorOf(req),
@@ -100,11 +91,11 @@ export class CashflowVoucherCommandsController {
   @Post(':id/cancel')
   cancel(
     @Param('id', ParseUUIDPipe) id: string,
-    @BranchId() branchId: string,
+    @ErpBranchId() branchId: string | undefined,
     @Req() req: RequestWithUser,
   ) {
     return this.flow.changeVoucherStatus(
-      requireBranch(branchId),
+      branchId,
       id,
       'CANCELLED',
       actorOf(req),

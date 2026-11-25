@@ -1,5 +1,6 @@
 import type { DataSource, ObjectLiteral, SelectQueryBuilder } from 'typeorm';
 import { agingSumColumns } from './garage-debt-sql.helper';
+import { applyBranchScope } from '@/v2/core/branches-core';
 
 /** Cờ đọc công nợ từ sổ nợ (`debts_garage`) thay vì tính từ `kgara_*`. Mặc định tắt; chỉ bật sau khi đối soát lệch = 0. */
 export function isLedgerReadEnabled(): boolean {
@@ -7,7 +8,8 @@ export function isLedgerReadEnabled(): boolean {
 }
 
 export interface LedgerReadScope {
-  branchId: string;
+  /** Chi nhánh ERP (không bắt buộc); không có thì mọi chi nhánh. */
+  branchId?: string;
   /** Ngày mốc từ (đã kẹp theo mốc theo dõi). */
   from: string;
   to?: string;
@@ -25,10 +27,8 @@ function ledgerWhere(
     .andWhere("d.status <> 'VOID'")
     .andWhere('d.excluded = false')
     .andWhere('d.direction = :ledgerDir', { ledgerDir: direction })
-    .andWhere('d.branch_external_id = :ledgerBranch', {
-      ledgerBranch: scope.branchId,
-    })
     .andWhere('d.due_base_date >= :ledgerFrom', { ledgerFrom: scope.from });
+  applyBranchScope(sub, 'd', scope.branchId, 'ledgerBranch');
   if (scope.to) {
     sub.andWhere('d.due_base_date <= :ledgerTo', {
       ledgerTo: scope.to.slice(0, 10),

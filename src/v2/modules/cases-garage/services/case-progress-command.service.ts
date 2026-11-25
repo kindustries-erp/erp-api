@@ -23,13 +23,13 @@ export class CaseProgressCommandService {
   ) {}
 
   update(
-    branch: string,
+    branchId: string | undefined,
     id: string,
     dto: UpdateCaseProgressDto,
     actorId: string,
   ) {
     return this.dataSource.transaction(async (m) => {
-      const current = await this.cases.findOwned(m, branch, id, true);
+      const current = await this.cases.findOwned(m, branchId, id, true);
       if (!isStageOf(current.status, dto.progressStage)) {
         throw new BadRequestException(
           `Công đoạn ${dto.progressStage} không thuộc trạng thái ${current.status}.`,

@@ -19,7 +19,7 @@ function makeService() {
 }
 
 describe('GrossProfitReportService', () => {
-  it('nối vụ việc theo mã và chỉ vụ việc đang hoạt động; chi nhánh là tham số', async () => {
+  it('nối vụ việc theo mã và chỉ vụ việc đang hoạt động; chi nhánh ERP là tham số', async () => {
     const { service, query } = makeService();
 
     await service.getReport({ branchId: 'b1', from: '2026-07-01' });
@@ -33,7 +33,17 @@ describe('GrossProfitReportService', () => {
     expect(sql).toContain('FROM cases_garage c2');
     expect(sql).toContain('LIMIT 1');
     expect(sql).not.toContain('hd_phieu_dich_vu_id');
+    expect(sql).toContain('c.branch_id = $1');
     expect(params).toEqual(['b1', '2026-07-01']);
+  });
+
+  it('không chọn chi nhánh thì lấy mọi dòng lãi gộp', async () => {
+    const { service, query } = makeService();
+    await service.getReport({ from: '2026-07-01' });
+    const [sql, params] = query.mock.calls[0];
+    expect(sql).not.toContain('c.branch_id =');
+    expect(sql).not.toContain('gp.branch_external_id = $');
+    expect(params).toEqual(['2026-07-01']);
   });
 
   it('tổng bằng SQL, phân trang kẹp pageSize và offset theo trang', async () => {

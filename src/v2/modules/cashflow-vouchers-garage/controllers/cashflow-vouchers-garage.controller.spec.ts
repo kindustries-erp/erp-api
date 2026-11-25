@@ -50,22 +50,14 @@ describe('CashflowVouchersGarageController', () => {
     );
   });
 
-  it('thiếu chi nhánh thì 400 và không chạm service', () => {
+  it('không gửi chi nhánh → service nhận undefined (mọi chi nhánh)', async () => {
     const { controller, query, insight } = make();
-    const none = undefined as never;
-    expect(() => controller.list({} as never, none)).toThrow(
-      BadRequestException,
-    );
-    expect(() => controller.columnOptions('status', none)).toThrow(
-      BadRequestException,
-    );
-    expect(() => controller.dashboard(none)).toThrow(BadRequestException);
-    expect(() =>
-      controller.duplicateCheck({ amount: 1 } as never, none),
-    ).toThrow(BadRequestException);
-    expect(() => controller.detail('id', none)).toThrow(BadRequestException);
-    expect(query.findPage).not.toHaveBeenCalled();
-    expect(insight.getDashboard).not.toHaveBeenCalled();
+    await controller.list({} as never, undefined);
+    expect(query.findPage.mock.calls[0][0].branchId).toBeUndefined();
+    await controller.dashboard(undefined);
+    expect(insight.getDashboard.mock.calls[0][0]).toBeUndefined();
+    await controller.detail('id', undefined);
+    expect(query.findOne).toHaveBeenCalledWith(undefined, 'id');
   });
 
   it('chuyển chi nhánh và kỳ xuống service', async () => {

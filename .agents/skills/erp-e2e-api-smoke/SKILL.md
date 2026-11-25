@@ -10,7 +10,7 @@ description: Quy trình E2E/smoke cho erp-api. Gồm jest e2e (`*.e2e-spec.ts`, 
 | Loại | Lệnh | Yêu cầu |
 |---|---|---|
 | Jest e2e (`test/*.e2e-spec.ts`, cấu hình `test/jest-e2e.json`) | `bun run test:e2e` | Boot app qua Nest testing module, cần DB test |
-| Smoke trên API đang chạy (`test/smoke/*.smoke.mjs`) | `bun run test:smoke:clone`, `bun run test:smoke:procurement`, `bun run test:smoke:save-and-act` (orchestration save-and-submit/confirm/post, rollback, hoàn nhập), `bun run test:smoke:cases-garage-kanban` (đổi status xe sync/NATIVE, revert, công đoạn; cần `E2E_SYNC_BRANCH`=`branch_external_id`), `bun run test:smoke:users` (users-management V2, tiền tố `smoke-users-`), `bun run test:smoke:auth-sessions` (auth V2 `/api/v2/auth-sessions`: login, refresh xoay vòng, dùng lại token thu hồi, đua refresh, đổi mật khẩu/ngưng tài khoản thu hồi phiên, đổi token v1 sang v2, impersonate, v1 admin ghi qua v2; dùng `E2E_PASSWORD` với `E2E_TAO_EMAIL` (ai-test-tao); nhánh impersonate chỉ chạy khi tài khoản là `admin@liouni.com`, còn lại in INFO và bỏ qua; dọn `smoke-auth-<tag>-*` bằng SQL) | API đang chạy ở `E2E_API_URL`, DB đúng, tài khoản test |
+| Smoke trên API đang chạy (`test/smoke/*.smoke.mjs`) | `bun run test:smoke:clone`, `bun run test:smoke:procurement`, `bun run test:smoke:save-and-act` (orchestration save-and-submit/confirm/post, rollback, hoàn nhập), `bun run test:smoke:cases-garage-kanban` (đổi status xe sync/NATIVE, revert, công đoạn; cần `E2E_SYNC_BRANCH` = id chi nhánh ERP `branches_management` có xe KGARA_SYNC), `bun run test:smoke:garage-v2-branch-scope` (Garage V2 header `x-erp-branch-id` không bắt buộc: không header = mọi chi nhánh, header lọc đúng chi nhánh, khác chi nhánh 404, sai UUID 400, lọc `classification=OJ` trên board/tiến độ, tạo xe NATIVE có/không chi nhánh, công nợ/thu chi V2 không cần header; cần `E2E_ERP_BRANCH_IDS`=`<GR>,<GN>`, tùy chọn `E2E_OJ_BRANCH_ID`), `bun run test:smoke:users` (users-management V2, tiền tố `smoke-users-`), `bun run test:smoke:auth-sessions` (auth V2 `/api/v2/auth-sessions`: login, refresh xoay vòng, dùng lại token thu hồi, đua refresh, đổi mật khẩu/ngưng tài khoản thu hồi phiên, đổi token v1 sang v2, impersonate, v1 admin ghi qua v2; dùng `E2E_PASSWORD` với `E2E_TAO_EMAIL` (ai-test-tao); nhánh impersonate chỉ chạy khi tài khoản là `admin@liouni.com`, còn lại in INFO và bỏ qua; dọn `smoke-auth-<tag>-*` bằng SQL) | API đang chạy ở `E2E_API_URL`, DB đúng, tài khoản test |
 
 Unit test (`bunx jest --forceExit`, hoặc scope hẹp `bunx jest --forceExit procurement`) vẫn là lớp kiểm tra chính trước commit.
 
@@ -45,6 +45,13 @@ Trước khi chạy: xác nhận `DATABASE_URL` trong `.env` không phải produ
    - Chỉ dừng tiến trình có cwd là repo này (xem trên). Không dừng tiến trình của repo khác.
 2. Trước khi ghi DB: `SELECT current_database();`, báo tên DB cho người dùng. Không suy ra DB từ tên file env.
 3. Smoke tạo dữ liệu mới (tên có tag, số chứng từ mới). Dữ liệu này không tự dọn, nên ghi rõ trong báo cáo nếu người dùng cần dọn.
+
+## 3b. Chi nhánh trong smoke Garage V2
+
+- Từ 2026-11-25, Garage V2 (`cases-garage`, `debts-garage`, `debts-flow-garage`, `cashflow-vouchers-garage`) nhận header tùy chọn `x-erp-branch-id` = `branches_management.id`; header `x-kgara-branch-id` không còn tác dụng ở V2 (V1 vẫn dùng).
+- Env: `E2E_ERP_BRANCH_ID` / `E2E_ERP_OTHER_BRANCH_ID` (`cases-garage-v2`, `garage-workshop`, bỏ trống là không chi nhánh), `E2E_SYNC_BRANCH` (id ERP), `E2E_BRANCH_ID` (`garage-debts-v2`, tùy chọn; so V1/V2 thì chạy không chi nhánh vì V1 không lọc theo chi nhánh ERP).
+- Staging `erp_greenway_staging`: GR `55239f19-ef5f-4cf8-833d-b6bb38d7b1c4`, GN `d8ad5cf5-e5d7-4c5f-89fc-19380077cd24` (GN là tài khoản KGara OJ, mọi xe là OJ).
+- Đã biết: `garage-debts-v2` check "cases trang 1 cùng id và thứ tự" lệch khi hai phiếu trùng `issued_at` (V1 và V2 tie-break khác nhau), tập phiếu vẫn trùng.
 
 ## 4. Cách báo kết quả
 

@@ -104,6 +104,11 @@ describe('CaseProgressLogCommandService.create', () => {
       assigneeId: E1,
       progressUpdatedBy: 'u1',
     });
+    // Nhật ký mới không mang UUID đơn vị KGara; chi nhánh lấy theo vụ việc cha.
+    expect(manager.create.mock.calls.at(-1)?.[1]).toMatchObject({
+      caseId: 'c1',
+      branchExternalId: null,
+    });
   });
 
   it('STAGE không thuộc status cha → 400, không ghi', async () => {
@@ -273,6 +278,9 @@ describe('CaseProgressLogCommandService.update / remove', () => {
         NOW,
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
+    // Chi nhánh kiểm qua vụ việc cha của nhật ký.
+    expect(a.cases.findOwned).toHaveBeenCalledWith(a.manager, 'B1', 'c1');
+
     const b = make({ log: { ...closed, endedAt: null } });
     await expect(
       b.svc.update(
@@ -387,6 +395,9 @@ describe('CaseProgressLogCommandService.update / remove', () => {
       isDeleted: true,
     });
     expect(callsFor(a.manager, CaseGarage)).toHaveLength(0);
+
+    // Chi nhánh kiểm qua vụ việc cha của nhật ký.
+    expect(a.cases.findOwned).toHaveBeenCalledWith(a.manager, 'B1', 'c1');
 
     const b = make({ log: { ...closed, endedAt: null } });
     await b.svc.remove('B1', 'l1', 'u');

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { vnDayBound } from '@/v2/core/base-core/helpers/vn-time.util';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, In, Repository, SelectQueryBuilder } from 'typeorm';
+import { applyBranchScope } from '@/v2/core/branches-core';
 import { buildPagination } from '@/common/utils/paginated-result';
 import {
   applyListSummaries,
@@ -18,10 +19,14 @@ import type { CaseOrigin } from '../entities/case-garage.enums';
 import { CASE_COLUMNS, CASE_SUMMARY_KEYS } from '../helpers/case-query.columns';
 import { applyCaseSpecialFilters } from '../helpers/case-query.special';
 import { toCaseListItem } from '../helpers/case-list-item.mapper';
-import { CaseListEnrichmentService } from './case-list-enrichment.service';
+import {
+  CaseListEnrichmentService,
+  grossProfitKey,
+} from './case-list-enrichment.service';
 
 export interface CaseListFilter {
-  branchId: string;
+  /** Chi nhánh ERP (không bắt buộc); không có thì mọi chi nhánh. */
+  branchId?: string;
   page?: number;
   pageSize?: number;
   search?: string;
@@ -115,10 +120,7 @@ export class CaseListQueryService {
       this.enrichment.settlementSums(ids),
       this.enrichment.linkCounts(ids),
       this.enrichment.categoryRefs(ordered.map((r) => r.categoryId)),
-      this.enrichment.grossProfitByCode(
-        f.branchId,
-        ordered.map((r) => r.caseCode),
-      ),
+      this.enrichment.grossProfitByCase(ordered),
     ]);
     return {
       items: ordered.map((r) =>
@@ -126,7 +128,7 @@ export class CaseListQueryService {
           settlement: sums.get(r.id),
           links: links.get(r.id),
           category: r.categoryId ? (cats.get(r.categoryId) ?? null) : null,
-          grossProfit: gp.get(r.caseCode),
+          grossProfit: gp.get(grossProfitKey(r.caseCode, r.branchExternalId)),
         }),
       ),
       pagination: buildPagination(page, pageSize, Number(count?.total) || 0),
@@ -134,7 +136,7 @@ export class CaseListQueryService {
     };
   }
 
-  /** Truy vấn nền dùng chung với `column-options`. Luôn kèm chi nhánh. */
+  /** Truy vấn nền dùng chung với `column-options`. Có chọn chi nhánh ERP thì lọc theo `branch_id`. */
   baseQuery(
     f: Pick<
       CaseListFilter,
@@ -144,8 +146,8 @@ export class CaseListQueryService {
     const qb = this.cases
       .createQueryBuilder('c')
       .leftJoin(ErpModuleCategory, 'cat', '"cat"."id" = "c"."category_id"')
-      .where('"c"."branch_external_id" = :branchId', { branchId: f.branchId })
-      .andWhere('"c"."is_deleted" = false');
+      .where('"c"."is_deleted" = false');
+    applyBranchScope(qb, 'c', f.branchId);
     if (!f.includeDeleted) qb.andWhere('"c"."external_deleted_at" IS NULL');
     if (f.origin) qb.andWhere('"c"."origin" = :origin', { origin: f.origin });
     if (f.from) {

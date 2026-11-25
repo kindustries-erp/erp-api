@@ -133,7 +133,7 @@ describe('CaseWorkshopTrackService', () => {
     );
     expect(m.query).toHaveBeenCalledWith(
       'SELECT pg_advisory_xact_lock(hashtext($1))',
-      ['workshop:B1:30A99999'],
+      ['workshop:30A99999'],
     );
     expect(qb.andWhere).toHaveBeenCalledWith(
       expect.stringContaining('= :key'),

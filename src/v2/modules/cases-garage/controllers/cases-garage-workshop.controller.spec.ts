@@ -92,9 +92,14 @@ describe('CasesGarageWorkshopController', () => {
     }
   });
 
-  it('thiếu header chi nhánh → 400', () => {
-    const { c } = make();
-    expect(() => c.board({}, undefined as never)).toThrow(BadRequestException);
+  it('không gửi chi nhánh → board và workers nhận undefined (mọi chi nhánh)', async () => {
+    const { c, query, workers } = make();
+    await c.board({ classification: 'OJ' }, undefined);
+    expect(query.board).toHaveBeenCalledWith(undefined, {
+      classification: 'OJ',
+    });
+    await c.workers('an', undefined);
+    expect(workers.list).toHaveBeenCalledWith(undefined, 'an');
   });
 
   it('chuyển chi nhánh, người dùng và body xuống service; bọc response', async () => {
@@ -195,8 +200,7 @@ describe('CasesGarageWorkshopController', () => {
     });
     await c.untrack('c1', 'B1');
     expect(tracker.untrack).toHaveBeenCalledWith('B1', 'c1');
-    expect(() => c.untrack('c1', undefined as never)).rejects.toThrow(
-      BadRequestException,
-    );
+    await c.untrack('c1', undefined);
+    expect(tracker.untrack).toHaveBeenLastCalledWith(undefined, 'c1');
   });
 });

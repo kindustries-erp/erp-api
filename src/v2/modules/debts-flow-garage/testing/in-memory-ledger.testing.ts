@@ -2,9 +2,13 @@ import type { DataSource, EntityManager } from 'typeorm';
 import { KgaraCashflowVoucher } from '@/kgara-api-core/entities/kgara_cashflow_voucher.entity';
 import { KgaraCaseSettlement } from '@/kgara-api-core/entities/kgara_case_settlement.entity';
 import { KgaraCase } from '@/kgara-api-core/entities/kgara_case.entity';
+import { CaseGarage } from '../../cases-garage/entities/case-garage.entity';
 import { CashflowVoucherGarage } from '../../cashflow-vouchers-garage/entities/cashflow-voucher-garage.entity';
 import { DebtAllocationGarage } from '../../debts-garage/entities/debt-allocation-garage.entity';
 import { DebtGarage } from '../../debts-garage/entities/debt-garage.entity';
+
+/** Id chi nhánh ERP coi như không tồn tại trong DB giả. */
+export const MISSING_BRANCH_ID = '00000000-0000-4000-8000-00000000dead';
 
 export type Row = Record<string, any>;
 
@@ -19,6 +23,7 @@ export function createInMemoryLedger() {
     [DebtAllocationGarage, []],
     [CashflowVoucherGarage, []],
     [KgaraCase, []],
+    [CaseGarage, []],
     [KgaraCashflowVoucher, []],
     [KgaraCaseSettlement, []],
   ]);
@@ -94,8 +99,8 @@ export function createInMemoryLedger() {
               (r) =>
                 r.id === (params.debtId ?? params.id) &&
                 !r.isDeleted &&
-                (params.branchExternalId === undefined ||
-                  r.branchExternalId === params.branchExternalId),
+                (params.branchId === undefined ||
+                  r.branchId === params.branchId),
             ) ?? null,
           getRawOne: async () => {
             if (!selected) return null;
@@ -114,6 +119,9 @@ export function createInMemoryLedger() {
   const manager = {
     getRepository: (e: unknown) => repo(e),
     delete: (e: unknown, where: Row) => repo(e).delete(where),
+    // Chỉ dùng cho kiểm chi nhánh ERP tồn tại: mọi id có thật, trừ `MISSING_BRANCH_ID`.
+    query: async (_sql: string, params: unknown[] = []) =>
+      params[0] === MISSING_BRANCH_ID ? [] : [{ exists: 1 }],
   } as unknown as EntityManager;
   const snapshot = () =>
     new Map([...tables].map(([k, v]) => [k, v.map((r) => ({ ...r }))]));
@@ -142,7 +150,8 @@ export function createInMemoryLedger() {
       const original = Number(over.originalAmount ?? 1000);
       const row = {
         id: `d-${over.partyType ?? 'CUSTOMER'}-${++seq}`,
-        branchExternalId: 'B1',
+        branchExternalId: 'KG1',
+        branchId: 'B1',
         sourceType: 'CASE',
         sourceId: 'case-1',
         caseId: 'case-1',
@@ -160,12 +169,22 @@ export function createInMemoryLedger() {
       (tables.get(DebtGarage) as Row[]).push(row);
       return row;
     },
-    seedCase: (over: Row = {}) =>
+    /** Vụ việc V1 và bản chiếu V2 cùng id (`branchId` = chi nhánh ERP, `branchExternalId` = UUID KGara). */
+    seedCase: (over: Row = {}) => {
+      const id = (over.id as string) ?? 'case-1';
       (tables.get(KgaraCase) as Row[]).push({
-        id: 'case-1',
-        branchExternalId: 'B1',
+        id,
+        branchExternalId: 'KG1',
         bienSoXe: '30A-1',
         ...over,
-      }),
+      });
+      (tables.get(CaseGarage) as Row[]).push({
+        id,
+        branchId: (over.branchId as string) ?? 'B1',
+        branchExternalId: 'KG1',
+        licensePlate: (over.bienSoXe as string) ?? '30A-1',
+        isDeleted: false,
+      });
+    },
   };
 }

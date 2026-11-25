@@ -13,7 +13,7 @@ describe('CaseListQueryService', () => {
     settlementSums: jest.fn().mockResolvedValue(new Map()),
     linkCounts: jest.fn().mockResolvedValue(new Map()),
     categoryRefs: jest.fn().mockResolvedValue(new Map()),
-    grossProfitByCode: jest.fn().mockResolvedValue(new Map()),
+    grossProfitByCase: jest.fn().mockResolvedValue(new Map()),
   };
 
   beforeEach(async () => {
@@ -24,12 +24,13 @@ describe('CaseListQueryService', () => {
     );
   });
 
-  it('đọc từ cases_garage, luôn lọc chi nhánh, bỏ xóa mềm v2 và xóa phía KGara', async () => {
+  it('đọc từ cases_garage, có chọn chi nhánh ERP thì lọc branch_id, bỏ xóa mềm v2 và xóa phía KGara', async () => {
     await service.findPage({ branchId: 'b1' });
     expect(cap.calls.length).toBeGreaterThan(0);
     for (const { sql, params } of cap.calls) {
       expect(sql).toContain('cases_garage');
-      expect(sql).toContain('"c"."branch_external_id" = $1');
+      expect(sql).toContain('"c"."branch_id" = $1');
+      expect(sql).not.toContain('"c"."branch_external_id" =');
       expect(sql).toContain('"c"."is_deleted" = false');
       expect(sql).toContain('"c"."external_deleted_at" IS NULL');
       expect(params[0]).toBe('b1');
@@ -39,8 +40,16 @@ describe('CaseListQueryService', () => {
   it('includeDeleted bỏ điều kiện xóa phía KGara nhưng vẫn giữ chi nhánh', async () => {
     await service.findPage({ branchId: 'b1', includeDeleted: true });
     for (const { sql } of cap.calls) {
-      expect(sql).toContain('"c"."branch_external_id" = $1');
+      expect(sql).toContain('"c"."branch_id" = $1');
       expect(sql).not.toContain('"c"."external_deleted_at" IS NULL');
+    }
+  });
+
+  it('không chọn chi nhánh thì không lọc chi nhánh', async () => {
+    await service.findPage({});
+    for (const { sql } of cap.calls) {
+      expect(sql).not.toContain('"c"."branch_id" =');
+      expect(sql).not.toContain('"c"."branch_external_id" =');
     }
   });
 

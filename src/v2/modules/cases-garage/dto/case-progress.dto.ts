@@ -9,6 +9,7 @@ import {
   IsString,
   IsUUID,
   Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 import type { PaginationMeta } from '@/common/utils/paginated-result';
@@ -70,6 +71,13 @@ export class QueryCaseProgressDto {
   @IsBoolean()
   overdue?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsString() search?: string;
+
+  /** Mã phân loại (ví dụ `OJ`): khớp danh mục (`category.code`) hoặc cột `classification`. */
+  @ApiPropertyOptional({ example: 'OJ' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  classification?: string;
 }
 
 /** Một dòng bảng theo dõi tiến độ. */

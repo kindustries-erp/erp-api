@@ -19,12 +19,11 @@ import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
 import { RequirePermissions } from '@/auth/decorators/require-permissions.decorator';
 import { AuditLog } from '@/v2/core/audit-core/decorators/audit-log.decorator';
 import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
-import { BranchId } from '@/kgara-api-core/decorators/branch-id.decorator';
+import { ErpBranchId } from '@/v2/core/branches-core';
 import { AllocateDebtDto } from '../dto/allocate-debt.dto';
 import { GarageDebtAllocationFlowService } from '../services/garage-debt-allocation-flow.service';
 import {
   actorOf,
-  requireBranch,
   requireIdempotencyKey,
   type RequestWithUser,
 } from './flow-controller.helper';
@@ -54,11 +53,11 @@ export class DebtAllocationsController {
   allocate(
     @Body() dto: AllocateDebtDto,
     @Headers('idempotency-key') key: string | undefined,
-    @BranchId() branchId: string,
+    @ErpBranchId() branchId: string | undefined,
     @Req() req: RequestWithUser,
   ) {
     return this.flow.allocate(
-      requireBranch(branchId),
+      branchId,
       dto,
       requireIdempotencyKey(key),
       actorOf(req),
@@ -73,11 +72,11 @@ export class DebtAllocationsController {
   reverse(
     @Param('id', ParseUUIDPipe) id: string,
     @Headers('idempotency-key') key: string | undefined,
-    @BranchId() branchId: string,
+    @ErpBranchId() branchId: string | undefined,
     @Req() req: RequestWithUser,
   ) {
     return this.flow.reverseAllocation(
-      requireBranch(branchId),
+      branchId,
       id,
       requireIdempotencyKey(key),
       actorOf(req),

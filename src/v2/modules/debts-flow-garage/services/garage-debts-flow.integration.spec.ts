@@ -6,7 +6,10 @@ import {
 import { CashflowVoucherGarageCommandService } from '../../cashflow-vouchers-garage/services/cashflow-voucher-garage-command.service';
 import { GarageDebtSettlementService } from '../../debts-garage/services/garage-debt-settlement.service';
 import { LegacyKgaraMirrorService } from '../legacy/legacy-kgara-mirror.service';
-import { createInMemoryLedger } from '../testing/in-memory-ledger.testing';
+import {
+  createInMemoryLedger,
+  MISSING_BRANCH_ID,
+} from '../testing/in-memory-ledger.testing';
 import { GarageDebtAllocationFlowService } from './garage-debt-allocation-flow.service';
 import { GarageDebtsFlowService } from './garage-debts-flow.service';
 import { GarageVoucherAllocationService } from './garage-voucher-allocation.service';
@@ -191,6 +194,43 @@ describe('luồng thu chi + công nợ garage (integration, DB giả)', () => {
     await expect(
       flow.updateVoucher('B2', v.id, { amount: 1 }, null),
     ).rejects.toThrow(NotFoundException);
+  });
+
+  it('không chọn chi nhánh: phiếu lấy chi nhánh ERP và UUID KGara theo vụ việc, phân bổ theo khoản nợ', async () => {
+    const { db, flow } = setup();
+    db.seedDebt({});
+    const v = await flow.recordVoucher(
+      undefined,
+      receipt({ status: 'PAID' }),
+      null,
+    );
+    expect(db.vouchers()[0]).toMatchObject({
+      id: v.id,
+      branchId: 'B1',
+      branchExternalId: 'KG1',
+      licensePlate: '30A-1',
+    });
+    expect(db.allocations()[0]).toMatchObject({ branchId: 'B1' });
+    // Không chọn chi nhánh thì đổi trạng thái được mọi phiếu.
+    await flow.changeVoucherStatus(undefined, v.id, 'CANCELLED', null);
+  });
+
+  it('phiếu không gắn vụ việc: chi nhánh ERP đang chọn (hoặc null), không có UUID KGara', async () => {
+    const { db, flow } = setup();
+    await flow.recordVoucher('B9', receipt({ caseId: null }), null);
+    await flow.recordVoucher(undefined, receipt({ caseId: null }), null);
+    expect(db.vouchers().map((r) => [r.branchId, r.branchExternalId])).toEqual([
+      ['B9', null],
+      [null, null],
+    ]);
+  });
+
+  it('phiếu không gắn vụ việc với chi nhánh không tồn tại → 400, không ghi phiếu', async () => {
+    const { db, flow } = setup();
+    await expect(
+      flow.recordVoucher(MISSING_BRANCH_ID, receipt({ caseId: null }), null),
+    ).rejects.toThrow(BadRequestException);
+    expect(db.vouchers()).toHaveLength(0);
   });
 
   it('phân bổ thủ công: idempotent, từ chối vượt số dư, không làm số dư âm', async () => {

@@ -102,7 +102,7 @@ describe('case-progress-stage.closer', () => {
 
   it('switchStageLog: đóng dòng mở rồi mở dòng STAGE mới; stage null chỉ đóng', async () => {
     const m = manager({ open: { id: 'l1', startedAt: at('08:00') } });
-    const c = { id: 'c1', branchExternalId: 'B1', status: CaseStatus.QUOTED };
+    const c = { id: 'c1', status: CaseStatus.QUOTED };
     await switchStageLog(
       m as never,
       c as never,
@@ -114,7 +114,7 @@ describe('case-progress-stage.closer', () => {
       CaseProgressLogGarage,
       expect.objectContaining({
         caseId: 'c1',
-        branchExternalId: 'B1',
+        branchExternalId: null,
         stage: 'AWAITING_APPROVAL',
         caseStatus: CaseStatus.QUOTED,
         startedAt: at('09:00'),

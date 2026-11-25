@@ -20,6 +20,7 @@ const make = (current: Record<string, unknown> | null) => {
       ...v,
     })),
     update: jest.fn().mockResolvedValue(undefined),
+    query: jest.fn().mockResolvedValue([{ exists: 1 }]),
   };
   const ds = { transaction: (cb: (m: unknown) => unknown) => cb(manager) };
   const lines = { replaceAll: jest.fn(), recompute: jest.fn() };
@@ -31,12 +32,12 @@ const owned = (origin: CaseOrigin, status = CaseStatus.INTAKE) => ({
   id: 'c1',
   origin,
   status,
-  branchExternalId: 'B1',
+  branchId: 'B1',
   accountKey: 'MAIN',
 });
 
 describe('CaseCommandService', () => {
-  it('create: NATIVE, chi nhánh từ tham số, tự sinh mã, ghi dòng', async () => {
+  it('create: NATIVE, chi nhánh ERP từ tham số, không có UUID KGara, tự sinh mã, ghi dòng', async () => {
     const { svc, manager, lines } = make(null);
     await svc.create(
       'B1',
@@ -46,7 +47,8 @@ describe('CaseCommandService', () => {
     const created = manager.create.mock.calls[0][1] as Record<string, unknown>;
     expect(created).toMatchObject({
       origin: CaseOrigin.NATIVE,
-      branchExternalId: 'B1',
+      branchId: 'B1',
+      branchExternalId: null,
       accountKey: 'MAIN',
       caseCode: 'VV-20261119-001',
       status: CaseStatus.INTAKE,
@@ -55,7 +57,16 @@ describe('CaseCommandService', () => {
     expect(lines.replaceAll).toHaveBeenCalledTimes(1);
   });
 
-  it('create: trùng mã trong chi nhánh → 409', async () => {
+  it('create: không chọn chi nhánh → branchId null', async () => {
+    const { svc, manager } = make(null);
+    await svc.create(undefined, { licensePlate: '30A-1' } as never, 'u1');
+    expect(manager.create.mock.calls[0][1]).toMatchObject({
+      branchId: null,
+      branchExternalId: null,
+    });
+  });
+
+  it('create: trùng mã → 409', async () => {
     const { svc, manager } = make(null);
     manager.save.mockRejectedValueOnce({ code: '23505' });
     await expect(
@@ -63,7 +74,16 @@ describe('CaseCommandService', () => {
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
-  it('cách ly chi nhánh: where có branchExternalId, không thấy → 404', async () => {
+  it('create: chi nhánh không tồn tại → 400, không lưu', async () => {
+    const { svc, manager } = make(null);
+    manager.query.mockResolvedValueOnce([]);
+    await expect(
+      svc.create('B-x', { licensePlate: 'x' } as never, 'u1'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(manager.save).not.toHaveBeenCalled();
+  });
+
+  it('cách ly chi nhánh: có chọn chi nhánh thì where có branchId, không thấy → 404', async () => {
     const { svc, manager } = make(null);
     await expect(
       svc.update('B2', 'c1', { licensePlate: 'x' } as never),
@@ -73,9 +93,20 @@ describe('CaseCommandService', () => {
     ).where;
     expect(where).toMatchObject({
       id: 'c1',
-      branchExternalId: 'B2',
+      branchId: 'B2',
       isDeleted: false,
     });
+    expect(where).not.toHaveProperty('branchExternalId');
+  });
+
+  it('không chọn chi nhánh: where không lọc chi nhánh', async () => {
+    const { svc, manager } = make(owned(CaseOrigin.NATIVE));
+    await svc.update(undefined, 'c1', { licensePlate: 'x' } as never);
+    const where = (
+      manager.findOne.mock.calls[0][1] as { where: Record<string, unknown> }
+    ).where;
+    expect(where).not.toHaveProperty('branchId');
+    expect(where).not.toHaveProperty('branchExternalId');
   });
 
   it('update NATIVE: ghi field và thay dòng', async () => {
@@ -123,6 +154,24 @@ describe('CaseCommandService', () => {
       { id: 'c1' },
       { licensePlate: '30A-1', overrides: {} },
     );
+  });
+
+  it('update xe tài khoản OJ: đổi phân loại khác OJ → 400, không ghi; sửa field khác vẫn được', async () => {
+    const oj = {
+      ...owned(CaseOrigin.KGARA_SYNC),
+      accountKey: 'OJ',
+      sourceSnapshot: {},
+      overrides: {},
+    };
+    const a = make(oj);
+    await expect(
+      a.svc.update('B1', 'c1', { classification: 'BH' } as never),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(a.manager.update).not.toHaveBeenCalled();
+
+    const b = make(oj);
+    await b.svc.update('B1', 'c1', { licensePlate: '29B-2' } as never);
+    expect(b.manager.update).toHaveBeenCalledTimes(1);
   });
 
   it('softDelete: đặt isDeleted cho cả xe NATIVE và xe sync', async () => {

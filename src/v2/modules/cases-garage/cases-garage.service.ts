@@ -39,14 +39,18 @@ export class CasesGarageService {
     return { caseCode };
   }
 
-  async create(branch: string, dto: CreateCaseDto, actorId: string) {
+  async create(
+    branch: string | undefined,
+    dto: CreateCaseDto,
+    actorId: string,
+  ) {
     return wrap(
       'Đã tạo vụ việc',
       await this.commands.create(branch, dto, actorId),
     );
   }
 
-  async update(branch: string, id: string, dto: UpdateCaseDto) {
+  async update(branch: string | undefined, id: string, dto: UpdateCaseDto) {
     return wrap(
       'Đã cập nhật vụ việc',
       await this.commands.update(branch, id, dto),
@@ -54,7 +58,7 @@ export class CasesGarageService {
   }
 
   async updateStatus(
-    branch: string,
+    branch: string | undefined,
     id: string,
     status: CaseStatus,
     actorId = '',
@@ -65,12 +69,19 @@ export class CasesGarageService {
     );
   }
 
-  async remove(branch: string, id: string): Promise<{ message: string }> {
+  async remove(
+    branch: string | undefined,
+    id: string,
+  ): Promise<{ message: string }> {
     await this.commands.softDelete(branch, id);
     return { message: 'Đã xóa vụ việc' };
   }
 
-  async addLine(branch: string, id: string, dto: CaseServiceLineDto) {
+  async addLine(
+    branch: string | undefined,
+    id: string,
+    dto: CaseServiceLineDto,
+  ) {
     return wrap(
       'Đã thêm hạng mục',
       await this.lineCommands.add(branch, id, dto),
@@ -78,7 +89,7 @@ export class CasesGarageService {
   }
 
   async replaceLine(
-    branch: string,
+    branch: string | undefined,
     id: string,
     lineId: string,
     dto: CaseServiceLineDto,
@@ -89,7 +100,7 @@ export class CasesGarageService {
     );
   }
 
-  async removeLine(branch: string, id: string, lineId: string) {
+  async removeLine(branch: string | undefined, id: string, lineId: string) {
     return wrap(
       'Đã xóa hạng mục',
       await this.lineCommands.remove(branch, id, lineId),
@@ -97,7 +108,7 @@ export class CasesGarageService {
   }
 
   async updateProgress(
-    branch: string,
+    branch: string | undefined,
     id: string,
     dto: UpdateCaseProgressDto,
     actorId: string,
@@ -109,7 +120,7 @@ export class CasesGarageService {
   }
 
   async revertCase(
-    branch: string,
+    branch: string | undefined,
     id: string,
     fields?: string[],
     actorId = '',
@@ -121,7 +132,7 @@ export class CasesGarageService {
   }
 
   async revertLine(
-    branch: string,
+    branch: string | undefined,
     id: string,
     lineId: string,
     fields?: string[],
@@ -133,7 +144,7 @@ export class CasesGarageService {
   }
 
   async updatePartsCost(
-    branch: string,
+    branch: string | undefined,
     id: string,
     lineId: string,
     partsCost: number,

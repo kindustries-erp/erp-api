@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Brackets, DataSource } from 'typeorm';
+import { applyBranchScope } from '@/v2/core/branches-core';
 import type {
   CaseWorkshopCandidate,
   QueryWorkshopCandidatesDto,
@@ -31,7 +32,7 @@ export function toWorkshopCandidate(c: CaseGarage): CaseWorkshopCandidate {
 }
 
 /**
- * Tìm xe để đưa vào bảng tiến độ trong chi nhánh: biển số (so sau chuẩn hóa), mã vụ việc, tên khách.
+ * Tìm xe để đưa vào bảng tiến độ (trong chi nhánh ERP nếu có chọn): biển số (so sau chuẩn hóa), mã vụ việc, tên khách.
  * Xe chưa xong lên trước, rồi theo ngày tiếp nhận mới nhất.
  */
 @Injectable()
@@ -39,12 +40,12 @@ export class CaseWorkshopCandidatesService {
   constructor(private readonly dataSource: DataSource) {}
 
   async search(
-    branch: string,
+    branchId: string | undefined,
     q: QueryWorkshopCandidatesDto,
   ): Promise<CaseWorkshopCandidate[]> {
     const term = q.search.trim();
     const plate = normalizePlate(term);
-    const rows = await this.dataSource
+    const qb = this.dataSource
       .getRepository(CaseGarage)
       .createQueryBuilder('c')
       .addSelect(
@@ -53,7 +54,6 @@ export class CaseWorkshopCandidatesService {
       )
       .where('c.is_deleted = false')
       .andWhere('c.external_deleted_at IS NULL')
-      .andWhere('c.branch_external_id = :branch', { branch })
       .andWhere(
         new Brackets((w) => {
           w.where('c.case_code ILIKE :s', {
@@ -65,8 +65,9 @@ export class CaseWorkshopCandidatesService {
       .orderBy('finished_rank', 'ASC')
       .addOrderBy('c.received_at', 'DESC', 'NULLS LAST')
       .addOrderBy('c.created_at', 'DESC')
-      .limit(q.limit ?? DEFAULT_LIMIT)
-      .getMany();
+      .limit(q.limit ?? DEFAULT_LIMIT);
+    applyBranchScope(qb, 'c', branchId);
+    const rows = await qb.getMany();
     return rows.map(toWorkshopCandidate);
   }
 }

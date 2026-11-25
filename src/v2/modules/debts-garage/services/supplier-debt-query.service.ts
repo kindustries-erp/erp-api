@@ -19,9 +19,11 @@ import {
   buildSupplierLedgerQuery,
   isLedgerReadEnabled,
 } from '../helpers/ledger-read.helper';
+import { caseInErpBranchSql } from '../helpers/erp-branch-case.sql';
 
 export interface SupplierDebtListQuery extends DebtListQuery {
-  branchId: string;
+  /** Chi nhánh ERP (không bắt buộc); không có thì mọi chi nhánh. */
+  branchId?: string;
   from?: string;
   to?: string;
   scope?: 'outstanding' | 'all';
@@ -145,11 +147,12 @@ export class SupplierDebtQueryService extends AbstractDebtQueryService<
         .where(SUPPLIER_CASE_CONDITIONS.join(' AND '))
         .andWhere(P.hasPayable)
         .andWhere(`${P.date} >= :debtFrom`, { debtFrom: effectiveFrom })
-        .andWhere(
-          'COALESCE(c.branch_external_id, gp.branch_external_id) = :debtBranch',
-          { debtBranch: branchId },
-        )
         .groupBy(PLATE);
+      if (branchId) {
+        sub.andWhere(caseInErpBranchSql('c', ':debtBranch'), {
+          debtBranch: branchId,
+        });
+      }
       if (to) {
         sub.andWhere(`${P.date} <= :debtTo`, {
           debtTo: to.length === 10 ? `${to} 23:59:59.999` : to,

@@ -43,7 +43,7 @@ describe('CaseColumnOptionsService', () => {
     ]);
     expect(res.pagination).toMatchObject({ pageSize: 200, total: 2 });
     for (const { sql, params } of cap.calls) {
-      expect(sql).toContain('"c"."branch_external_id" = $1');
+      expect(sql).toContain('"c"."branch_id" = $1');
       expect(sql).toContain('"c"."external_deleted_at" IS NULL');
       expect(sql).not.toContain("51' --");
       expect(params[0]).toBe('b1');

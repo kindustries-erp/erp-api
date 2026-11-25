@@ -17,7 +17,7 @@ import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
 import { RequirePermissions } from '@/auth/decorators/require-permissions.decorator';
 import { ErpAction, ErpResource, RbacAccessService } from '@/v2/core/rbac-core';
-import { BranchId } from '@/kgara-api-core/decorators/branch-id.decorator';
+import { ErpBranchId } from '@/v2/core/branches-core';
 import {
   CreateCaseProgressLogDto,
   QueryWorkshopBoardDto,
@@ -44,11 +44,6 @@ interface RequestWithUser {
   user?: { sub?: string };
 }
 
-function requireBranch(branchId: string | undefined): string {
-  if (!branchId) throw new BadRequestException('Thiếu chi nhánh.');
-  return branchId;
-}
-
 /**
  * Trang tiến độ xưởng (quyền riêng `garage_workshop`): board xe theo status v2, nhật ký công đoạn/ghi chú,
  * sửa tay giờ. Đổi status cha vẫn qua `PATCH :id/status` (quyền `garage:update`).
@@ -73,15 +68,21 @@ export class CasesGarageWorkshopController {
     summary: 'Board tiến độ xưởng: mọi status v2 + thời gian công đoạn',
   })
   @Get('workshop/board')
-  board(@Query() q: QueryWorkshopBoardDto, @BranchId() branch: string) {
-    return this.query.board(requireBranch(branch), q);
+  board(
+    @Query() q: QueryWorkshopBoardDto,
+    @ErpBranchId() branch: string | undefined,
+  ) {
+    return this.query.board(branch, q);
   }
 
   @RequirePermissions(perm(ErpAction.READ))
   @ApiOperation({ summary: 'Nhân viên để chọn người làm (theo chi nhánh)' })
   @Get('workshop/workers')
-  workers(@Query('search') search: string, @BranchId() branch: string) {
-    return this.workersService.list(requireBranch(branch), search);
+  workers(
+    @Query('search') search: string,
+    @ErpBranchId() branch: string | undefined,
+  ) {
+    return this.workersService.list(branch, search);
   }
 
   @RequirePermissions(perm(ErpAction.READ))
@@ -89,10 +90,10 @@ export class CasesGarageWorkshopController {
   @Get('workshop/candidates')
   async candidates(
     @Query() q: QueryWorkshopCandidatesDto,
-    @BranchId() branch: string,
+    @ErpBranchId() branch: string | undefined,
   ) {
     return {
-      items: await this.candidatesService.search(requireBranch(branch), q),
+      items: await this.candidatesService.search(branch, q),
     };
   }
 
@@ -104,7 +105,7 @@ export class CasesGarageWorkshopController {
   @Post('workshop/track')
   async track(
     @Body() dto: TrackWorkshopCaseDto,
-    @BranchId() branch: string,
+    @ErpBranchId() branch: string | undefined,
     @Req() req: RequestWithUser,
   ) {
     const userId = req.user?.sub ?? '';
@@ -115,7 +116,7 @@ export class CasesGarageWorkshopController {
           ErpAction.UPDATE,
         )
       : false;
-    const data = await this.tracker.track(requireBranch(branch), dto, {
+    const data = await this.tracker.track(branch, dto, {
       id: userId,
       canChangeStatus,
     });
@@ -130,7 +131,7 @@ export class CasesGarageWorkshopController {
   @Post('workshop/track-new')
   async trackNew(
     @Body() dto: TrackNewWorkshopCaseDto,
-    @BranchId() branch: string,
+    @ErpBranchId() branch: string | undefined,
     @Req() req: RequestWithUser,
   ) {
     const userId = req.user?.sub ?? '';
@@ -143,7 +144,7 @@ export class CasesGarageWorkshopController {
             ErpAction.UPDATE,
           )
         : false;
-    const data = await this.tracker.trackNew(requireBranch(branch), dto, {
+    const data = await this.tracker.trackNew(branch, dto, {
       id: userId,
       canChangeStatus,
     });
@@ -155,9 +156,9 @@ export class CasesGarageWorkshopController {
   @Delete('workshop/track/:caseId')
   async untrack(
     @Param('caseId', new ParseUUIDPipe()) caseId: string,
-    @BranchId() branch: string,
+    @ErpBranchId() branch: string | undefined,
   ) {
-    await this.tracker.untrack(requireBranch(branch), caseId);
+    await this.tracker.untrack(branch, caseId);
     return { message: 'Đã bỏ xe khỏi bảng tiến độ' };
   }
 
@@ -166,9 +167,9 @@ export class CasesGarageWorkshopController {
   @Get(':id/progress-logs')
   async timeline(
     @Param('id', new ParseUUIDPipe()) id: string,
-    @BranchId() branch: string,
+    @ErpBranchId() branch: string | undefined,
   ) {
-    return { items: await this.query.timeline(requireBranch(branch), id) };
+    return { items: await this.query.timeline(branch, id) };
   }
 
   @RequirePermissions(perm(ErpAction.UPDATE))
@@ -177,15 +178,10 @@ export class CasesGarageWorkshopController {
   async createLog(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: CreateCaseProgressLogDto,
-    @BranchId() branch: string,
+    @ErpBranchId() branch: string | undefined,
     @Req() req: RequestWithUser,
   ) {
-    const data = await this.logs.create(
-      requireBranch(branch),
-      id,
-      dto,
-      req.user?.sub ?? '',
-    );
+    const data = await this.logs.create(branch, id, dto, req.user?.sub ?? '');
     return { message: 'Đã ghi tiến độ', data };
   }
 
@@ -197,11 +193,11 @@ export class CasesGarageWorkshopController {
   async updateLog(
     @Param('logId', new ParseUUIDPipe()) logId: string,
     @Body() dto: UpdateCaseProgressLogDto,
-    @BranchId() branch: string,
+    @ErpBranchId() branch: string | undefined,
     @Req() req: RequestWithUser,
   ) {
     const data = await this.logs.update(
-      requireBranch(branch),
+      branch,
       logId,
       dto,
       req.user?.sub ?? '',
@@ -214,10 +210,10 @@ export class CasesGarageWorkshopController {
   @Delete('progress-logs/:logId')
   async removeLog(
     @Param('logId', new ParseUUIDPipe()) logId: string,
-    @BranchId() branch: string,
+    @ErpBranchId() branch: string | undefined,
     @Req() req: RequestWithUser,
   ) {
-    await this.logs.remove(requireBranch(branch), logId, req.user?.sub ?? '');
+    await this.logs.remove(branch, logId, req.user?.sub ?? '');
     return { message: 'Đã xóa nhật ký' };
   }
 }

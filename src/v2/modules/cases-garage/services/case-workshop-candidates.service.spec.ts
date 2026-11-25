@@ -23,11 +23,18 @@ function make(rows: unknown[]) {
 }
 
 describe('CaseWorkshopCandidatesService', () => {
-  it('lọc chi nhánh, xe còn hoạt động; xe chưa xong lên trước; limit mặc định 20', async () => {
+  it('không chọn chi nhánh thì không lọc chi nhánh', async () => {
+    const { svc, qb } = make([]);
+    await svc.search(undefined, { search: '51g-123' });
+    const sqls = qb.andWhere.mock.calls.map((c) => String(c[0]));
+    expect(sqls.some((s) => s.includes('branch'))).toBe(false);
+  });
+
+  it('có chọn chi nhánh ERP thì lọc branch_id, xe còn hoạt động; xe chưa xong lên trước; limit mặc định 20', async () => {
     const { svc, qb } = make([]);
     await svc.search('B1', { search: '51g-123' });
-    expect(qb.andWhere).toHaveBeenCalledWith('c.branch_external_id = :branch', {
-      branch: 'B1',
+    expect(qb.andWhere).toHaveBeenCalledWith('c.branch_id = :scopeBranchId', {
+      scopeBranchId: 'B1',
     });
     expect(qb.andWhere).toHaveBeenCalledWith('c.external_deleted_at IS NULL');
     expect(qb.orderBy).toHaveBeenCalledWith('finished_rank', 'ASC');
