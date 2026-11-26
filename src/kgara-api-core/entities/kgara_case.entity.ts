@@ -54,6 +54,15 @@ export class KgaraCase {
   })
   khachHangName: string | null;
 
+  /** TenKhachHang – tên khách in trên phiếu (có thể khác tên danh mục `khachHangName`) */
+  @Column({
+    type: 'varchar',
+    length: 255,
+    name: 'ten_khach_hang',
+    nullable: true,
+  })
+  tenKhachHang: string | null;
+
   /** TinhTrangDichVu – service status code (0=intake,1=quote,2=wip,3=done,9=cancelled) */
   @Column({ type: 'int', name: 'tinh_trang_dich_vu', nullable: true })
   tinhTrangDichVu: number | null;

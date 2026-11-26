@@ -183,6 +183,7 @@ export class KgaraCaseServicesExportService {
         soChungTu: item.soChungTu || '—',
         bienSoXe: item.bienSoXe || '—',
         khachHangName: item.khachHangName || '—',
+        tenKhachHang: item.tenKhachHang || '—',
         loaiHienThi,
         sanPhamCode: item.sanPhamCode || '—',
         sanPhamName: item.sanPhamName || '—',

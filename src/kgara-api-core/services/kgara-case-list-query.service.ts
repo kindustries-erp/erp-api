@@ -127,6 +127,7 @@ export class KgaraCaseListQueryService {
           qb.where('case.soChungTu ILIKE :q', { q: `%${q}%` })
             .orWhere('case.bienSoXe ILIKE :q', { q: `%${q}%` })
             .orWhere('case.khachHangName ILIKE :q', { q: `%${q}%` })
+            .orWhere('case.tenKhachHang ILIKE :q', { q: `%${q}%` })
             .orWhere('case.khachHangCode ILIKE :q', { q: `%${q}%` })
             .orWhere('case.hangXeName ILIKE :q', { q: `%${q}%` })
             .orWhere('case.dongXeName ILIKE :q', { q: `%${q}%` });

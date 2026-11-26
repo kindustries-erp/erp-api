@@ -80,6 +80,7 @@ describe('CaseWorkshopCandidatesService', () => {
       caseCode: 'VV-1',
       licensePlate: '51G-12345',
       customerName: 'Chị Tư',
+      voucherCustomerName: null,
       vehicleName: 'Toyota Vios',
       origin: CaseOrigin.KGARA_SYNC,
       status: CaseStatus.QUOTED,

@@ -75,6 +75,7 @@ export interface CaseWorkshopCandidate {
   caseCode: string;
   licensePlate: string | null;
   customerName: string | null;
+  voucherCustomerName: string | null;
   vehicleName: string | null;
   origin: CaseOrigin;
   status: CaseStatus;

@@ -114,6 +114,7 @@ export class KgaraCaseServicesQueryService {
             .orWhere('c.so_chung_tu ILIKE :q', { q: `%${query}%` })
             .orWhere('c.bien_so_xe ILIKE :q', { q: `%${query}%` })
             .orWhere('c.khach_hang_name ILIKE :q', { q: `%${query}%` })
+            .orWhere('c.ten_khach_hang ILIKE :q', { q: `%${query}%` })
             .orWhere('c.khach_hang_code ILIKE :q', { q: `%${query}%` });
         }),
       );
@@ -211,6 +212,7 @@ export class KgaraCaseServicesQueryService {
         'c.bien_so_xe AS "bienSoXe"',
         'c.khach_hang_code AS "khachHangCode"',
         'c.khach_hang_name AS "khachHangName"',
+        'c.ten_khach_hang AS "tenKhachHang"',
         'c.tinh_trang_dich_vu AS "status"',
         'c.ten_tinh_trang_dich_vu AS "statusName"',
         'c.classification AS "classification"',
@@ -233,6 +235,7 @@ export class KgaraCaseServicesQueryService {
       bienSoXe: r.bienSoXe,
       khachHangCode: r.khachHangCode,
       khachHangName: r.khachHangName,
+      tenKhachHang: r.tenKhachHang,
       caseDate: r.caseDate,
       completionDate: r.completionDate,
       branchExternalId: r.branchExternalId,

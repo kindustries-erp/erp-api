@@ -71,6 +71,11 @@ export class CreateCaseDto {
   @IsString()
   @MaxLength(255)
   customerName?: string;
+  @ApiPropertyOptional({ description: 'Tên khách in trên phiếu' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  voucherCustomerName?: string;
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

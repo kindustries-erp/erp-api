@@ -109,6 +109,15 @@ export class CaseGarage extends BaseCaseEntity<CaseStatus> {
   @Column({ type: 'smallint', name: 'manufacture_year', nullable: true })
   manufactureYear: number | null;
 
+  /** Tên khách in trên phiếu KGara (V1 `ten_khach_hang`), có thể khác `customerName` (danh mục). */
+  @Column({
+    type: 'varchar',
+    length: 255,
+    name: 'voucher_customer_name',
+    nullable: true,
+  })
+  voucherCustomerName: string | null;
+
   /** Nguồn khách theo KGara (V1 `kgara_classification`), chỉ đọc. */
   @Column({
     type: 'varchar',

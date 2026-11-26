@@ -716,6 +716,60 @@ describe('SyncCaseService (số khung & đối tượng thanh toán)', () => {
     expect(saved.doiTuongThanhToanName).toBe('Bảo hiểm DBV');
   });
 
+  it('detail: tên danh mục và tên trên phiếu lưu riêng, không gộp (phiếu nhân bản)', async () => {
+    const ctx = buildService();
+    ctx.client.getCaseDetail.mockResolvedValue({
+      data: {
+        HdPhieuDichVuID: MAIN_GUID,
+        SoChungTu: 'GR-PDV2608-0099-Copy1',
+        TinhTrangDichVu: 1,
+        KhachHangCode: 'KH-ACTR',
+        KhachHangName: 'ACTR',
+        TenKhachHang: 'SAILUN',
+        ListPhieuDichVuChiTiet: [],
+      },
+      dataAsOf: '2026-11-26T10:00:00+07:00',
+    });
+    ctx.caseRepo.findOne.mockResolvedValue({
+      id: 'case-row-1',
+      hdPhieuDichVuId: MAIN_GUID,
+      accountKey: 'MAIN',
+      khachHangName: 'ACTR',
+      tenKhachHang: null,
+    } as unknown as KgaraCase);
+
+    await ctx.service.syncCaseDetail(BRANCH, MAIN_GUID, KgaraAccountKey.MAIN);
+
+    const saved = ctx.caseRepo.save.mock.calls[0][0];
+    expect(saved.khachHangName).toBe('ACTR');
+    expect(saved.tenKhachHang).toBe('SAILUN');
+  });
+
+  it('detail thiếu KhachHangName không lấy TenKhachHang làm tên danh mục', async () => {
+    const ctx = buildService();
+    ctx.client.getCaseDetail.mockResolvedValue({
+      data: {
+        HdPhieuDichVuID: MAIN_GUID,
+        SoChungTu: 'GR-PDV2608-0100',
+        TinhTrangDichVu: 1,
+        TenKhachHang: 'Khách lẻ',
+        ListPhieuDichVuChiTiet: [],
+      },
+      dataAsOf: '2026-11-26T10:00:00+07:00',
+    });
+    ctx.caseRepo.findOne.mockResolvedValue({
+      id: 'case-row-1',
+      hdPhieuDichVuId: MAIN_GUID,
+      accountKey: 'MAIN',
+    } as unknown as KgaraCase);
+
+    await ctx.service.syncCaseDetail(BRANCH, MAIN_GUID, KgaraAccountKey.MAIN);
+
+    const saved = ctx.caseRepo.save.mock.calls[0][0];
+    expect(saved.khachHangName).toBeUndefined();
+    expect(saved.tenKhachHang).toBe('Khách lẻ');
+  });
+
   it('list có hãng/dòng xe thì lưu; list rỗng không xóa giá trị đã có', async () => {
     const ctx = buildService();
     ctx.client.getCases.mockResolvedValue({

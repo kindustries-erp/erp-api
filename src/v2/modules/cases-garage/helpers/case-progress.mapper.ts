@@ -49,6 +49,7 @@ export function toCaseProgressItem(
     vehicleBrandName: c.vehicleBrandName ?? null,
     vehicleModelName: c.vehicleModelName ?? null,
     customerName: c.customerName ?? null,
+    voucherCustomerName: c.voucherCustomerName ?? null,
     receivedAt: iso(c.receivedAt),
     startedAt: iso(c.startedAt),
     workSummary: c.requestDescription?.trim() || lineSummary,

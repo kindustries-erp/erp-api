@@ -288,7 +288,10 @@ export class SyncCaseService {
           gwCase.soChungTu = c.SoChungTu;
           gwCase.bienSoXe = c.BienSoXe;
           gwCase.khachHangCode = c.KhachHangCode;
-          gwCase.khachHangName = c.KhachHangName || c.TenKhachHang;
+          // Tên danh mục và tên trên phiếu là hai field riêng của KGara, không gộp.
+          gwCase.khachHangName = c.KhachHangName;
+          if (c.TenKhachHang !== undefined)
+            gwCase.tenKhachHang = c.TenKhachHang || null;
           gwCase.tinhTrangDichVu = newStatus;
           gwCase.tenTinhTrangDichVu = c.TenTinhTrangDichVu;
           gwCase.tienCoThue = resolveStoredRevenue(
@@ -767,7 +770,9 @@ export class SyncCaseService {
       gwCase.soChungTu = caseData.SoChungTu;
       gwCase.bienSoXe = caseData.BienSoXe;
       gwCase.khachHangCode = caseData.KhachHangCode;
-      gwCase.khachHangName = caseData.KhachHangName || caseData.TenKhachHang;
+      gwCase.khachHangName = caseData.KhachHangName;
+      if (caseData.TenKhachHang !== undefined)
+        gwCase.tenKhachHang = caseData.TenKhachHang || null;
       gwCase.tinhTrangDichVu = newStatus;
       gwCase.tenTinhTrangDichVu = caseData.TenTinhTrangDichVu;
       gwCase.tienCoThue = netPayable;

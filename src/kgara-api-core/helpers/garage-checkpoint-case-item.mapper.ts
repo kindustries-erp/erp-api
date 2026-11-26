@@ -9,6 +9,8 @@ export interface CheckpointCaseItem {
   bienSoXe: string | null;
   khachHangCode: string | null;
   khachHangName: string | null;
+  /** Tên khách in trên phiếu (có thể khác tên danh mục). */
+  tenKhachHang: string | null;
   tinhTrangDichVu: number | null;
   tenTinhTrangDichVu: string | null;
   classification: string;
@@ -77,6 +79,7 @@ export function toCheckpointCaseItem(c: any): CheckpointCaseItem {
     bienSoXe: c.bienSoXe,
     khachHangCode: c.khachHangCode,
     khachHangName: c.khachHangName,
+    tenKhachHang: c.tenKhachHang ?? null,
     tinhTrangDichVu: c.tinhTrangDichVu,
     tenTinhTrangDichVu: c.tenTinhTrangDichVu,
     classification: normalizeClass(c),
