@@ -1,4 +1,5 @@
-// Smoke KINDU-1623 (CHỈ staging/dev): (A) ngày V2 = giờ VN của V1 sau sync, (B) Excel hạng mục tách sheet công/OJ.
+// Smoke KINDU-1623 (CHỈ staging/dev): (A) ngày V2 = giờ VN của V1 sau sync, (B) Excel hạng mục tách sheet công/OJ
+// (OJ = tài khoản OJ hoặc phân loại OJ).
 // A ghi DB staging qua `POST sync/gross-profit` (chiếu lại V2). Từ chối DB chứa "prod".
 // Env: E2E_API_URL (mặc định suy từ PORT), E2E_PASSWORD (đọc từ .env nếu shell chưa có),
 //      SMOKE_FROM / SMOKE_TO (mặc định 2026-10-01..2026-10-31), SMOKE_ACCOUNT (mặc định MAIN).
@@ -42,7 +43,15 @@ const check = (name, ok, detail = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ` :: ${detail}`}`);
 };
 
-const db = new pg.Client({ connectionString: dbUrl });
+// Giống src/db/pg-connection.helper: SSL bật thì bỏ sslmode/ssl khỏi URL để rejectUnauthorized:false có hiệu lực.
+const sslOff = /sslmode=disable|ssl=false/.test(dbUrl);
+const pgUrl = sslOff
+  ? dbUrl
+  : dbUrl.replace(/([?&])(sslmode|ssl|uselibpqcompat)=[^&]*&?/gi, '$1').replace(/[?&]$/, '');
+const db = new pg.Client({
+  connectionString: pgUrl,
+  ssl: sslOff ? false : { rejectUnauthorized: false },
+});
 await db.connect();
 const one = async (sql, params = []) => (await db.query(sql, params)).rows[0];
 
@@ -136,6 +145,16 @@ if (ex.status === 200) {
   console.log('Sheets:', names.join(' | '));
   check('B1. sheet chính luôn có', names.includes(NAMES[0]));
   check('B2. chỉ có tên sheet chuẩn', names.every((n) => NAMES.includes(n)), names.join(','));
+  // Phiếu OJ = tài khoản OJ hoặc phân loại hiệu lực OJ (cùng quy tắc isOjCase), không theo tiền tố mã.
+  const ojCodes = new Set(
+    (
+      await db.query(
+        `SELECT c.so_chung_tu FROM kgara_cases c
+           LEFT JOIN erp_module_categories cat ON cat.id = c.category_id
+          WHERE c.account_key = 'OJ' OR COALESCE(cat.code, c.classification) IN ('OJ', 'OJ_NGOAI')`,
+      )
+    ).rows.map((r) => r.so_chung_tu),
+  );
   const isLabor = (u) => /^cong(\s|$)|\bgio cong\b/.test(String(u ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase().trim());
   const val = (c) => (c && typeof c === 'object' && 'result' in c ? c.result : c);
   let total = 0;
@@ -151,12 +170,12 @@ if (ex.status === 200) {
       n++;
       const labor = isLabor(val(row.getCell(iU).value));
       if (labor !== ws.name.includes('Công')) wrong++;
-      if (no.startsWith('GN-') !== ws.name.includes('(OJ)')) ojWrong++;
+      if (ojCodes.has(no) !== ws.name.includes('(OJ)')) ojWrong++;
     });
     total += n;
     console.log(`  ${ws.name}: ${n} dòng`);
     check(`B3. "${ws.name}" đúng nhóm công/không công`, wrong === 0, `${wrong} dòng sai`);
-    check(`B4. "${ws.name}" đúng nhóm MAIN/OJ (theo tiền tố GR-/GN-)`, ojWrong === 0, `${ojWrong} dòng sai`);
+    check(`B4. "${ws.name}" đúng nhóm MAIN/OJ (tài khoản hoặc phân loại OJ)`, ojWrong === 0, `${ojWrong} dòng sai`);
   }
   const api = await (await fetch(`${BASE}/api/v1/greenway/cases/services?from=${FROM}&to=${TO}&page=1&pageSize=1`, { headers: H })).json().catch(() => null);
   const apiTotal = api?.total ?? api?.data?.total ?? api?.meta?.total;
