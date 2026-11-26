@@ -15,9 +15,18 @@ export type ItemizedSheetKey = keyof typeof ITEMIZED_SHEET_NAMES;
 const unitOf = (line: any): string =>
   line?.donViTinhText ?? line?.DonViTinhText ?? '';
 
-/** Phiếu OJ khi `accountKey = 'OJ'`; thiếu/MAIN/khác là MAIN. */
-export const isOjCase = (caseRow: any): boolean =>
-  String(caseRow?.accountKey ?? '').toUpperCase() === 'OJ';
+const OJ_CLASSIFICATIONS = ['OJ', 'OJ_NGOAI'];
+
+/**
+ * Phiếu OJ khi thuộc tài khoản KGara OJ (`accountKey = 'OJ'`) HOẶC có phân loại hiệu lực
+ * (mã danh mục, không có thì `classification`) là OJ/OJ_NGOAI, ví dụ xe tài khoản MAIN được
+ * phân loại OJ trên ERP. Còn lại là MAIN.
+ */
+export const isOjCase = (caseRow: any): boolean => {
+  if (String(caseRow?.accountKey ?? '').toUpperCase() === 'OJ') return true;
+  const cls = caseRow?.category?.code ?? caseRow?.classification;
+  return OJ_CLASSIFICATIONS.includes(String(cls ?? '').toUpperCase());
+};
 
 /** Nhóm sheet của một dòng hạng mục: OJ hay MAIN, công (theo ĐVT) hay không. */
 export function itemizedSheetKeyOf(caseRow: any, line: any): ItemizedSheetKey {
@@ -27,7 +36,7 @@ export function itemizedSheetKeyOf(caseRow: any, line: any): ItemizedSheetKey {
 }
 
 /**
- * Sheet chi tiết hạng mục của bảng kê: tách công khỏi DV/PT (theo ĐVT) và tách OJ khỏi MAIN.
+ * Sheet chi tiết hạng mục của bảng kê: tách công khỏi DV/PT (theo ĐVT) và tách OJ (`isOjCase`) khỏi MAIN.
  * Mỗi dòng thuộc đúng một sheet, mỗi sheet có tổng riêng. Sheet MAIN không công luôn được tạo
  * (giữ tương thích); ba sheet còn lại chỉ tạo khi có dòng.
  */

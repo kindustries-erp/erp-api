@@ -109,10 +109,13 @@ export class KgaraCaseServicesExportService {
     workbook.creator = 'ERP';
     workbook.created = new Date();
 
-    // Tách công khỏi DV/PT (theo ĐVT) và OJ khỏi MAIN; mỗi dòng đúng một sheet.
+    // Tách công khỏi DV/PT (theo ĐVT) và OJ (tài khoản hoặc phân loại OJ) khỏi MAIN; mỗi dòng đúng một sheet.
     const groups = new Map<ItemizedSheetKey, any[]>();
     for (const item of items) {
-      const key = itemizedSheetKeyOf({ accountKey: item.accountKey }, item);
+      const key = itemizedSheetKeyOf(
+        { accountKey: item.accountKey, classification: item.classification },
+        item,
+      );
       const list = groups.get(key) ?? [];
       list.push(item);
       groups.set(key, list);
