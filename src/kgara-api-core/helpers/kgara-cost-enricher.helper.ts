@@ -152,6 +152,32 @@ export class KgaraCostEnricherHelper {
     }
   }
 
+  private static setLineCost(
+    line: Record<string, any>,
+    unit: number,
+    total: number,
+  ): void {
+    line.GiaVonPhuTung = unit;
+    line.giaVonPhuTung = unit;
+    line.TongVon = total;
+    line.tongVon = total;
+  }
+
+  /** Tên journal (còn trong pool) chứa hoặc nằm trong tên dòng (> 5 ký tự); ưu tiên tên dài nhất. */
+  private static longestFuzzyMatch(
+    names: string[],
+    pool: Map<string, number>,
+  ): string | null {
+    let best: string | null = null;
+    for (const jName of pool.keys()) {
+      const hit = names.some(
+        (n) => n.length > 5 && (n.includes(jName) || jName.includes(n)),
+      );
+      if (hit && (!best || jName.length > best.length)) best = jName;
+    }
+    return best;
+  }
+
   static enrichCaseLines<T extends Record<string, any>>(
     lines: T[],
     journalItems?: JournalItemCost[] | null,
@@ -213,8 +239,11 @@ export class KgaraCostEnricherHelper {
       }
     }
 
-    // 2. Khớp giá vốn xuất kho (TK 1541) vào từng dòng phụ tùng (LoaiSanPhamCode === 'PT')
+    // 2. Khớp giá vốn xuất kho (TK 1541) vào từng dòng phụ tùng (LoaiSanPhamCode === 'PT').
+    // Vòng 1 khớp đúng tên cho mọi dòng, vòng 2 mới khớp gần đúng (ưu tiên tên journal dài nhất),
+    // để "THANH TRUYỀN" không lấy nhầm "BẠC THANH TRUYỀN" tùy thứ tự journal.
     let allocatedTotal = 0;
+    const pending: Array<{ copy: Record<string, any>; names: string[] }> = [];
     const enrichedLines = lines.map((line) => {
       const copy: Record<string, any> = { ...line };
       const itemType = String(
@@ -239,43 +268,49 @@ export class KgaraCostEnricherHelper {
         return copy as T;
       }
 
-      const name1 = this.cleanName(copy.SanPhamName || copy.sanPhamName);
-      const name2 = this.cleanName(copy.NoiDungChiTiet || copy.noiDungChiTiet);
-
-      let matchedCost = 0;
-      for (const [jName, cost] of warehouseCostsByName.entries()) {
-        if (!jName || cost <= 0) continue;
-        if (
-          name1 === jName ||
-          name2 === jName ||
-          (name1.length > 5 &&
-            (name1.includes(jName) || jName.includes(name1))) ||
-          (name2.length > 5 && (name2.includes(jName) || jName.includes(name2)))
-        ) {
-          matchedCost += cost;
-          warehouseCostsByName.delete(jName);
-          break;
-        }
+      // Giá vốn xuất kho của lần làm giàu trước bị xóa, khớp lại từ đầu theo journal hiện tại
+      if (
+        String(copy.CostAllocationType ?? copy.costAllocationType ?? '') ===
+        'WAREHOUSE_ISSUE'
+      ) {
+        this.setLineCost(copy, 0, 0);
+        delete copy.CostAllocationType;
+        delete copy.costAllocationType;
       }
 
-      if (matchedCost > 0) {
-        const qty = Math.max(
-          1,
-          Number(copy.SoLuongHoaDon ?? copy.soLuongHoaDon ?? copy.SoLuong ?? 1),
-        );
-        const unitCost = Math.round(matchedCost / qty);
-
-        copy.GiaVonPhuTung = unitCost;
-        copy.giaVonPhuTung = unitCost;
-        copy.TongVon = matchedCost;
-        copy.tongVon = matchedCost;
-        copy.CostAllocationType = 'WAREHOUSE_ISSUE';
-        copy.costAllocationType = 'WAREHOUSE_ISSUE';
-        allocatedTotal += matchedCost;
-      }
-
+      pending.push({
+        copy,
+        names: [
+          this.cleanName(copy.SanPhamName || copy.sanPhamName),
+          this.cleanName(copy.NoiDungChiTiet || copy.noiDungChiTiet),
+        ],
+      });
       return copy as T;
     });
+
+    const assign = (copy: Record<string, any>, jName: string) => {
+      const cost = warehouseCostsByName.get(jName) || 0;
+      warehouseCostsByName.delete(jName);
+      const qty = Math.max(
+        1,
+        Number(copy.SoLuongHoaDon ?? copy.soLuongHoaDon ?? copy.SoLuong ?? 1),
+      );
+      this.setLineCost(copy, Math.round(cost / qty), cost);
+      copy.CostAllocationType = 'WAREHOUSE_ISSUE';
+      copy.costAllocationType = 'WAREHOUSE_ISSUE';
+      allocatedTotal += cost;
+    };
+
+    const unmatched: typeof pending = [];
+    for (const p of pending) {
+      const exact = p.names.find((n) => n && warehouseCostsByName.has(n));
+      if (exact) assign(p.copy, exact);
+      else unmatched.push(p);
+    }
+    for (const p of unmatched) {
+      const fuzzy = this.longestFuzzyMatch(p.names, warehouseCostsByName);
+      if (fuzzy) assign(p.copy, fuzzy);
+    }
 
     breakdown.allocatedPartsCost = allocatedTotal;
     breakdown.unallocatedCost = Math.max(
