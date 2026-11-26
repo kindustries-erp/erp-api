@@ -1,6 +1,7 @@
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
+import { resolvePgConnection } from '../../db/pg-connection.helper';
 
 /**
  * Loader env chuẩn cho các script chạy tay (backfill, seed, netoff...).
@@ -183,6 +184,7 @@ export function resolveScriptEnv(opts: ScriptEnvOptions = {}): ScriptEnv {
 
   const databaseUrl = buildDatabaseUrl(config);
   const { host, port, dbName } = parseDatabaseUrl(databaseUrl);
+  const ssl = resolvePgSsl({ ...config, DATABASE_URL: databaseUrl });
   const isProduction =
     /production/i.test(dbName) ||
     (envFile ? /production/i.test(path.basename(envFile)) : false);
@@ -192,11 +194,12 @@ export function resolveScriptEnv(opts: ScriptEnvOptions = {}): ScriptEnv {
     envSource,
     envFile,
     explicit: Boolean(requested),
-    databaseUrl,
+    // SSL bật thì bỏ sslmode khỏi URL để `ssl` dưới đây có hiệu lực (pg ghi đè config bằng tham số URL)
+    databaseUrl: ssl ? resolvePgConnection(databaseUrl).url : databaseUrl,
     dbLabel: `${host}:${port}/${dbName}`,
     dbName,
     isProduction,
-    ssl: resolvePgSsl({ ...config, DATABASE_URL: databaseUrl }),
+    ssl,
   };
 }
 

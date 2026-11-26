@@ -2,6 +2,7 @@ import * as ExcelJS from 'exceljs';
 import {
   ITEMIZED_SHEET_NAMES,
   buildItemizedSheets,
+  isOjCase,
   itemizedSheetKeyOf,
 } from './kgara-itemized-sheets.builder';
 
@@ -92,6 +93,58 @@ describe('buildItemizedSheets', () => {
     expect(wb2.worksheets.map((w) => w.name)).toEqual([
       ITEMIZED_SHEET_NAMES.main,
     ]);
+  });
+
+  it('xe tài khoản MAIN phân loại OJ vào sheet OJ, MAIN loại khác giữ ở MAIN', () => {
+    const mainOj = {
+      ...mainCase,
+      hdPhieuDichVuId: 'm2',
+      soChungTu: 'GR-2',
+      classification: 'OJ',
+    };
+    const mainOjCat = {
+      ...mainCase,
+      hdPhieuDichVuId: 'm3',
+      soChungTu: 'GR-3',
+      classification: null,
+      category: { code: 'OJ_NGOAI' },
+    };
+    const mainOther = { ...mainCase, classification: 'SUA_CHUA_CHUNG' };
+    const wb = new ExcelJS.Workbook();
+    buildItemizedSheets(
+      wb,
+      [mainOther, mainOj, mainOjCat],
+      new Map([
+        ['m1', [line('Cái')]],
+        ['m2', [line('Cái'), line('Công')]],
+        ['m3', [line('Lần')]],
+      ]),
+    );
+    const codes = (name: string) =>
+      dataRows(wb.getWorksheet(name)!).map((r) => r.getCell(2).text);
+    expect(codes(ITEMIZED_SHEET_NAMES.main)).toEqual(['GR-1']);
+    expect(codes(ITEMIZED_SHEET_NAMES.oj).sort()).toEqual(['GR-2', 'GR-3']);
+    expect(codes(ITEMIZED_SHEET_NAMES.ojLabor)).toEqual(['GR-2']);
+    expect(wb.getWorksheet(ITEMIZED_SHEET_NAMES.mainLabor)).toBeUndefined();
+  });
+
+  it('isOjCase: tài khoản OJ luôn là OJ; MAIN theo phân loại hiệu lực (danh mục ưu tiên)', () => {
+    expect(
+      isOjCase({ accountKey: 'OJ', classification: 'SUA_CHUA_CHUNG' }),
+    ).toBe(true);
+    expect(isOjCase({ accountKey: 'MAIN', classification: 'oj' })).toBe(true);
+    expect(isOjCase({ accountKey: 'MAIN', classification: 'OJ_NGOAI' })).toBe(
+      true,
+    );
+    expect(
+      isOjCase({
+        accountKey: 'MAIN',
+        classification: 'OJ',
+        category: { code: 'KY_GUI_NOI_BO' },
+      }),
+    ).toBe(false);
+    expect(isOjCase({ accountKey: 'MAIN', classification: null })).toBe(false);
+    expect(isOjCase({})).toBe(false);
   });
 
   it('itemizedSheetKeyOf: thiếu accountKey là MAIN, ĐVT rỗng không phải công', () => {

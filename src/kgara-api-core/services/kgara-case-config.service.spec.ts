@@ -176,6 +176,35 @@ describe('KgaraCaseConfigService', () => {
       expect(result.categoryId).toBe('cat-uuid-2');
     });
 
+    it('đổi classification khi quan hệ category cũ đã nạp: danh mục đổi theo, không giữ danh mục cũ', async () => {
+      const oldCategory = {
+        id: 'cat-uuid-1',
+        code: 'SUA_CHUA_CHUNG',
+        moduleKey: 'GARAGE_CASE',
+      } as ErpModuleCategory;
+      const ojCategory = {
+        id: 'cat-oj-id',
+        code: 'OJ_NGOAI',
+        moduleKey: 'GARAGE_CASE',
+      } as ErpModuleCategory;
+      const existingCase = {
+        ...mockCase,
+        category: oldCategory,
+      } as KgaraCase;
+      caseRepo.findOne.mockResolvedValue(existingCase);
+      categoryRepo.findOne.mockResolvedValue(ojCategory);
+
+      const result = await service.updateCaseConfig(existingCase.id, {
+        classification: 'OJ',
+      });
+
+      expect(result.classification).toBe('OJ');
+      expect(result.categoryId).toBe('cat-oj-id');
+      expect(result.category).toBe(ojCategory);
+      const saved = mockManager.save.mock.calls[0][1];
+      expect(saved.category?.id).toBe('cat-oj-id');
+    });
+
     it('should normalize OJ_NGOAI to OJ and automatically set excludeFromDebt = true', async () => {
       const existingCase = { ...mockCase, excludeFromDebt: false } as KgaraCase;
       caseRepo.findOne.mockResolvedValue(existingCase);
