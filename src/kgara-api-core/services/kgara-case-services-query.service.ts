@@ -11,6 +11,19 @@ import {
   applySingleCaseServiceColumnFilter,
 } from '../helpers/kgara-case-filter.helper';
 
+/** Trần pageSize của API phân trang chi tiết hạng mục. */
+export const CASE_SERVICES_PAGE_SIZE_MAX = 100;
+/** Trần số dòng khi xuất Excel chi tiết hạng mục. */
+export const CASE_SERVICES_EXPORT_MAX_ROWS = 50000;
+
+/** pageSize hợp lệ: mặc định 20, tối thiểu 1, tối đa `max` (mặc định trần API 100). */
+export function resolveCaseServicesPageSize(
+  pageSize: number | string | undefined,
+  max: number = CASE_SERVICES_PAGE_SIZE_MAX,
+): number {
+  return Math.min(max, Math.max(1, Number(pageSize) || 20));
+}
+
 @Injectable()
 export class KgaraCaseServicesQueryService {
   private readonly logger = new Logger(KgaraCaseServicesQueryService.name);
@@ -26,21 +39,28 @@ export class KgaraCaseServicesQueryService {
   ) {}
 
   /**
-   * Truy vấn danh sách chi tiết Hạng mục Dịch vụ & Phụ tùng phân trang có tính tổng và tổng lũy kế
+   * Truy vấn danh sách chi tiết Hạng mục Dịch vụ & Phụ tùng phân trang có tính tổng và tổng lũy kế.
+   * API phân trang giữ trần `CASE_SERVICES_PAGE_SIZE_MAX`; export truyền `options.maxPageSize` để lấy đủ dòng.
    */
-  async findCaseServices(params: {
-    branchId?: string;
-    page?: number | string;
-    pageSize?: number | string;
-    q?: string;
-    from?: string;
-    to?: string;
-    serviceType?: string;
-    filtersStr?: string;
-    sorts?: string | string[];
-  }) {
+  async findCaseServices(
+    params: {
+      branchId?: string;
+      page?: number | string;
+      pageSize?: number | string;
+      q?: string;
+      from?: string;
+      to?: string;
+      serviceType?: string;
+      filtersStr?: string;
+      sorts?: string | string[];
+    },
+    options: { maxPageSize?: number } = {},
+  ) {
     const page = Math.max(1, Number(params.page) || 1);
-    const pageSize = Math.min(100, Math.max(1, Number(params.pageSize) || 20));
+    const pageSize = resolveCaseServicesPageSize(
+      params.pageSize,
+      options.maxPageSize,
+    );
     const offset = (page - 1) * pageSize;
 
     this.logger.log(

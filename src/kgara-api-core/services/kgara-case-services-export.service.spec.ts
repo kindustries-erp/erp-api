@@ -216,6 +216,40 @@ describe('KgaraCaseServicesExportService – tách sheet công và OJ', () => {
     expect(total).toBe(data.length);
   });
 
+  it('xuất đủ mọi dòng (không bị trần 100 của API phân trang) và xe MAIN phân loại OJ vào sheet OJ', async () => {
+    const data = Array.from({ length: 150 }, (_, i) =>
+      mk({ id: String(i), soChungTu: `GR-${i}`, donViTinhText: 'Lít' }),
+    );
+    data.push(
+      mk({
+        id: 'oj',
+        soChungTu: 'GR-OJ',
+        donViTinhText: 'Lít',
+        classification: 'OJ',
+      }),
+    );
+    const queryService = { findCaseServices: jest.fn(async () => ({ data })) };
+    const service = new KgaraCaseServicesExportService(queryService as any);
+
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load((await service.exportCaseServicesExcel({})) as any);
+
+    expect(queryService.findCaseServices).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 1, pageSize: 50000 }),
+      { maxPageSize: 50000 },
+    );
+    const codes = (name: string) => {
+      const out: string[] = [];
+      wb.getWorksheet(name)!.eachRow((r, n) => {
+        const v = r.getCell(4).text;
+        if (n > 4 && /^GR-/.test(v)) out.push(v);
+      });
+      return out;
+    };
+    expect(codes('Chi tiết DV & Phụ tùng')).toHaveLength(150);
+    expect(codes('Chi tiết DV & PT (OJ)')).toEqual(['GR-OJ']);
+  });
+
   it('không có OJ và không có công thì chỉ một sheet', async () => {
     const queryService = {
       findCaseServices: jest.fn(async () => ({ data: [mk({ id: '1' })] })),
