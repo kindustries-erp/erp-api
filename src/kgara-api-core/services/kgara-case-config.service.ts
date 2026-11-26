@@ -114,10 +114,13 @@ export class KgaraCaseConfigService {
         caseData.classification = normalizedClass;
         if (cat) {
           caseData.categoryId = cat.id;
+          // Quan hệ `category` đã nạp sẵn; không gán theo thì save giữ category_id cũ
+          caseData.category = cat;
         }
       } else {
         caseData.classification = null;
         caseData.categoryId = null;
+        caseData.category = null as any;
         caseData.classificationManuallyCleared = true;
       }
     }

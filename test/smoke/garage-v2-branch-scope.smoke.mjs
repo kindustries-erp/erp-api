@@ -4,7 +4,8 @@
 // công nợ và thu chi V2 đọc được khi không gửi header. Chỉ chạy trên staging/dev, KHÔNG production.
 // Xe NATIVE tạo ra được bỏ khỏi bảng và xóa mềm ở cuối.
 // Env: E2E_API_URL (mặc định suy từ PORT), E2E_TAO_EMAIL, E2E_PASSWORD (bắt buộc),
-//   E2E_ERP_BRANCH_IDS (bắt buộc, 2 id `branches_management` có xe, cách nhau dấu phẩy, ví dụ GR,GN),
+//   E2E_ERP_BRANCH_IDS (bắt buộc, 2 id `branches_management` cách nhau dấu phẩy; A phải có xe, B có thể không có xe,
+//   ví dụ PQ,LVL khi mọi xe KGara thuộc Phổ Quang),
 //   E2E_OJ_BRANCH_ID (tùy chọn: chi nhánh mà mọi xe là OJ, ví dụ GN của tài khoản KGara OJ).
 import { resolveApiUrl } from './e2e-ports.mjs';
 
@@ -17,7 +18,9 @@ const BRANCHES = (process.env.E2E_ERP_BRANCH_IDS ?? '')
   .filter(Boolean);
 const OJ_BRANCH = process.env.E2E_OJ_BRANCH_ID;
 if (!PASSWORD || BRANCHES.length < 2) {
-  console.error('Thiếu E2E_PASSWORD hoặc E2E_ERP_BRANCH_IDS (cần 2 chi nhánh).');
+  console.error(
+    'Thiếu E2E_PASSWORD hoặc E2E_ERP_BRANCH_IDS (cần 2 chi nhánh).',
+  );
   process.exit(2);
 }
 const [BR_A, BR_B] = BRANCHES;
@@ -74,20 +77,38 @@ const onBoard = async (id, query = '', branch) =>
 const all = await listTotal('');
 const a = await listTotal('', BR_A);
 const b = await listTotal('', BR_B);
-check('danh sách không header trả mọi chi nhánh (>= A + B)', all >= a + b && a > 0 && b > 0, `${all} / ${a} / ${b}`);
-check('header lọc đúng chi nhánh (A < tổng, B < tổng)', a < all && b < all, `${all} / ${a} / ${b}`);
+check(
+  'danh sách không header trả mọi chi nhánh (>= A + B, A có xe)',
+  all >= a + b && a > 0,
+  `${all} / ${a} / ${b}`,
+);
+// B có thể không có xe (mọi xe KGara cùng một chi nhánh): chỉ cần ít nhất một chi nhánh trả ít hơn tổng.
+check(
+  'header lọc đúng chi nhánh (A, B <= tổng, có chi nhánh < tổng)',
+  a <= all && b <= all && (a < all || b < all),
+  `${all} / ${a} / ${b}`,
+);
 
-const bad = await call('GET', '/cases-garage?pageSize=1', { branch: 'khong-phai-uuid' });
+const bad = await call('GET', '/cases-garage?pageSize=1', {
+  branch: 'khong-phai-uuid',
+});
 check('header sai UUID → 400', bad.status === 400, `${bad.status}`);
 
 // 2. Chi tiết: xe chi nhánh A đọc qua header B → 404; không header → 200.
-const firstA = (await call('GET', '/cases-garage?pageSize=1', { branch: BR_A })).d?.items?.[0];
+const firstA = (await call('GET', '/cases-garage?pageSize=1', { branch: BR_A }))
+  .d?.items?.[0];
 if (firstA) {
   const own = await call('GET', `/cases-garage/${firstA.id}`, { branch: BR_A });
-  const other = await call('GET', `/cases-garage/${firstA.id}`, { branch: BR_B });
+  const other = await call('GET', `/cases-garage/${firstA.id}`, {
+    branch: BR_B,
+  });
   const none = await call('GET', `/cases-garage/${firstA.id}`);
   check('chi tiết đúng chi nhánh → 200', own.status === 200, `${own.status}`);
-  check('chi tiết khác chi nhánh → 404', other.status === 404, `${other.status}`);
+  check(
+    'chi tiết khác chi nhánh → 404',
+    other.status === 404,
+    `${other.status}`,
+  );
   check('chi tiết không header → 200', none.status === 200, `${none.status}`);
 } else {
   check('chi nhánh A có xe để kiểm chi tiết', false, 'không có xe');
@@ -97,11 +118,19 @@ if (firstA) {
 const ojAll = await progressTotal('&classification=OJ');
 const ojA = await progressTotal('&classification=OJ', BR_A);
 const ojB = await progressTotal('&classification=OJ', BR_B);
-check('tiến độ classification=OJ: không header = tổng A + B', ojAll >= ojA + ojB && ojAll > 0, `${ojAll} / ${ojA} / ${ojB}`);
+check(
+  'tiến độ classification=OJ: không header = tổng A + B',
+  ojAll >= ojA + ojB && ojAll > 0,
+  `${ojAll} / ${ojA} / ${ojB}`,
+);
 if (OJ_BRANCH) {
   const ojBranchAll = await progressTotal('', OJ_BRANCH);
   const ojBranchOj = await progressTotal('&classification=OJ', OJ_BRANCH);
-  check('chi nhánh tài khoản OJ: mọi xe là OJ', ojBranchAll > 0 && ojBranchAll === ojBranchOj, `${ojBranchAll} / ${ojBranchOj}`);
+  check(
+    'chi nhánh tài khoản OJ: mọi xe là OJ',
+    ojBranchAll > 0 && ojBranchAll === ojBranchOj,
+    `${ojBranchAll} / ${ojBranchOj}`,
+  );
 }
 
 // 4. Tạo xe NATIVE không chi nhánh → branchId null; đưa lên board, lọc OJ.
@@ -115,18 +144,39 @@ const created = await call('POST', '/cases-garage', {
 });
 const id = created.d?.id;
 if (id) createdIds.push(id);
-check('tạo xe NATIVE không chọn chi nhánh', ok(created) && !!id, short(created));
-check('xe không chi nhánh có branchId null', created.d?.branchId === null, short(created.d?.branchId));
+check(
+  'tạo xe NATIVE không chọn chi nhánh',
+  ok(created) && !!id,
+  short(created),
+);
+check(
+  'xe không chi nhánh có branchId null',
+  created.d?.branchId === null,
+  short(created.d?.branchId),
+);
 
 if (id) {
-  const tr = await call('POST', '/cases-garage/workshop/track', { body: { caseId: id } });
+  const tr = await call('POST', '/cases-garage/workshop/track', {
+    body: { caseId: id },
+  });
   check('đưa xe vào bảng không header', ok(tr), short(tr));
   check('board không header thấy xe', await onBoard(id));
-  check('board header chi nhánh A không thấy xe NULL chi nhánh', !(await onBoard(id, '', BR_A)));
-  check('board classification=OJ chưa thấy xe (chưa phân loại)', !(await onBoard(id, '&classification=OJ')));
-  const up = await call('PATCH', `/cases-garage/${id}`, { body: { classification: 'OJ' } });
+  check(
+    'board header chi nhánh A không thấy xe NULL chi nhánh',
+    !(await onBoard(id, '', BR_A)),
+  );
+  check(
+    'board classification=OJ chưa thấy xe (chưa phân loại)',
+    !(await onBoard(id, '&classification=OJ')),
+  );
+  const up = await call('PATCH', `/cases-garage/${id}`, {
+    body: { classification: 'OJ' },
+  });
   check('đặt phân loại OJ', ok(up), short(up));
-  check('board classification=OJ thấy xe sau khi phân loại OJ', await onBoard(id, '&classification=OJ'));
+  check(
+    'board classification=OJ thấy xe sau khi phân loại OJ',
+    await onBoard(id, '&classification=OJ'),
+  );
   const un = await call('DELETE', `/cases-garage/workshop/track/${id}`);
   check('bỏ xe khỏi bảng', ok(un), short(un));
 }
@@ -134,17 +184,28 @@ if (id) {
 // 5. Tạo xe NATIVE có chọn chi nhánh A → branchId = A; header B không sửa được.
 const withBranch = await call('POST', '/cases-garage', {
   branch: BR_A,
-  body: { licensePlate: `BRA-${tag % 100000}`, customerName: 'Smoke branch scope A' },
+  body: {
+    licensePlate: `BRA-${tag % 100000}`,
+    customerName: 'Smoke branch scope A',
+  },
 });
 const idA = withBranch.d?.id;
 if (idA) createdIds.push(idA);
-check('tạo xe NATIVE có chi nhánh A → branchId = A', ok(withBranch) && withBranch.d?.branchId === BR_A, short(withBranch.d?.branchId));
+check(
+  'tạo xe NATIVE có chi nhánh A → branchId = A',
+  ok(withBranch) && withBranch.d?.branchId === BR_A,
+  short(withBranch.d?.branchId),
+);
 if (idA) {
   const otherEdit = await call('PATCH', `/cases-garage/${idA}`, {
     branch: BR_B,
     body: { customerName: 'không được sửa' },
   });
-  check('sửa xe chi nhánh A bằng header B → 404', otherEdit.status === 404, `${otherEdit.status}`);
+  check(
+    'sửa xe chi nhánh A bằng header B → 404',
+    otherEdit.status === 404,
+    `${otherEdit.status}`,
+  );
 }
 
 // 6. Công nợ và thu chi V2 không cần header.
@@ -155,7 +216,11 @@ for (const path of [
   '/cashflow-vouchers-garage?pageSize=1',
 ]) {
   const r = await call('GET', path);
-  check(`GET ${path.split('?')[0]} không header → 200`, r.status === 200, `${r.status} ${short(r.d)}`);
+  check(
+    `GET ${path.split('?')[0]} không header → 200`,
+    r.status === 200,
+    `${r.status} ${short(r.d)}`,
+  );
 }
 
 // Dọn: xóa mềm xe đã tạo.

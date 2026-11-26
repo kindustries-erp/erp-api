@@ -85,6 +85,10 @@ import { CasesGarageModule } from './v2/modules/cases-garage/cases-garage.module
 import { CasesDashboardGarageModule } from './v2/modules/cases-dashboard-garage/cases-dashboard-garage.module'; // api-v2-module:cases-dashboard-garage:app-imports
 import { UsersManagementModule } from './v2/modules/users-management/users-management.module'; // api-v2-module:users-management:app-imports
 import { AuthSessionsModule } from './v2/modules/auth-sessions/auth-sessions.module'; // api-v2-module:auth-sessions:app-imports
+import {
+  isPgSslDisabled,
+  resolvePgConnection,
+} from './db/pg-connection.helper';
 // plop:api-v2-imports
 
 @Module({
@@ -99,17 +103,14 @@ import { AuthSessionsModule } from './v2/modules/auth-sessions/auth-sessions.mod
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
         const databaseUrl = configService.get<string>('DATABASE_URL');
-        const isSslDisabled =
-          configService.get<string>('DB_SSL') === 'false' ||
-          (databaseUrl &&
-            (databaseUrl.includes('sslmode=disable') ||
-              databaseUrl.includes('ssl=false')));
+        const dbSsl = configService.get<string>('DB_SSL');
+        const isSslDisabled = isPgSslDisabled(databaseUrl, dbSsl);
 
         if (databaseUrl) {
           return {
             type: 'postgres' as const,
             schema: 'public',
-            url: databaseUrl,
+            url: resolvePgConnection(databaseUrl, dbSsl).url,
             entities: [
               CoreUser,
               CoreUserPreference,

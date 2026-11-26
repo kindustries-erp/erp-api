@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
+import { isPgSslDisabled, resolvePgConnection } from './pg-connection.helper';
 import { CoreUser } from '../users/entities/core-user.entity';
 import { CoreUserPreference } from '../users/entities/core-user-preference.entity';
 import { CoreUserTablePreference } from '@/v2/modules/table-preferences/entities/core-user-table-preference.entity';
@@ -269,17 +270,17 @@ const entities = [
 
 const databaseUrl = process.env.DATABASE_URL;
 
-const isSslDisabled =
-  process.env.DB_SSL === 'false' ||
-  (databaseUrl &&
-    (databaseUrl.includes('sslmode=disable') ||
-      databaseUrl.includes('ssl=false')));
+const isSslDisabled = isPgSslDisabled(databaseUrl, process.env.DB_SSL);
+// Bỏ sslmode khỏi URL để `ssl` dưới đây có hiệu lực (migration/script không qua main.ts nên không có NODE_TLS_REJECT_UNAUTHORIZED=0)
+const connection = databaseUrl
+  ? resolvePgConnection(databaseUrl, process.env.DB_SSL)
+  : null;
 
 export default new DataSource(
-  databaseUrl
+  connection
     ? {
         type: 'postgres',
-        url: databaseUrl,
+        url: connection.url,
         schema: 'public',
         entities,
         migrations: [
