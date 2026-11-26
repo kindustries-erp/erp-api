@@ -101,6 +101,22 @@ export function overriddenFields(overrides: OverrideMap): string[] {
     .sort();
 }
 
+/**
+ * Giá trị nguồn (snapshot) của các field đang override, để client so "nguồn → giá trị sửa".
+ * Chỉ gồm khóa vừa override vừa có trong snapshot; không có `_deleted`. Không override → `{}`.
+ */
+export function sourceValues(
+  snapshot: Dict | null | undefined,
+  overrides: OverrideMap | null | undefined,
+): Dict {
+  const out: Dict = {};
+  const snap = snapshot ?? {};
+  for (const k of overriddenFields(overrides ?? {})) {
+    if (Object.prototype.hasOwnProperty.call(snap, k)) out[k] = snap[k];
+  }
+  return out;
+}
+
 export function isLineDeleted(overrides: OverrideMap): boolean {
   return hasOverride(overrides, OVERRIDE_DELETED);
 }

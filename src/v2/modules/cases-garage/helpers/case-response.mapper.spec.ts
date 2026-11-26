@@ -50,4 +50,45 @@ describe('toCaseResponse', () => {
     expect(r.services?.[0].quantity).toBe(2);
     expect(r.services?.[0].partsCost).toBeNull();
   });
+
+  it('sourceValues: header lấy giá trị KGara của field override; không override thì {}', () => {
+    const r = toCaseResponse({
+      id: 'c1',
+      origin: CaseOrigin.KGARA_SYNC,
+      licensePlate: '51B-790.71',
+      sourceSnapshot: { licensePlate: '51B79071', customerName: 'A' },
+      overrides: { licensePlate: true },
+      extraData: {},
+    } as unknown as CaseGarage);
+    expect(r.overriddenFields).toEqual(['licensePlate']);
+    expect(r.sourceValues).toEqual({ licensePlate: '51B79071' });
+    expect(r).not.toHaveProperty('sourceSnapshot');
+    expect(r).not.toHaveProperty('overrides');
+  });
+
+  it('sourceValues: xe NATIVE (snapshot rỗng) và dòng không lộ _deleted', () => {
+    const native = toCaseResponse({
+      id: 'c2',
+      origin: CaseOrigin.NATIVE,
+      sourceSnapshot: {},
+      overrides: {},
+      extraData: {},
+    } as unknown as CaseGarage);
+    expect(native.sourceValues).toEqual({});
+
+    const withLine = toCaseResponse({
+      id: 'c3',
+      extraData: {},
+      services: [
+        {
+          ...line(1),
+          sourceSnapshot: { unitPrice: '100.0000', quantity: '1.0000' },
+          overrides: { unitPrice: true },
+        },
+      ],
+    } as unknown as CaseGarage);
+    expect(withLine.services?.[0].sourceValues).toEqual({
+      unitPrice: '100.0000',
+    });
+  });
 });

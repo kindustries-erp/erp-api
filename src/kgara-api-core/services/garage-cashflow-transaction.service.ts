@@ -33,6 +33,7 @@ import {
 import { GarageHubService } from '../hub/garage-hub.service';
 import { notifyLedgerProjector } from '../hub/ledger-projector.port';
 import { resolveCaseReceiptPayer } from '../helpers/kgara-case-receipt-payer.helper';
+import { pickVoucherQrFields } from '../helpers/garage-cashflow-qr.helper';
 import type { ReceiptPayerType } from '../helpers/kgara-receipt-payer-resolver.helper';
 
 @Injectable()
@@ -110,6 +111,7 @@ export class GarageCashflowTransactionService {
         erpCashVoucherId: dto.erpCashVoucherId || undefined,
         note: dto.note || undefined,
         createdBy: user?.email || user?.sub || 'Hệ thống',
+        ...pickVoucherQrFields(dto),
       });
 
       const savedVoucher = await queryRunner.manager.save(newVoucher);
@@ -241,7 +243,10 @@ export class GarageCashflowTransactionService {
       }
 
       const beforeSnapshot = { ...existingVoucher };
-      queryRunner.manager.merge(KgaraCashflowVoucher, existingVoucher, dto);
+      queryRunner.manager.merge(KgaraCashflowVoucher, existingVoucher, {
+        ...dto,
+        ...pickVoucherQrFields(dto),
+      });
       if (newType === 'PAYMENT') {
         if (dto.paymentStatus !== undefined) {
           existingVoucher.paymentStatus = dto.paymentStatus;

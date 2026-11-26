@@ -10,6 +10,8 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
+import { GarageCashflowQrFieldsDto } from './garage-cashflow-qr.dto';
+
 export enum GarageCashflowTab {
   DASHBOARD = 'dashboard',
   VOUCHERS = 'vouchers',
@@ -36,7 +38,7 @@ export enum GarageCashflowPaymentStatus {
   CANCELLED = 'CANCELLED',
 }
 
-export class CreateKgaraCashflowVoucherDto {
+export class CreateKgaraCashflowVoucherDto extends GarageCashflowQrFieldsDto {
   @IsString()
   @IsOptional()
   voucherCode?: string;
@@ -113,7 +115,7 @@ export class CreateKgaraCashflowVoucherDto {
   payerType?: 'KH' | 'BH';
 }
 
-export class UpdateKgaraCashflowVoucherDto {
+export class UpdateKgaraCashflowVoucherDto extends GarageCashflowQrFieldsDto {
   @IsString()
   @IsOptional()
   @IsIn(['RECEIPT', 'PAYMENT'])
@@ -271,6 +273,13 @@ export class KgaraCashflowVoucherResponseDto {
   pnlPeriodMonth?: number | null;
   pnlCommissionType?: string | null;
   pnlCommissionAnchorId?: string | null;
+  /** Thông tin thanh toán dựng VietQR đã lưu (KINDU-2096). */
+  qrCompanyAccountId?: string | null;
+  qrBankBin?: string | null;
+  qrBankCode?: string | null;
+  qrAccountNumber?: string | null;
+  qrAccountName?: string | null;
+  qrTransferContent?: string | null;
   createdAt: string;
   updatedAt: string;
   case?: KgaraCashflowCaseResponseDto | null;
@@ -320,6 +329,12 @@ export function toKgaraCashflowVoucherResponse(
     pnlPeriodMonth: entity.pnlPeriodMonth ?? null,
     pnlCommissionType: entity.pnlCommissionType ?? null,
     pnlCommissionAnchorId: entity.pnlCommissionAnchorId ?? null,
+    qrCompanyAccountId: entity.qrCompanyAccountId ?? null,
+    qrBankBin: entity.qrBankBin ?? null,
+    qrBankCode: entity.qrBankCode ?? null,
+    qrAccountNumber: entity.qrAccountNumber ?? null,
+    qrAccountName: entity.qrAccountName ?? null,
+    qrTransferContent: entity.qrTransferContent ?? null,
     createdAt:
       entity.createdAt instanceof Date
         ? entity.createdAt.toISOString()
