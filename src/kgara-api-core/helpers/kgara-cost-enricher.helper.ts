@@ -291,10 +291,11 @@ export class KgaraCostEnricherHelper {
     const assign = (copy: Record<string, any>, jName: string) => {
       const cost = warehouseCostsByName.get(jName) || 0;
       warehouseCostsByName.delete(jName);
-      const qty = Math.max(
-        1,
-        Number(copy.SoLuongHoaDon ?? copy.soLuongHoaDon ?? copy.SoLuong ?? 1),
+      // Số lượng lẻ dưới 1 (ví dụ 0,2 lít) vẫn chia đúng; chỉ dùng 1 khi SL thiếu hoặc không dương
+      const rawQty = Number(
+        copy.SoLuongHoaDon ?? copy.soLuongHoaDon ?? copy.SoLuong ?? 1,
       );
+      const qty = rawQty > 0 ? rawQty : 1;
       this.setLineCost(copy, Math.round(cost / qty), cost);
       copy.CostAllocationType = 'WAREHOUSE_ISSUE';
       copy.costAllocationType = 'WAREHOUSE_ISSUE';

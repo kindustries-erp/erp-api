@@ -341,4 +341,25 @@ describe('KgaraCostEnricherHelper khớp tên: đúng tên trước, gần đún
       CostAllocationType: 'MANUAL_ERP',
     });
   });
+
+  it('số lượng dưới 1 chia đúng đơn giá vốn; số lượng 0 hoặc thiếu thì dùng 1', () => {
+    const res = KgaraCostEnricherHelper.enrichCaseLines(
+      [
+        pt('le', 'Dầu trợ lực lái 02', 0.2),
+        pt('khong', 'Nước làm mát', 0),
+        pt('thieu', 'Dầu phanh', NaN),
+      ],
+      [
+        j('Dầu trợ lực lái 02', 100000),
+        j('Nước làm mát', 500000),
+        j('Dầu phanh', 100000),
+      ],
+    );
+    expect(costById(res.lines)).toEqual({
+      le: 500000,
+      khong: 500000,
+      thieu: 100000,
+    });
+    expect(res.lines[0].TongVon).toBe(100000);
+  });
 });
