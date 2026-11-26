@@ -381,6 +381,19 @@ export class KgaraCaseLookupService {
 
       if (!journalItems || !Array.isArray(journalItems)) return false;
 
+      const detailIdOf = (line: any) =>
+        line.HdPhieuDichVuChiTietID || line.HdPhieuDichVuChiTietId || line.Id;
+      // Dòng lần trước được gán giá vốn xuất kho: nếu lần này không khớp thì phải ghi về 0
+      const previouslyIssued = new Set(
+        rawLines
+          .filter(
+            (l: any) =>
+              String(l.CostAllocationType ?? l.costAllocationType ?? '') ===
+              'WAREHOUSE_ISSUE',
+          )
+          .map(detailIdOf)
+          .filter(Boolean),
+      );
       const enriched = KgaraCostEnricherHelper.enrichCaseLines(
         rawLines,
         journalItems,
@@ -392,9 +405,11 @@ export class KgaraCaseLookupService {
       await this.caseRepo.save(caseData);
 
       for (const line of enriched.lines) {
-        const detailId =
-          line.HdPhieuDichVuChiTietID || line.HdPhieuDichVuChiTietId || line.Id;
-        if (detailId && line.GiaVonPhuTung > 0) {
+        const detailId = detailIdOf(line);
+        if (
+          detailId &&
+          (line.GiaVonPhuTung > 0 || previouslyIssued.has(detailId))
+        ) {
           await this.caseServiceRepo.update(
             { hdPhieuDichVuChiTietId: detailId },
             { giaVonPhuTung: line.GiaVonPhuTung },
