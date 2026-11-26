@@ -16,9 +16,11 @@ import {
   toDebtAllocationRow,
   toDebtLedgerRow,
 } from '../helpers/debt-ledger-row.mapper';
+import { applyBranchScope, branchWhere } from '@/v2/core/branches-core';
 
 export interface DebtLedgerListQuery extends DebtListQuery {
-  branchId: string;
+  /** Chi nhánh ERP (không bắt buộc); không có thì mọi chi nhánh. */
+  branchId?: string;
   direction?: string;
   partyType?: string;
   status?: string;
@@ -80,12 +82,8 @@ export class DebtLedgerQueryService extends AbstractDebtQueryService<
     query: DebtListQuery,
   ): SelectQueryBuilder<DebtGarage> {
     const q = query as DebtLedgerListQuery;
-    const qb = this.debts
-      .createQueryBuilder('d')
-      .where('d.is_deleted = false')
-      .andWhere('d.branch_external_id = :ledgerBranch', {
-        ledgerBranch: q.branchId,
-      });
+    const qb = this.debts.createQueryBuilder('d').where('d.is_deleted = false');
+    applyBranchScope(qb, 'd', q.branchId, 'ledgerBranch');
     if (q.direction)
       qb.andWhere('d.direction = :ledgerDir', { ledgerDir: q.direction });
     if (q.partyType)
@@ -106,13 +104,13 @@ export class DebtLedgerQueryService extends AbstractDebtQueryService<
     return { rows: rows.map(toDebtLedgerRow), total };
   }
 
-  /** Phân bổ của một khoản nợ; khoản nợ khác chi nhánh coi như không tồn tại. */
+  /** Phân bổ của một khoản nợ; có chọn chi nhánh thì khoản nợ khác chi nhánh coi như không tồn tại. */
   async findAllocations(
-    branchId: string,
+    branchId: string | undefined,
     debtId: string,
   ): Promise<DebtAllocationRow[]> {
     const debt = await this.debts.findOne({
-      where: { id: debtId, branchExternalId: branchId, isDeleted: false },
+      where: { id: debtId, ...branchWhere(branchId), isDeleted: false },
     });
     if (!debt) throw new NotFoundException('Không có khoản nợ');
     const rows = await this.allocations.find({

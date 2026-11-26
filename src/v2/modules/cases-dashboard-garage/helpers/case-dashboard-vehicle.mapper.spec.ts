@@ -13,6 +13,7 @@ const item = (
   licensePlate: '51B-756.95',
   vehicleKey: '51B75695',
   customerName: 'TRƯƠNG XUÂN BỈNH',
+  voucherCustomerName: null,
   status: CaseStatus.QUOTED,
   stage: 'quotation',
   classification: 'OJ_NGOAI',

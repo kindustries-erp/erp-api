@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import type { Repository, SelectQueryBuilder } from 'typeorm';
+
+import { applyBranchScope, branchWhere } from '@/v2/core/branches-core';
 import type { TableColumnMap } from '@/common/utils/table-query';
 import {
   AbstractCashflowVoucherQueryService,
@@ -12,7 +14,8 @@ import { CashflowVoucherGarage } from '../entities/cashflow-voucher-garage.entit
 import { toCashflowVoucherRow } from '../helpers/cashflow-voucher-garage.mapper';
 
 export interface CashflowVoucherGarageListQuery extends CashflowVoucherListQuery {
-  branchId: string;
+  /** Chi nhánh ERP (không bắt buộc); không có thì mọi chi nhánh. */
+  branchId?: string;
   voucherType?: string;
   status?: string;
   caseId?: string;
@@ -70,8 +73,8 @@ export class CashflowVoucherGarageQueryService extends AbstractCashflowVoucherQu
     const q = query as CashflowVoucherGarageListQuery;
     const qb = this.vouchers
       .createQueryBuilder('v')
-      .where('v.is_deleted = false')
-      .andWhere('v.branch_external_id = :cfBranch', { cfBranch: q.branchId });
+      .where('v.is_deleted = false');
+    applyBranchScope(qb, 'v', q.branchId, 'cfBranch');
     if (q.voucherType)
       qb.andWhere('v.voucher_type = :cfType', { cfType: q.voucherType });
     if (
@@ -92,11 +95,11 @@ export class CashflowVoucherGarageQueryService extends AbstractCashflowVoucherQu
   }
 
   async findOne(
-    branchId: string,
+    branchId: string | undefined,
     id: string,
   ): Promise<CashflowVoucherGarageRow> {
     const row = await this.vouchers.findOne({
-      where: { id, branchExternalId: branchId, isDeleted: false },
+      where: { id, ...branchWhere(branchId), isDeleted: false },
     });
     if (!row) throw new NotFoundException('Không có phiếu thu chi');
     return toCashflowVoucherRow(row);

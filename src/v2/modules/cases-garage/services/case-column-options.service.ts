@@ -15,7 +15,7 @@ export class CaseColumnOptionsService {
   constructor(private readonly list: CaseListQueryService) {}
 
   async findOptions(
-    branchId: string,
+    branchId: string | undefined,
     column: string,
     opts: {
       search?: string;

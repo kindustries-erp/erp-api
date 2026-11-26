@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import type { DataSource, EntityManager } from 'typeorm';
+
+import { CaseGarage } from '@/v2/modules/cases-garage/entities/case-garage.entity';
 import { KgaraCase } from '@/kgara-api-core/entities/kgara_case.entity';
 import { KgaraCashflowVoucher } from '@/kgara-api-core/entities/kgara_cashflow_voucher.entity';
 import { KgaraCaseSettlement } from '@/kgara-api-core/entities/kgara_case_settlement.entity';
@@ -71,6 +73,18 @@ export class LegacyProjectorService implements GarageLedgerProjectorPort {
     return fallback;
   }
 
+  /** Chi nhánh ERP từ vụ việc V2 (`cases_garage` dùng chung id với `kgara_cases`); không có thì null. */
+  private async erpBranchOf(
+    manager: EntityManager,
+    caseId?: string | null,
+  ): Promise<string | null> {
+    if (!caseId) return null;
+    const kase = await manager
+      .getRepository(CaseGarage)
+      .findOne({ where: { id: caseId } });
+    return kase?.branchId ?? null;
+  }
+
   private async upsertVoucher(
     manager: EntityManager,
     v1: KgaraCashflowVoucher,
@@ -87,6 +101,8 @@ export class LegacyProjectorService implements GarageLedgerProjectorPort {
         branchExternalId:
           existing?.branchExternalId ??
           (await this.branchOf(manager, v1.caseId)),
+        branchId:
+          existing?.branchId ?? (await this.erpBranchOf(manager, v1.caseId)),
         voucherCode: v1.voucherCode,
         voucherType: v1.voucherType,
         status: (v1.paymentStatus ??

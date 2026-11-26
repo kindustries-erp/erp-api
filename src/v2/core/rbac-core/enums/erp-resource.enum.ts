@@ -16,6 +16,8 @@ export enum ErpResource {
   EMAIL_INGEST = 'email_ingest',
   JOURNAL_ENTRIES = 'journal_entries',
   GARAGE = 'garage',
+  /** Trang tiến độ xưởng: xem board/nhật ký (`read`), ghi công đoạn và nhật ký (`update`). */
+  GARAGE_WORKSHOP = 'garage_workshop',
   GARAGE_DEBTS = 'garage_debts',
   GARAGE_CASHFLOW = 'garage_cashflow',
   ACCOUNTING_CONFIGS = 'accounting_configs',

@@ -34,19 +34,14 @@ describe('DebtsLedgerController', () => {
     ]);
   });
 
-  it('thiếu chi nhánh thì 400 và không chạm service', () => {
+  it('không gửi chi nhánh → service nhận undefined', async () => {
     const { controller, ledger, parties } = make();
-    expect(() => controller.list({} as never, undefined as never)).toThrow(
-      BadRequestException,
-    );
-    expect(() => controller.allocations('id', undefined as never)).toThrow(
-      BadRequestException,
-    );
-    expect(() =>
-      controller.assignParty('id', { partyCode: 'X' }, undefined as never),
-    ).toThrow(BadRequestException);
-    expect(ledger.findPage).not.toHaveBeenCalled();
-    expect(parties.assignParty).not.toHaveBeenCalled();
+    await controller.list({} as never, undefined);
+    expect(ledger.findPage.mock.calls[0][0].branchId).toBeUndefined();
+    await controller.assignParty('id', { partyCode: 'X' }, undefined);
+    expect(parties.assignParty).toHaveBeenCalledWith(undefined, 'id', {
+      partyCode: 'X',
+    });
   });
 
   it('chuyển chi nhánh từ header xuống service', async () => {

@@ -32,7 +32,7 @@ export class KgaraCustomersDebtQueryService {
   ) {}
 
   async getCustomersDebt(
-    branchId: string,
+    branchId: string | undefined,
     params: CustomersDebtQueryParams,
     options: { unpaged?: boolean } = {},
   ) {

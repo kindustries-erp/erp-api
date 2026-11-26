@@ -16,10 +16,12 @@ import {
   getHorizonTitle,
 } from '../helpers/garage-debts-horizon.helper';
 import { parseDebtDate } from '../helpers/garage-debt-date.helper';
+import { caseInErpBranchSql } from '../helpers/erp-branch-case.sql';
 
 export interface TimeHorizonCasesFilter {
   horizon: string;
-  branchId: string;
+  /** Chi nhánh ERP (không bắt buộc); không có thì mọi chi nhánh. */
+  branchId?: string;
   dateFrom?: string;
   dateTo?: string;
   search?: string;
@@ -66,14 +68,17 @@ export class TimeHorizonCasesService {
         ? f.dateFrom
         : GARAGE_DEBT_BASELINE_DATE;
 
-    const params: unknown[] = [from, f.branchId];
+    const params: unknown[] = [from];
     const conds = [
       ...SUPPLIER_CASE_CONDITIONS,
       'c.ngay_hoan_thanh_cong_viec IS NOT NULL',
       'c.ngay_hoan_thanh_cong_viec >= $1',
-      'c.branch_external_id = $2',
       getHorizonCaseSqlCondition(f.horizon, 'c'),
     ];
+    if (f.branchId) {
+      params.push(f.branchId);
+      conds.push(caseInErpBranchSql('c', `$${params.length}`));
+    }
     if (f.dateTo) {
       params.push(
         f.dateTo.length === 10 ? `${f.dateTo} 23:59:59.999` : f.dateTo,

@@ -175,7 +175,8 @@ export function toCaseDashboardItemDto(
     | 'receivedAt'
     | 'completedAt'
     | 'totalAmountWithTax'
-  >,
+  > &
+    Partial<Pick<CaseGarage, 'voucherCustomerName'>>,
 ): CaseDashboardCaseItemDto {
   return {
     id: c.id,
@@ -183,6 +184,7 @@ export function toCaseDashboardItemDto(
     licensePlate: c.licensePlate,
     vehicleKey: vehicleKey(c.licensePlate, c.id),
     customerName: c.customerName,
+    voucherCustomerName: c.voucherCustomerName ?? null,
     status: c.status,
     stage: stageOfStatus(c.status),
     classification: classOfCase(c.classification),

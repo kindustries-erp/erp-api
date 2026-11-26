@@ -33,6 +33,7 @@ export const CASE_COLUMNS: TableColumnMap = {
   manufactureYear: n(col('manufacture_year')),
   customerCode: t(col('customer_code')),
   customerName: t(col('customer_name')),
+  voucherCustomerName: t(col('voucher_customer_name')),
   customer: t(
     `CONCAT(COALESCE("c"."customer_name", ''), ' ', COALESCE("c"."customer_code", ''))`,
   ),

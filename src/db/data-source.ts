@@ -102,6 +102,7 @@ import { DebtGarage } from '@/v2/modules/debts-garage/entities/debt-garage.entit
 import { DebtAllocationGarage } from '@/v2/modules/debts-garage/entities/debt-allocation-garage.entity';
 import { CaseGarage } from '@/v2/modules/cases-garage/entities/case-garage.entity';
 import { CaseLineGarage } from '@/v2/modules/cases-garage/entities/case-line-garage.entity';
+import { CaseProgressLogGarage } from '@/v2/modules/cases-garage/entities/case-progress-log-garage.entity';
 import { CashflowVoucherGarage } from '@/v2/modules/cashflow-vouchers-garage/entities/cashflow-voucher-garage.entity';
 import { ApprovalEvent } from '@/v2/modules/approval-management/entities/approval-event.entity';
 import { ApprovalSetting } from '@/v2/modules/approval-management/entities/approval-setting.entity';
@@ -246,6 +247,7 @@ const entities = [
   CashflowVoucherGarage,
   CaseGarage,
   CaseLineGarage,
+  CaseProgressLogGarage,
   GarageInventoryBalance,
   InventoryMovementsGarageReceiptLine,
   InventoryMovementsGarageIssueLine,

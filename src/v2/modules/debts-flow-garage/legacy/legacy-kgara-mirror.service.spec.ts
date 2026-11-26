@@ -100,12 +100,7 @@ describe('LegacyKgaraMirrorService (v2 → bảng V1, cùng transaction)', () =>
 
   it('sửa số tiền cập nhật settlement hiện có (không nhân đôi); đổi vụ việc tính lại cả vụ cũ', async () => {
     const { db, flow } = setup();
-    db.cases().push({
-      id: 'case-2',
-      branchExternalId: 'B1',
-      tienCoThue: 500,
-      rawData: {},
-    });
+    db.seedCase({ id: 'case-2', tienCoThue: 500, rawData: {} });
     const v = await flow.recordVoucher('B1', receipt(), null);
     await flow.updateVoucher('B1', v.id, { amount: 450 }, null);
     expect(db.v1Settlements()).toHaveLength(1);

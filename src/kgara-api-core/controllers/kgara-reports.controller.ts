@@ -24,6 +24,7 @@ export class KgaraReportsController {
     private readonly client: KgaraClientService,
   ) {}
 
+  // 3 endpoint dưới gọi thẳng API KGara nên vẫn cần chi nhánh KGara (header), giống đồng bộ.
   @Get('reports/gross-profit-detail')
   @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
   async getGrossProfitDetail(
@@ -63,18 +64,14 @@ export class KgaraReportsController {
 
   @Get('receivables')
   @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
-  async getReceivables(@BranchId() branchId: string) {
-    const where: any = {};
-    if (branchId) where.branchExternalId = branchId;
-    return this.receivableRepo.find({ where, order: { updatedAt: 'DESC' } });
+  async getReceivables() {
+    return this.receivableRepo.find({ order: { updatedAt: 'DESC' } });
   }
 
   @Get('payables')
   @RequirePermissions({ resource: ErpResource.GARAGE, action: ErpAction.READ })
-  async getPayables(@BranchId() branchId: string) {
-    const where: any = {};
-    if (branchId) where.branchExternalId = branchId;
-    return this.payableRepo.find({ where, order: { updatedAt: 'DESC' } });
+  async getPayables() {
+    return this.payableRepo.find({ order: { updatedAt: 'DESC' } });
   }
 
   @Get('cases/:id/services')

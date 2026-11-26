@@ -26,6 +26,7 @@ Toàn bộ dưới `/api/v2/branches`, guard `JwtAuthGuard` duy nhất và Swagg
 | Method | Path | Response |
 | --- | --- | --- |
 | GET | `/` | `{items,pagination}` (xem mục phân trang); `PaginationDto` mặc định page 1, pageSize 20; tìm code/name bằng ILIKE, sort whitelist `createdAt,code,name` (alias `created_at`), mặc định createdAt DESC; chỉ bản ghi chưa xóa mềm, không lọc inactive |
+| GET | `/:id/external-links` | `{items:[{source,externalId,accountKey}]}` từ `branches_management_external_links` (chưa xóa mềm); web dùng để đổi id chi nhánh ERP sang external id KGara cho header `x-kgara-branch-id` (không phân quyền thêm, id lạ trả `items:[]`) |
 | POST | `/` | HTTP 201 `{data: ErpBranchResponseDto,message:'Branch created successfully'}` |
 | PATCH | `/:id` | HTTP 200 `{data: ErpBranchResponseDto \| null,message:'Branch updated successfully'}`; ID không có hoặc đã xóa mềm trả `data:null`, không ghi |
 | DELETE | `/:id` | HTTP 200 `{message:'Branch deleted successfully'}`; **xóa mềm** (`is_deleted=true`, `is_active=false`). 404 khi không có hoặc đã xóa mềm; **409** `{message, references:[{table,count}]}` khi còn bản ghi tham chiếu (6 bảng ở trên cộng 3 bảng garage v2; nhân viên/phiếu/công nợ đã xóa mềm không chặn) |

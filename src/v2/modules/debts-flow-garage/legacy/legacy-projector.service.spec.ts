@@ -125,7 +125,8 @@ describe('LegacyProjectorService (V1 → sổ nợ v2)', () => {
     await svc.projectVoucher('v-9');
     expect(db.vouchers()[0]).toMatchObject({
       id: 'v-9',
-      branchExternalId: 'B1',
+      branchExternalId: 'KG1',
+      branchId: 'B1',
       source: 'LEGACY',
       status: 'PAID',
       payerType: 'BH',

@@ -56,6 +56,14 @@ describe('kgaraCaseToCaseGarage', () => {
     expect(r).not.toHaveProperty('rawData');
   });
 
+  it('tên danh mục và tên trên phiếu map riêng, không gộp', () => {
+    const r = kgaraCaseToCaseGarage(
+      v1({ khachHangName: 'ACTR', tenKhachHang: 'SAILUN' }),
+    );
+    expect(r.customerName).toBe('ACTR');
+    expect(r.voucherCustomerName).toBe('SAILUN');
+  });
+
   it('bỏ qua undefined, chuỗi rỗng thành null, mã trạng thái lạ rơi về INTAKE', () => {
     const r = kgaraCaseToCaseGarage(
       v1({ bienSoXe: '  ', soKhung: undefined, tinhTrangDichVu: 77 } as any),

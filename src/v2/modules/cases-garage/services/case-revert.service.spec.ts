@@ -1,13 +1,17 @@
 import { BadRequestException } from '@nestjs/common';
+import { CaseProgressLogGarage } from '../entities/case-progress-log-garage.entity';
 import { CaseRevertService } from './case-revert.service';
 
 const make = (
   header: Record<string, unknown>,
   line?: Record<string, unknown>,
+  openStage?: Record<string, unknown>,
 ) => {
   const manager = {
     update: jest.fn(),
-    findOne: jest.fn().mockResolvedValue(line ?? null),
+    findOne: jest.fn(async (entity: unknown) =>
+      entity === CaseProgressLogGarage ? (openStage ?? null) : (line ?? null),
+    ),
   };
   const ds = { transaction: (cb: (m: unknown) => unknown) => cb(manager) };
   const cases = {
@@ -54,6 +58,21 @@ describe('CaseRevertService', () => {
     );
   });
 
+  it('về trạng thái KGara: chép status từ snapshot, bỏ dấu override', async () => {
+    const { svc, manager } = make({
+      id: 'c1',
+      status: 'INTAKE',
+      sourceSnapshot: { status: 'QUOTED' },
+      overrides: { status: true },
+    });
+    await svc.revertCase('B1', 'c1', ['status']);
+    expect(manager.update).toHaveBeenCalledWith(
+      expect.anything(),
+      { id: 'c1' },
+      { status: 'QUOTED', overrides: {} },
+    );
+  });
+
   it('field chưa bị override → 400, không ghi', async () => {
     const { svc, manager } = make(header);
     await expect(
@@ -73,6 +92,31 @@ describe('CaseRevertService', () => {
       expect.anything(),
       { id: 'l1' },
       { overrides: {} },
+    );
+  });
+
+  it('về status KGara khác status hiện tại: đóng công đoạn mở, bỏ công đoạn không còn thuộc status', async () => {
+    const { svc, manager } = make(
+      {
+        id: 'c1',
+        status: 'IN_PROGRESS',
+        progressStage: 'PAINTING',
+        sourceSnapshot: { status: 'QUOTED' },
+        overrides: { status: true },
+      },
+      undefined,
+      { id: 'l1', startedAt: new Date('2026-11-24T07:00:00.000Z') },
+    );
+    await svc.revertCase('B1', 'c1', ['status'], 'u1');
+    expect(manager.update).toHaveBeenCalledWith(
+      CaseProgressLogGarage,
+      { id: 'l1' },
+      expect.objectContaining({ updatedBy: 'u1' }),
+    );
+    expect(manager.update).toHaveBeenCalledWith(
+      expect.anything(),
+      { id: 'c1' },
+      { progressStage: null },
     );
   });
 });

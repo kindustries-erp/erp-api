@@ -94,7 +94,6 @@ describe('KgaraCustomersController (Debt & Completion Date Aging)', () => {
         .mockResolvedValueOnce(mockData);
 
       const result = await controller.getCustomersDebt(
-        'BRANCH_01',
         '1',
         '20',
         '',
@@ -152,7 +151,6 @@ describe('KgaraCustomersController (Debt & Completion Date Aging)', () => {
         .mockResolvedValueOnce([]);
 
       await controller.getCustomersDebt(
-        'BRANCH_01',
         '1',
         '20',
         '',
@@ -181,7 +179,6 @@ describe('KgaraCustomersController (Debt & Completion Date Aging)', () => {
         .mockResolvedValueOnce([]);
 
       await controller.getCustomersDebt(
-        'BRANCH_01',
         '1',
         '20',
         '',
@@ -214,7 +211,6 @@ describe('KgaraCustomersController (Debt & Completion Date Aging)', () => {
       caseRepo.createQueryBuilder.mockReturnValue(mockQb);
 
       const res = await controller.getCustomersDebtColumnOptions(
-        'BRANCH_01',
         'licensePlate',
         '',
         '1',
@@ -231,7 +227,6 @@ describe('KgaraCustomersController (Debt & Completion Date Aging)', () => {
 
     it('should return predefined currency range options for balanceAmount without querying customerCode', async () => {
       const res = await controller.getCustomersDebtColumnOptions(
-        'BRANCH_01',
         'balanceAmount',
         '',
         '1',
@@ -255,7 +250,6 @@ describe('KgaraCustomersController (Debt & Completion Date Aging)', () => {
         .mockResolvedValueOnce([]);
 
       await controller.getCustomersDebt(
-        'BRANCH_01',
         '1',
         '20',
         '',
@@ -276,15 +270,12 @@ describe('KgaraCustomersController (Debt & Completion Date Aging)', () => {
         .mockResolvedValueOnce([{ total_customers: '0' }])
         .mockResolvedValueOnce([]);
 
-      await controller.getCustomersDebt(
-        'BRANCH_01',
-        '1',
-        '20',
-        '',
-        undefined,
-        undefined,
-        ['aging0_30', '-aging31_60', 'aging61_90', '-agingOver90'],
-      );
+      await controller.getCustomersDebt('1', '20', '', undefined, undefined, [
+        'aging0_30',
+        '-aging31_60',
+        'aging61_90',
+        '-agingOver90',
+      ]);
 
       const dataQuery = caseRepo.manager.query.mock.calls[1][0];
       expect(dataQuery).toContain(
@@ -300,15 +291,11 @@ describe('KgaraCustomersController (Debt & Completion Date Aging)', () => {
         mockResult,
       );
 
-      const cases = await controller.getCasesByCustomer(
-        'BRANCH_01',
-        'KH001',
-        '51H-12345',
-      );
+      const cases = await controller.getCasesByCustomer('KH001', '51H-12345');
 
       expect(
         customerCasesDetailService.getCasesByCustomer,
-      ).toHaveBeenCalledWith('BRANCH_01', 'KH001', '51H-12345');
+      ).toHaveBeenCalledWith(undefined, 'KH001', '51H-12345');
       expect(cases).toBe(mockResult);
     });
   });

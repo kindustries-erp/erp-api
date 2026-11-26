@@ -14,7 +14,7 @@ import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
 import { RequirePermissions } from '@/auth/decorators/require-permissions.decorator';
 import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
-import { BranchId } from '@/kgara-api-core/decorators/branch-id.decorator';
+import { ErpBranchId } from '@/v2/core/branches-core';
 import { AssignDebtPartyDto } from '../dto/assign-debt-party.dto';
 import { QueryDebtLedgerDto } from '../dto/query-debt-ledger.dto';
 import { DebtLedgerQueryService } from '../services/debt-ledger-query.service';
@@ -28,11 +28,6 @@ const DEBTS_UPDATE = {
   resource: ErpResource.GARAGE_DEBTS,
   action: ErpAction.UPDATE,
 };
-
-function requireBranch(branchId: string | undefined): string {
-  if (!branchId) throw new BadRequestException('Thiếu chi nhánh.');
-  return branchId;
-}
 
 /** Sổ công nợ garage v2: đọc sổ nợ, phân bổ, và gán hãng bảo hiểm / NCC. Chi nhánh bắt buộc. */
 @ApiTags('debts-garage')
@@ -48,10 +43,13 @@ export class DebtsLedgerController {
   @RequirePermissions(DEBTS_READ)
   @ApiOperation({ summary: 'Sổ công nợ garage' })
   @Get()
-  list(@Query() query: QueryDebtLedgerDto, @BranchId() branchId: string) {
+  list(
+    @Query() query: QueryDebtLedgerDto,
+    @ErpBranchId() branchId: string | undefined,
+  ) {
     return this.ledger.findPage({
       ...query,
-      branchId: requireBranch(branchId),
+      branchId,
     });
   }
 
@@ -60,9 +58,9 @@ export class DebtsLedgerController {
   @Get(':debtId/allocations')
   allocations(
     @Param('debtId', ParseUUIDPipe) debtId: string,
-    @BranchId() branchId: string,
+    @ErpBranchId() branchId: string | undefined,
   ) {
-    return this.ledger.findAllocations(requireBranch(branchId), debtId);
+    return this.ledger.findAllocations(branchId, debtId);
   }
 
   @RequirePermissions(DEBTS_UPDATE)
@@ -71,8 +69,8 @@ export class DebtsLedgerController {
   assignParty(
     @Param('debtId', ParseUUIDPipe) debtId: string,
     @Body() dto: AssignDebtPartyDto,
-    @BranchId() branchId: string,
+    @ErpBranchId() branchId: string | undefined,
   ) {
-    return this.parties.assignParty(requireBranch(branchId), debtId, dto);
+    return this.parties.assignParty(branchId, debtId, dto);
   }
 }

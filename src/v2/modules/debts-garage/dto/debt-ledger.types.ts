@@ -1,7 +1,7 @@
 /** Một dòng sổ nợ garage trả ra API (không lộ entity). Tiền là number. */
 export interface DebtLedgerRow {
   id: string;
-  branchExternalId: string;
+  branchExternalId: string | null;
   sourceType: string;
   sourceId: string;
   caseId: string | null;

@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import type { Repository } from 'typeorm';
+
+import { applyBranchScope } from '@/v2/core/branches-core';
 import {
   normalizePlate,
   normalizedPlateSql,
@@ -34,7 +36,7 @@ export class CashflowVoucherGarageInsightService {
   ) {}
 
   async getDashboard(
-    branchId: string,
+    branchId: string | undefined,
     range: { from?: string; to?: string },
   ): Promise<CashflowDashboardGarage> {
     const qb = this.vouchers
@@ -58,8 +60,8 @@ export class CashflowVoucherGarageInsightService {
       .addSelect('COUNT(*)', 'voucher_count')
       .where('v.is_deleted = false')
       .andWhere("v.status <> 'CANCELLED'")
-      .andWhere('v.branch_external_id = :branchId', { branchId })
       .setParameter('pending', PENDING_STATUSES);
+    applyBranchScope(qb, 'v', branchId);
     if (range.from) qb.andWhere('v.trans_date >= :from', { from: range.from });
     if (range.to) qb.andWhere('v.trans_date <= :to', { to: range.to });
     const raw = (await qb.getRawOne<Record<string, string>>()) ?? {};
@@ -76,7 +78,7 @@ export class CashflowVoucherGarageInsightService {
   }
 
   async findPotentialDuplicates(
-    branchId: string,
+    branchId: string | undefined,
     q: CheckCashflowDuplicateGarageDto,
   ): Promise<CashflowDuplicateResult> {
     const base = () => {
@@ -95,8 +97,8 @@ export class CashflowVoucherGarageInsightService {
         ])
         .where('v.is_deleted = false')
         .andWhere("v.status <> 'CANCELLED'")
-        .andWhere('v.branch_external_id = :branchId', { branchId })
         .andWhere('v.amount = :amount', { amount: q.amount });
+      applyBranchScope(qb, 'v', branchId);
       if (q.excludeId)
         qb.andWhere('v.id <> :excludeId', { excludeId: q.excludeId });
       return qb;

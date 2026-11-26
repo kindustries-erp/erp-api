@@ -201,15 +201,15 @@ describe('KgaraCaseQueryService', () => {
       // Row 1: SUM Row
       const row1 = sheet1?.getRow(1);
       expect(row1?.getCell(5).value).toBe('TỔNG CỘNG (SUM)');
-      expect(row1?.getCell(10).value).toEqual(
-        expect.objectContaining({ formula: 'SUM(J5:J5)' }),
+      expect(row1?.getCell(11).value).toEqual(
+        expect.objectContaining({ formula: 'SUM(K5:K5)' }),
       );
 
       // Row 2: SUBTOTAL Row
       const row2 = sheet1?.getRow(2);
       expect(row2?.getCell(5).value).toBe('TỔNG THEO BỘ LỌC (SUBTOTAL)');
-      expect(row2?.getCell(10).value).toEqual(
-        expect.objectContaining({ formula: 'SUBTOTAL(9,J5:J5)' }),
+      expect(row2?.getCell(11).value).toEqual(
+        expect.objectContaining({ formula: 'SUBTOTAL(9,K5:K5)' }),
       );
 
       // Row 4: Header Row
@@ -221,43 +221,43 @@ describe('KgaraCaseQueryService', () => {
       const row5 = sheet1?.getRow(5);
       expect(row5?.getCell(2).value).toBe('PDV-2026-001'); // soChungTu
       expect(row5?.getCell(3).value).toBe('51G-12345'); // bienSoXe
-      expect(row5?.getCell(6).value).toBe('Hoàn tất'); // tenTinhTrangDichVu (Trạng thái)
-      expect(row5?.getCell(6).fill).toEqual(
+      expect(row5?.getCell(7).value).toBe('Hoàn tất'); // tenTinhTrangDichVu (Trạng thái)
+      expect(row5?.getCell(7).fill).toEqual(
         expect.objectContaining({
           type: 'pattern',
           pattern: 'solid',
           fgColor: { argb: 'FFECFDF5' },
         }),
       );
-      expect(row5?.getCell(7).value).toBe('Sửa chữa chung'); // classification
-      expect(row5?.getCell(10).value).toBe(0); // phaiThuBaoHiem
-      expect(row5?.getCell(11).value).toBe(15000000); // phaiThuKhachHang
-      expect(row5?.getCell(12).value).toEqual(
-        expect.objectContaining({ formula: 'SUM(J5:K5)', result: 15000000 }),
+      expect(row5?.getCell(8).value).toBe('Sửa chữa chung'); // classification
+      expect(row5?.getCell(11).value).toBe(0); // phaiThuBaoHiem
+      expect(row5?.getCell(12).value).toBe(15000000); // phaiThuKhachHang
+      expect(row5?.getCell(13).value).toEqual(
+        expect.objectContaining({ formula: 'SUM(K5:L5)', result: 15000000 }),
       ); // phaiThu
-      expect(row5?.getCell(12).numFmt).toBe('#,##0.00'); // phaiThu format
-      expect(row5?.getCell(13).value).toBe(10000000); // daThu
-      expect(row5?.getCell(14).value).toEqual(
-        expect.objectContaining({ formula: 'L5-M5', result: 5000000 }),
+      expect(row5?.getCell(13).numFmt).toBe('#,##0.00'); // phaiThu format
+      expect(row5?.getCell(14).value).toBe(10000000); // daThu
+      expect(row5?.getCell(15).value).toEqual(
+        expect.objectContaining({ formula: 'M5-N5', result: 5000000 }),
       ); // conPhaiThu formula
-      expect((row5?.getCell(15).fill as any)?.fgColor?.argb).toBe('FFFFFBEB'); // Ghi chú thu pastel fill
+      expect((row5?.getCell(16).fill as any)?.fgColor?.argb).toBe('FFFFFBEB'); // Ghi chú thu pastel fill
       // giaVonPhuTung là đơn giá vốn; tổng vốn dòng = 700k × SL 4 = 2.8M (khớp "ĐG vốn × SL = Tổng vốn" trên drawer)
-      expect(row5?.getCell(16).value).toBe(6200000); // chiPhiNhanCong (9M - 2.8M phụ tùng)
-      expect(row5?.getCell(17).value).toBe(2800000); // chiPhiPhuTung (gvPt = tổng vốn)
-      expect(row5?.getCell(18).value).toEqual(
-        expect.objectContaining({ formula: 'SUM(P5:Q5)', result: 9000000 }),
+      expect(row5?.getCell(17).value).toBe(6200000); // chiPhiNhanCong (9M - 2.8M phụ tùng)
+      expect(row5?.getCell(18).value).toBe(2800000); // chiPhiPhuTung (gvPt = tổng vốn)
+      expect(row5?.getCell(19).value).toEqual(
+        expect.objectContaining({ formula: 'SUM(Q5:R5)', result: 9000000 }),
       ); // phaiTra
-      expect(row5?.getCell(20).value).toEqual(
-        expect.objectContaining({ formula: 'R5-S5', result: 9000000 }),
+      expect(row5?.getCell(21).value).toEqual(
+        expect.objectContaining({ formula: 'S5-T5', result: 9000000 }),
       ); // conPhaiTra formula
-      expect((row5?.getCell(21).fill as any)?.fgColor?.argb).toBe('FFFFFBEB'); // Ghi chú trả pastel fill
+      expect((row5?.getCell(22).fill as any)?.fgColor?.argb).toBe('FFFFFBEB'); // Ghi chú trả pastel fill
       // Cột 22 là Thuế GTGT (mặc định), đứng ngay trái doanhThu
-      expect(row5?.getCell(23).value).toBe(15000000); // doanhThu
-      expect(row5?.getCell(24).value).toBe(9000000); // chiPhi
-      expect(row5?.getCell(25).value).toEqual(
-        expect.objectContaining({ formula: 'W5-X5', result: 6000000 }),
+      expect(row5?.getCell(24).value).toBe(15000000); // doanhThu
+      expect(row5?.getCell(25).value).toBe(9000000); // chiPhi
+      expect(row5?.getCell(26).value).toEqual(
+        expect.objectContaining({ formula: 'X5-Y5', result: 6000000 }),
       ); // loiNhuan formula
-      expect(row5?.getCell(28).value).toBe('Chi nhánh Quận 7'); // branchName
+      expect(row5?.getCell(29).value).toBe('Chi nhánh Quận 7'); // branchName
 
       // Sheet 2: Theo dõi lãi lỗ
       const sheet2 = workbook.getWorksheet('Theo dõi lãi lỗ');
@@ -269,26 +269,26 @@ describe('KgaraCaseQueryService', () => {
       const sheet2Row5 = sheet2?.getRow(5);
       expect(sheet2Row5?.getCell(2).value).toBe('PDV-2026-001');
       // Sheet 2 có thêm cột Thuế GTGT (cột 9) nên các cột sau dịch +1
-      expect(sheet2Row5?.getCell(10).value).toEqual(
-        expect.objectContaining({ formula: 'G5+H5', result: 15000000 }),
-      );
-      expect(sheet2Row5?.getCell(13).value).toEqual(
-        expect.objectContaining({ formula: 'K5+L5', result: 9000000 }),
+      expect(sheet2Row5?.getCell(11).value).toEqual(
+        expect.objectContaining({ formula: 'H5+I5', result: 15000000 }),
       );
       expect(sheet2Row5?.getCell(14).value).toEqual(
-        expect.objectContaining({ formula: 'J5-M5', result: 6000000 }),
+        expect.objectContaining({ formula: 'L5+M5', result: 9000000 }),
       );
       expect(sheet2Row5?.getCell(15).value).toEqual(
+        expect.objectContaining({ formula: 'K5-N5', result: 6000000 }),
+      );
+      expect(sheet2Row5?.getCell(16).value).toEqual(
         expect.objectContaining({
-          formula: 'IF(J5>0, N5/J5, 0)',
+          formula: 'IF(K5>0, O5/K5, 0)',
           result: 0.4,
         }),
       );
       // Dải 4 (40% - 60%): Green-200 FFBBF7D0
-      expect((sheet2Row5?.getCell(15).fill as any)?.fgColor?.argb).toBe(
+      expect((sheet2Row5?.getCell(16).fill as any)?.fgColor?.argb).toBe(
         'FFBBF7D0',
       );
-      expect(sheet2Row5?.getCell(16).value).toBe('Chi nhánh Quận 7');
+      expect(sheet2Row5?.getCell(17).value).toBe('Chi nhánh Quận 7');
 
       // Sheet 3: Chi tiết DV & Phụ tùng
       const sheet3 = workbook.getWorksheet('Chi tiết DV & Phụ tùng');

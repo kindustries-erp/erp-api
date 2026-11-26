@@ -85,6 +85,14 @@ Sinh module:
 
 Chi tiết về kiểu trường (`fieldSpec`), hợp đồng HTTP, bẫy đã gặp, checklist sau khi sinh, test generator và trạng thái migrate: xem `references/v2-module.md`.
 
+### Audit layer (v2)
+
+Ghi nhật ký thao tác nằm ở tầng riêng, không tự dựng trong module nghiệp vụ: lõi `src/v2/core/audit-core/` và module `src/v2/modules/audit-logs/` (route `/api/v2/audit-logs`, bảng `audit_logs`, interceptor + writer + retention `ScheduledJob`). `erp_audit_logs` là bảng v1: v1 ủy quyền sang v2 và giữ route cũ. Module mới dùng interceptor và writer có sẵn; chi tiết trạng thái migrate ở `references/v2-module.md`.
+
+### Gate 0 (DB precheck)
+
+Trước khi viết hoặc đổi DTO, entity, persistence, chạy skill `erp-gate-0-precheck`: đối chiếu schema, field, constraint, relation từ Postgres runtime thật (`SELECT current_database();` trước, báo tên DB). Không suy từ entity hay note cũ.
+
 ## 6. Checklist tối thiểu trước khi báo xong
 
 - [ ] `bun run type:check` pass.
@@ -99,4 +107,4 @@ Chi tiết về kiểu trường (`fieldSpec`), hợp đồng HTTP, bẫy đã g
 - `references/service-controller-refactor.md`: Pattern A-E, ngưỡng, bất biến, checklist v1.
 - `references/v2-module.md`: quy ước v2, fieldSpec, hợp đồng HTTP, generator, trạng thái migrate.
 - `scripts/scan-oversized-files.ts`: scanner kích thước file và vi phạm Clean DI.
-- Workflow đầy đủ: `.agents/workflows/erp-api-structure.md` và `.agents/workflows/erp-api-structure.md`.
+- Workflow đầy đủ: `.agents/workflows/erp-api-structure.md` (repo `erp-api`); bản điểm trỏ cấp workspace: `.agents/workflows/erp-api-structure.md` ở workspace root.

@@ -60,6 +60,7 @@ export function toCaseResponse(c: CaseGarage): CaseResponse {
     manufactureYear: c.manufactureYear ?? null,
     customerCode: c.customerCode ?? null,
     customerName: c.customerName ?? null,
+    voucherCustomerName: c.voucherCustomerName ?? null,
     customerSourceName: c.customerSourceName ?? null,
     customerSourceCode: c.customerSourceCode ?? null,
     payerCode: c.payerCode ?? null,

@@ -17,7 +17,7 @@ import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { CoreRbacGuard } from '@/auth/guards/core-rbac.guard';
 import { RequirePermissions } from '@/auth/decorators/require-permissions.decorator';
 import { ErpAction, ErpResource } from '@/v2/core/rbac-core';
-import { BranchId } from '@/kgara-api-core/decorators/branch-id.decorator';
+import { ErpBranchId } from '@/v2/core/branches-core';
 import { CasesGarageService } from '../cases-garage.service';
 import {
   CaseServiceLineDto,
@@ -35,12 +35,6 @@ const perm = (action: ErpAction) => ({ resource: ErpResource.GARAGE, action });
 
 interface RequestWithUser {
   user?: { sub?: string };
-}
-
-/** Chi nhánh KGara bắt buộc từ header; mọi lệnh ghi cách ly theo chi nhánh. */
-function requireBranch(branchId: string | undefined): string {
-  if (!branchId) throw new BadRequestException('Thiếu chi nhánh.');
-  return branchId;
 }
 
 /**
@@ -66,10 +60,10 @@ export class CasesGarageCommandsController {
   @Post()
   create(
     @Body() dto: CreateCaseDto,
-    @BranchId() branch: string,
+    @ErpBranchId() branch: string | undefined,
     @Req() req: RequestWithUser,
   ) {
-    return this.service.create(requireBranch(branch), dto, req.user?.sub ?? '');
+    return this.service.create(branch, dto, req.user?.sub ?? '');
   }
 
   @RequirePermissions(perm(ErpAction.UPDATE))
@@ -80,9 +74,9 @@ export class CasesGarageCommandsController {
   update(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdateCaseDto,
-    @BranchId() branch: string,
+    @ErpBranchId() branch: string | undefined,
   ) {
-    return this.service.update(requireBranch(branch), id, dto);
+    return this.service.update(branch, id, dto);
   }
 
   @RequirePermissions(perm(ErpAction.UPDATE))
@@ -94,15 +88,10 @@ export class CasesGarageCommandsController {
   progress(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdateCaseProgressDto,
-    @BranchId() branch: string,
+    @ErpBranchId() branch: string | undefined,
     @Req() req: RequestWithUser,
   ) {
-    return this.service.updateProgress(
-      requireBranch(branch),
-      id,
-      dto,
-      req.user?.sub ?? '',
-    );
+    return this.service.updateProgress(branch, id, dto, req.user?.sub ?? '');
   }
 
   @RequirePermissions(perm(ErpAction.UPDATE))
@@ -113,9 +102,10 @@ export class CasesGarageCommandsController {
   revert(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: RevertFieldsDto,
-    @BranchId() branch: string,
+    @ErpBranchId() branch: string | undefined,
+    @Req() req: RequestWithUser,
   ) {
-    return this.service.revertCase(requireBranch(branch), id, dto.fields);
+    return this.service.revertCase(branch, id, dto.fields, req.user?.sub ?? '');
   }
 
   @RequirePermissions(perm(ErpAction.UPDATE))
@@ -128,14 +118,9 @@ export class CasesGarageCommandsController {
     @Param('id', new ParseUUIDPipe()) id: string,
     @Param('lineId', new ParseUUIDPipe()) lineId: string,
     @Body() dto: RevertFieldsDto,
-    @BranchId() branch: string,
+    @ErpBranchId() branch: string | undefined,
   ) {
-    return this.service.revertLine(
-      requireBranch(branch),
-      id,
-      lineId,
-      dto.fields,
-    );
+    return this.service.revertLine(branch, id, lineId, dto.fields);
   }
 
   @RequirePermissions(perm(ErpAction.UPDATE))
@@ -144,9 +129,15 @@ export class CasesGarageCommandsController {
   status(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdateCaseStatusDto,
-    @BranchId() branch: string,
+    @ErpBranchId() branch: string | undefined,
+    @Req() req: RequestWithUser,
   ) {
-    return this.service.updateStatus(requireBranch(branch), id, dto.status);
+    return this.service.updateStatus(
+      branch,
+      id,
+      dto.status,
+      req.user?.sub ?? '',
+    );
   }
 
   @RequirePermissions(perm(ErpAction.DELETE))
@@ -154,9 +145,9 @@ export class CasesGarageCommandsController {
   @Delete(':id')
   remove(
     @Param('id', new ParseUUIDPipe()) id: string,
-    @BranchId() branch: string,
+    @ErpBranchId() branch: string | undefined,
   ) {
-    return this.service.remove(requireBranch(branch), id);
+    return this.service.remove(branch, id);
   }
 
   @RequirePermissions(perm(ErpAction.UPDATE))
@@ -165,9 +156,9 @@ export class CasesGarageCommandsController {
   addLine(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: CaseServiceLineDto,
-    @BranchId() branch: string,
+    @ErpBranchId() branch: string | undefined,
   ) {
-    return this.service.addLine(requireBranch(branch), id, dto);
+    return this.service.addLine(branch, id, dto);
   }
 
   @RequirePermissions(perm(ErpAction.UPDATE))
@@ -177,9 +168,9 @@ export class CasesGarageCommandsController {
     @Param('id', new ParseUUIDPipe()) id: string,
     @Param('lineId', new ParseUUIDPipe()) lineId: string,
     @Body() dto: CaseServiceLineDto,
-    @BranchId() branch: string,
+    @ErpBranchId() branch: string | undefined,
   ) {
-    return this.service.replaceLine(requireBranch(branch), id, lineId, dto);
+    return this.service.replaceLine(branch, id, lineId, dto);
   }
 
   @RequirePermissions(perm(ErpAction.UPDATE))
@@ -189,14 +180,9 @@ export class CasesGarageCommandsController {
     @Param('id', new ParseUUIDPipe()) id: string,
     @Param('lineId', new ParseUUIDPipe()) lineId: string,
     @Body() dto: UpdateServicePartsCostDto,
-    @BranchId() branch: string,
+    @ErpBranchId() branch: string | undefined,
   ) {
-    return this.service.updatePartsCost(
-      requireBranch(branch),
-      id,
-      lineId,
-      dto.partsCost,
-    );
+    return this.service.updatePartsCost(branch, id, lineId, dto.partsCost);
   }
 
   @RequirePermissions(perm(ErpAction.UPDATE))
@@ -205,8 +191,8 @@ export class CasesGarageCommandsController {
   removeLine(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Param('lineId', new ParseUUIDPipe()) lineId: string,
-    @BranchId() branch: string,
+    @ErpBranchId() branch: string | undefined,
   ) {
-    return this.service.removeLine(requireBranch(branch), id, lineId);
+    return this.service.removeLine(branch, id, lineId);
   }
 }

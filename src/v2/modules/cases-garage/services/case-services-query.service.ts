@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { vnDayBound } from '@/v2/core/base-core/helpers/vn-time.util';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository, SelectQueryBuilder } from 'typeorm';
+import { applyBranchScope } from '@/v2/core/branches-core';
 import { buildPagination } from '@/common/utils/paginated-result';
 import {
   applyListSummaries,
@@ -25,7 +26,8 @@ import {
 } from '../helpers/case-service-row.mapper';
 
 export interface CaseServicesFilter {
-  branchId: string;
+  /** Chi nhánh ERP (không bắt buộc); không có thì mọi chi nhánh. */
+  branchId?: string;
   page?: number;
   pageSize?: number;
   search?: string;
@@ -50,6 +52,7 @@ const SEARCH_COLUMNS = [
   'c.case_code',
   'c.license_plate',
   'c.customer_name',
+  'c.voucher_customer_name',
   'c.customer_code',
 ];
 
@@ -120,10 +123,8 @@ export class CaseServicesQueryService {
       .where('"c"."is_deleted" = false')
       .andWhere('"c"."external_deleted_at" IS NULL')
       .andWhere('"s"."external_deleted_at" IS NULL')
-      .andWhere(`NOT jsonb_exists("s"."overrides", '_deleted')`)
-      .andWhere('"c"."branch_external_id" = :branchId', {
-        branchId: f.branchId,
-      });
+      .andWhere(`NOT jsonb_exists("s"."overrides", '_deleted')`);
+    applyBranchScope(qb, 'c', f.branchId);
     if (f.origin) qb.andWhere('"c"."origin" = :origin', { origin: f.origin });
     if (f.serviceType && f.serviceType !== 'ALL') {
       qb.andWhere('"s"."product_type_code" = :serviceType', {

@@ -1,4 +1,5 @@
 import { BranchesManagementService } from '../branches-management.service';
+import { BranchExternalLinkService } from '../services/branch-external-link.service';
 import { ErpBranchController } from './erp-branch.controller';
 
 describe('ErpBranchController', () => {
@@ -8,6 +9,7 @@ describe('ErpBranchController', () => {
     update: jest.Mock;
     remove: jest.Mock;
   };
+  let links: { findByBranch: jest.Mock };
   let controller: ErpBranchController;
 
   beforeEach(() => {
@@ -17,8 +19,10 @@ describe('ErpBranchController', () => {
       update: jest.fn(),
       remove: jest.fn(),
     };
+    links = { findByBranch: jest.fn() };
     controller = new ErpBranchController(
       service as unknown as BranchesManagementService,
+      links as unknown as BranchExternalLinkService,
     );
   });
 
@@ -40,5 +44,20 @@ describe('ErpBranchController', () => {
     expect(service.create).toHaveBeenCalledWith(body);
     expect(service.update).toHaveBeenCalledWith('id-1', body);
     expect(service.remove).toHaveBeenCalledWith('id-1');
+  });
+
+  it('maps external links of a branch to source, externalId and accountKey', async () => {
+    links.findByBranch.mockResolvedValue([
+      { source: 'KGARA', externalId: 'ext-1', accountKey: 'MAIN', id: 'x' },
+      { source: 'KGARA', externalId: 'ext-2', accountKey: null },
+    ]);
+
+    await expect(controller.findExternalLinks('b-1')).resolves.toEqual({
+      items: [
+        { source: 'KGARA', externalId: 'ext-1', accountKey: 'MAIN' },
+        { source: 'KGARA', externalId: 'ext-2', accountKey: null },
+      ],
+    });
+    expect(links.findByBranch).toHaveBeenCalledWith('b-1');
   });
 });

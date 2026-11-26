@@ -36,7 +36,7 @@ export interface CaseResponse {
   origin: CaseOrigin;
   caseCode: string;
   externalId: string | null;
-  branchExternalId: string;
+  branchExternalId: string | null;
   accountKey: string;
   branchId: string | null;
   licensePlate: string | null;
@@ -48,6 +48,8 @@ export interface CaseResponse {
   manufactureYear: number | null;
   customerCode: string | null;
   customerName: string | null;
+  /** Tên khách in trên phiếu KGara, có thể khác `customerName` (danh mục). */
+  voucherCustomerName: string | null;
   customerSourceName: string | null;
   customerSourceCode: string | null;
   payerCode: string | null;

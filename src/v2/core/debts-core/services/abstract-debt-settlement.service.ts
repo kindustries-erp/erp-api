@@ -51,6 +51,7 @@ export abstract class AbstractDebtSettlementService implements DebtSettlementPor
     const saved = await allocations.save(
       allocations.create({
         branchExternalId: debt.branchExternalId,
+        branchId: debt.branchId,
         debtId: debt.id,
         sourceType: command.sourceType,
         sourceId: command.sourceId,
@@ -95,6 +96,7 @@ export abstract class AbstractDebtSettlementService implements DebtSettlementPor
     const marker = await allocations.save(
       allocations.create({
         branchExternalId: debt.branchExternalId,
+        branchId: debt.branchId,
         debtId: debt.id,
         sourceType: target.sourceType,
         sourceId: target.sourceId,

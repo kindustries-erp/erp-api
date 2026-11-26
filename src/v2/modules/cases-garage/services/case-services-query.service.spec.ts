@@ -18,16 +18,24 @@ describe('CaseServicesQueryService', () => {
     );
   });
 
-  it('luôn lọc chi nhánh, bỏ dòng đã xóa và join chi nhánh đủ account_key', async () => {
+  it('có chọn chi nhánh ERP thì lọc branch_id, bỏ dòng đã xóa và join chi nhánh đủ account_key', async () => {
     await service.findPage({ branchId: 'b1' });
 
     for (const { sql, params } of cap.calls) {
-      expect(sql).toContain('"c"."branch_external_id" = $1');
+      expect(sql).toContain('"c"."branch_id" = $1');
       expect(sql).toContain('"c"."external_deleted_at" IS NULL');
       expect(sql).toContain('"c"."is_deleted" = false');
       expect(sql).toContain('"s"."external_deleted_at" IS NULL');
       expect(sql).toContain('"b"."account_key" = "c"."account_key"');
       expect(params[0]).toBe('b1');
+    }
+  });
+
+  it('không chọn chi nhánh thì không lọc chi nhánh', async () => {
+    await service.findPage({});
+    for (const { sql } of cap.calls) {
+      expect(sql).not.toContain('"c"."branch_id" =');
+      expect(sql).not.toContain('"c"."branch_external_id" =');
     }
   });
 

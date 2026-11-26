@@ -3,6 +3,7 @@ import {
   Injectable,
   OnModuleDestroy,
 } from '@nestjs/common';
+import { DataSource } from 'typeorm';
 import {
   ExportJobRunner,
   formatExportTimestamp,
@@ -15,6 +16,7 @@ import {
   type GarageDebtExportKind,
 } from '@/kgara-api-core/helpers/garage-debts-export.helper';
 import { GarageDebtsExportService } from '@/kgara-api-core/services/garage-debts-export.service';
+import { BranchManagementExternalLink } from '@/v2/modules/branches-management/entities/branch-management-external-link.entity';
 
 export const DEBTS_EXPORT_KINDS: ReadonlyArray<GarageDebtExportKind> = [
   'customers',
@@ -48,7 +50,36 @@ export class DebtsExportJobsService implements OnModuleDestroy {
     ]),
   ) as Record<GarageDebtExportKind, ExportJobRunner>;
 
-  constructor(private readonly excel: GarageDebtsExportService) {}
+  constructor(
+    private readonly excel: GarageDebtsExportService,
+    private readonly dataSource: DataSource,
+  ) {}
+
+  /**
+   * V2 chọn chi nhánh ERP, còn file Excel (dùng chung service V1) vẫn lọc theo đơn vị KGara: đổi qua
+   * `branches_management_external_links`. Bỏ bước đổi này khi V1 chuyển sang chi nhánh ERP (Phase 5).
+   */
+  async startForErpBranch(
+    kind: GarageDebtExportKind,
+    dto: GarageDebtsExportDto,
+    erpBranchId: string | undefined,
+    userId: string,
+  ): Promise<ExportStartResult> {
+    if (!erpBranchId) {
+      throw new BadRequestException('Xuất Excel công nợ cần chọn chi nhánh.');
+    }
+    const link = await this.dataSource
+      .getRepository(BranchManagementExternalLink)
+      .findOne({
+        where: { branchId: erpBranchId, source: 'KGARA', isDeleted: false },
+      });
+    if (!link) {
+      throw new BadRequestException(
+        'Chi nhánh chưa liên kết KGara nên chưa xuất được Excel công nợ.',
+      );
+    }
+    return this.start(kind, dto, link.externalId, userId);
+  }
 
   onModuleDestroy(): void {
     Object.values(this.runners).forEach((runner) => runner.destroy());

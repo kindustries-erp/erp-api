@@ -224,6 +224,7 @@ export class KgaraCompletedCasesExportService {
             .where('case.soChungTu ILIKE :q', { q: `%${params.q}%` })
             .orWhere('case.bienSoXe ILIKE :q', { q: `%${params.q}%` })
             .orWhere('case.khachHangName ILIKE :q', { q: `%${params.q}%` })
+            .orWhere('case.tenKhachHang ILIKE :q', { q: `%${params.q}%` })
             .orWhere('case.khachHangCode ILIKE :q', { q: `%${params.q}%` });
           if (matchAmount) {
             sub

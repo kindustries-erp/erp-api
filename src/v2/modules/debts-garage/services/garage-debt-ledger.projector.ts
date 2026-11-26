@@ -23,9 +23,13 @@ export class GarageDebtLedgerProjector {
     const kgaraCase = await manager
       .getRepository(KgaraCase)
       .findOne({ where: { id: caseId } });
-    const wanted = kgaraCase
+    const built = kgaraCase
       ? buildCaseDebtOrigins(kgaraCase, await this.gpChiPhi(manager, kgaraCase))
       : [];
+    const branchId = built.length
+      ? await this.erpBranchOf(manager, caseId)
+      : null;
+    const wanted = built.map((w) => ({ ...w, branchId }));
 
     for (const command of wanted)
       await this.origins.upsertOrigin(manager, command);
@@ -47,6 +51,18 @@ export class GarageDebtLedgerProjector {
       if (hit) voided += 1;
     }
     return { upserted: wanted.length, voided };
+  }
+
+  /** Chi nhánh ERP của vụ việc: `cases_garage` dùng chung id với `kgara_cases`. */
+  private async erpBranchOf(
+    manager: EntityManager,
+    caseId: string,
+  ): Promise<string | null> {
+    const rows: Array<{ branch_id: string | null }> = await manager.query(
+      `SELECT branch_id FROM cases_garage WHERE id = $1 LIMIT 1`,
+      [caseId],
+    );
+    return rows[0]?.branch_id ?? null;
   }
 
   /** Chi phí lãi gộp khớp theo mã vụ việc và chi nhánh (như lớp đọc; không khớp thì dùng `chi_phi` của vụ việc). */

@@ -1,7 +1,7 @@
 /** Một dòng phiếu thu chi trả ra API (không lộ entity). Tiền là number. */
 export interface CashflowVoucherGarageRow {
   id: string;
-  branchExternalId: string;
+  branchExternalId: string | null;
   voucherCode: string;
   voucherType: 'RECEIPT' | 'PAYMENT';
   status: string;

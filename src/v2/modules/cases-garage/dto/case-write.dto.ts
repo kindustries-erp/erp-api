@@ -18,7 +18,7 @@ import { ExtraDataField } from '@/v2/core/base-core/dto/extra-data.decorator';
 import { CaseStatus } from '../entities/case-garage.enums';
 import { CaseServiceLineDto } from './case-service-line.dto';
 
-/** Tạo vụ việc nhập tay (origin NATIVE). Chi nhánh lấy từ header `x-kgara-branch-id`. */
+/** Tạo vụ việc nhập tay (origin NATIVE). Chi nhánh ERP lấy từ header `x-erp-branch-id`, không gửi thì để trống. */
 export class CreateCaseDto {
   @ApiPropertyOptional({
     description: 'Bỏ trống thì hệ thống tự sinh (VV-YYMM-NNNN)',
@@ -71,6 +71,11 @@ export class CreateCaseDto {
   @IsString()
   @MaxLength(255)
   customerName?: string;
+  @ApiPropertyOptional({ description: 'Tên khách in trên phiếu' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  voucherCustomerName?: string;
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

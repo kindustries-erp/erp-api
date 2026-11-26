@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import { applyBranchScope } from '@/v2/core/branches-core';
 import { buildPagination } from '@/common/utils/paginated-result';
 import { EmployeeManagement } from '@/v2/modules/employees-management/entities/employee-management.entity';
 import type {
@@ -20,10 +21,16 @@ const SUMMARY_LINES = 3;
 export class CaseProgressQueryService {
   constructor(private readonly dataSource: DataSource) {}
 
+  /**
+   * `opts.finishedSince`: xe COMPLETED/CANCELLED chỉ lấy khi xong (hoặc cập nhật) từ mốc này, để board
+   * xưởng không tải toàn bộ lịch sử; xe chưa xong luôn được lấy.
+   * `opts.trackedOnly`: chỉ xe nhân viên xưởng đã đưa vào bảng (`workshop_tracked_at` khác NULL).
+   */
   async findPage(
-    branch: string,
+    branchId: string | undefined,
     q: QueryCaseProgressDto,
     now = new Date(),
+    opts: { finishedSince?: Date; trackedOnly?: boolean } = {},
   ): Promise<CaseProgressListResponse> {
     const page = q.page ?? 1;
     const pageSize = q.pageSize ?? DEFAULT_PAGE_SIZE;
@@ -31,8 +38,8 @@ export class CaseProgressQueryService {
       .getRepository(CaseGarage)
       .createQueryBuilder('c')
       .where('c.is_deleted = false')
-      .andWhere('c.external_deleted_at IS NULL')
-      .andWhere('c.branch_external_id = :branch', { branch });
+      .andWhere('c.external_deleted_at IS NULL');
+    applyBranchScope(qb, 'c', branchId);
     const status = q.status ?? CaseStatus.IN_PROGRESS;
     if (status !== 'ALL') qb.andWhere('c.status = :status', { status });
     if (q.assigneeId) qb.andWhere('c.assignee_id = :a', { a: q.assigneeId });
@@ -45,9 +52,27 @@ export class CaseProgressQueryService {
         },
       );
     }
+    if (opts.trackedOnly) qb.andWhere('c.workshop_tracked_at IS NOT NULL');
+    if (opts.finishedSince) {
+      qb.andWhere(
+        '(c.status NOT IN (:...finished) OR COALESCE(c.completed_at, c.updated_at) >= :since)',
+        {
+          finished: [CaseStatus.COMPLETED, CaseStatus.CANCELLED],
+          since: opts.finishedSince,
+        },
+      );
+    }
+    const cls = q.classification?.trim();
+    if (cls) {
+      // Cùng biểu thức cột phân loại của danh sách vụ việc: danh mục trước, cột text sau.
+      qb.andWhere(
+        `COALESCE((SELECT cat.code FROM erp_module_categories cat WHERE cat.id = c.category_id), c.classification) = :cls`,
+        { cls },
+      );
+    }
     if (q.search?.trim()) {
       qb.andWhere(
-        '(c.license_plate ILIKE :s OR c.case_code ILIKE :s OR c.customer_name ILIKE :s)',
+        '(c.license_plate ILIKE :s OR c.case_code ILIKE :s OR c.customer_name ILIKE :s OR c.voucher_customer_name ILIKE :s)',
         { s: `%${q.search.trim()}%` },
       );
     }

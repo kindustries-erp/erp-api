@@ -10,7 +10,7 @@ function makeService(row: unknown) {
     settlementSums: jest.fn().mockResolvedValue(new Map()),
     linkCounts: jest.fn().mockResolvedValue(new Map()),
     categoryRefs: jest.fn().mockResolvedValue(new Map()),
-    grossProfitByCode: jest.fn().mockResolvedValue(new Map()),
+    grossProfitByCase: jest.fn().mockResolvedValue(new Map()),
   };
   const service = new CaseDetailQueryService(
     repo as unknown as Repository<CaseGarage>,
@@ -28,16 +28,26 @@ describe('CaseDetailQueryService', () => {
     expect(enrichment.settlementSums).not.toHaveBeenCalled();
   });
 
-  it('luôn ràng buộc chi nhánh, chưa xóa mềm và chưa bị KGara xóa', async () => {
+  it('có chọn chi nhánh ERP thì ràng buộc branchId, chưa xóa mềm và chưa bị KGara xóa', async () => {
     const { service, repo } = makeService(null);
     await service.findByCode('b1', 'PS1').catch(() => undefined);
     const where = repo.findOne.mock.calls[0][0].where;
     expect(where).toMatchObject({
       caseCode: 'PS1',
-      branchExternalId: 'b1',
+      branchId: 'b1',
       isDeleted: false,
     });
+    expect(where).not.toHaveProperty('branchExternalId');
     expect(where.externalDeletedAt).toBeDefined();
+  });
+
+  it('không chọn chi nhánh thì không lọc chi nhánh', async () => {
+    const { service, repo } = makeService(null);
+    await service.findById(undefined, 'x').catch(() => undefined);
+    const where = repo.findOne.mock.calls[0][0].where;
+    expect(where).toMatchObject({ id: 'x', isDeleted: false });
+    expect(where).not.toHaveProperty('branchId');
+    expect(where).not.toHaveProperty('branchExternalId');
   });
 
   it('trả chi tiết kèm services (bỏ dòng đã xóa phía KGara), không có rawData', async () => {

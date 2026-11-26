@@ -47,15 +47,13 @@ describe('DebtsGarageController', () => {
     }
   });
 
-  it('thiếu chi nhánh thì từ chối, không chạm service', () => {
+  it('không gửi chi nhánh → service nhận undefined, không từ chối', async () => {
     const { controller, customers, analytics } = makeController();
 
-    expect(() => controller.customersList({}, '')).toThrow(BadRequestException);
-    expect(() => controller.analyticsOverview(undefined as never)).toThrow(
-      BadRequestException,
-    );
-    expect(customers.findPage).not.toHaveBeenCalled();
-    expect(analytics.getAnalytics).not.toHaveBeenCalled();
+    await controller.customersList({}, undefined);
+    expect(customers.findPage.mock.calls[0][0].branchId).toBeUndefined();
+    await controller.analyticsOverview(undefined);
+    expect(analytics.getAnalytics.mock.calls[0][0].branchId).toBeUndefined();
   });
 
   it('list gắn chi nhánh và đổi date_from/date_to thành from/to', async () => {

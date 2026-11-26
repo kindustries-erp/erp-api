@@ -6,13 +6,20 @@ import { KgaraGrossProfit } from '@/kgara-api-core/entities/kgara_gross_profit.e
 import type { GarageCaseProjectorPort } from '@/kgara-api-core/hub/case-projector.port';
 import { BranchManagementExternalLink } from '@/v2/modules/branches-management/entities/branch-management-external-link.entity';
 import { CaseGarage } from '../entities/case-garage.entity';
-import { CaseOrigin } from '../entities/case-garage.enums';
+import { CaseOrigin, type CaseStatus } from '../entities/case-garage.enums';
 import { CaseLineGarage } from '../entities/case-line-garage.entity';
+import {
+  findOjCategoryId,
+  isOjAccount,
+  ojClassificationFields,
+  withoutOjOverrides,
+} from '../helpers/case-oj-classification.helper';
 import {
   applyProjection,
   isLineDeleted,
   type OverrideMap,
 } from '../helpers/case-override.helper';
+import { syncStageOnStatusChange } from '../helpers/case-progress-stage.closer';
 import { resolveKgaraCaseMoney } from '../helpers/kgara-case-money';
 import {
   kgaraCaseToCaseGarage,
@@ -61,16 +68,32 @@ export class CaseProjectorService implements GarageCaseProjectorPort {
       mapped.revenue = String(money.revenue);
       mapped.cost = String(money.cost);
       mapped.profit = String(money.profit);
+      // Xe tài khoản OJ luôn là phân loại OJ: ghi đè giá trị nguồn và bỏ override phân loại ở v2.
+      const isOj = isOjAccount(v1.accountKey);
+      let overrides = existing?.overrides ?? {};
+      if (isOj) {
+        Object.assign(
+          mapped,
+          ojClassificationFields(await findOjCategoryId(m)),
+        );
+        overrides = withoutOjOverrides(overrides);
+      }
       const { snapshot, patch } = applyProjection(
         mapped as Record<string, unknown>,
-        existing?.overrides ?? {},
+        overrides,
       );
       if (existing) {
         const { id: _id, createdAt: _c, updatedAt: _u, ...fields } = patch;
         await m.update(CaseGarage, { id: caseId }, {
           ...fields,
+          ...(isOj ? { overrides } : {}),
           sourceSnapshot: snapshot,
         } as never);
+        // Status KGara đổi (không bị override ở v2): đồng bộ công đoạn như đổi tay.
+        const nextStatus = fields.status as CaseStatus | undefined;
+        if (nextStatus && nextStatus !== existing.status) {
+          await syncStageOnStatusChange(m, existing, nextStatus, '');
+        }
       } else {
         await m.insert(CaseGarage, {
           ...mapped,

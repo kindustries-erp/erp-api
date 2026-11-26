@@ -30,6 +30,7 @@ describe('KgaraSyncScheduler', () => {
         .mockResolvedValue([
           { id: 'b1', externalId: 'BRANCH-HN', name: 'Chi nhánh Hà Nội' },
         ]),
+      manager: { query: jest.fn().mockResolvedValue([]) },
     };
 
     permissionRepo = {
@@ -118,6 +119,8 @@ describe('KgaraSyncScheduler', () => {
     }).compile();
 
     scheduler = module.get<KgaraSyncScheduler>(KgaraSyncScheduler);
+    // Mặc định là lượt thường; test lượt cuối ngày tự bật lại.
+    jest.spyOn(scheduler as any, 'isLastSlotOfDay').mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -328,5 +331,71 @@ describe('KgaraSyncScheduler', () => {
 
     scheduler.onModuleDestroy();
     // After destroy, interval should be cleared
+  });
+
+  describe('lượt cuối ngày (quét 6 tháng tách tháng)', () => {
+    it('lượt thường: một khoảng, có watermark, không exactRange', async () => {
+      await scheduler.runScheduledSyncCheck();
+
+      expect(syncService.syncCasesForBranch).toHaveBeenCalledTimes(1);
+      const call = syncService.syncCasesForBranch.mock.calls[0];
+      expect(call[3]).toBe('2026-08-01T00:00:00Z');
+      expect(call[5]).toBeUndefined();
+    });
+
+    it('lượt cuối ngày: 7 đoạn tháng (6 tháng từ hôm nay), mới trước, exactRange, không watermark', async () => {
+      jest.useFakeTimers({ now: new Date('2026-11-25T14:15:00Z') }); // 21:15 VN
+      (scheduler as any).isLastSlotOfDay.mockReturnValue(true);
+
+      await scheduler.runScheduledSyncCheck();
+      jest.useRealTimers();
+
+      const calls = syncService.syncCasesForBranch.mock.calls;
+      expect(calls).toHaveLength(7);
+      expect(calls[0][5]).toEqual({ exactRange: true });
+      expect(calls.map((c: unknown[]) => [c[1], c[2]])).toEqual([
+        ['2026-11-01', '2026-11-25'],
+        ['2026-10-01', '2026-10-31'],
+        ['2026-09-01', '2026-09-30'],
+        ['2026-08-01', '2026-08-31'],
+        ['2026-07-01', '2026-07-31'],
+        ['2026-06-01', '2026-06-30'],
+        ['2026-05-25', '2026-05-31'],
+      ]);
+      expect(calls.every((c: unknown[]) => c[3] === undefined)).toBe(true);
+      expect(syncService.getIncrementalWatermark).not.toHaveBeenCalled();
+      expect(syncService.syncGrossProfitForBranch).toHaveBeenCalledTimes(7);
+      expect(syncService.syncCaseDetailsBatch).toHaveBeenCalledTimes(7);
+    });
+
+    it('lượt cuối ngày: một tháng lỗi không dừng các tháng còn lại', async () => {
+      jest.useFakeTimers({ now: new Date('2026-11-25T14:15:00Z') });
+      (scheduler as any).isLastSlotOfDay.mockReturnValue(true);
+      syncService.syncCasesForBranch.mockImplementation(
+        (_b: string, from: string) =>
+          from === '2026-09-01'
+            ? Promise.reject(new Error('timeout'))
+            : Promise.resolve({ deletedCount: 0, withLinkedInvoices: [] }),
+      );
+
+      await scheduler.runScheduledSyncCheck();
+      jest.useRealTimers();
+
+      expect(syncService.syncCasesForBranch).toHaveBeenCalledTimes(7);
+      expect(syncService.syncGrossProfitForBranch).toHaveBeenCalledTimes(6);
+      expect(notificationsService.createForUser).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'ERROR' }),
+      );
+    });
+
+    it('isLastSlotOfDay: 21h VN là lượt cuối, 17h thì không', () => {
+      (scheduler as any).isLastSlotOfDay.mockRestore();
+      expect(
+        (scheduler as any).isLastSlotOfDay(new Date('2026-11-25T14:15:00Z')),
+      ).toBe(true);
+      expect(
+        (scheduler as any).isLastSlotOfDay(new Date('2026-11-25T10:15:00Z')),
+      ).toBe(false);
+    });
   });
 });

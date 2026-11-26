@@ -8,6 +8,7 @@ import request from 'supertest';
 import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { applyGlobalPrefix } from '@/common/config/global-prefix.config';
 import { BranchesManagementService } from '../branches-management.service';
+import { BranchExternalLinkService } from '../services/branch-external-link.service';
 import { ErpBranchController } from './erp-branch.controller';
 
 describe('ErpBranchController HTTP routes', () => {
@@ -29,10 +30,15 @@ describe('ErpBranchController HTTP routes', () => {
     remove: jest.fn(),
   };
 
+  const links = { findByBranch: jest.fn() };
+
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [ErpBranchController],
-      providers: [{ provide: BranchesManagementService, useValue: service }],
+      providers: [
+        { provide: BranchesManagementService, useValue: service },
+        { provide: BranchExternalLinkService, useValue: links },
+      ],
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({
@@ -105,6 +111,18 @@ describe('ErpBranchController HTTP routes', () => {
     await request(app.getHttpServer())
       .get('/api/v2/branches/column-options')
       .expect(404);
+  });
+
+  it('serves external links of a branch under /:id/external-links', async () => {
+    links.findByBranch.mockResolvedValue([
+      { source: 'KGARA', externalId: 'ext-1', accountKey: 'MAIN' },
+    ]);
+    await request(app.getHttpServer())
+      .get('/api/v2/branches/id-1/external-links')
+      .expect(200, {
+        items: [{ source: 'KGARA', externalId: 'ext-1', accountKey: 'MAIN' }],
+      });
+    expect(links.findByBranch).toHaveBeenCalledWith('id-1');
   });
 
   it('accepts unknown body keys on POST and PATCH but drops them before the facade', async () => {

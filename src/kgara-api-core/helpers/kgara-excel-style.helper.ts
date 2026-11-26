@@ -374,6 +374,7 @@ export const COMPLETED_CASES_COLUMNS: ExcelReportColumnDef[] = [
   { header: 'Biển số xe', key: 'bienSoXe', width: 14, align: 'center' },
   { header: 'Mã KH', key: 'khachHangCode', width: 16, align: 'left' },
   { header: 'Tên khách hàng', key: 'khachHangName', width: 32, align: 'left' },
+  { header: 'Tên trên phiếu', key: 'tenKhachHang', width: 28, align: 'left' },
   {
     header: 'Trạng thái',
     key: 'tenTinhTrangDichVu',
@@ -553,7 +554,7 @@ export const COMPLETED_CASES_COLUMNS: ExcelReportColumnDef[] = [
 ];
 
 /**
- * Cột tùy chọn, chỉ xuất khi người dùng chọn (không nằm trong mặc định 30 cột).
+ * Cột tùy chọn, chỉ xuất khi người dùng chọn (không nằm trong mặc định 31 cột).
  * Khớp các cột "Tất cả cột" của bảng garage-cases.
  */
 export const COMPLETED_CASES_OPTIONAL_COLUMNS: ExcelReportColumnDef[] = [
@@ -602,7 +603,7 @@ export const COMPLETED_CASES_OPTIONAL_COLUMNS: ExcelReportColumnDef[] = [
   },
 ];
 
-/** Toàn bộ cột có thể xuất: mặc định 30 cột + cột tùy chọn. */
+/** Toàn bộ cột có thể xuất: mặc định 31 cột + cột tùy chọn. */
 export const COMPLETED_CASES_ALL_COLUMNS: ExcelReportColumnDef[] = [
   ...COMPLETED_CASES_COLUMNS,
   ...COMPLETED_CASES_OPTIONAL_COLUMNS,
@@ -620,6 +621,7 @@ export const CASE_PNL_COLUMNS: ExcelReportColumnDef[] = [
   { header: 'Số phiếu', key: 'soChungTu', width: 18, align: 'left' },
   { header: 'Biển số xe', key: 'bienSoXe', width: 14, align: 'center' },
   { header: 'Tên khách hàng', key: 'khachHangName', width: 32, align: 'left' },
+  { header: 'Tên trên phiếu', key: 'tenKhachHang', width: 28, align: 'left' },
   { header: 'Phân loại', key: 'classification', width: 18, align: 'center' },
   {
     header: 'Ngày hoàn thành',
@@ -921,6 +923,7 @@ export const CASE_SERVICES_EXPORT_COLUMNS: ExcelReportColumnDef[] = [
   { header: 'Số phiếu DV', key: 'soChungTu', width: 22, align: 'left' },
   { header: 'Biển số xe', key: 'bienSoXe', width: 14, align: 'center' },
   { header: 'Khách hàng', key: 'khachHangName', width: 28, align: 'left' },
+  { header: 'Tên trên phiếu', key: 'tenKhachHang', width: 28, align: 'left' },
   { header: 'Loại', key: 'loaiHienThi', width: 14, align: 'center' },
   { header: 'Mã hạng mục', key: 'sanPhamCode', width: 18, align: 'left' },
   { header: 'Tên hạng mục', key: 'sanPhamName', width: 30, align: 'left' },

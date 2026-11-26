@@ -19,6 +19,8 @@ export function toVehicleItemDto(
     vehicleKey: key,
     licensePlate: cases.find((c) => c.licensePlate)?.licensePlate ?? null,
     customerName: cases.find((c) => c.customerName)?.customerName ?? null,
+    voucherCustomerName:
+      cases.find((c) => c.voucherCustomerName)?.voucherCustomerName ?? null,
     caseCount: cases.length,
     caseCodes: cases.map((c) => c.caseCode),
     amount: cases.reduce((sum, c) => sum + c.amount, 0),

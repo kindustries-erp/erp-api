@@ -17,8 +17,8 @@ Kỹ năng chi tiết nằm ở skill `erp-local-changes-audit`. Nạp `erp-api-
    ```
    Chỉ lấy kết quả liên quan đến file đổi. Danh sách tồn đọng cả repo chỉ để tham khảo.
 3. **Đối chiếu từng rule** trong bảng dưới. Mỗi dòng ghi PASS hoặc FAIL kèm `file#dòng`.
-4. **Xuất báo cáo** theo bố cục tuân thủ: `1. Tổng quan`, `2. Bảng tuân thủ`, `3. Kết luận`.
-5. **Nếu có FAIL**: lập plan enhance và fix theo mẫu `/erp-plan` (Task 3 cấp, DoD, Verification), trình trong hội thoại, đặt `RequestFeedback: true`, rồi **DỪNG** chờ `OK`.
+4. **Xuất báo cáo** theo bố cục tuân thủ: `1. Tổng quan`, `2. Bảng tuân thủ`, `3. Kết luận`. Dòng bắt buộc: `Plane: KINDU-xx` hoặc `Plane: không theo dõi`.
+5. **Nếu có FAIL**: quét Plane tìm tiền lệ (skill `plane-work-items`, mục Quét tiền lệ), rồi lập plan enhance và fix theo mẫu `/erp-plan` (Task 3 cấp, DoD, Verification). Plan phải có bước tạo hoặc cập nhật Plane (Module, Cycle, Story, Task con) **trước** mọi sửa file. Trình trong hội thoại, đặt `RequestFeedback: true`, rồi **DỪNG** chờ `OK`.
 
 ## Bảng rule kiểm
 
@@ -35,6 +35,7 @@ Kỹ năng chi tiết nằm ở skill `erp-local-changes-audit`. Nạp `erp-api-
 | Response list v2 | `{ items, pagination, summaries?, extraData? }` | `erp-api-structure` Phần B |
 | Field link FK dùng bộ chung | Field FK nội bộ sửa cục bộ dùng `link-override-core` (`LinkSourcePort` + `BaseLinkOverrideEngine`), không tự lặp `source_snapshot`/`overrides`; link-source chỉ đọc; FK không tồn tại trả 404; chỉ Nhóm A (không khóa cha-con, không FK hệ thống) | `erp-api-structure` Phần B, `v2-module.md` mục 5d |
 | Script độc lập | Không đường dẫn tuyệt đối, dry-run mặc định | `erp-api-structure` mục "Script độc lập" |
+| Plane trước khi làm | Khi plan fix có FAIL: có bước tạo/cập nhật Module, Cycle, Story, Task con (tên `[module] X.Y.Z`, có start/target date, state Backlog→Todo) trước mọi sửa file. Báo cáo ghi `Plane: KINDU-xx` | `plane-work-items` (mục Luồng state, Quy ước tên, Lịch Cycle, Quét tiền lệ) |
 
 ## Quy tắc
 

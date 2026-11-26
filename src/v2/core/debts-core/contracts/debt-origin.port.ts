@@ -4,6 +4,8 @@ import type { DebtDirection } from './debt-account.contract';
 /** Nợ phát sinh từ một chứng từ nguồn (vụ việc, phiếu nhập kho...). Khóa: nguồn + chiều + đối tượng nợ. */
 export interface UpsertDebtOriginCommand {
   branchExternalId: string;
+  /** Chi nhánh ERP; `undefined` thì giữ nguyên giá trị đang có của dòng nợ. */
+  branchId?: string | null;
   sourceType: string;
   sourceId: string;
   direction: DebtDirection;

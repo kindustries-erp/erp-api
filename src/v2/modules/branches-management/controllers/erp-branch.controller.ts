@@ -17,18 +17,35 @@ import { CreateErpBranchDto } from '../dto/create-erp-branch.dto';
 import { ErpBranchListResponseDto } from '../dto/erp-branch-list-response.dto';
 import { UpdateErpBranchDto } from '../dto/update-erp-branch.dto';
 import { ParseBranchBodyPipe } from '../pipes/parse-branch-body.pipe';
+import { BranchExternalLinkService } from '../services/branch-external-link.service';
 
 @ApiTags('branches_management')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('api/v2/branches')
 export class ErpBranchController {
-  constructor(private readonly service: BranchesManagementService) {}
+  constructor(
+    private readonly service: BranchesManagementService,
+    private readonly externalLinks: BranchExternalLinkService,
+  ) {}
 
   @ApiOkResponse({ type: ErpBranchListResponseDto })
   @Get()
   findAll(@Query() query: PaginationDto) {
     return this.service.findAll(query);
+  }
+
+  /** Liên kết nguồn ngoài của chi nhánh (Kgara: `externalId`, `accountKey`), dùng khi đối chiếu với đơn vị KGara. */
+  @Get(':id/external-links')
+  async findExternalLinks(@Param('id') id: string) {
+    const links = await this.externalLinks.findByBranch(id);
+    return {
+      items: links.map((l) => ({
+        source: l.source,
+        externalId: l.externalId,
+        accountKey: l.accountKey ?? null,
+      })),
+    };
   }
 
   @Post()

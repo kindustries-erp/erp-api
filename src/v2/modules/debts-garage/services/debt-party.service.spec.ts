@@ -11,6 +11,7 @@ function setup(row: Row | null) {
     createQueryBuilder: () => ({
       setLock: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
       getOne: async () => row,
     }),
   };

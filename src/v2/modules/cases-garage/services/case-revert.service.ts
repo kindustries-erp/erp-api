@@ -8,6 +8,8 @@ import {
   revertFields,
 } from '../helpers/case-override.helper';
 import { CASE_DATE_KEYS, LINE_DATE_KEYS } from '../helpers/case-override.keys';
+import { syncStageOnStatusChange } from '../helpers/case-progress-stage.closer';
+import type { CaseStatus } from '../entities/case-garage.enums';
 import { CaseCommandService } from './case-command.service';
 import { CaseLineWriter } from './case-line-writer.service';
 
@@ -24,9 +26,14 @@ export class CaseRevertService {
   ) {}
 
   /** `fields` rỗng hoặc bỏ trống: về hết mọi field đang override của header. */
-  revertCase(branch: string, id: string, fields?: string[]) {
+  revertCase(
+    branchId: string | undefined,
+    id: string,
+    fields?: string[],
+    actorId?: string,
+  ) {
     return this.dataSource.transaction(async (m) => {
-      const current = await this.cases.findOwned(m, branch, id, true);
+      const current = await this.cases.findOwned(m, branchId, id, true);
       const keys = this.pickKeys(current.overrides, fields);
       const { values, overrides } = revertFields(
         keys,
@@ -35,18 +42,23 @@ export class CaseRevertService {
         CASE_DATE_KEYS,
       );
       await m.update(CaseGarage, { id }, { ...values, overrides } as never);
+      // Về trạng thái KGara cũng là đổi status: đồng bộ công đoạn như đổi tay.
+      const nextStatus = values.status as CaseStatus | undefined;
+      if (nextStatus && nextStatus !== current.status) {
+        await syncStageOnStatusChange(m, current, nextStatus, actorId ?? '');
+      }
       return this.cases.reload(m, id);
     });
   }
 
   revertLine(
-    branch: string,
+    branchId: string | undefined,
     caseId: string,
     lineId: string,
     fields?: string[],
   ) {
     return this.dataSource.transaction(async (m) => {
-      await this.cases.findOwned(m, branch, caseId, true);
+      await this.cases.findOwned(m, branchId, caseId, true);
       const line = await m.findOne(CaseLineGarage, {
         where: { id: lineId, caseId },
       });

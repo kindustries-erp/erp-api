@@ -147,6 +147,7 @@ export class SyncCaseService {
     to?: string,
     updatedSince?: string,
     accountKey: KgaraAccountKey = KgaraAccountKey.MAIN,
+    options?: { exactRange?: boolean },
   ): Promise<{ deletedCount: number; withLinkedInvoices: string[] }> {
     this.logger.log(
       `Syncing cases for branch ${branchExternalId} (account: ${accountKey})...`,
@@ -159,14 +160,17 @@ export class SyncCaseService {
     let skippedCount = 0;
     let conflictCount = 0;
 
-    // Compute effective lookback date range (look back 2 months to catch cross-month ongoing service cases)
+    // Compute effective lookback date range (look back 2 months to catch cross-month ongoing service cases).
+    // `exactRange` (đồng bộ tách theo tháng): gọi KGara đúng from..to, không lùi.
     let effectiveFrom: string | undefined = from;
     let effectiveTo: string | undefined = to;
 
     const parsedFrom = parseSafeDate(from);
     const parsedTo = parseSafeDate(to);
 
-    if (parsedFrom) {
+    if (options?.exactRange && from && to) {
+      // giữ nguyên from..to
+    } else if (parsedFrom) {
       const lookbackFrom = new Date(
         parsedFrom.getFullYear(),
         parsedFrom.getMonth() - 2,
@@ -284,7 +288,10 @@ export class SyncCaseService {
           gwCase.soChungTu = c.SoChungTu;
           gwCase.bienSoXe = c.BienSoXe;
           gwCase.khachHangCode = c.KhachHangCode;
-          gwCase.khachHangName = c.KhachHangName || c.TenKhachHang;
+          // Tên danh mục và tên trên phiếu là hai field riêng của KGara, không gộp.
+          gwCase.khachHangName = c.KhachHangName;
+          if (c.TenKhachHang !== undefined)
+            gwCase.tenKhachHang = c.TenKhachHang || null;
           gwCase.tinhTrangDichVu = newStatus;
           gwCase.tenTinhTrangDichVu = c.TenTinhTrangDichVu;
           gwCase.tienCoThue = resolveStoredRevenue(
@@ -763,7 +770,9 @@ export class SyncCaseService {
       gwCase.soChungTu = caseData.SoChungTu;
       gwCase.bienSoXe = caseData.BienSoXe;
       gwCase.khachHangCode = caseData.KhachHangCode;
-      gwCase.khachHangName = caseData.KhachHangName || caseData.TenKhachHang;
+      gwCase.khachHangName = caseData.KhachHangName;
+      if (caseData.TenKhachHang !== undefined)
+        gwCase.tenKhachHang = caseData.TenKhachHang || null;
       gwCase.tinhTrangDichVu = newStatus;
       gwCase.tenTinhTrangDichVu = caseData.TenTinhTrangDichVu;
       gwCase.tienCoThue = netPayable;
@@ -1047,7 +1056,8 @@ export class SyncCaseService {
       linesCount = linesResult.upserted;
       // Khôi phục giá vốn từ journal đã lưu (payload KGara không có giá vốn), rồi mới chiếu V2
       await this.finalizer?.finalizeCase(gwCase);
-      await this.projectCaseToV2(targetCaseId);
+      // Cổng chiếu tìm theo `kgara_cases.id`, không theo mã phiếu KGara (`targetCaseId`)
+      await this.projectCaseToV2(gwCase.id);
       if (linesResult.conflicts.length > 0) {
         this.logger.warn(
           `Case ${targetCaseId}: ${linesResult.conflicts.length} line(s) belong to another case, not moved: ${linesResult.conflicts.join(', ')}`,

@@ -31,6 +31,8 @@ export function applyCaseListSorts(
       targetCol = 'case.bienSoXe';
     else if (col === 'khachHangName' || col === 'customerName')
       targetCol = 'case.khachHangName';
+    else if (col === 'tenKhachHang' || col === 'voucherCustomerName')
+      targetCol = 'case.tenKhachHang';
     else if (col === 'khachHangCode' || col === 'customerCode')
       targetCol = 'case.khachHangCode';
     else if (col === 'doanhThu') targetCol = 'case.doanhThu';

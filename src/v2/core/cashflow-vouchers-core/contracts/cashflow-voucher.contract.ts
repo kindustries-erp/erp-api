@@ -5,7 +5,10 @@ import type {
 
 /** Dữ liệu tạo phiếu thu chi (đã validate ở DTO của module con). */
 export interface CreateCashflowVoucherInput {
-  branchExternalId: string;
+  /** Đơn vị KGara (chỉ phiếu gắn vụ việc KGara); null với phiếu nhập ở ERP. */
+  branchExternalId?: string | null;
+  /** Chi nhánh ERP (không bắt buộc). */
+  branchId?: string | null;
   voucherType: CashflowVoucherType;
   transDate: string;
   /** Dương. */
@@ -28,7 +31,12 @@ export interface CreateCashflowVoucherInput {
 export type UpdateCashflowVoucherInput = Partial<
   Omit<
     CreateCashflowVoucherInput,
-    'branchExternalId' | 'voucherType' | 'voucherCode' | 'source' | 'createdBy'
+    | 'branchExternalId'
+    | 'branchId'
+    | 'voucherType'
+    | 'voucherCode'
+    | 'source'
+    | 'createdBy'
   >
 >;
 

@@ -1,7 +1,7 @@
 /**
  * scripts/backfill-cases-garage-from-kgara.ts
  *
- * Chiếu toàn bộ `kgara_cases` + `kgara_case_services` (V1) sang `cases_garage` + `case_services_garage` (v2)
+ * Chiếu toàn bộ `kgara_cases` + `kgara_case_services` (V1) sang `cases_garage` + `case_lines_garage` (v2)
  * bằng CHÍNH `CaseProjectorService` (một mapper duy nhất, cùng UUID, origin=KGARA_SYNC, idempotent).
  * Không đụng xe NATIVE. Vụ việc V1 chưa có `branch_external_id` bị bỏ qua và được báo cáo.
  *
@@ -59,7 +59,7 @@ async function counts(ds: DataSource, branch?: string): Promise<Counts> {
         WHERE c.branch_external_id IS NOT NULL ${b.replace('branch_external_id', 'c.branch_external_id')}`,
     ),
     v2SyncLines: await one(
-      `SELECT COUNT(*) n FROM case_services_garage s JOIN cases_garage c ON c.id = s.case_id
+      `SELECT COUNT(*) n FROM case_lines_garage s JOIN cases_garage c ON c.id = s.case_id
         WHERE c.origin = 'KGARA_SYNC' ${b.replace('branch_external_id', 'c.branch_external_id')}`,
     ),
   };

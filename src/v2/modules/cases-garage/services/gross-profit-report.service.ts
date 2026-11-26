@@ -9,7 +9,8 @@ import type {
 } from '../dto/gross-profit-report.types';
 
 export interface GrossProfitReportFilter {
-  branchId: string;
+  /** Chi nhánh ERP (không bắt buộc), lọc theo `branch_id` của vụ việc khớp. */
+  branchId?: string;
   /** Lọc theo kỳ báo cáo của dòng lợi nhuận gộp (`report_from >= from`), như V1. */
   from?: string;
   /** Lọc theo kỳ báo cáo của dòng lợi nhuận gộp (`report_to <= to`), như V1. */
@@ -42,8 +43,12 @@ export class GrossProfitReportService {
       Math.max(1, Math.floor(f.pageSize ?? 20) || 20),
     );
 
-    const params: unknown[] = [f.branchId];
-    const conds = ['gp.branch_external_id = $1'];
+    const params: unknown[] = [];
+    const conds = ['true'];
+    if (f.branchId) {
+      params.push(f.branchId);
+      conds.push(`c.branch_id = $${params.length}`);
+    }
     if (f.from) {
       params.push(f.from);
       conds.push(`gp.report_from >= $${params.length}`);

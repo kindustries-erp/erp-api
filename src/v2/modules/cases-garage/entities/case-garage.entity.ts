@@ -18,14 +18,13 @@ import type { CaseLineGarage } from './case-line-garage.entity';
   unique: true,
   where: '"external_id" IS NOT NULL',
 })
-@Index(
-  'UQ_cases_garage_case_code_active',
-  ['branchExternalId', 'accountKey', 'caseCode'],
-  {
-    unique: true,
-    where: '"is_deleted" = false AND "external_deleted_at" IS NULL',
-  },
-)
+@Index('UQ_cases_garage_case_code_active', ['accountKey', 'caseCode'], {
+  unique: true,
+  where: '"is_deleted" = false AND "external_deleted_at" IS NULL',
+})
+@Index('IDX_cases_garage_branch_tracked', ['branchId', 'workshopTrackedAt'], {
+  where: '"workshop_tracked_at" IS NOT NULL',
+})
 export class CaseGarage extends BaseCaseEntity<CaseStatus> {
   // ── Định danh và nguồn ────────────────────────────────────────────────────
   @Index()
@@ -36,10 +35,16 @@ export class CaseGarage extends BaseCaseEntity<CaseStatus> {
   @Column({ type: 'varchar', length: 100, name: 'external_id', nullable: true })
   externalId: string | null;
 
-  // ── Chi nhánh (giống V1: chi nhánh KGara + tài khoản) ─────────────────────
+  // ── Nguồn KGara (chỉ dùng khi đồng bộ; lọc chi nhánh dùng `branchId` ERP) ──
+  /** Đơn vị KGara (DonViID) của phiếu sync; null với xe nhập tay. GR/GN dùng chung UUID nên không dùng để lọc. */
   @Index()
-  @Column({ type: 'varchar', length: 100, name: 'branch_external_id' })
-  branchExternalId: string;
+  @Column({
+    type: 'varchar',
+    length: 100,
+    name: 'branch_external_id',
+    nullable: true,
+  })
+  branchExternalId: string | null;
 
   @Column({
     type: 'varchar',
@@ -104,6 +109,15 @@ export class CaseGarage extends BaseCaseEntity<CaseStatus> {
   @Column({ type: 'smallint', name: 'manufacture_year', nullable: true })
   manufactureYear: number | null;
 
+  /** Tên khách in trên phiếu KGara (V1 `ten_khach_hang`), có thể khác `customerName` (danh mục). */
+  @Column({
+    type: 'varchar',
+    length: 255,
+    name: 'voucher_customer_name',
+    nullable: true,
+  })
+  voucherCustomerName: string | null;
+
   /** Nguồn khách theo KGara (V1 `kgara_classification`), chỉ đọc. */
   @Column({
     type: 'varchar',
@@ -164,6 +178,15 @@ export class CaseGarage extends BaseCaseEntity<CaseStatus> {
     nullable: true,
   })
   advisorName: string | null;
+
+  // ── Bảng tiến độ xưởng ────────────────────────────────────────────────────
+  /** Thời điểm nhân viên xưởng đưa xe vào bảng tiến độ; NULL là không có trên bảng. */
+  @Column({ type: 'timestamptz', name: 'workshop_tracked_at', nullable: true })
+  workshopTrackedAt: Date | null;
+
+  /** Người đưa xe vào bảng (`users.id`, trỏ mềm, không FK). */
+  @Column({ type: 'uuid', name: 'workshop_tracked_by', nullable: true })
+  workshopTrackedBy: string | null;
 
   // ── Override v2 trên dữ liệu sync ─────────────────────────────────────────
   /** Giá trị mới nhất sync từ v1 (khóa camelCase). */

@@ -100,6 +100,26 @@ describe('buildSheet1CompletedCases với selectedColumns', () => {
   });
 });
 
+describe('tên khách trên phiếu ở Sheet 1', () => {
+  it('xuất tên danh mục và tên trên phiếu ở hai cột riêng', () => {
+    const workbook = new ExcelJS.Workbook();
+    buildSheet1CompletedCases(
+      workbook,
+      [{ ...sampleCase, khachHangName: 'ACTR', tenKhachHang: 'SAILUN' }],
+      {},
+      {},
+      {},
+      undefined,
+      {},
+      ['khachHangName', 'tenKhachHang'],
+    );
+    const sheet = workbook.getWorksheet(SHEET1_NAME) as ExcelJS.Worksheet;
+    expect(headersOf(sheet)).toEqual(['Tên khách hàng', 'Tên trên phiếu']);
+    expect(sheet.getRow(5).getCell(1).value).toBe('ACTR');
+    expect(sheet.getRow(5).getCell(2).value).toBe('SAILUN');
+  });
+});
+
 describe('cột tùy chọn của Sheet 1', () => {
   const optionalCase = {
     ...sampleCase,
@@ -129,9 +149,12 @@ describe('cột tùy chọn của Sheet 1', () => {
     };
   };
 
-  it('không chọn thì chỉ có 30 cột mặc định, Thuế GTGT đứng ngay trái Doanh thu', () => {
+  it('không chọn thì chỉ có 31 cột mặc định, Thuế GTGT đứng ngay trái Doanh thu', () => {
     const keys = resolveCompletedCasesColumns().map((c) => c.key);
-    expect(keys).toHaveLength(30);
+    expect(keys).toHaveLength(31);
+    expect(keys.indexOf('tenKhachHang')).toBe(
+      keys.indexOf('khachHangName') + 1,
+    );
     expect(keys.indexOf('vatAmount')).toBe(keys.indexOf('doanhThu') - 1);
     expect(keys).not.toContain('exclusionRules');
   });
@@ -196,7 +219,7 @@ describe('cột tùy chọn của Sheet 1', () => {
     expect(build({})).toEqual(['—', '—', '—', '—', '—']);
   });
 
-  it('5 cột xe nằm trong khóa hợp lệ nhưng không thuộc 30 cột mặc định', () => {
+  it('5 cột xe nằm trong khóa hợp lệ nhưng không thuộc 31 cột mặc định', () => {
     const defaults = resolveCompletedCasesColumns().map((c) => c.key);
     for (const key of [
       'soKhung',
