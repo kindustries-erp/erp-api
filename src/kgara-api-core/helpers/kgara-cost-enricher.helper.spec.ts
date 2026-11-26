@@ -248,3 +248,97 @@ describe('KgaraCostEnricherHelper manual cost & stale helpers', () => {
     expect(next[1].GiaVonPhuTung).toBe(0);
   });
 });
+
+describe('KgaraCostEnricherHelper khớp tên: đúng tên trước, gần đúng sau', () => {
+  const j = (name: string, amount: number) => ({
+    TaiKhoanNoCode: '1541',
+    GiaTriTien: amount,
+    ChiPhi: amount,
+    NoiDung: `[70A45967] - [${name}]`,
+  });
+  const pt = (
+    id: string,
+    name: string,
+    qty: number,
+    extra: Record<string, unknown> = {},
+  ): Record<string, any> => ({
+    HdPhieuDichVuChiTietID: id,
+    LoaiSanPhamCode: 'PT',
+    SanPhamName: name,
+    SoLuongHoaDon: qty,
+    ...extra,
+  });
+  const costById = (lines: any[]) =>
+    Object.fromEntries(
+      lines.map((l) => [l.HdPhieuDichVuChiTietID, l.GiaVonPhuTung]),
+    );
+
+  it('không tráo giá vốn giữa tên chứa nhau (GR-PDV2608-0099-Copy1-Copy1), bất kể thứ tự journal', () => {
+    const lines = [
+      pt('tt', 'THANH TRUYỀN', 4),
+      pt('btt', 'BẠC THANH TRUYỀN', 8),
+      pt('bl', 'BULONG', 1),
+      pt('blq', 'BULONG NẮP QUY LÁT', 10),
+    ];
+    const journal = [
+      j('BẠC THANH TRUYỀN', 2096000),
+      j('BULONG NẮP QUY LÁT', 1980000),
+      j('THANH TRUYỀN', 6588000),
+      j('BULONG', 200000),
+    ];
+    const expected = { tt: 1647000, btt: 262000, bl: 200000, blq: 198000 };
+
+    const res = KgaraCostEnricherHelper.enrichCaseLines(lines, journal);
+    const rev = KgaraCostEnricherHelper.enrichCaseLines(
+      lines,
+      [...journal].reverse(),
+    );
+
+    expect(costById(res.lines)).toEqual(expected);
+    expect(costById(rev.lines)).toEqual(expected);
+    expect(res.costBreakdown.allocatedPartsCost).toBe(10864000);
+  });
+
+  it('gần đúng ưu tiên tên journal dài nhất', () => {
+    const res = KgaraCostEnricherHelper.enrichCaseLines(
+      [pt('l1', 'Lọc nhớt hộp số 7 cấp', 1)],
+      [j('Lọc nhớt', 320000), j('Lọc nhớt hộp số', 1670000)],
+    );
+    expect(res.lines[0].GiaVonPhuTung).toBe(1670000);
+  });
+
+  it('mục journal bằng 0 không bị dòng khác lấy nhầm tiền (GR-PDV2607-0018-Copy2)', () => {
+    const res = KgaraCostEnricherHelper.enrichCaseLines(
+      [
+        pt('loc', 'Lọc nhớt động cơ', 1, { GiaVonPhuTung: 0 }),
+        pt('nhot', 'Nhớt động cơ', 4.8),
+      ],
+      [j('Nhớt động cơ', 648000), j('Lọc nhớt động cơ', 0)],
+    );
+    expect(costById(res.lines)).toEqual({ loc: 0, nhot: 135000 });
+  });
+
+  it('xóa giá vốn xuất kho cũ của dòng không còn khớp, giữ dòng nhập tay', () => {
+    const res = KgaraCostEnricherHelper.enrichCaseLines(
+      [
+        pt('stale', 'Lọc nhớt động cơ', 1, {
+          GiaVonPhuTung: 648000,
+          TongVon: 648000,
+          CostAllocationType: 'WAREHOUSE_ISSUE',
+        }),
+        pt('manual', 'Ron đáy cate', 1, {
+          GiaVonPhuTung: 410000,
+          TongVon: 410000,
+          CostAllocationType: 'MANUAL_ERP',
+        }),
+      ],
+      [j('Nhớt động cơ 5W-30', 648000)],
+    );
+    expect(res.lines[0]).toMatchObject({ GiaVonPhuTung: 0, TongVon: 0 });
+    expect(res.lines[0].CostAllocationType).toBeUndefined();
+    expect(res.lines[1]).toMatchObject({
+      GiaVonPhuTung: 410000,
+      CostAllocationType: 'MANUAL_ERP',
+    });
+  });
+});

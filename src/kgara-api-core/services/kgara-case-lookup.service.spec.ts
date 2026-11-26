@@ -367,6 +367,72 @@ describe('KgaraCaseLookupService', () => {
       expect(notifyCaseProjector).not.toHaveBeenCalled();
     });
 
+    it('force ghi giá vốn 0 cho dòng lần trước gán nhầm, không đụng dòng chưa từng gán', async () => {
+      const mockCase = {
+        id: 'case-c',
+        soChungTu: 'GR-PDV2607-0018-Copy2',
+        hdPhieuDichVuId: 'ext-c',
+        rawData: {
+          costEnriched: true,
+          costBreakdown: { warehousePartsCost: 648000 },
+          ListPhieuDichVuChiTiet: [
+            {
+              HdPhieuDichVuChiTietID: 'loc',
+              LoaiSanPhamCode: 'PT',
+              SanPhamName: 'Lọc nhớt động cơ',
+              SoLuongHoaDon: 1,
+              GiaVonPhuTung: 648000,
+              CostAllocationType: 'WAREHOUSE_ISSUE',
+            },
+            {
+              HdPhieuDichVuChiTietID: 'nhot',
+              LoaiSanPhamCode: 'PT',
+              SanPhamName: 'Nhớt động cơ',
+              SoLuongHoaDon: 4.8,
+              GiaVonPhuTung: 0,
+            },
+            {
+              HdPhieuDichVuChiTietID: 'khac',
+              LoaiSanPhamCode: 'PT',
+              SanPhamName: 'Mỡ tra ắc thắng',
+              SoLuongHoaDon: 1,
+              GiaVonPhuTung: 0,
+            },
+          ],
+        } as any,
+      };
+      grossProfitRepoMock.findOne.mockResolvedValue({
+        rawData: {
+          journal_items: [
+            {
+              TaiKhoanNoCode: '1541',
+              ChiPhi: 648000,
+              NoiDung: '[61LD05581] - [Nhớt động cơ]',
+            },
+          ],
+        },
+      });
+
+      const res = await service.enrichCostForCase(mockCase as any, {
+        force: true,
+        notifyProjector: false,
+      });
+
+      expect(res).toBe(true);
+      expect(caseServiceRepoMock.update).toHaveBeenCalledWith(
+        { hdPhieuDichVuChiTietId: 'loc' },
+        { giaVonPhuTung: 0 },
+      );
+      expect(caseServiceRepoMock.update).toHaveBeenCalledWith(
+        { hdPhieuDichVuChiTietId: 'nhot' },
+        { giaVonPhuTung: 135000 },
+      );
+      expect(caseServiceRepoMock.update).not.toHaveBeenCalledWith(
+        { hdPhieuDichVuChiTietId: 'khac' },
+        expect.anything(),
+      );
+    });
+
     it('should allow manual updating of line costs on ERP', async () => {
       const mockCase = {
         id: 'case-1',
