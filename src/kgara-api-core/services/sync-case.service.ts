@@ -393,12 +393,14 @@ export class SyncCaseService {
           gwCase.rawData = { ...(gwCase.rawData ?? {}), ...c };
 
           if (accountKey === KgaraAccountKey.OJ) {
+            // Xe tài khoản OJ luôn là OJ: gán cả danh mục, không giữ danh mục cũ (tránh lệch phân loại/danh mục)
             gwCase.classification = 'OJ';
             gwCase.excludeFromDebt = true;
-            if (!gwCase.categoryId) {
-              gwCase.categoryId =
-                categoryMap.get('OJ') || categoryMap.get('OJ_NGOAI') || null;
-            }
+            gwCase.categoryId =
+              categoryMap.get('OJ') ||
+              categoryMap.get('OJ_NGOAI') ||
+              gwCase.categoryId ||
+              null;
           } else {
             // KGara Classification extraction & Zero-Overwrite auto-mapping
             const { kgaraClassification, kgaraClassificationCode } =
@@ -927,7 +929,8 @@ export class SyncCaseService {
       ) {
         gwCase.classification = 'OJ';
         gwCase.excludeFromDebt = true;
-        if (!gwCase.categoryId) {
+        // Tài khoản OJ: luôn gán danh mục OJ; phiếu khác chỉ bổ sung khi chưa có danh mục
+        if (!gwCase.categoryId || effectiveAccountKey === KgaraAccountKey.OJ) {
           const cat =
             typeof this.caseRepo.manager?.findOne === 'function'
               ? await this.caseRepo.manager.findOne(ErpModuleCategory, {

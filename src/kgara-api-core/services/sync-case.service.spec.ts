@@ -688,6 +688,99 @@ describe('SyncCaseService (số khung & đối tượng thanh toán)', () => {
     expect(ctx.caseRepo.save).toHaveBeenCalled();
   });
 
+  it('list tài khoản OJ: xe đã có danh mục khác vẫn được gán danh mục OJ', async () => {
+    const ctx = buildService();
+    ctx.caseRepo.manager.find.mockResolvedValue([
+      { id: 'cat-oj', code: 'OJ', moduleKey: 'GARAGE_CASE' },
+      { id: 'cat-ky-gui', code: 'KY_GUI_NOI_BO', moduleKey: 'GARAGE_CASE' },
+    ]);
+    ctx.client.getCases.mockResolvedValue({
+      data: [
+        {
+          ID: 1,
+          SoChungTu: 'GN-PDV2610-0007',
+          HdPhieuDichVuID: OJ_GUID,
+          TinhTrangDichVu: 3,
+        },
+      ],
+      pagination: { totalPages: 1 },
+    });
+    ctx.caseRepo.findOne.mockResolvedValue({
+      id: 'case-oj',
+      hdPhieuDichVuId: OJ_GUID,
+      accountKey: 'OJ',
+      classification: 'OJ',
+      categoryId: 'cat-ky-gui',
+      excludeFromDebt: false,
+    } as unknown as KgaraCase);
+
+    await ctx.service.syncCasesForBranch(
+      BRANCH,
+      '2026-10-01',
+      '2026-10-31',
+      undefined,
+      KgaraAccountKey.OJ,
+    );
+
+    expect(ctx.caseRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        classification: 'OJ',
+        categoryId: 'cat-oj',
+        excludeFromDebt: true,
+      }),
+    );
+  });
+
+  it('detail tài khoản OJ: gán danh mục OJ dù đã có danh mục khác; MAIN giữ danh mục đã có', async () => {
+    const detail = (guid: string, so: string) => ({
+      data: {
+        HdPhieuDichVuID: guid,
+        SoChungTu: so,
+        TinhTrangDichVu: 1,
+        ListPhieuDichVuChiTiet: [],
+      },
+      dataAsOf: '2026-11-03T10:00:00+07:00',
+    });
+
+    const oj = buildService();
+    (oj.caseRepo.manager as any).findOne = jest
+      .fn()
+      .mockResolvedValue({ id: 'cat-oj', code: 'OJ' });
+    oj.client.getCaseDetail.mockResolvedValue(
+      detail(OJ_GUID, 'GN-PDV2610-0007'),
+    );
+    oj.caseRepo.findOne.mockResolvedValue({
+      id: 'case-oj',
+      hdPhieuDichVuId: OJ_GUID,
+      accountKey: 'OJ',
+      classification: 'OJ',
+      categoryId: 'cat-ky-gui',
+    } as unknown as KgaraCase);
+    await oj.service.syncCaseDetail(BRANCH, OJ_GUID, KgaraAccountKey.OJ);
+    const savedOj = oj.caseRepo.save.mock.calls[0][0];
+    expect(savedOj.classification).toBe('OJ');
+    expect(savedOj.categoryId).toBe('cat-oj');
+
+    const main = buildService();
+    (main.caseRepo.manager as any).findOne = jest
+      .fn()
+      .mockResolvedValue({ id: 'cat-oj', code: 'OJ' });
+    main.client.getCaseDetail.mockResolvedValue(
+      detail(MAIN_GUID, 'GR-PDV2610-0012'),
+    );
+    main.caseRepo.findOne.mockResolvedValue({
+      id: 'case-main',
+      hdPhieuDichVuId: MAIN_GUID,
+      accountKey: 'MAIN',
+      classification: 'OJ',
+      categoryId: 'cat-oj-custom',
+    } as unknown as KgaraCase);
+    await main.service.syncCaseDetail(BRANCH, MAIN_GUID, KgaraAccountKey.MAIN);
+    expect(main.caseRepo.save.mock.calls[0][0].categoryId).toBe(
+      'cat-oj-custom',
+    );
+  });
+
   it('detail có DoiTuongThanhToanCode/Name thì lưu cột typed', async () => {
     const ctx = buildService();
     ctx.client.getCaseDetail.mockResolvedValue({
