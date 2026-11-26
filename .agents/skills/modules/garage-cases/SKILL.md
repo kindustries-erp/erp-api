@@ -36,7 +36,8 @@ Các nghiệp vụ trọng tâm:
 | `so_chung_tu` | `varchar(100)` | YES | `NULL` | Số chứng từ phiếu dịch vụ (vd: `PDV-202607-001`) |
 | `bien_so_xe` | `varchar(50)` | YES | `NULL` | Biển số xe tiếp nhận sửa chữa |
 | `khach_hang_code` | `varchar(100)` | YES | `NULL` | Mã định danh khách hàng |
-| `khach_hang_name` | `varchar(255)` | YES | `NULL` | Tên khách hàng / chủ phương tiện |
+| `khach_hang_name` | `varchar(255)` | YES | `NULL` | Tên khách danh mục (KGara `KhachHangName`, không lấy `TenKhachHang` thay thế) |
+| `ten_khach_hang` | `varchar(255)` | YES | `NULL` | Tên khách in trên phiếu (KGara `TenKhachHang`); export bảng kê, lãi lỗ, hạng mục có cột "Tên trên phiếu" ngay sau "Tên khách hàng" (bảng kê mặc định 31 cột); tìm/lọc/sắp xếp theo `tenKhachHang` |
 | `tinh_trang_dich_vu` | `int` | YES | `NULL` | Mã trạng thái: 0: Tiếp nhận, 1: Báo giá, 2: Đang sửa, 3: Hoàn tất, 9: Hủy |
 | `ten_tinh_trang_dich_vu` | `varchar(100)`| YES | `NULL` | Tên hiển thị trạng thái dịch vụ |
 | `tien_co_thue` | `numeric(18,2)` | YES | `NULL` | Tổng giá trị phiếu đã bao gồm thuế (VNĐ) |

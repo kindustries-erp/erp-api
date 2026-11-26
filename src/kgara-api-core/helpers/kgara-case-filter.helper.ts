@@ -39,6 +39,7 @@ export function getCaseColumnSelectExpr(column: string): string | null {
     khachHangCode: '"case"."khach_hang_code"',
     customerName: '"case"."khach_hang_name"',
     khachHangName: '"case"."khach_hang_name"',
+    tenKhachHang: '"case"."ten_khach_hang"',
     statusName: '"case"."ten_tinh_trang_dich_vu"',
     categoryId: '"case"."category_id"',
     categoryName: '"cat"."name"',
@@ -177,6 +178,7 @@ export function applySingleCaseColumnFilter(
         [
           '"case"."khach_hang_name"',
           '"case"."khach_hang_code"',
+          '"case"."ten_khach_hang"',
           'CONCAT(COALESCE("case"."khach_hang_name", \'\'), \' \', COALESCE("case"."khach_hang_code", \'\'))',
         ],
         searchStr,
@@ -669,6 +671,7 @@ export function getCaseServiceColumnSelectExpr(column: string): string | null {
     khachHangCode: '"c"."khach_hang_code"',
     customerName: '"c"."khach_hang_name"',
     khachHangName: '"c"."khach_hang_name"',
+    tenKhachHang: '"c"."ten_khach_hang"',
     statusName: '"c"."ten_tinh_trang_dich_vu"',
     status: '"c"."tinh_trang_dich_vu"',
     classification: '"c"."classification"',

@@ -53,6 +53,7 @@ describe('kgara-case-filter.helper', () => {
       ['namSanXuat', '"case"."nam_san_xuat"'],
       ['doiTuongThanhToan', '"case"."doi_tuong_thanh_toan_name"'],
       ['doiTuongThanhToanCode', '"case"."doi_tuong_thanh_toan_code"'],
+      ['tenKhachHang', '"case"."ten_khach_hang"'],
     ])('map %s', (key, expr) => {
       expect(getCaseColumnSelectExpr(key)).toBe(expr);
     });

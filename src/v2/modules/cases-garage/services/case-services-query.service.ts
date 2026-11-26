@@ -52,6 +52,7 @@ const SEARCH_COLUMNS = [
   'c.case_code',
   'c.license_plate',
   'c.customer_name',
+  'c.voucher_customer_name',
   'c.customer_code',
 ];
 

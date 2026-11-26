@@ -23,6 +23,7 @@ export function toWorkshopCandidate(c: CaseGarage): CaseWorkshopCandidate {
     caseCode: c.caseCode,
     licensePlate: c.licensePlate ?? null,
     customerName: c.customerName ?? null,
+    voucherCustomerName: c.voucherCustomerName ?? null,
     vehicleName: vehicle || null,
     origin: c.origin,
     status: c.status,
@@ -58,7 +59,9 @@ export class CaseWorkshopCandidatesService {
         new Brackets((w) => {
           w.where('c.case_code ILIKE :s', {
             s: `%${escapeLike(term)}%`,
-          }).orWhere('c.customer_name ILIKE :s');
+          })
+            .orWhere('c.customer_name ILIKE :s')
+            .orWhere('c.voucher_customer_name ILIKE :s');
           if (plate) w.orWhere(`${PLATE_SQL} LIKE :p`, { p: `%${plate}%` });
         }),
       )

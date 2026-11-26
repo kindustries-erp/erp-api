@@ -25,6 +25,7 @@ export const KGARA_CASE_FIELD_MAP: readonly FieldMapEntry[] = [
   f('namSanXuat', 'manufactureYear', 'int'),
   f('khachHangCode', 'customerCode', 'text'),
   f('khachHangName', 'customerName', 'text'),
+  f('tenKhachHang', 'voucherCustomerName', 'text'),
   f('kgaraClassification', 'customerSourceName', 'text'),
   f('kgaraClassificationCode', 'customerSourceCode', 'text'),
   f('doiTuongThanhToanCode', 'payerCode', 'text'),

@@ -72,7 +72,7 @@ export class CaseProgressQueryService {
     }
     if (q.search?.trim()) {
       qb.andWhere(
-        '(c.license_plate ILIKE :s OR c.case_code ILIKE :s OR c.customer_name ILIKE :s)',
+        '(c.license_plate ILIKE :s OR c.case_code ILIKE :s OR c.customer_name ILIKE :s OR c.voucher_customer_name ILIKE :s)',
         { s: `%${q.search.trim()}%` },
       );
     }

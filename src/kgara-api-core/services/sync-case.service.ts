@@ -288,7 +288,10 @@ export class SyncCaseService {
           gwCase.soChungTu = c.SoChungTu;
           gwCase.bienSoXe = c.BienSoXe;
           gwCase.khachHangCode = c.KhachHangCode;
-          gwCase.khachHangName = c.KhachHangName || c.TenKhachHang;
+          // Tên danh mục và tên trên phiếu là hai field riêng của KGara, không gộp.
+          gwCase.khachHangName = c.KhachHangName;
+          if (c.TenKhachHang !== undefined)
+            gwCase.tenKhachHang = c.TenKhachHang || null;
           gwCase.tinhTrangDichVu = newStatus;
           gwCase.tenTinhTrangDichVu = c.TenTinhTrangDichVu;
           gwCase.tienCoThue = resolveStoredRevenue(
@@ -767,7 +770,9 @@ export class SyncCaseService {
       gwCase.soChungTu = caseData.SoChungTu;
       gwCase.bienSoXe = caseData.BienSoXe;
       gwCase.khachHangCode = caseData.KhachHangCode;
-      gwCase.khachHangName = caseData.KhachHangName || caseData.TenKhachHang;
+      gwCase.khachHangName = caseData.KhachHangName;
+      if (caseData.TenKhachHang !== undefined)
+        gwCase.tenKhachHang = caseData.TenKhachHang || null;
       gwCase.tinhTrangDichVu = newStatus;
       gwCase.tenTinhTrangDichVu = caseData.TenTinhTrangDichVu;
       gwCase.tienCoThue = netPayable;
@@ -1051,7 +1056,8 @@ export class SyncCaseService {
       linesCount = linesResult.upserted;
       // Khôi phục giá vốn từ journal đã lưu (payload KGara không có giá vốn), rồi mới chiếu V2
       await this.finalizer?.finalizeCase(gwCase);
-      await this.projectCaseToV2(targetCaseId);
+      // Cổng chiếu tìm theo `kgara_cases.id`, không theo mã phiếu KGara (`targetCaseId`)
+      await this.projectCaseToV2(gwCase.id);
       if (linesResult.conflicts.length > 0) {
         this.logger.warn(
           `Case ${targetCaseId}: ${linesResult.conflicts.length} line(s) belong to another case, not moved: ${linesResult.conflicts.join(', ')}`,

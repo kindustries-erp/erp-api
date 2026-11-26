@@ -7,7 +7,7 @@ const BRANCH = '0b4d6d3a-55df-492b-abaf-377d84b61d05';
 const OJ_GUID = 'uuid-oj-1';
 const MAIN_GUID = 'uuid-main-1';
 
-function buildService() {
+function buildService(moduleRef?: unknown) {
   const lineManager = {
     getRepository: jest.fn(() => ({
       find: jest.fn().mockResolvedValue([]),
@@ -78,7 +78,7 @@ function buildService() {
     syncGrossProfit as any,
     undefined,
     undefined,
-    undefined,
+    moduleRef as any,
     finalizer as any,
   );
 
@@ -183,6 +183,33 @@ describe('SyncCaseService giá vốn', () => {
     expect(arg.rawData.__detailSnapshot).toEqual(
       expect.objectContaining({ tinhTrang: 1 }),
     );
+  });
+});
+
+describe('SyncCaseService chiếu V2 sau sync chi tiết', () => {
+  it('gọi cổng chiếu bằng kgara_cases.id, không bằng mã phiếu KGara', async () => {
+    const projector = { projectCase: jest.fn(async () => undefined) };
+    const ctx = buildService({ get: jest.fn(() => projector) });
+    ctx.caseRepo.findOne.mockResolvedValue({
+      id: 'case-1',
+      hdPhieuDichVuId: MAIN_GUID,
+      tinhTrangDichVu: 1,
+      rawData: {},
+    });
+    ctx.client.getCaseDetail.mockResolvedValue({
+      data: {
+        HdPhieuDichVuID: MAIN_GUID,
+        SoChungTu: 'GR-PDV2610-0001',
+        TinhTrangDichVu: 1,
+        ListPhieuDichVuChiTiet: [],
+      },
+      dataAsOf: '2026-11-03T00:00:00Z',
+    });
+
+    await ctx.service.syncCaseDetail(BRANCH, MAIN_GUID, KgaraAccountKey.MAIN);
+
+    expect(projector.projectCase).toHaveBeenCalledWith('case-1');
+    expect(projector.projectCase).not.toHaveBeenCalledWith(MAIN_GUID);
   });
 });
 
@@ -714,6 +741,60 @@ describe('SyncCaseService (số khung & đối tượng thanh toán)', () => {
     const saved = ctx.caseRepo.save.mock.calls[0][0];
     expect(saved.doiTuongThanhToanCode).toBe('BH-DBV');
     expect(saved.doiTuongThanhToanName).toBe('Bảo hiểm DBV');
+  });
+
+  it('detail: tên danh mục và tên trên phiếu lưu riêng, không gộp (phiếu nhân bản)', async () => {
+    const ctx = buildService();
+    ctx.client.getCaseDetail.mockResolvedValue({
+      data: {
+        HdPhieuDichVuID: MAIN_GUID,
+        SoChungTu: 'GR-PDV2608-0099-Copy1',
+        TinhTrangDichVu: 1,
+        KhachHangCode: 'KH-ACTR',
+        KhachHangName: 'ACTR',
+        TenKhachHang: 'SAILUN',
+        ListPhieuDichVuChiTiet: [],
+      },
+      dataAsOf: '2026-11-26T10:00:00+07:00',
+    });
+    ctx.caseRepo.findOne.mockResolvedValue({
+      id: 'case-row-1',
+      hdPhieuDichVuId: MAIN_GUID,
+      accountKey: 'MAIN',
+      khachHangName: 'ACTR',
+      tenKhachHang: null,
+    } as unknown as KgaraCase);
+
+    await ctx.service.syncCaseDetail(BRANCH, MAIN_GUID, KgaraAccountKey.MAIN);
+
+    const saved = ctx.caseRepo.save.mock.calls[0][0];
+    expect(saved.khachHangName).toBe('ACTR');
+    expect(saved.tenKhachHang).toBe('SAILUN');
+  });
+
+  it('detail thiếu KhachHangName không lấy TenKhachHang làm tên danh mục', async () => {
+    const ctx = buildService();
+    ctx.client.getCaseDetail.mockResolvedValue({
+      data: {
+        HdPhieuDichVuID: MAIN_GUID,
+        SoChungTu: 'GR-PDV2608-0100',
+        TinhTrangDichVu: 1,
+        TenKhachHang: 'Khách lẻ',
+        ListPhieuDichVuChiTiet: [],
+      },
+      dataAsOf: '2026-11-26T10:00:00+07:00',
+    });
+    ctx.caseRepo.findOne.mockResolvedValue({
+      id: 'case-row-1',
+      hdPhieuDichVuId: MAIN_GUID,
+      accountKey: 'MAIN',
+    } as unknown as KgaraCase);
+
+    await ctx.service.syncCaseDetail(BRANCH, MAIN_GUID, KgaraAccountKey.MAIN);
+
+    const saved = ctx.caseRepo.save.mock.calls[0][0];
+    expect(saved.khachHangName).toBeUndefined();
+    expect(saved.tenKhachHang).toBe('Khách lẻ');
   });
 
   it('list có hãng/dòng xe thì lưu; list rỗng không xóa giá trị đã có', async () => {

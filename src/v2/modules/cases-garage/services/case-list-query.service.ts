@@ -48,6 +48,7 @@ const SEARCH_COLUMNS = [
   'license_plate',
   'chassis_number',
   'customer_name',
+  'voucher_customer_name',
   'customer_code',
   'payer_name',
   'vehicle_brand_name',
