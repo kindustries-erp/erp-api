@@ -178,7 +178,7 @@ if (ex.status === 200) {
     check(`B4. "${ws.name}" đúng nhóm MAIN/OJ (tài khoản hoặc phân loại OJ)`, ojWrong === 0, `${ojWrong} dòng sai`);
   }
   const api = await (await fetch(`${BASE}/api/v1/greenway/cases/services?from=${FROM}&to=${TO}&page=1&pageSize=1`, { headers: H })).json().catch(() => null);
-  const apiTotal = api?.total ?? api?.data?.total ?? api?.meta?.total;
+  const apiTotal = api?.pagination?.total ?? api?.total ?? api?.data?.total ?? api?.meta?.total;
   if (apiTotal != null) check('B5. tổng dòng các sheet = tổng dòng API', total === Number(apiTotal), `${total} vs ${apiTotal}`);
   else console.log(`SKIP B5: không đọc được total từ API (tổng sheet = ${total})`);
 }

@@ -2,7 +2,10 @@ import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as ExcelJS from 'exceljs';
-import { KgaraCaseServicesQueryService } from './kgara-case-services-query.service';
+import {
+  CASE_SERVICES_EXPORT_MAX_ROWS,
+  KgaraCaseServicesQueryService,
+} from './kgara-case-services-query.service';
 import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
 import { KgaraCostEnricherHelper } from '../helpers/kgara-cost-enricher.helper';
 import {
@@ -97,11 +100,11 @@ export class KgaraCaseServicesExportService {
   async exportCaseServicesExcel(
     params: CaseServicesExportParams,
   ): Promise<Buffer> {
-    const result = await this.caseServicesQueryService.findCaseServices({
-      ...params,
-      page: 1,
-      pageSize: 50000,
-    });
+    // API phân trang chặn 100 dòng; export cần đủ dòng nên truyền trần riêng
+    const result = await this.caseServicesQueryService.findCaseServices(
+      { ...params, page: 1, pageSize: CASE_SERVICES_EXPORT_MAX_ROWS },
+      { maxPageSize: CASE_SERVICES_EXPORT_MAX_ROWS },
+    );
 
     const items = await this.enrichItemsWithJournal(result.data || []);
 
