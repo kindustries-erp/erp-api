@@ -1056,7 +1056,8 @@ export class SyncCaseService {
       linesCount = linesResult.upserted;
       // Khôi phục giá vốn từ journal đã lưu (payload KGara không có giá vốn), rồi mới chiếu V2
       await this.finalizer?.finalizeCase(gwCase);
-      await this.projectCaseToV2(targetCaseId);
+      // Cổng chiếu tìm theo `kgara_cases.id`, không theo mã phiếu KGara (`targetCaseId`)
+      await this.projectCaseToV2(gwCase.id);
       if (linesResult.conflicts.length > 0) {
         this.logger.warn(
           `Case ${targetCaseId}: ${linesResult.conflicts.length} line(s) belong to another case, not moved: ${linesResult.conflicts.join(', ')}`,
