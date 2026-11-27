@@ -16,6 +16,7 @@ export {
   overriddenFields,
   revertFields,
   sameValue,
+  sourceValues,
   toSnapshotValue,
 } from '@/v2/core/link-override-core';
 

@@ -28,6 +28,8 @@ export interface CaseServiceResponse {
   extraData: Record<string, unknown>;
   /** Khóa field đã sửa đè ở v2 (khác giá trị sync từ KGara). */
   overriddenFields: string[];
+  /** Giá trị KGara (snapshot) của các field trong `overriddenFields`; không override thì `{}`. */
+  sourceValues: Record<string, unknown>;
 }
 
 /** Vụ việc garage v2. Không có `raw_data`; `origin` phân biệt xe nhập tay và xe sync từ V1. */
@@ -87,6 +89,8 @@ export interface CaseResponse {
   externalDeletedAt: string | null;
   /** Khóa field đã sửa đè ở v2 (khác giá trị sync từ KGara). */
   overriddenFields: string[];
+  /** Giá trị KGara (snapshot) của các field trong `overriddenFields`; không override thì `{}`. */
+  sourceValues: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
   extraData: Record<string, unknown>;
