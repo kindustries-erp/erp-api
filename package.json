@@ -63,7 +63,8 @@
     "test:smoke:garage-workshop": "node test/smoke/garage-workshop-progress.smoke.mjs",
     "test:smoke:garage-v2-branch-scope": "node test/smoke/garage-v2-branch-scope.smoke.mjs",
     "test:smoke:garage-v1-no-branch": "node test/smoke/garage-v1-no-branch.smoke.mjs",
-    "test:smoke:garage-cashflow-qr": "node test/smoke/garage-cashflow-qr.smoke.mjs"
+    "test:smoke:garage-cashflow-qr": "node test/smoke/garage-cashflow-qr.smoke.mjs",
+    "test:smoke:garage-debts-legacy-split": "node test/smoke/garage-debts-legacy-split.smoke.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1069.0",

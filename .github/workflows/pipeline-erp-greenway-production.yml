@@ -177,7 +177,7 @@ jobs:
 
             echo "Configuring stack $sname (ID: $sid_found)..."
             call /write/UpdateStack "$(jq -nc --arg id "$sid_found" --arg sid "$sid" --arg run_dir "/opt/stacks/$sname" \
-              '{id:$id, config:{server_id:$sid, files_on_host:true, run_directory:$run_dir, file_paths:["compose.yaml"], env_file_path:".env", auto_pull:true}}')" >/dev/null
+              '{id:$id, config:{server_id:$sid, files_on_host:true, run_directory:$run_dir, file_paths:["compose.yaml"], env_file_path:".env", auto_pull:true, registry_provider:"ghcr.io", registry_account:"kindustries2026"}}')" >/dev/null
 
             call /write/WriteStackFileContents "$(jq -nc --arg stack "$sname" --arg contents "$compose_text" \
               '{stack:$stack, file_path:"compose.yaml", contents:$contents}')" >/dev/null
