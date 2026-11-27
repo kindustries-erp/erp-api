@@ -56,7 +56,8 @@ export const PAYABLE_EXPRS = (() => {
     cost,
     paid,
     balance: `GREATEST(${cost} - ${paid}, 0)`,
-    hasPayable: `(${cost} > 0 OR ${paid} <> 0)`,
+    // Chỉ vụ có chi phí > 0; vụ chi phí 0 dù có khoản đã chi cũng không tính (khớp sổ nợ và V1).
+    hasPayable: `(${cost} > 0)`,
     // Chỉ ép kiểu khi NgayKetThuc đúng ISO; sai format thì rơi về ngày phát sinh thay vì làm lỗi cả truy vấn.
     date: `COALESCE(c.ngay_hoan_thanh_cong_viec, CASE WHEN gp.raw_data->>'NgayKetThuc' ~ '^\\d{4}-\\d{2}-\\d{2}' THEN (gp.raw_data->>'NgayKetThuc')::timestamp END, c.ngay_phat_sinh)`,
     plateRaw: `COALESCE(c.bien_so_xe, substring(gp.vu_viec_name from 'Biển số: ([^ ]+)'))`,

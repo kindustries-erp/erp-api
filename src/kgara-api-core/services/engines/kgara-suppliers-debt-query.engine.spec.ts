@@ -246,7 +246,7 @@ describe('KgaraSuppliersDebtQueryEngine', () => {
 
     for (const [sql] of caseRepo.manager.query.mock.calls) {
       expect(sql).toContain(`"settlement_type" = 'PAYMENT'`);
-      expect(sql).toContain('<> 0');
+      expect(sql).not.toContain('COALESCE("pay"."paid", 0)::numeric <> 0');
     }
     expect(result.data[0].paidAmount).toBe(1200000);
     expect(result.data[0].balanceAmount).toBe(-200000);
