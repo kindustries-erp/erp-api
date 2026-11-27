@@ -13,6 +13,13 @@ describe('PAYABLE_EXPRS.date', () => {
   });
 });
 
+describe('PAYABLE_EXPRS.hasPayable', () => {
+  it('chỉ giữ vụ có chi phí > 0, vụ chi phí 0 dù đã chi cũng bị loại (khớp V1 và sổ nợ)', () => {
+    expect(PAYABLE_EXPRS.hasPayable).toBe(`(${PAYABLE_EXPRS.cost} > 0)`);
+    expect(PAYABLE_EXPRS.hasPayable).not.toContain(PAYABLE_EXPRS.paid);
+  });
+});
+
 describe('agingSumColumns', () => {
   const sql = agingSumColumns('c.bal', 'c.dt');
 
