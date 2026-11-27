@@ -222,7 +222,13 @@ src/kgara-api-core/
 ├── utils/
 │   └── kgara-parser.util.ts                # Parser helpers (parseSafeDate, extractNetPayableAmount)
 ├── helpers/
-│   ├── kgara-excel-style.helper.ts         # Layout helper xuất Excel chuẩn hóa (SUM, SUBTOTAL, Freeze, COMPLETED_CASES_COLUMNS, CASE_PNL_COLUMNS & buildGarageCaseExportFileName)
+│   ├── kgara-excel-style.helper.ts         # Barrel re-export (giữ đường dẫn cũ) của 6 file dưới
+│   ├── kgara-excel-layout.helper.ts        # ExcelReportColumnDef, border, initSheetStructure, applyStandardExcelReportLayout (SUM, SUBTOTAL, Freeze)
+│   ├── kgara-excel-column-styles.helper.ts # Palette nhóm cột, applyColumnGroupStyles, applyForecastColumnStyle, styleMarginCell
+│   ├── kgara-completed-cases-columns.const.ts # COMPLETED_CASES_COLUMNS (+ OPTIONAL, ALL, EXPORT_COLUMN_KEYS)
+│   ├── kgara-case-pnl-columns.const.ts     # CASE_PNL_COLUMNS
+│   ├── kgara-case-services-columns.const.ts # COMPLETED_CASE_SERVICES_COLUMNS, CASE_SERVICES_EXPORT_COLUMNS
+│   ├── kgara-export-file-name.helper.ts    # buildGarageCaseExportFileName
 │   ├── kgara-completed-cases-sheet.builder.ts # Sheet Builders cho file xuất Excel đa sheets (Sheet 1: Thu/Trả P1, Sheet 2: Theo dõi PnL, Sheet 3: Chi tiết DV/PT)
 │   ├── kgara-case-filter.helper.ts         # Helper chuẩn hóa bộ lọc SQL cho Vụ việc (hỗ trợ caseCode lọc theo cả Số chứng từ VÀ Biển số xe, lọc cột & distinct options)
 │   └── kgara-case-filter.helper.spec.ts    # Unit test cho KgaraCaseFilterHelper
@@ -625,7 +631,7 @@ Module tuân thủ nghiêm ngặt tiêu chuẩn `erp-api-structure` (Pattern B +
 - **Pure Helpers & Sheet Builders (Pattern C)**:
   - `kgara-case-financial-parser.helper.ts`: Pure parser engine bóc tách 18 chỉ số tài chính, hoa hồng, bảo hiểm, khấu trừ, chế tài, GCN và lợi nhuận dự kiến từ raw_data JSONB của phiếu dịch vụ.
   - `kgara-completed-cases-sheet.builder.ts`: Sheet rendering engine chuyên trách dựng 3 sheets (Sheet 1: Bảng kê kết thúc & công nợ hai chiều Thu/Trả P1, Sheet 2: Theo dõi PnL phân tích lợi nhuận, Sheet 3: Chi tiết DV & Phụ tùng).
-  - `kgara-excel-style.helper.ts`: Pure styling engine (`applyStandardExcelReportLayout`, `initSheetStructure`, `COMPLETED_CASES_COLUMNS`, `CASE_PNL_COLUMNS`, `COMPLETED_CASE_SERVICES_COLUMNS`, `CASE_SERVICES_EXPORT_COLUMNS`).
+  - `kgara-excel-style.helper.ts`: barrel re-export (KINDU-1393, 2026-11-27). Code nằm ở `kgara-excel-layout.helper.ts` (layout), `kgara-excel-column-styles.helper.ts` (tô màu), `kgara-*-columns.const.ts` (định nghĩa cột) và `kgara-export-file-name.helper.ts`. Hành vi khóa bằng `kgara-excel-style.snapshot.spec.ts`; đổi cột/style thì chạy `jest -u` có chủ đích và review diff snapshot.
   - `kgara-case-filter.helper.ts`: Pure SQL mapping và query filter parsers (`applyCaseListFilters`, `applyCaseServiceFilters`, `getCaseColumnSelectExpr`, `getCaseServiceColumnSelectExpr`).
 
 ### 8.2. Cấu Trúc Báo Cáo Excel Chuẩn Hóa (3 Sheets & 6 Dải Màu Biên LN Tương Phản Cao)
@@ -1050,5 +1056,9 @@ Nhằm tinh gọn tối đa thanh công cụ (Toolbar) và đồng bộ trải n
 - **TK 521 là giảm trừ doanh thu**: `journalItemCostAmount(item, tk)` (`kgara-case-financial-parser.helper.ts`) dùng `ChiPhi ?? ChiPhiVon`; `GiaTriTien` chỉ dự phòng cho TK 1541/1542/1543/521, TK khác chỉ tính khi `ChiPhi > 0` (hàng doanh thu Nợ 131 có `ChiPhi=0`, `GiaTriTien>0` không còn lọt vào `otherCost`). `parseJournalCostBreakdown` và `KgaraCostEnricherHelper.enrichCaseLines` tách 521 ra `discountCost`, không vào `totalCost`/`otherCost`/`unallocatedCost`. `GET cases/by-code/:code/gross-profit`: `DoanhThu - discountCost - totalCost = LoiNhuan`, thêm `DoanhThuThuan`, `BienLoiNhuan` theo doanh thu thuần; `ChiPhi`/`LoiNhuan` thô của KGara giữ nguyên (ChiPhi thô đã gồm 521). Phiếu đã làm giàu trước đây chưa có `discountCost` đúng đến khi `force` làm giàu lại.
 - **Excel tách sheet**: `isLaborUnit(ĐVT)` (`kgara-labor-unit.helper.ts`, chuẩn hóa bỏ dấu: `Công`, `cõng`, `Cọng`, `Công - 1`, `giờ công`...) chỉ dựa ĐVT, không xét Loại DV/PT. `buildItemizedSheets` (bảng kê phiếu kết thúc) và `KgaraCaseServicesExportService` (export hạng mục) chia 4 sheet: "Chi tiết DV & Phụ tùng", "Chi tiết Công", "Chi tiết DV & PT (OJ)", "Chi tiết Công (OJ)" theo OJ × công. Phiếu OJ (`isOjCase`, từ 2026-11-26) = tài khoản `accountKey=OJ` HOẶC phân loại hiệu lực (`category.code`, không có thì `classification`) là `OJ`/`OJ_NGOAI`, nên xe tài khoản MAIN được phân loại OJ cũng vào sheet OJ. Sheet MAIN gốc luôn có, ba sheet còn lại chỉ tạo khi có dòng; mỗi sheet có tổng riêng. `findCaseServices` trả thêm `accountKey`, export hạng mục truyền cả `classification`. `findCaseServices` giữ trần pageSize 100 cho API phân trang (`resolveCaseServicesPageSize`); export truyền `{ maxPageSize: CASE_SERVICES_EXPORT_MAX_ROWS }` (50000) để lấy đủ dòng (trước 2026-11-26 file Excel hạng mục bị cắt ở 100 dòng). Smoke `test/smoke/garage-date-parity.smoke.mjs` (chỉ staging/dev) kiểm ngày V1/V2 và tách sheet, B5 so tổng dòng file với `pagination.total` của API.
 - **Bun**: `CashflowClassification`/`CashflowPurpose` trong `bank-transactions-core` import bằng `import type` (kiểu thuần, bun không nạp được dưới dạng giá trị); `bun -e "import('./src/app.module.ts')"` chạy được.
-- **Ngoài phạm vi (chưa làm)**: URL in "Lợi nhuận dự kiến" của KGara; `GREENWAY_STAGING_WEB_API_BASE_URL`; 10 phiếu GN đơn giá 0.
+- **Việc ngoài phạm vi (rà lại 2026-11-26, comment trên KINDU-1386)**:
+  - URL in "Lợi nhuận dự kiến" của KGara: đóng. Giá vốn từng dòng đã lấy bằng khớp journal TK 1541 theo tên. 72 phiếu chỉ có giá cost toàn đơn cần story riêng nếu muốn xử lý.
+  - `GREENWAY_STAGING_WEB_API_BASE_URL`: pipeline staging không dùng; đã bỏ khỏi file env local.
+  - Phiếu GN đơn giá 0: mã đúng là `GN-PDV2610-*`/`GN-PDV2611-*` (tài khoản OJ), 31 phiếu, 39 dòng, đa số là dòng công. ERP phản chiếu đúng KGara, không phải lỗi code; chờ vận hành rà trên KGara.
+- **Bảng sao lưu `_mig_kgara_branch_pq_backup`, `_mig_kgara_branch_snapshot_backup`** (migration `KgaraBranchToPhoQuang20261126110000`, `KgaraBranchSnapshotToPhoQuang20261126120000`): lưu `branch_id` GR/GN cũ để `down()` hoàn lại khi chuyển xe KGara sang chi nhánh ERP Phổ Quang. Quyết định 2026-11-26: **giữ**, không đặt lịch xóa; chỉ xóa khi user yêu cầu (backup DB trước).
 

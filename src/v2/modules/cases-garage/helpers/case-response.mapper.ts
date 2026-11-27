@@ -4,7 +4,11 @@ import type {
 } from '../dto/case-response.types';
 import type { CaseGarage } from '../entities/case-garage.entity';
 import type { CaseLineGarage } from '../entities/case-line-garage.entity';
-import { isLineDeleted, overriddenFields } from './case-override.helper';
+import {
+  isLineDeleted,
+  overriddenFields,
+  sourceValues,
+} from './case-override.helper';
 
 const num = (v: string | number | null | undefined): number | null =>
   v == null || v === '' ? null : Number(v);
@@ -38,6 +42,7 @@ export function toCaseServiceResponse(s: CaseLineGarage): CaseServiceResponse {
     externalDeletedAt: iso(s.externalDeletedAt),
     extraData: s.extraData ?? {},
     overriddenFields: overriddenFields(s.overrides),
+    sourceValues: sourceValues(s.sourceSnapshot, s.overrides),
   };
 }
 
@@ -100,6 +105,7 @@ export function toCaseResponse(c: CaseGarage): CaseResponse {
     updatedAt: iso(c.updatedAt) ?? '',
     extraData: c.extraData ?? {},
     overriddenFields: overriddenFields(c.overrides),
+    sourceValues: sourceValues(c.sourceSnapshot, c.overrides),
   };
   if (c.services) {
     base.services = c.services

@@ -5,6 +5,7 @@ import {
   overriddenFields,
   revertFields,
   sameValue,
+  sourceValues,
 } from './link-override.helper';
 
 describe('link-override.helper', () => {
@@ -97,5 +98,20 @@ describe('link-override.helper', () => {
     ]);
     expect(isLineDeleted({ _deleted: true })).toBe(true);
     expect(isLineDeleted({})).toBe(false);
+  });
+
+  it('sourceValues chỉ lấy giá trị snapshot của field đang override', () => {
+    const snapshot = { licensePlate: '51B79071', customerName: 'A', qty: 2 };
+    expect(
+      sourceValues(snapshot, { licensePlate: true, _deleted: true }),
+    ).toEqual({ licensePlate: '51B79071' });
+    expect(sourceValues(snapshot, {})).toEqual({});
+  });
+
+  it('sourceValues bỏ khóa override không có trong snapshot; null an toàn', () => {
+    expect(sourceValues({ a: 1 }, { b: true })).toEqual({});
+    expect(sourceValues({ a: null }, { a: true })).toEqual({ a: null });
+    expect(sourceValues(null, { a: true })).toEqual({});
+    expect(sourceValues({ a: 1 }, null)).toEqual({});
   });
 });

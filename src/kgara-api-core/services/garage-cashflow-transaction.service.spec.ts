@@ -462,3 +462,84 @@ describe('GarageCashflowTransactionService - _recalculateCaseDebt: đã thu = RE
     expect(c.tienConPhaiThanhToan).toBe(700);
   });
 });
+
+describe('GarageCashflowTransactionService - thông tin thanh toán QR', () => {
+  it('tạo phiếu lưu field QR đã chuẩn hóa', async () => {
+    const h = buildHarness();
+    await h.service.createVoucher({
+      ...baseDto,
+      voucherType: 'RECEIPT',
+      qrBankBin: '970418',
+      qrBankCode: 'BIDV',
+      qrAccountNumber: ' 1234567890 ',
+      qrAccountName: 'CONG TY ABC',
+      qrTransferContent: '',
+    });
+    const [voucher] = h.createdOf(KgaraCashflowVoucher);
+    expect(voucher).toMatchObject({
+      qrBankBin: '970418',
+      qrBankCode: 'BIDV',
+      qrAccountNumber: '1234567890',
+      qrAccountName: 'CONG TY ABC',
+      qrTransferContent: null,
+    });
+    expect(voucher).not.toHaveProperty('qrCompanyAccountId');
+  });
+
+  it('cập nhật chỉ đổi field QR có gửi, giữ field QR khác', async () => {
+    const voucher = {
+      id: 'v1',
+      voucherType: 'RECEIPT',
+      paymentStatus: 'PAID',
+      amount: 1_000_000,
+      transDate: '2026-10-05',
+      qrBankBin: '970418',
+      qrAccountNumber: '111',
+    };
+    const h = buildHarness({ voucher });
+    await h.service.updateVoucher('v1', {
+      qrAccountNumber: ' 222 ',
+      qrAccountName: '  ',
+    });
+    expect(voucher).toMatchObject({
+      qrBankBin: '970418',
+      qrAccountNumber: '222',
+      qrAccountName: null,
+    });
+  });
+});
+
+describe('GarageCashflowTransactionService - đối chiếu tài khoản công ty khi lưu QR', () => {
+  const MISSING_ACCOUNT = '05666c3f-5897-46f7-b952-39c703e7a6d2';
+
+  it('tạo phiếu với qrCompanyAccountId không tồn tại: trả 400, không lưu phiếu', async () => {
+    const h = buildHarness();
+    await expect(
+      h.service.createVoucher({
+        ...baseDto,
+        paymentStatus: 'PAID',
+        qrCompanyAccountId: MISSING_ACCOUNT,
+      } as any),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(h.createdOf(KgaraCashflowVoucher)).toHaveLength(0);
+    expect(h.manager.save).not.toHaveBeenCalled();
+  });
+
+  it('cập nhật phiếu với qrCompanyAccountId không tồn tại: trả 400, không merge phiếu', async () => {
+    const h = buildHarness({
+      voucher: {
+        id: 'v1',
+        voucherType: 'PAYMENT',
+        paymentStatus: 'PENDING',
+        amount: 1000,
+        caseId: null,
+      },
+    });
+    await expect(
+      h.service.updateVoucher('v1', {
+        qrCompanyAccountId: MISSING_ACCOUNT,
+      } as any),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(h.manager.merge).not.toHaveBeenCalled();
+  });
+});

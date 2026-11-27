@@ -135,6 +135,40 @@ export class KgaraCashflowVoucher {
   @Column({ type: 'uuid', name: 'pnl_commission_anchor_id', nullable: true })
   pnlCommissionAnchorId?: string | null;
 
+  /** Thông tin thanh toán dựng VietQR (in kèm phiếu). Số tiền QR = `amount` của phiếu. */
+  @Column({ type: 'uuid', name: 'qr_company_account_id', nullable: true })
+  qrCompanyAccountId?: string | null;
+
+  @Column({ type: 'varchar', length: 10, name: 'qr_bank_bin', nullable: true })
+  qrBankBin?: string | null;
+
+  @Column({ type: 'varchar', length: 50, name: 'qr_bank_code', nullable: true })
+  qrBankCode?: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 50,
+    name: 'qr_account_number',
+    nullable: true,
+  })
+  qrAccountNumber?: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 255,
+    name: 'qr_account_name',
+    nullable: true,
+  })
+  qrAccountName?: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 255,
+    name: 'qr_transfer_content',
+    nullable: true,
+  })
+  qrTransferContent?: string | null;
+
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   createdAt: Date;
 
