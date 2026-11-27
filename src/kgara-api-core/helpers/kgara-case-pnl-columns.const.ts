@@ -1,0 +1,92 @@
+import type { ExcelReportColumnDef } from './kgara-excel-layout.helper';
+
+/**
+ * Định nghĩa cột chuẩn cho Sheet 2: Theo dõi lãi lỗ (16 cột)
+ */
+export const CASE_PNL_COLUMNS: ExcelReportColumnDef[] = [
+  { header: 'STT', key: 'index', width: 8, align: 'center' },
+  { header: 'Số phiếu', key: 'soChungTu', width: 18, align: 'left' },
+  { header: 'Biển số xe', key: 'bienSoXe', width: 14, align: 'center' },
+  { header: 'Tên khách hàng', key: 'khachHangName', width: 32, align: 'left' },
+  { header: 'Tên trên phiếu', key: 'tenKhachHang', width: 28, align: 'left' },
+  { header: 'Phân loại', key: 'classification', width: 18, align: 'center' },
+  {
+    header: 'Ngày hoàn thành',
+    key: 'ngayHoanThanhCongViec',
+    width: 18,
+    align: 'center',
+    style: { numFmt: 'dd/mm/yyyy' },
+  },
+  {
+    header: 'Doanh thu Công DV (VNĐ)',
+    key: 'doanhThuDichVu',
+    width: 24,
+    isSum: true,
+    align: 'right',
+    style: { numFmt: '#,##0.00' },
+  },
+  {
+    header: 'Doanh thu Phụ tùng (VNĐ)',
+    key: 'doanhThuPhuTung',
+    width: 24,
+    isSum: true,
+    align: 'right',
+    style: { numFmt: '#,##0.00' },
+  },
+  {
+    header: 'Thuế GTGT (VNĐ)',
+    key: 'vatAmount',
+    width: 20,
+    isSum: true,
+    align: 'right',
+    style: { numFmt: '#,##0.00' },
+  },
+  {
+    header: 'Tổng Doanh thu (VNĐ)',
+    key: 'doanhThu',
+    width: 22,
+    isSum: true,
+    align: 'right',
+    style: { numFmt: '#,##0.00' },
+  },
+  {
+    header: 'Giá vốn Phụ tùng (VNĐ)',
+    key: 'giaVonPhuTung',
+    width: 24,
+    isSum: true,
+    align: 'right',
+    style: { numFmt: '#,##0.00' },
+  },
+  {
+    header: 'Chi phí thợ / Khác (VNĐ)',
+    key: 'chiPhiKhac',
+    width: 24,
+    isSum: true,
+    align: 'right',
+    style: { numFmt: '#,##0.00' },
+  },
+  {
+    header: 'Tổng Chi phí (VNĐ)',
+    key: 'chiPhi',
+    width: 22,
+    isSum: true,
+    align: 'right',
+    style: { numFmt: '#,##0.00' },
+  },
+  {
+    header: 'Lợi nhuận gộp (VNĐ)',
+    key: 'loiNhuan',
+    width: 22,
+    isSum: true,
+    align: 'right',
+    style: { numFmt: '#,##0.00' },
+  },
+  {
+    header: 'Biên LN (%)',
+    key: 'margin',
+    width: 14,
+    align: 'right',
+    style: { numFmt: '0.0%' },
+  },
+  { header: 'Chi nhánh', key: 'branchName', width: 22, align: 'left' },
+];

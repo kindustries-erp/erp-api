@@ -222,7 +222,13 @@ src/kgara-api-core/
 ├── utils/
 │   └── kgara-parser.util.ts                # Parser helpers (parseSafeDate, extractNetPayableAmount)
 ├── helpers/
-│   ├── kgara-excel-style.helper.ts         # Layout helper xuất Excel chuẩn hóa (SUM, SUBTOTAL, Freeze, COMPLETED_CASES_COLUMNS, CASE_PNL_COLUMNS & buildGarageCaseExportFileName)
+│   ├── kgara-excel-style.helper.ts         # Barrel re-export (giữ đường dẫn cũ) của 6 file dưới
+│   ├── kgara-excel-layout.helper.ts        # ExcelReportColumnDef, border, initSheetStructure, applyStandardExcelReportLayout (SUM, SUBTOTAL, Freeze)
+│   ├── kgara-excel-column-styles.helper.ts # Palette nhóm cột, applyColumnGroupStyles, applyForecastColumnStyle, styleMarginCell
+│   ├── kgara-completed-cases-columns.const.ts # COMPLETED_CASES_COLUMNS (+ OPTIONAL, ALL, EXPORT_COLUMN_KEYS)
+│   ├── kgara-case-pnl-columns.const.ts     # CASE_PNL_COLUMNS
+│   ├── kgara-case-services-columns.const.ts # COMPLETED_CASE_SERVICES_COLUMNS, CASE_SERVICES_EXPORT_COLUMNS
+│   ├── kgara-export-file-name.helper.ts    # buildGarageCaseExportFileName
 │   ├── kgara-completed-cases-sheet.builder.ts # Sheet Builders cho file xuất Excel đa sheets (Sheet 1: Thu/Trả P1, Sheet 2: Theo dõi PnL, Sheet 3: Chi tiết DV/PT)
 │   ├── kgara-case-filter.helper.ts         # Helper chuẩn hóa bộ lọc SQL cho Vụ việc (hỗ trợ caseCode lọc theo cả Số chứng từ VÀ Biển số xe, lọc cột & distinct options)
 │   └── kgara-case-filter.helper.spec.ts    # Unit test cho KgaraCaseFilterHelper
@@ -625,7 +631,7 @@ Module tuân thủ nghiêm ngặt tiêu chuẩn `erp-api-structure` (Pattern B +
 - **Pure Helpers & Sheet Builders (Pattern C)**:
   - `kgara-case-financial-parser.helper.ts`: Pure parser engine bóc tách 18 chỉ số tài chính, hoa hồng, bảo hiểm, khấu trừ, chế tài, GCN và lợi nhuận dự kiến từ raw_data JSONB của phiếu dịch vụ.
   - `kgara-completed-cases-sheet.builder.ts`: Sheet rendering engine chuyên trách dựng 3 sheets (Sheet 1: Bảng kê kết thúc & công nợ hai chiều Thu/Trả P1, Sheet 2: Theo dõi PnL phân tích lợi nhuận, Sheet 3: Chi tiết DV & Phụ tùng).
-  - `kgara-excel-style.helper.ts`: Pure styling engine (`applyStandardExcelReportLayout`, `initSheetStructure`, `COMPLETED_CASES_COLUMNS`, `CASE_PNL_COLUMNS`, `COMPLETED_CASE_SERVICES_COLUMNS`, `CASE_SERVICES_EXPORT_COLUMNS`).
+  - `kgara-excel-style.helper.ts`: barrel re-export (KINDU-1393, 2026-11-27). Code nằm ở `kgara-excel-layout.helper.ts` (layout), `kgara-excel-column-styles.helper.ts` (tô màu), `kgara-*-columns.const.ts` (định nghĩa cột) và `kgara-export-file-name.helper.ts`. Hành vi khóa bằng `kgara-excel-style.snapshot.spec.ts`; đổi cột/style thì chạy `jest -u` có chủ đích và review diff snapshot.
   - `kgara-case-filter.helper.ts`: Pure SQL mapping và query filter parsers (`applyCaseListFilters`, `applyCaseServiceFilters`, `getCaseColumnSelectExpr`, `getCaseServiceColumnSelectExpr`).
 
 ### 8.2. Cấu Trúc Báo Cáo Excel Chuẩn Hóa (3 Sheets & 6 Dải Màu Biên LN Tương Phản Cao)
