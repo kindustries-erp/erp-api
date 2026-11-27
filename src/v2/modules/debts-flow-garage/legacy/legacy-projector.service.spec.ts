@@ -102,6 +102,64 @@ describe('LegacyProjectorService (V1 → sổ nợ v2)', () => {
     expect(customer.settledAmount).toBe('0.00');
   });
 
+  it('thu KH vượt dòng khách: phần vượt sang dòng bảo hiểm, tổng số dư phải thu = 0 như V1', async () => {
+    const { svc, customer, insurer, settle } = setup();
+    settle({ amount: 1500 });
+    await svc.projectCase('case-1');
+    expect(customer).toMatchObject({
+      settledAmount: '1000.00',
+      balanceAmount: '0.00',
+    });
+    expect(insurer).toMatchObject({
+      settledAmount: '500.00',
+      balanceAmount: '0.00',
+    });
+  });
+
+  it('dữ liệu cũ dồn hết vào dòng khách: chạy lại sync đảo phân bổ cũ và chia lại KH + BH', async () => {
+    const { db, svc, customer, insurer, settle } = setup();
+    db.allocations().push({
+      id: 'old-1',
+      debtId: customer.id,
+      origin: 'LEGACY',
+      amount: '1500.00',
+      idempotencyKey: `legacy:s-1:${customer.id}:1500.00:0`,
+      reversedAt: null,
+      reversalOfId: null,
+    });
+    Object.assign(customer, {
+      settledAmount: '1500.00',
+      balanceAmount: '0.00',
+      status: 'SETTLED',
+    });
+    settle({ amount: 1500 });
+    await svc.projectCase('case-1');
+    expect(
+      db.allocations().find((a) => a.id === 'old-1')?.reversedAt,
+    ).toBeTruthy();
+    expect(customer).toMatchObject({
+      settledAmount: '1000.00',
+      balanceAmount: '0.00',
+    });
+    expect(insurer).toMatchObject({
+      settledAmount: '500.00',
+      balanceAmount: '0.00',
+    });
+  });
+
+  it('chạy lại sau khi đã chia KH + BH không nhân đôi', async () => {
+    const { db, svc, customer, insurer, settle } = setup();
+    settle({ amount: 1500 });
+    await svc.projectCase('case-1');
+    await svc.projectCase('case-1');
+    const live = db
+      .allocations()
+      .filter((a) => !a.reversedAt && !a.reversalOfId);
+    expect(live).toHaveLength(2);
+    expect(customer.settledAmount).toBe('1000.00');
+    expect(insurer.settledAmount).toBe('500.00');
+  });
+
   it('removeVoucher: phiếu v2 thành CANCELLED và dựng lại vụ việc', async () => {
     const { db, svc, ledger } = setup();
     db.vouchers().push({ id: 'v-1', status: 'PAID', caseId: 'case-1' });

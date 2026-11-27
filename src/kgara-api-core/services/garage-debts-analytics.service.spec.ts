@@ -159,7 +159,7 @@ describe('GarageDebtsAnalyticsService', () => {
     for (const sql of [payableSql, trendSql, suppSql]) {
       expect(sql).toContain(`"settlement_type" = 'PAYMENT'`);
     }
-    expect(payableSql).toContain('<> 0');
+    expect(payableSql).not.toContain('COALESCE("pay"."paid", 0)::numeric <> 0');
     expect(res.summary.paidPayable).toBe(1200000);
     expect(res.summary.remainingPayable).toBe(-200000);
     expect(res.summary.netBalance).toBe(200000);

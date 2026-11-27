@@ -17,6 +17,7 @@ Vị trí: `src/v2/modules/debts-garage`. Quyền `GARAGE_DEBTS:READ`. Chi nhán
 ## 2. Dữ liệu và quy tắc
 - Nguồn: `kgara_cases`, `kgara_case_settlements`, hóa đơn liên kết. Bỏ qua `kgara_payables` / `kgara_receivables` (code cũ).
 - Mốc `GARAGE_DEBT_BASELINE_DATE = 2026-07-01`; điều kiện vụ việc hoàn tất và NCC trong `helpers/garage-debt-sql.helper.ts`.
+- Phải trả chỉ tính vụ có chi phí > 0 (`PAYABLE_EXPRS.hasPayable = cost > 0`, cập nhật 2026-11-27). Vụ chi phí 0 dù có PAYMENT không vào tổng, danh sách, analytics, horizon; V1 `buildPayableExprs.hasPayableCondition` cùng quy tắc. Lý do: sổ nợ chỉ tạo dòng phải trả khi chi phí > 0, nên V1 = v2 = sổ nợ.
 - Số tiền trả về là number (V1 trả chuỗi "0.00"). Không trả `raw_data`.
 - Analytics chạy 5 truy vấn song song, kết quả deep-equal V1 trên staging.
 - Khác V1: time-horizons trả `{items, pagination, extraData.summary}`; bỏ SQL payable-horizon cũ.
@@ -32,8 +33,8 @@ Drill-down `customers/:customerCode/cases`, `suppliers/:supplierId/cases`. Ghi s
 - Ghi (phiếu, phân bổ) ở module `debts-flow-garage`.
 
 ### Entity (cũ)
-- Entity `DebtGarage` (`debts_garage`) và `DebtAllocationGarage` (`debt_allocations_garage`) ở `entities/`, kế thừa entity base của `debts-core`. Migration `1794900000000-GarageCashflowDebtsV2Tables` đã chạy trên staging 2026-11-17 và trên DB `erp_greenway_production` (bảng rỗng, chưa backfill). Migration `20261118100100` thêm `branch_id` (nullable, FK `branches_management`) vào `debts_garage`, `debt_allocations_garage`, `cashflow_vouchers_garage`; từ 2026-11-25 là khóa lọc hiện hành (entity base `debts-core`/`cashflow-vouchers-core` có cột `branchId`); nợ gốc lấy `branch_id` từ `cases_garage`, phân bổ theo khoản nợ; migration `20261125140000` backfill `branch_id` theo vụ việc.
-- Lớp đọc hiện tại vẫn tính từ `kgara_*`; chưa có cờ `DEBTS_GARAGE_LEDGER_READ`. Chi tiết: skill `debts-core`.
+- Entity `DebtGarage` (`debts_garage`) và `DebtAllocationGarage` (`debt_allocations_garage`) ở `entities/`, kế thừa entity base của `debts-core`. Migration `1794900000000-GarageCashflowDebtsV2Tables` đã chạy trên staging 2026-11-17 và trên DB `erp_greenway_production` (đã backfill; 2026-11-27 đối soát `MISMATCH 0` với V1, xem `debts-flow-garage` mục 3). Migration `20261118100100` thêm `branch_id` (nullable, FK `branches_management`) vào `debts_garage`, `debt_allocations_garage`, `cashflow_vouchers_garage`; từ 2026-11-25 là khóa lọc hiện hành (entity base `debts-core`/`cashflow-vouchers-core` có cột `branchId`); nợ gốc lấy `branch_id` từ `cases_garage`, phân bổ theo khoản nợ; migration `20261125140000` backfill `branch_id` theo vụ việc.
+- Lớp đọc mặc định vẫn tính từ `kgara_*` (cờ `DEBTS_GARAGE_LEDGER_READ` tắt). Chi tiết: skill `debts-core`.
 
 ## Quy tắc "đã thu = RECEIPT-only" và số ròng (cập nhật 2026-11-19)
 

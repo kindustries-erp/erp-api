@@ -14,7 +14,7 @@ export interface PayableSqlExprs {
   paidExpr: string;
   /** Còn phải trả của MỘT vụ việc = max(0, chi phí - đã chi); trả dư không bù sang vụ khác. */
   balanceExpr: string;
-  /** Giữ dòng có chi phí hoặc có khoản đã chi (kể cả chi phí = 0). */
+  /** Chỉ giữ dòng có chi phí > 0. Vụ chi phí 0 dù có khoản đã chi cũng không tính (khớp sổ nợ v2). */
   hasPayableCondition: string;
 }
 
@@ -23,6 +23,6 @@ export function buildPayableExprs(costExpr: string): PayableSqlExprs {
   return {
     paidExpr,
     balanceExpr: `GREATEST(${costExpr} - ${paidExpr}, 0)`,
-    hasPayableCondition: `(${costExpr} > 0 OR ${paidExpr} <> 0)`,
+    hasPayableCondition: `(${costExpr} > 0)`,
   };
 }

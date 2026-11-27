@@ -18,8 +18,9 @@ describe('garage-payable-settlement.helper', () => {
     expect(balanceExpr).toBe(`GREATEST(${cost} - ${paidExpr}, 0)`);
   });
 
-  it('giữ vụ việc chi phí 0 nhưng đã chi', () => {
+  it('chỉ giữ vụ việc có chi phí > 0, vụ chi phí 0 dù đã chi cũng bị loại', () => {
     const { hasPayableCondition, paidExpr } = buildPayableExprs(cost);
-    expect(hasPayableCondition).toBe(`(${cost} > 0 OR ${paidExpr} <> 0)`);
+    expect(hasPayableCondition).toBe(`(${cost} > 0)`);
+    expect(hasPayableCondition).not.toContain(paidExpr);
   });
 });
