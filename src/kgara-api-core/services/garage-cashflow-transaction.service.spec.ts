@@ -508,3 +508,38 @@ describe('GarageCashflowTransactionService - thông tin thanh toán QR', () => {
     });
   });
 });
+
+describe('GarageCashflowTransactionService - đối chiếu tài khoản công ty khi lưu QR', () => {
+  const MISSING_ACCOUNT = '05666c3f-5897-46f7-b952-39c703e7a6d2';
+
+  it('tạo phiếu với qrCompanyAccountId không tồn tại: trả 400, không lưu phiếu', async () => {
+    const h = buildHarness();
+    await expect(
+      h.service.createVoucher({
+        ...baseDto,
+        paymentStatus: 'PAID',
+        qrCompanyAccountId: MISSING_ACCOUNT,
+      } as any),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(h.createdOf(KgaraCashflowVoucher)).toHaveLength(0);
+    expect(h.manager.save).not.toHaveBeenCalled();
+  });
+
+  it('cập nhật phiếu với qrCompanyAccountId không tồn tại: trả 400, không merge phiếu', async () => {
+    const h = buildHarness({
+      voucher: {
+        id: 'v1',
+        voucherType: 'PAYMENT',
+        paymentStatus: 'PENDING',
+        amount: 1000,
+        caseId: null,
+      },
+    });
+    await expect(
+      h.service.updateVoucher('v1', {
+        qrCompanyAccountId: MISSING_ACCOUNT,
+      } as any),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(h.manager.merge).not.toHaveBeenCalled();
+  });
+});
