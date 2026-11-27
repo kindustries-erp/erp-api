@@ -1,41 +1,36 @@
 import { createSqlCapture } from '@/common/testing/sql-capture.testing';
 import { CustomerDebtQueryService } from '../services/customer-debt-query.service';
 import { SupplierDebtQueryService } from '../services/supplier-debt-query.service';
-import { isLedgerReadEnabled } from './ledger-read.helper';
 
-describe('cờ DEBTS_GARAGE_LEDGER_READ', () => {
+/** Không còn cờ: phải thu và phải trả luôn đọc sổ nợ, kể cả khi env cũ vẫn đặt DEBTS_GARAGE_LEDGER_READ. */
+describe('ledger-read.helper (đọc sổ nợ mặc định)', () => {
   const OLD = process.env.DEBTS_GARAGE_LEDGER_READ;
   afterEach(() => {
     if (OLD === undefined) delete process.env.DEBTS_GARAGE_LEDGER_READ;
     else process.env.DEBTS_GARAGE_LEDGER_READ = OLD;
   });
 
-  it('mặc định tắt; chỉ bật khi đúng chuỗi "true"', () => {
-    delete process.env.DEBTS_GARAGE_LEDGER_READ;
-    expect(isLedgerReadEnabled()).toBe(false);
-    process.env.DEBTS_GARAGE_LEDGER_READ = '1';
-    expect(isLedgerReadEnabled()).toBe(false);
-    process.env.DEBTS_GARAGE_LEDGER_READ = 'true';
-    expect(isLedgerReadEnabled()).toBe(true);
-  });
+  it.each(['false', undefined])(
+    'env cũ DEBTS_GARAGE_LEDGER_READ=%s không còn tác dụng: vẫn đọc debts_garage',
+    async (value) => {
+      if (value === undefined) delete process.env.DEBTS_GARAGE_LEDGER_READ;
+      else process.env.DEBTS_GARAGE_LEDGER_READ = value;
+      const cap = await createSqlCapture();
+      await new CustomerDebtQueryService(cap.dataSource).findPage({
+        branchId: 'b1',
+      });
+      await new SupplierDebtQueryService(cap.dataSource).findPage({
+        branchId: 'b1',
+      });
+      expect(cap.calls.length).toBeGreaterThan(0);
+      for (const { sql } of cap.calls) {
+        expect(sql).toContain('FROM "debts_garage" "d"');
+        expect(sql).not.toContain('FROM "kgara_cases"');
+      }
+    },
+  );
 
-  it('cờ tắt: phải thu và phải trả vẫn đọc từ kgara_*, không chạm debts_garage', async () => {
-    delete process.env.DEBTS_GARAGE_LEDGER_READ;
-    const cap = await createSqlCapture();
-    await new CustomerDebtQueryService(cap.dataSource).findPage({
-      branchId: 'b1',
-    });
-    await new SupplierDebtQueryService(cap.dataSource).findPage({
-      branchId: 'b1',
-    });
-    for (const { sql } of cap.calls) {
-      expect(sql).toContain('kgara_cases');
-      expect(sql).not.toContain('debts_garage');
-    }
-  });
-
-  it('cờ bật, phải thu: đọc sổ nợ RECEIVABLE, lọc chi nhánh, bỏ VOID/excluded, kẹp mốc theo dõi', async () => {
-    process.env.DEBTS_GARAGE_LEDGER_READ = 'true';
+  it('phải thu: đọc sổ nợ RECEIVABLE, lọc chi nhánh, bỏ VOID/excluded, kẹp mốc theo dõi', async () => {
     const cap = await createSqlCapture();
     await new CustomerDebtQueryService(cap.dataSource).findPage({
       branchId: 'b1',
@@ -62,8 +57,7 @@ describe('cờ DEBTS_GARAGE_LEDGER_READ', () => {
     }
   });
 
-  it('cờ bật, phải trả: đọc sổ nợ PAYABLE, giữ tên cột response', async () => {
-    process.env.DEBTS_GARAGE_LEDGER_READ = 'true';
+  it('phải trả: đọc sổ nợ PAYABLE, giữ tên cột response', async () => {
     const cap = await createSqlCapture();
     await new SupplierDebtQueryService(cap.dataSource).findPage({
       branchId: 'b1',

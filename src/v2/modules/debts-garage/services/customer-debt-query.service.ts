@@ -8,17 +8,8 @@ import {
 } from '@/v2/core/debts-core';
 import { CustomerDebtRow } from '../dto/customer-debt-row.dto';
 import { toCustomerDebtRow } from '../helpers/customer-debt-row.mapper';
-import {
-  agingSumColumns,
-  COMPLETED_CASE_CONDITIONS,
-  GARAGE_DEBT_BASELINE_DATE,
-} from '../helpers/garage-debt-sql.helper';
-
-import {
-  buildCustomerLedgerQuery,
-  isLedgerReadEnabled,
-} from '../helpers/ledger-read.helper';
-import { caseInErpBranchSql } from '../helpers/erp-branch-case.sql';
+import { GARAGE_DEBT_BASELINE_DATE } from '../helpers/garage-debt-sql.helper';
+import { buildCustomerLedgerQuery } from '../helpers/ledger-read.helper';
 
 export interface CustomerDebtListQuery extends DebtListQuery {
   /** Chi nhánh ERP (không bắt buộc); không có thì mọi chi nhánh. */
@@ -49,13 +40,10 @@ const COLUMNS: TableColumnMap = {
   agingOver90: col('g.aging_over_90', 'number'),
 };
 
-/** Khóa gom: biển số đã trim; phiếu chưa có biển số gom chung vào chuỗi rỗng (lọc trống khớp, không lộ giá trị giả). */
-const PLATE = `COALESCE(TRIM(c.bien_so_xe), '')`;
-
 /**
- * Công nợ phải thu khách hàng v2, gom theo biển số xe. Số dư lấy từ cột đã tính sẵn của vụ việc
- * (như V1; công thức max(0, gốc - đã thu) nằm ở nơi ghi settlement). Điều kiện lọc đặt trên dòng đã gom;
- * khác V1 ở chỗ này: một biển số có nhiều khách thì lọc theo khách vẫn thấy tổng cả biển số.
+ * Công nợ phải thu khách hàng v2, gom theo biển số xe, đọc từ sổ nợ `debts_garage` (dòng RECEIVABLE của
+ * khách và bảo hiểm). Số dư khớp V1 `kgara_cases.tien_con_phai_thanh_toan` (đối soát `MISMATCH 0`).
+ * Điều kiện lọc đặt trên dòng đã gom: một biển số có nhiều khách thì lọc theo khách vẫn thấy tổng cả biển số.
  */
 @Injectable()
 export class CustomerDebtQueryService extends AbstractDebtQueryService<
@@ -96,71 +84,15 @@ export class CustomerDebtQueryService extends AbstractDebtQueryService<
         ? from
         : GARAGE_DEBT_BASELINE_DATE;
 
-    if (isLedgerReadEnabled()) {
-      const ledger = buildCustomerLedgerQuery(this.dataSource, {
-        branchId,
-        from: effectiveFrom,
-        to,
-      });
-      if (scope === 'outstanding') ledger.where('g.con_phai_thu > 0');
-      return ledger;
-    }
-
-    const outer = this.dataSource.createQueryBuilder().from((sub) => {
-      sub
-        .select(PLATE, 'bien_so_xe')
-        .addSelect(`MAX(COALESCE(c.khach_hang_code, ''))`, 'khach_hang_code')
-        .addSelect(
-          `MAX(COALESCE(c.khach_hang_name, 'Chưa xác định'))`,
-          'khach_hang_name',
-        )
-        .addSelect('MAX(c.branch_external_id)', 'branch_external_id')
-        .addSelect('COUNT(c.id)::int', 'so_phieu')
-        .addSelect(
-          'COALESCE(SUM(c.tien_co_thue), 0)::numeric',
-          'tong_doanh_thu',
-        )
-        .addSelect(
-          'COALESCE(SUM(c.tien_da_thanh_toan), 0)::numeric',
-          'da_thanh_toan',
-        )
-        .addSelect(
-          'COALESCE(SUM(c.tien_con_phai_thanh_toan), 0)::numeric',
-          'con_phai_thu',
-        )
-        .addSelect('MAX(c.ngay_hoan_thanh_cong_viec)', 'ngay_gan_nhat')
-        .addSelect('MIN(c.ngay_hoan_thanh_cong_viec)', 'ngay_xa_nhat')
-        .addSelect(
-          'COALESCE(MAX(CASE WHEN COALESCE(c.tien_con_phai_thanh_toan, 0) > 0 THEN CURRENT_DATE - DATE(c.ngay_hoan_thanh_cong_viec) ELSE 0 END), 0)::int',
-          'max_aging_days',
-        )
-        .addSelect(
-          agingSumColumns(
-            'c.tien_con_phai_thanh_toan',
-            'c.ngay_hoan_thanh_cong_viec',
-          ),
-        )
-        .from('kgara_cases', 'c')
-        .where(COMPLETED_CASE_CONDITIONS.join(' AND '))
-        .andWhere('c.ngay_hoan_thanh_cong_viec >= :debtFrom', {
-          debtFrom: effectiveFrom,
-        })
-        .groupBy(PLATE);
-      if (branchId) {
-        sub.andWhere(caseInErpBranchSql('c', ':debtBranch'), {
-          debtBranch: branchId,
-        });
-      }
-      if (to) {
-        sub.andWhere('c.ngay_hoan_thanh_cong_viec <= :debtTo', {
-          debtTo: to.length === 10 ? `${to} 23:59:59.999` : to,
-        });
-      }
-      return sub;
-    }, 'g');
-
-    if (scope === 'outstanding') outer.where('g.con_phai_thu > 0');
-    return outer;
+    // Luôn đọc sổ nợ `debts_garage` (bỏ cờ DEBTS_GARAGE_LEDGER_READ 2026-11-28). Nhánh tính từ `kgara_*`
+    // cũ: `buildLegacyCustomerDebtQuery` (helpers/legacy-kgara-debt-read.helper.ts), cùng tham số.
+    const ledger = buildCustomerLedgerQuery(this.dataSource, {
+      branchId,
+      from: effectiveFrom,
+      to,
+    });
+    if (scope === 'outstanding') ledger.where('g.con_phai_thu > 0');
+    return ledger;
   }
 
   protected fetchPage(

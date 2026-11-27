@@ -2,10 +2,10 @@ import type { DataSource, ObjectLiteral, SelectQueryBuilder } from 'typeorm';
 import { agingSumColumns } from './garage-debt-sql.helper';
 import { applyBranchScope } from '@/v2/core/branches-core';
 
-/** Cờ đọc công nợ từ sổ nợ (`debts_garage`) thay vì tính từ `kgara_*`. Mặc định tắt; chỉ bật sau khi đối soát lệch = 0. */
-export function isLedgerReadEnabled(): boolean {
-  return process.env.DEBTS_GARAGE_LEDGER_READ === 'true';
-}
+/*
+ * Lớp đọc công nợ v2 từ sổ nợ `debts_garage`. Từ 2026-11-28 là nguồn đọc duy nhất (bỏ cờ
+ * `DEBTS_GARAGE_LEDGER_READ`); logic tính từ `kgara_*` cũ giữ ở `legacy-kgara-debt-read.helper.ts`.
+ */
 
 export interface LedgerReadScope {
   /** Chi nhánh ERP (không bắt buộc); không có thì mọi chi nhánh. */

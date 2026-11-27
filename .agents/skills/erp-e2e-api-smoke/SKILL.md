@@ -50,7 +50,7 @@ Trước khi chạy: xác nhận `DATABASE_URL` trong `.env` không phải produ
 
 - Từ 2026-11-25, Garage V2 (`cases-garage`, `debts-garage`, `debts-flow-garage`, `cashflow-vouchers-garage`) nhận header tùy chọn `x-erp-branch-id` = `branches_management.id`; header `x-kgara-branch-id` không còn tác dụng ở V2 (V1 vẫn dùng).
 - Env: `E2E_ERP_BRANCH_ID` / `E2E_ERP_OTHER_BRANCH_ID` (`cases-garage-v2`, `garage-workshop`, bỏ trống là không chi nhánh), `E2E_SYNC_BRANCH` (id ERP), `E2E_BRANCH_ID` (`garage-debts-v2`, tùy chọn; so V1/V2 thì chạy không chi nhánh vì V1 không lọc theo chi nhánh ERP).
-- Staging `erp_greenway_staging`: GR `55239f19-ef5f-4cf8-833d-b6bb38d7b1c4`, GN `d8ad5cf5-e5d7-4c5f-89fc-19380077cd24` (GN là tài khoản KGara OJ, mọi xe là OJ).
+- Staging `erp_greenway_staging` (từ 2026-11-28 là bản sao production, id chi nhánh đổi): PQ `6d37f290-b465-4af1-91b6-265ced4b30bb` (đang chứa toàn bộ xe), GR `24a3223b-fb69-4266-bae4-ba7dac601be6`, GN `0155ec21-e974-4591-abd3-0891ebee6d0b`. `garage-v2-branch-scope` cần chi nhánh A có xe: dùng `E2E_ERP_BRANCH_IDS=<PQ>,<GR>`. Id có thể đổi sau mỗi lần ghi đè DB; kiểm lại bằng `SELECT id, code FROM branches_management`.
 - Đã biết: `garage-debts-v2` check "cases trang 1 cùng id và thứ tự" lệch khi hai phiếu trùng `issued_at` (V1 và V2 tie-break khác nhau), tập phiếu vẫn trùng.
 
 ## 4. Cách báo kết quả

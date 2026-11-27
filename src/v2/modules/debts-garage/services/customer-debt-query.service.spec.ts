@@ -14,28 +14,32 @@ describe('CustomerDebtQueryService', () => {
     service = new CustomerDebtQueryService(cap.dataSource);
   });
 
-  it('luôn lọc chi nhánh, bỏ phiếu đã xóa hoặc loại khỏi công nợ, không sớm hơn mốc theo dõi', async () => {
+  it('đọc sổ nợ RECEIVABLE (không còn kgara_cases), lọc chi nhánh, bỏ VOID/excluded/đã xóa, kẹp mốc theo dõi', async () => {
     await service.findPage({ branchId: 'b1', from: '2020-01-01' });
 
     expect(cap.calls.length).toBeGreaterThan(0);
     for (const { sql, params } of cap.calls) {
-      expect(sql).toContain('c.kgara_deleted_at IS NULL');
-      expect(sql).toContain('c.exclude_from_debt IS NOT TRUE');
-      expect(params).toContain('b1');
-      expect(params).toContain(GARAGE_DEBT_BASELINE_DATE);
+      expect(sql).toContain('debts_garage');
+      expect(sql).not.toContain('kgara_cases');
+      expect(sql).toContain('d.is_deleted = false');
+      expect(sql).toContain("d.status <> 'VOID'");
+      expect(sql).toContain('d.excluded = false');
+      expect(params).toEqual(
+        expect.arrayContaining(['RECEIVABLE', 'b1', GARAGE_DEBT_BASELINE_DATE]),
+      );
       expect(params).not.toContain('2020-01-01');
     }
   });
 
-  it('from sau mốc thì dùng from; to chỉ có ngày thì lấy hết ngày', async () => {
+  it('from sau mốc thì dùng from; to cắt về ngày', async () => {
     await service.findPage({
       branchId: 'b1',
       from: '2026-09-01',
-      to: '2026-09-30',
+      to: '2026-09-30 10:00:00',
     });
 
     expect(cap.calls[0].params).toEqual(
-      expect.arrayContaining(['2026-09-01', '2026-09-30 23:59:59.999']),
+      expect.arrayContaining(['2026-09-01', '2026-09-30']),
     );
   });
 
@@ -68,7 +72,7 @@ describe('CustomerDebtQueryService', () => {
       pageSize: 10,
     });
 
-    expect(cap.calls[0].sql).toContain("COALESCE(TRIM(c.bien_so_xe), '')");
+    expect(cap.calls[0].sql).toContain("COALESCE(TRIM(d.license_plate), '')");
     expect(cap.calls[0].sql).not.toContain('CHUA_CO_BKS');
     expect(res.items[0]).toMatchObject({
       licensePlate: '51A-1',

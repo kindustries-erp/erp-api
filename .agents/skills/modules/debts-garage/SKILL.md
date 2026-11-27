@@ -29,12 +29,12 @@ Drill-down `customers/:customerCode/cases`, `suppliers/:supplierId/cases`. Ghi s
 ## 4. Sổ công nợ (Phase 2, 2026-11-17)
 - Service: `GarageDebtOriginService`, `GarageDebtSettlementService` (điểm duy nhất đổi số dư), `GarageDebtLedgerProjector.projectCase(manager, caseId)` (dựng nợ gốc từ vụ việc; bảo hiểm tách INSURER + CUSTOMER; mã `BH_CHUA_XAC_DINH` / `NCC_CHUA_XAC_DINH` khi chưa rõ bên), `DebtLedgerQueryService`, `DebtPartyService`.
 - Route mới `api/v2/debts-garage/ledger`: `GET ledger`, `GET ledger/:debtId/allocations`, `PATCH ledger/:debtId/party`.
-- Cờ `DEBTS_GARAGE_LEDGER_READ=true` bật nhánh đọc từ sổ cho `customers`/`suppliers`; mặc định tắt (hành vi cũ). Chỉ bật sau backfill (Phase 3).
+- Từ 2026-11-28 `customers`/`suppliers` luôn đọc từ sổ nợ (`buildCustomerLedgerQuery` / `buildSupplierLedgerQuery` trong `helpers/ledger-read.helper.ts`); đã bỏ cờ `DEBTS_GARAGE_LEDGER_READ` (env cũ còn đặt cũng không tác dụng). Phải trả vẫn LEFT JOIN `kgara_cases` chỉ để lấy mã/tên khách.
 - Ghi (phiếu, phân bổ) ở module `debts-flow-garage`.
 
 ### Entity (cũ)
 - Entity `DebtGarage` (`debts_garage`) và `DebtAllocationGarage` (`debt_allocations_garage`) ở `entities/`, kế thừa entity base của `debts-core`. Migration `1794900000000-GarageCashflowDebtsV2Tables` đã chạy trên staging 2026-11-17 và trên DB `erp_greenway_production` (đã backfill; 2026-11-27 đối soát `MISMATCH 0` với V1, xem `debts-flow-garage` mục 3). Migration `20261118100100` thêm `branch_id` (nullable, FK `branches_management`) vào `debts_garage`, `debt_allocations_garage`, `cashflow_vouchers_garage`; từ 2026-11-25 là khóa lọc hiện hành (entity base `debts-core`/`cashflow-vouchers-core` có cột `branchId`); nợ gốc lấy `branch_id` từ `cases_garage`, phân bổ theo khoản nợ; migration `20261125140000` backfill `branch_id` theo vụ việc.
-- Lớp đọc mặc định vẫn tính từ `kgara_*` (cờ `DEBTS_GARAGE_LEDGER_READ` tắt). Chi tiết: skill `debts-core`.
+- Logic đọc cũ tính từ `kgara_*` giữ ở `helpers/legacy-kgara-debt-read.helper.ts` (`buildLegacyCustomerDebtQuery` / `buildLegacySupplierDebtQuery`, `@deprecated`, có spec). Không nơi nào gọi; quay về khi sổ nợ có sự cố bằng cách đổi lời gọi trong hai service, giữ nguyên tham số. Bằng chứng trước khi bỏ cờ: đối soát production và staging `MISMATCH 0`, so 2 trang khi cờ tắt và bật khớp 100% (Story KINDU-2200). Chi tiết: skill `debts-core`.
 
 ## Quy tắc "đã thu = RECEIPT-only" và số ròng (cập nhật 2026-11-19)
 
