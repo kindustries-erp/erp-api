@@ -54,23 +54,18 @@ export class LegacyProjectorService implements GarageLedgerProjectorPort {
     );
   }
 
-  /** Chi nhánh từ vụ việc; V1 không có cột chi nhánh nên phiếu không vụ việc dùng biến môi trường. */
+  /** Chi nhánh KGara từ vụ việc, không có thì biến môi trường; vẫn thiếu thì null (cột cho phép null). */
   private async branchOf(
     manager: EntityManager,
     caseId?: string | null,
-  ): Promise<string> {
+  ): Promise<string | null> {
     if (caseId) {
       const kCase = await manager
         .getRepository(KgaraCase)
         .findOne({ where: { id: caseId } });
       if (kCase?.branchExternalId) return kCase.branchExternalId;
     }
-    const fallback = process.env.GARAGE_DEFAULT_BRANCH_EXTERNAL_ID;
-    if (!fallback)
-      throw new Error(
-        'Không xác định được chi nhánh của phiếu V1 (thiếu vụ việc và GARAGE_DEFAULT_BRANCH_EXTERNAL_ID)',
-      );
-    return fallback;
+    return process.env.GARAGE_DEFAULT_BRANCH_EXTERNAL_ID || null;
   }
 
   /** Chi nhánh ERP từ vụ việc V2 (`cases_garage` dùng chung id với `kgara_cases`); không có thì null. */
@@ -105,8 +100,8 @@ export class LegacyProjectorService implements GarageLedgerProjectorPort {
           existing?.branchId ?? (await this.erpBranchOf(manager, v1.caseId)),
         voucherCode: v1.voucherCode,
         voucherType: v1.voucherType,
-        status: (v1.paymentStatus ??
-          'PENDING') as CashflowVoucherGarage['status'],
+        // Phiếu V1 cũ không có trạng thái được V1 coi là đã thu chi.
+        status: (v1.paymentStatus ?? 'PAID') as CashflowVoucherGarage['status'],
         transDate: v1.transDate,
         amount: Number(v1.amount).toFixed(2),
         caseId: v1.caseId ?? null,

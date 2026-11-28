@@ -76,6 +76,28 @@ describe('GarageCashflowExcelBuilder', () => {
     expect(Buffer.isBuffer(buffer)).toBe(true);
   });
 
+  it('cột Đối tác: phiếu thu trống lấy tên khách, phiếu chi trống để trống', async () => {
+    const row = (voucherType: 'RECEIPT' | 'PAYMENT') =>
+      ({
+        id: voucherType,
+        voucherCode: voucherType,
+        voucherType,
+        amount: 1,
+        transDate: '2026-10-15',
+        case: { id: 'case-1', khachHangName: 'Khách A' },
+      }) as unknown as KgaraCashflowVoucher;
+    const wb = new Workbook();
+    await wb.xlsx.load(
+      (await builder.build({
+        vouchers: [row('RECEIPT'), row('PAYMENT')],
+      })) as any,
+    );
+    const sheet = wb.getWorksheet('Thu chi Garage')!;
+    const col = (sheet.getRow(4).values as unknown[]).indexOf('Đối tác');
+    expect(sheet.getRow(5).getCell(col).value).toBe('Khách A');
+    expect(sheet.getRow(6).getCell(col).value || '').toBe('');
+  });
+
   describe('nhóm dòng tiền', () => {
     const v = (
       id: string,

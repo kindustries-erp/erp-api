@@ -18,6 +18,8 @@ import { ModuleRef } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { notifyLedgerProjector } from '../hub/ledger-projector.port';
+import { notifyCaseProjector } from '../hub/case-projector.port';
+import { refreshOjDebtFlag } from '../helpers/kgara-oj-debt-rule.helper';
 import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
@@ -60,6 +62,13 @@ export class KgaraCaseFinancialController {
     return notifyLedgerProjector(this.moduleRef, this.logger, (p) =>
       p.projectCase(caseId),
     );
+  }
+
+  /** Liên kết hóa đơn đổi thì phiếu OJ đổi cờ công nợ; có đổi mới chiếu V2 rồi sổ nợ. */
+  private async syncOjDebtAfterLinkChange(caseId: string): Promise<void> {
+    if (!(await refreshOjDebtFlag(this.caseRepo.manager, caseId))) return;
+    await notifyCaseProjector(this.moduleRef, this.logger, caseId);
+    await this.projectCaseToLedger(caseId);
   }
 
   @Get('cases/:id/linked-invoices')
@@ -151,6 +160,8 @@ export class KgaraCaseFinancialController {
       }
     }
 
+    if (results.length > 0) await this.syncOjDebtAfterLinkChange(id);
+
     return Array.isArray(body) || (body as any)?.items ? results : results[0];
   }
 
@@ -203,6 +214,7 @@ export class KgaraCaseFinancialController {
     if (link) {
       // Chỉ gỡ liên kết tham chiếu (Reference-only), không xóa settlement và không can thiệp net-off
       await this.linkedInvoiceRepo.delete({ id: linkedId, caseDbId: id });
+      await this.syncOjDebtAfterLinkChange(id);
     }
     return { success: true };
   }

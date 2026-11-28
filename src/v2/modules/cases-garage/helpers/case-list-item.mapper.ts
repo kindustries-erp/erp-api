@@ -1,3 +1,4 @@
+import { ojHasInvoiceOf } from '@/kgara-api-core/helpers/kgara-oj-debt-rule.helper';
 import type { CaseListItem } from '../dto/case-list.types';
 import type { CaseGarage } from '../entities/case-garage.entity';
 import type { CaseLinkCounts, CaseSettlementSums } from './case-list.mapper';
@@ -21,6 +22,8 @@ export interface CaseListExtras {
   links?: CaseLinkCounts;
   category?: CaseCategoryRef | null;
   grossProfit?: CaseGrossProfitRef | null;
+  /** Id phiếu OJ đã gắn hóa đơn đầu ra còn hiệu lực. */
+  ojInvoicedIds?: ReadonlySet<string>;
 }
 
 const num = (v: number | string | null | undefined): number | null =>
@@ -59,5 +62,6 @@ export function toCaseListItem(
     linkedInvoiceCount: x.links?.total ?? 0,
     linkedInvoiceOutCount: x.links?.outCount ?? 0,
     linkedInvoiceInCount: x.links?.inCount ?? 0,
+    ojHasInvoice: ojHasInvoiceOf(base, x.ojInvoicedIds),
   };
 }

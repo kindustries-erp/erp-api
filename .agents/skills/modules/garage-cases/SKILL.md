@@ -56,7 +56,7 @@ Các nghiệp vụ trọng tâm:
 | `category_id` | `uuid` | YES | `NULL` | Khóa ngoại danh mục phân loại (`FK -> erp_module_categories.id`) (**Index**) |
 | `classification` | `varchar(100)` | YES | `NULL` | Mã phân loại nghiệp vụ ERP: `'SUA_CHUA_CHUNG'`, `'KY_GUI_NOI_BO'`, `'OJ'`, `'KHAC'` (**Index**). Đã chuẩn hóa toàn bộ `'OJ_NGOAI'` về `'OJ'`. |
 | `exclude_from_reports` | `boolean` | NO | `false` | Cờ loại trừ khỏi báo cáo P&L xưởng & Dashboard (**Index**) |
-| `exclude_from_debt` | `boolean` | NO | `false` | Cờ loại trừ khỏi tính toán công nợ khách hàng (**Index**). Khi phân loại là `'OJ'`, hệ thống tự động kích hoạt `exclude_from_debt = true`. |
+| `exclude_from_debt` | `boolean` | NO | `false` | Cờ loại trừ khỏi tính toán công nợ khách hàng (**Index**). Phiếu `'OJ'`: cờ do hệ thống tính theo hóa đơn đầu ra (mục 5.18), không đặt tay. |
 | `erp_notes` | `varchar` | YES | `NULL` | Ghi chú nghiệp vụ nội bộ trên ERP |
 | `kgara_deleted_at` | `timestamptz` | YES | `NULL` | Thời điểm đánh dấu phiếu bị xóa trên KGara (**Index**) |
 | `kgara_delete_count` | `integer` | NO | `0` | Bộ đếm số lần vắng mặt trong các kỳ sync (**Index**) |
@@ -600,6 +600,32 @@ Cơ chế dùng chung `ExportJobRunner` (`src/common/export-jobs/export-job-runn
 
 ---
 
+### 5.18. Công nợ xe ngoài (OJ) theo hóa đơn đầu ra (KINDU-2262, cập nhật 2026-11-28)
+
+- **Luật** (nguồn duy nhất `helpers/kgara-oj-debt-rule.helper.ts`): phiếu OJ (`OJ`/`OJ_NGOAI`) đã gắn hóa đơn đầu ra còn hiệu lực thì `exclude_from_debt=false`; chưa gắn thì `true`, kể cả khi phiếu có VAT. "Còn hiệu lực": link `OUT`, hóa đơn chưa xóa, `tax_invoice_status` không phải 4 (bị thay thế) hay 6 (hủy), `status` khác `CANCELLED`; 5 (bị điều chỉnh) vẫn tính.
+- **Nơi áp dụng**: `SyncCaseService` (list và chi tiết), `KgaraCaseConfigService.updateCaseConfig` (bỏ qua cờ client gửi), `KgaraCaseFinancialController` gắn/gỡ link (`refreshOjDebtFlag` → chiếu V2 → sổ nợ). Không thêm phân loại hay cột DB.
+- **API**: list V1, list và chi tiết V2 trả `ojHasInvoice` (`true`/`false`; `null` khi không phải OJ). Bảng kê Excel đổi nhãn phân loại thành `Xe ngoài (OJ) · Có hóa đơn`, kể cả nhóm ở dashboard.
+- **Giới hạn**: hóa đơn bị xóa hoặc hủy ở module hóa đơn không đi qua nút gỡ link, cờ chỉ tính lại khi sync phiếu hoặc chạy đối soát. `backfill-kgara-classification.ts` dùng đúng luật này (từ KINDU-2274); `import-omoda-cases.ts`, `update-cases-classification.ts` **vẫn ép OJ `excludeFromDebt=true`**; chạy lại thì phải đối soát cờ sau đó.
+- **Dữ liệu cũ**: chưa tính lại cờ trên production (chờ deploy, KINDU-2271). Riêng 8 phiếu GR không thuộc OJ đã chuyển sang Sửa chữa chung trên production ngày 2026-11-28 (KINDU-2278).
+
+### 5.19. Tự phân loại phiếu "Nội Bộ PQ" (KINDU-2274, cập nhật 2026-11-28)
+
+Chỉ áp dụng khi `classification` đang trống và người dùng chưa chủ động bỏ phân loại (zero-overwrite). Nguồn duy nhất: `utils/kgara-parser.util.ts` (`mapKgaraClassificationToErp`) và `helpers/kgara-internal-pq-classification.helper.ts`. Dùng ở sync list, sync chi tiết và `backfill-kgara-classification.ts`.
+
+| Điều kiện (xét theo thứ tự) | Kết quả |
+|---|---|
+| Tài khoản KGara OJ (phiếu GN) | `OJ` |
+| NBPQ, ngày phát sinh trước 01/08/2026 | `SUA_CHUA_CHUNG` |
+| NBPQ, hãng / dòng xe / biển số có từ khóa `OMODA`, `JAECOO`, `J5`, `J7`, `C5` (nguyên từ) | `OJ` |
+| NBPQ, có hãng hoặc dòng xe, không có từ khóa | `SUA_CHUA_CHUNG` |
+| NBPQ, chưa có hãng và dòng xe | trống, chờ sync chi tiết hoặc chọn tay |
+| KGara ghi loại khác | Sales tặng → `KHAC`, còn lại → `KY_GUI_NOI_BO` |
+| KGara để trống | trống, chọn tay (kể cả xe Omoda/Jaecoo) |
+
+- Không suy ra OJ từ từ khóa khi KGara để trống hoặc ghi loại khác: dữ liệu thật có nhiều xe Omoda không phải OJ. `Ký gửi PQ` không nằm trong luật.
+- `KgaraCaseConfigService.updateCaseConfig` chiếu V2 **rồi cập nhật sổ nợ**, nên đổi phân loại hay cờ loại trừ có hiệu lực công nợ ngay. Đổi phiếu OJ sang loại khác phải gửi kèm `excludeFromDebt: false`, nếu không cờ loại trừ của OJ còn nguyên (web chưa tự làm việc này: kiểm tra lại cờ sau khi đổi tay).
+- Cổng chiếu chỉ ghi log khi lỗi: script ghi dữ liệu phải đối chiếu lại số trên `debts_garage`.
+
 ## 6. Tích hợp Liên Module
 
 - **`erp-invoices-core`**:
@@ -944,8 +970,8 @@ Nhằm tinh gọn tối đa thanh công cụ (Toolbar) và đồng bộ trải n
 
 - **Mặc định (built-in)**: `categoryId`, `classification`, `excludeFromReports`, `excludeFromDebt` nằm ở **cột `kgara_cases`**, là nguồn duy nhất cho báo cáo/công nợ/sync. 44 dòng EAV `exclude_from_*` cũ đã bị xóa (migration `20261014130000`); không còn ghi đôi. 2 def hệ thống `exclude_from_*` trong `erp_module_attribute_defs` đã xóa cứng (migration `20261019100000`), không còn hiện ở Trường tùy chỉnh. Client gửi 2 cờ này ở top-level của `updateCaseConfig`, không đưa vào `customAttributes`; `isBuiltinCode` (module-field-registry) bỏ qua chúng nếu lỡ gửi.
 - **Tùy chỉnh**: EAV qua `StrictCustomFieldsHelper` (xem skill `module-config` mục 10).
-- `KgaraCaseConfigService.updateCaseConfig` nhận diện OJ theo `ErpModuleCategory.semanticKey === 'OJ'` (không theo `code`); giá trị `classification` lưu vẫn là `OJ`/`KY_GUI_NOI_BO`/`SUA_CHUA_CHUNG`/`KHAC` để báo cáo không đổi. Category OJ → tự bật `excludeFromDebt` nếu client không gửi. Đổi theo `classification` phải gán cả quan hệ `category` (case nạp kèm `relations: ['category']`, chỉ gán `categoryId` thì save giữ danh mục cũ; sửa 2026-11-26). Đổi phân loại hàng loạt: gọi `updateCaseConfig` qua Nest application context (mẫu script trong `scripts/`, thư mục bị gitignore); 2026-11-26 đã đổi 6 phiếu GR sang OJ trên production theo cách này.
-- `SyncCaseService` map category OJ theo `semanticKey` (giữ alias `OJ`/`OJ_NGOAI`). Xe tài khoản OJ (sync list và sync chi tiết) luôn được gán `classification=OJ`, `excludeFromDebt=true` **và danh mục OJ**, kể cả khi đã có danh mục khác (từ 2026-11-26; trước đó chỉ gán khi trống nên phiếu MAIN bị sync OJ ghi nhầm, ví dụ GR-PDV2606-0015, mang phân loại OJ + danh mục Ký gửi / Nội bộ). Phiếu MAIN phân loại OJ chỉ được bổ sung danh mục khi trống.
+- `KgaraCaseConfigService.updateCaseConfig` nhận diện OJ theo `ErpModuleCategory.semanticKey === 'OJ'` (không theo `code`); giá trị `classification` lưu vẫn là `OJ`/`KY_GUI_NOI_BO`/`SUA_CHUA_CHUNG`/`KHAC` để báo cáo không đổi. Category OJ → `excludeFromDebt` tính theo hóa đơn đầu ra (mục 5.18), bỏ qua giá trị client gửi. Đổi theo `classification` phải gán cả quan hệ `category` (case nạp kèm `relations: ['category']`, chỉ gán `categoryId` thì save giữ danh mục cũ; sửa 2026-11-26). Đổi phân loại hàng loạt: gọi `updateCaseConfig` qua Nest application context (mẫu script trong `scripts/`, thư mục bị gitignore); 2026-11-26 đã đổi 6 phiếu GR sang OJ trên production theo cách này.
+- `SyncCaseService` map category OJ theo `semanticKey` (giữ alias `OJ`/`OJ_NGOAI`). Xe tài khoản OJ (sync list và sync chi tiết) luôn được gán `classification=OJ` **và danh mục OJ** (cờ công nợ theo mục 5.18), kể cả khi đã có danh mục khác (từ 2026-11-26; trước đó chỉ gán khi trống nên phiếu MAIN bị sync OJ ghi nhầm, ví dụ GR-PDV2606-0015, mang phân loại OJ + danh mục Ký gửi / Nội bộ). Phiếu MAIN phân loại OJ chỉ được bổ sung danh mục khi trống.
 - Response case thêm `builtin` + `custom.byCode` (giữ alias `customAttributes`/`attributes`/`attributeValues` 1 release).
 - `PUT /module-config/values/GARAGE_CASE/:id` bị từ chối (400); chỉ dùng `PATCH /cases/:id/config` (`GARAGE:UPDATE`).
 
@@ -996,7 +1022,7 @@ Nhằm tinh gọn tối đa thanh công cụ (Toolbar) và đồng bộ trải n
     - Tự động gán `classification = 'OJ'`.
     - Tự động gán `accountKey = 'OJ'`.
     - Tự động tra cứu và gán `categoryId` trỏ tới danh mục nghiệp vụ OJ (`semanticKey = 'OJ'` hoặc `code IN ('OJ', 'OJ_NGOAI')`).
-    - Tự động kích hoạt cờ `exclude_from_debt = true` (theo Phương án A: không ghi nhận công nợ dịch vụ garage chung của xưởng, trừ khi người dùng chủ động gỡ bỏ cờ trên UI).
+    - Cờ `exclude_from_debt` tính theo hóa đơn đầu ra (mục 5.18): chưa gắn thì loại khỏi công nợ.
 
 - **Tích Hợp Bảng Phân Tích Kết Quả Kinh Doanh (`garage-cases?tab=dashboard`)**:
   - `GaragePnlService.getPnlReport`: Tự động cộng gộp doanh thu, giá vốn của các case có `classification = 'OJ'` vào tổng thể xưởng dịch vụ.

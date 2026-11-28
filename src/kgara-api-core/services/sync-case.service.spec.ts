@@ -26,6 +26,7 @@ function buildService(moduleRef?: unknown) {
     create: jest.fn((d) => ({ ...d })),
     manager: {
       find: jest.fn().mockResolvedValue([]),
+      query: jest.fn().mockResolvedValue([{ has: false }]),
       transaction: jest.fn((cb) => cb(lineManager)),
     },
     ...overrides,
@@ -781,6 +782,41 @@ describe('SyncCaseService (số khung & đối tượng thanh toán)', () => {
     );
   });
 
+  it.each([
+    ['OJ', OJ_GUID, KgaraAccountKey.OJ],
+    ['MAIN', MAIN_GUID, KgaraAccountKey.MAIN],
+  ])(
+    'tài khoản %s: phiếu OJ đã gắn hóa đơn đầu ra thì sync giữ cờ tính công nợ',
+    async (_label, guid, accountKey) => {
+      const ctx = buildService();
+      (ctx.caseRepo.manager as any).findOne = jest
+        .fn()
+        .mockResolvedValue({ id: 'cat-oj', code: 'OJ' });
+      ctx.caseRepo.manager.query.mockResolvedValue([{ has: true }]);
+      ctx.client.getCaseDetail.mockResolvedValue({
+        data: {
+          HdPhieuDichVuID: guid,
+          SoChungTu: 'GR-PDV2610-0012',
+          TinhTrangDichVu: 1,
+          ListPhieuDichVuChiTiet: [],
+        },
+        dataAsOf: '2026-11-03T10:00:00+07:00',
+      });
+      ctx.caseRepo.findOne.mockResolvedValue({
+        id: 'case-invoiced',
+        hdPhieuDichVuId: guid,
+        accountKey,
+        classification: 'OJ',
+        categoryId: 'cat-oj',
+        excludeFromDebt: true,
+      } as unknown as KgaraCase);
+
+      await ctx.service.syncCaseDetail(BRANCH, guid, accountKey);
+
+      expect(ctx.caseRepo.save.mock.calls[0][0].excludeFromDebt).toBe(false);
+    },
+  );
+
   it('detail có DoiTuongThanhToanCode/Name thì lưu cột typed', async () => {
     const ctx = buildService();
     ctx.client.getCaseDetail.mockResolvedValue({
@@ -1003,5 +1039,43 @@ describe('SyncCaseService (số khung & đối tượng thanh toán)', () => {
     await expect(
       ctx.service.syncCaseDetail(BRANCH, MAIN_GUID, KgaraAccountKey.MAIN),
     ).rejects.toThrow(/detail not found on Kgara: .*Thiếu thông chi nhánh/);
+  });
+});
+
+describe('SyncCaseService phân loại NBPQ từ dòng danh sách', () => {
+  it.each([
+    ['OMODA', 'OJ'],
+    ['MAZDA', 'SUA_CHUA_CHUNG'],
+  ])('xe %s thì phân loại %s', async (brand, expected) => {
+    const ctx = buildService();
+    ctx.client.getCases.mockResolvedValue({
+      data: [
+        {
+          HdPhieuDichVuID: MAIN_GUID,
+          SoChungTu: 'GR-PDV2609-0001',
+          NgayPhatSinhFull: '2026-09-15T08:00:00',
+          TenHdHangSanXuat: brand,
+          NguonGocKhachHangCode: 'NBPQ',
+          NguonGocKhachHangName: 'Nội Bộ PQ',
+          TinhTrangDichVu: 1,
+        },
+      ],
+      pagination: { totalPages: 1 },
+    });
+
+    await ctx.service.syncCasesForBranch(
+      BRANCH,
+      '2026-09-01',
+      '2026-09-30',
+      undefined,
+      KgaraAccountKey.MAIN,
+    );
+
+    expect(ctx.caseRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hdPhieuDichVuId: MAIN_GUID,
+        classification: expected,
+      }),
+    );
   });
 });
