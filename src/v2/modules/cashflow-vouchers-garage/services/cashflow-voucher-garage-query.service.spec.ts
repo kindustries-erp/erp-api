@@ -59,6 +59,15 @@ describe('CashflowVoucherGarageQueryService', () => {
     expect(cap.calls[0].params).not.toContain("PAID' OR 1=1");
   });
 
+  it('overdueBucket lọc phiếu dự thu, dự chi theo cột status của v2', async () => {
+    await service.findPage({ overdueBucket: 'D31_90' });
+    for (const { sql } of cap.calls) {
+      expect(sql).toMatch(/"?v"?\."?status"? = 'EXPECTED'/);
+      expect(sql).toMatch(/"?v"?\."?trans_date"? >= \$/);
+      expect(sql).toMatch(/"?v"?\."?trans_date"? <= \$/);
+    }
+  });
+
   it('sắp xếp mặc định theo ngày giảm dần, kèm tie-breaker id', async () => {
     await service.findPage({ branchId: 'b1' });
     expect(cap.calls[0].sql).toContain(

@@ -196,7 +196,7 @@ describe('LegacyProjectorService (V1 → sổ nợ v2)', () => {
     });
   });
 
-  it('phiếu không vụ việc và không có chi nhánh mặc định thì báo lỗi, không ghi gì', async () => {
+  it('phiếu không vụ việc và không có chi nhánh mặc định vẫn chiếu, chi nhánh để trống', async () => {
     const { db, svc } = setup();
     delete process.env.GARAGE_DEFAULT_BRANCH_EXTERNAL_ID;
     db.v1Vouchers().push({
@@ -206,7 +206,26 @@ describe('LegacyProjectorService (V1 → sổ nợ v2)', () => {
       transDate: '2026-11-17',
       amount: 1,
     });
-    await expect(svc.projectVoucher('v-8')).rejects.toThrow('chi nhánh');
-    expect(db.vouchers()).toHaveLength(0);
+    await svc.projectVoucher('v-8');
+    expect(db.vouchers()[0]).toMatchObject({
+      id: 'v-8',
+      branchExternalId: null,
+      branchId: null,
+    });
+  });
+
+  it('phiếu V1 cũ không có trạng thái được chiếu là PAID', async () => {
+    const { db, svc } = setup();
+    db.v1Vouchers().push({
+      id: 'v-7',
+      voucherCode: 'PT-7',
+      voucherType: 'RECEIPT',
+      paymentStatus: null,
+      transDate: '2026-11-17',
+      amount: 1,
+      caseId: 'case-1',
+    });
+    await svc.projectVoucher('v-7');
+    expect(db.vouchers()[0].status).toBe('PAID');
   });
 });

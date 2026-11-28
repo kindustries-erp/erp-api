@@ -15,6 +15,7 @@ import type { DebtAllocationGarage } from '../../debts-garage/entities/debt-allo
 import type { DebtGarage } from '../../debts-garage/entities/debt-garage.entity';
 import { voucherSettlesDebt } from '../services/garage-voucher-allocation.service';
 import {
+  orNull,
   toLegacyPaymentMethod,
   toLegacyVoucherFields,
 } from './legacy-voucher.mapper';
@@ -113,14 +114,14 @@ export class LegacyKgaraMirrorService {
         settlementType: v.voucherType,
         amount: Number(v.amount),
         transDate: v.transDate,
-        bankTransactionId: v.erpBankTransactionId ?? undefined,
+        bankTransactionId: orNull(v.erpBankTransactionId),
         cashflowVoucherId: v.id,
         sourceChannel: 'ON_SYSTEM',
         paymentMethod: toLegacyPaymentMethod(v.paymentMethod),
         payerType:
           v.voucherType === 'RECEIPT' ? (v.payerType as 'KH' | 'BH') : 'KH',
-        note: v.note ?? undefined,
-        partnerName: v.partnerName ?? undefined,
+        note: orNull(v.note),
+        partnerName: orNull(v.partnerName),
       }),
     );
   }

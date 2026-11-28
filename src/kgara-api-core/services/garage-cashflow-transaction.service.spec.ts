@@ -76,6 +76,20 @@ const baseDto = {
   caseId: 'case-1',
 };
 
+/** Phiếu thu hợp lệ theo luật: đã thu phải có phương thức và nội dung đúng loại. */
+const receiptDto = {
+  ...baseDto,
+  voucherType: 'RECEIPT' as const,
+  paymentMethod: 'Tiền mặt',
+  paymentContent: '1. KH thanh toán',
+};
+/** Trường bắt buộc của phiếu chi đã chi trong các ca không quan tâm nội dung cụ thể. */
+const paidFields = {
+  paymentStatus: 'PAID' as const,
+  paymentMethod: 'Tiền mặt',
+  paymentContent: '9. Phụ tùng / vật tư',
+};
+
 describe('GarageCashflowTransactionService - đồng bộ dự thu sau khi lưu phiếu', () => {
   it('tạo phiếu gắn case thì gọi Hub đặt lại dự thu của case đó sau khi commit', async () => {
     const hub = {
@@ -83,7 +97,7 @@ describe('GarageCashflowTransactionService - đồng bộ dự thu sau khi lưu 
       handleCaseReceiptChanged: jest.fn().mockResolvedValue({}),
     };
     const h = buildHarness({}, hub);
-    await h.service.createVoucher({ ...baseDto, voucherType: 'RECEIPT' });
+    await h.service.createVoucher({ ...receiptDto });
     expect(h.queryRunner.commitTransaction).toHaveBeenCalled();
     expect(hub.handleCaseReceiptChanged).toHaveBeenCalledWith('case-1');
   });
@@ -95,7 +109,7 @@ describe('GarageCashflowTransactionService - đồng bộ dự thu sau khi lưu 
     };
     const h = buildHarness({}, hub);
     await expect(
-      h.service.createVoucher({ ...baseDto, voucherType: 'RECEIPT' }),
+      h.service.createVoucher({ ...receiptDto }),
     ).resolves.toBeDefined();
     expect(h.queryRunner.rollbackTransaction).not.toHaveBeenCalled();
   });
@@ -115,7 +129,7 @@ describe('GarageCashflowTransactionService - chiếu sang sổ nợ v2 sau commi
   it('tạo phiếu: chiếu phiếu vừa lưu, sau commit', async () => {
     const { projector, moduleRef } = projectorOf();
     const h = buildHarness({}, undefined, moduleRef);
-    await h.service.createVoucher({ ...baseDto, voucherType: 'RECEIPT' });
+    await h.service.createVoucher({ ...receiptDto });
     expect(projector.projectVoucher).toHaveBeenCalledWith('generated-id');
   });
 
@@ -144,7 +158,7 @@ describe('GarageCashflowTransactionService - chiếu sang sổ nợ v2 sau commi
     });
     const h = buildHarness({}, undefined, moduleRef);
     await expect(
-      h.service.createVoucher({ ...baseDto, voucherType: 'RECEIPT' }),
+      h.service.createVoucher({ ...receiptDto }),
     ).resolves.toBeDefined();
     expect(h.queryRunner.rollbackTransaction).not.toHaveBeenCalled();
   });
@@ -157,18 +171,14 @@ describe('GarageCashflowTransactionService - quy tắc phiếu chi', () => {
       await h.service.createVoucher({
         ...baseDto,
         paymentStatus: 'APPROVED',
-        paymentContent: '7. Phụ tùng / vật tư',
+        paymentContent: '9. Phụ tùng / vật tư',
       });
       expect(h.createdOf(KgaraCaseSettlement)).toHaveLength(0);
     });
 
     it('phiếu chi Đã chi nội dung thường tạo settlement PAYMENT', async () => {
       const h = buildHarness();
-      await h.service.createVoucher({
-        ...baseDto,
-        paymentStatus: 'PAID',
-        paymentContent: '7. Phụ tùng / vật tư',
-      });
+      await h.service.createVoucher({ ...baseDto, ...paidFields });
       const settlements = h.createdOf(KgaraCaseSettlement);
       expect(settlements).toHaveLength(1);
       expect(settlements[0].settlementType).toBe('PAYMENT');
@@ -179,7 +189,7 @@ describe('GarageCashflowTransactionService - quy tắc phiếu chi', () => {
       const h = buildHarness();
       await h.service.createVoucher({
         ...baseDto,
-        paymentStatus: 'PAID',
+        ...paidFields,
         paymentContent: '10. Vật tư tiêu hao',
       });
       expect(h.createdOf(KgaraCaseSettlement)).toHaveLength(0);
@@ -199,10 +209,7 @@ describe('GarageCashflowTransactionService - quy tắc phiếu chi', () => {
 
     it('phiếu thu thường hoặc không truyền status tạo settlement RECEIPT', async () => {
       const h = buildHarness();
-      await h.service.createVoucher({
-        ...baseDto,
-        voucherType: 'RECEIPT',
-      });
+      await h.service.createVoucher(receiptDto);
       const settlements = h.createdOf(KgaraCaseSettlement);
       expect(settlements).toHaveLength(1);
       expect(settlements[0].settlementType).toBe('RECEIPT');
@@ -225,7 +232,8 @@ describe('GarageCashflowTransactionService - quy tắc phiếu chi', () => {
       voucherCode: 'PC-GARA-1',
       voucherType: 'PAYMENT',
       paymentStatus: 'PAID',
-      paymentContent: '7. Phụ tùng / vật tư',
+      paymentMethod: 'Tiền mặt',
+      paymentContent: '9. Phụ tùng / vật tư',
       amount: 1_000_000,
       transDate: '2026-10-05',
       caseId: 'case-1',
@@ -264,11 +272,11 @@ describe('GarageCashflowTransactionService - quy tắc phiếu chi', () => {
       expect(h.createdOf(KgaraCaseSettlement)).toHaveLength(1);
     });
 
-    it('đổi nội dung sang 8 gỡ settlement và ghi opex', async () => {
+    it('đổi nội dung sang 10 gỡ settlement và ghi opex', async () => {
       const settlement = { id: 's1', caseId: 'case-1' };
       const h = buildHarness({ voucher: paidVoucher(), settlement });
       await h.service.updateVoucher('v1', {
-        paymentContent: '8. Vật tư tiêu hao',
+        paymentContent: '10. Vật tư tiêu hao',
       });
       expect(h.manager.remove).toHaveBeenCalledWith(settlement);
       expect(h.createdOf(KgaraOperatingExpense)).toHaveLength(1);
@@ -281,6 +289,8 @@ describe('GarageCashflowTransactionService - quy tắc phiếu chi', () => {
           voucherCode: 'PT-GARA-1',
           voucherType: 'RECEIPT',
           paymentStatus: 'EXPECTED',
+          paymentMethod: 'Tiền mặt',
+          paymentContent: '1. KH thanh toán',
           amount: 500_000,
           transDate: '2026-10-05',
           caseId: 'case-1',
@@ -337,7 +347,7 @@ describe('GarageCashflowTransactionService - bên thanh toán KH/BH của phiế
       TienThanhToanKH: 200_000,
     },
   };
-  const receipt = { ...baseDto, voucherType: 'RECEIPT' as const };
+  const receipt = receiptDto;
 
   it('AC-1: số tiền khớp phần BH thì tự gán BH và trả payerType trong response', async () => {
     const h = buildHarness({ caseRow: insuranceCase });
@@ -369,9 +379,8 @@ describe('GarageCashflowTransactionService - bên thanh toán KH/BH của phiế
     const p = buildHarness({ caseRow: insuranceCase });
     await p.service.createVoucher({
       ...baseDto,
+      ...paidFields,
       amount: 800_000,
-      paymentStatus: 'PAID',
-      paymentContent: '7. Phụ tùng / vật tư',
     });
     expect(p.createdOf(KgaraCaseSettlement)[0].payerType).toBe('KH');
   });
@@ -381,6 +390,8 @@ describe('GarageCashflowTransactionService - bên thanh toán KH/BH của phiế
       id: 'v1',
       voucherType: 'RECEIPT',
       paymentStatus: 'PAID',
+      paymentMethod: 'Tiền mặt',
+      paymentContent: '1. KH thanh toán',
       caseId: 'case-1',
       amount: 800_000,
       transDate: '2026-10-05',
@@ -434,6 +445,125 @@ describe('GarageCashflowTransactionService - bên thanh toán KH/BH của phiế
   });
 });
 
+describe('GarageCashflowTransactionService - luật nhập phiếu và map phương thức', () => {
+  it('tạo phiếu chi với nội dung thu: 400 và không lưu', async () => {
+    const h = buildHarness();
+    await expect(
+      h.service.createVoucher({
+        ...baseDto,
+        ...paidFields,
+        paymentContent: '3. BH thanh toán',
+      }),
+    ).rejects.toThrow('không dùng cho phiếu chi');
+    expect(h.manager.save).not.toHaveBeenCalled();
+    expect(h.queryRunner.rollbackTransaction).toHaveBeenCalled();
+  });
+
+  it('tạo phiếu số tiền 0: 400', async () => {
+    const h = buildHarness();
+    await expect(
+      h.service.createVoucher({ ...receiptDto, amount: 0 }),
+    ).rejects.toThrow('Số tiền phải lớn hơn 0');
+  });
+
+  it('kiểm trên trạng thái sau merge: bỏ phiếu dịch vụ không ghi lý do bị chặn', async () => {
+    const h = buildHarness({
+      voucher: { ...receiptDto, id: 'v1', paymentStatus: 'PAID' },
+    });
+    await expect(
+      h.service.updateVoucher('v1', { caseId: null as any }),
+    ).rejects.toThrow('cần gắn phiếu dịch vụ');
+    expect(h.queryRunner.rollbackTransaction).toHaveBeenCalled();
+  });
+
+  it('phiếu thu cũ không có trạng thái vẫn sửa được ghi chú dù nội dung ngoài danh sách', async () => {
+    const h = buildHarness({
+      voucher: {
+        ...receiptDto,
+        id: 'v1',
+        paymentStatus: null,
+        paymentContent: 'Dự thu hoàn tất phiếu dịch vụ',
+      },
+    });
+    await expect(
+      h.service.updateVoucher('v1', { note: 'x' }),
+    ).resolves.toBeDefined();
+  });
+
+  it('Chuyển khoản khác tạo settlement BANK_TRANSFER', async () => {
+    const h = buildHarness();
+    await h.service.createVoucher({
+      ...receiptDto,
+      paymentMethod: 'Chuyển khoản khác',
+    });
+    expect(h.createdOf(KgaraCaseSettlement)[0].paymentMethod).toBe(
+      'BANK_TRANSFER',
+    );
+  });
+
+  it('chỉ đổi trạng thái: settlement mới lấy phương thức đang lưu trên phiếu', async () => {
+    const h = buildHarness({
+      voucher: {
+        ...receiptDto,
+        id: 'v1',
+        paymentStatus: 'EXPECTED',
+        paymentMethod: 'Chuyển khoản',
+      },
+    });
+    await h.service.updateVoucher('v1', { paymentStatus: 'PAID' });
+    expect(h.createdOf(KgaraCaseSettlement)[0].paymentMethod).toBe(
+      'BANK_TRANSFER',
+    );
+  });
+});
+
+describe('GarageCashflowTransactionService - đối tác chỉ tự điền cho phiếu thu', () => {
+  const caseRow = { id: 'case-1', khachHangName: 'Khách A', rawData: {} };
+
+  it('tạo phiếu thu để trống đối tác thì lấy tên khách', async () => {
+    const h = buildHarness({ caseRow });
+    await h.service.createVoucher(receiptDto);
+    expect(h.createdOf(KgaraCashflowVoucher)[0].partnerName).toBe('Khách A');
+    expect(h.createdOf(KgaraCaseSettlement)[0].partnerName).toBe('Khách A');
+  });
+
+  it('tạo phiếu chi để trống đối tác thì giữ trống', async () => {
+    const h = buildHarness({ caseRow });
+    await h.service.createVoucher({ ...baseDto, ...paidFields });
+    expect(h.createdOf(KgaraCashflowVoucher)[0].partnerName).toBeUndefined();
+    expect(h.createdOf(KgaraCaseSettlement)[0].partnerName).toBeUndefined();
+  });
+
+  it('chuyển phiếu chi sang Đã chi: settlement lấy đối tác đã nhập, không lấy tên khách', async () => {
+    const h = buildHarness({
+      caseRow,
+      voucher: {
+        ...baseDto,
+        ...paidFields,
+        id: 'v1',
+        paymentStatus: 'APPROVED',
+        partnerName: 'NCC B',
+      },
+    });
+    await h.service.updateVoucher('v1', { paymentStatus: 'PAID' });
+    expect(h.createdOf(KgaraCaseSettlement)[0].partnerName).toBe('NCC B');
+  });
+
+  it('gửi null để xóa đối tác của phiếu và settlement', async () => {
+    const voucher = {
+      ...baseDto,
+      ...paidFields,
+      id: 'v1',
+      partnerName: 'Khách A',
+    };
+    const settlement = { id: 's1', partnerName: 'Khách A' };
+    const h = buildHarness({ caseRow, voucher, settlement });
+    await h.service.updateVoucher('v1', { partnerName: null as any });
+    expect(voucher.partnerName).toBeNull();
+    expect(settlement.partnerName).toBeNull();
+  });
+});
+
 describe('GarageCashflowTransactionService - _recalculateCaseDebt: đã thu = RECEIPT-only', () => {
   async function recalc(settlements: any[]) {
     const kCase: any = {
@@ -467,8 +597,7 @@ describe('GarageCashflowTransactionService - thông tin thanh toán QR', () => {
   it('tạo phiếu lưu field QR đã chuẩn hóa', async () => {
     const h = buildHarness();
     await h.service.createVoucher({
-      ...baseDto,
-      voucherType: 'RECEIPT',
+      ...receiptDto,
       qrBankBin: '970418',
       qrBankCode: 'BIDV',
       qrAccountNumber: ' 1234567890 ',
@@ -491,6 +620,8 @@ describe('GarageCashflowTransactionService - thông tin thanh toán QR', () => {
       id: 'v1',
       voucherType: 'RECEIPT',
       paymentStatus: 'PAID',
+      paymentMethod: 'Tiền mặt',
+      paymentContent: '2. Tất toán',
       amount: 1_000_000,
       transDate: '2026-10-05',
       qrBankBin: '970418',
@@ -517,7 +648,7 @@ describe('GarageCashflowTransactionService - đối chiếu tài khoản công t
     await expect(
       h.service.createVoucher({
         ...baseDto,
-        paymentStatus: 'PAID',
+        ...paidFields,
         qrCompanyAccountId: MISSING_ACCOUNT,
       } as any),
     ).rejects.toBeInstanceOf(BadRequestException);

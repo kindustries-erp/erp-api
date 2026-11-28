@@ -19,7 +19,7 @@ Module **Garage Cashflow** quản lý luồng tiền thu/chi đặc thù của x
 - `trans_date` (date) - Ngày giao dịch
 - `case_id` (uuid, FK -> `kgara_cases`, nullable) - Tham chiếu Phiếu dịch vụ liên quan
 - `license_plate` (varchar 50, nullable) - Biển số xe gắn với phiếu (auto sync từ `kgara_cases.bien_so_xe` hoặc nhập tay)
-- `payment_method` (varchar 50, nullable) - Phương thức thanh toán thuần túy (Tiền mặt, Chuyển khoản, Thẻ tín dụng, Khác)
+- `payment_method` (varchar 50, nullable) - Phương thức thanh toán thuần túy (Tiền mặt, Chuyển khoản, Chuyển khoản khác, Thẻ tín dụng, Khác)
 - `payment_content` (varchar 100, nullable) - Nội dung thanh toán / mục đích thu chi. Chuẩn hóa 13 options có số thứ tự từ 1 đến 13:
   1. `1. KH thanh toán`
   2. `2. Tất toán`
@@ -154,7 +154,7 @@ src/kgara-api-core/
 ## 6. Tích hợp Liên Module
 - **erp-bank-transactions**: Lưu tham chiếu qua trường `erpBankTransactionId` (không ràng buộc cứng business logic, chỉ dùng cho tra cứu chéo/đối soát). Khi get list hoặc view detail, queryBuilder `leftJoin` chọn lọc `id`, `transactionCode`, `transDate`, `amount`.
 - **erp-cash-vouchers**: Lưu tham chiếu qua trường `erpCashVoucherId`.
-- **kgara-cases**: Lấy thông tin khách hàng (`khachHangName`) từ `KgaraCase` để gán `partnerName` vào phiếu cấn trừ `KgaraCaseSettlement`. Hiển thị `soChungTu` qua selective join.
+- **kgara-cases**: Chỉ phiếu THU lấy `khachHangName` từ `KgaraCase` làm đối tác mặc định (xem mục "Luật phiếu theo loại"). Hiển thị `soChungTu` qua selective join.
 
 ## 7. Cấu trúc Source Code Frontend (Web)
 Tuân thủ nghiêm ngặt **Atomic UI** (Folder-per-Component, < 180 LoC/file, co-located tests, No Blue Mandate) theo `/erp-ui-structure`:
@@ -413,3 +413,16 @@ Nguồn quy tắc: `helpers/garage-cashflow-payment-rules.ts` (có spec). Áp d�
 - **Response**: `toKgaraCashflowVoucherResponse` liệt kê field tường minh; thêm field mới cho phiếu phải thêm vào `KgaraCashflowVoucherResponseDto` và mapper, nếu không web không nhận được (list, create, update đều đi qua mapper). Spec: `dto/garage-cashflow-response.mapper.spec.ts`.
 - **Web**: drawer chỉ sửa được thông tin thanh toán ở chế độ EDIT; giá trị ghi vào `formData` và lưu cùng phiếu. In phiếu (footer drawer hoặc menu dòng) tự dựng VietQR từ thông tin đã lưu; phiếu thu cũ chưa lưu dùng tài khoản công ty đầu tiên, phiếu chi chưa lưu in không có QR. Chi tiết UI: skill web `garage-dashboard` mục D.
 - **Kiểm thử**: smoke `bun run test:smoke:garage-cashflow-qr` (11 kiểm tra) và E2E web `bun run e2e:garage-cashflow-qr` (19 kiểm tra). Tab "Phiếu thu chi" chỉ hiện phiếu thực thu/chi; phiếu `PENDING` chỉ thấy khi `tab=all`.
+
+## Luật phiếu theo loại, đối tác và quá hạn (2026-11-28, dùng chung v1 và v2)
+
+Nằm ở `src/kgara-api-core/helpers/`; web có bản sao ở `modules/garage/utils/` (đổi một bên phải đổi cả hai và hai bảng test).
+
+- **Danh mục** (`garage-cashflow-catalog.ts`): nội dung theo loại phiếu, phương thức (có `Chuyển khoản khác`, settlement `BANK_TRANSFER`), danh sách nội dung cần phiếu dịch vụ (1, 3, 8; kế toán đổi tại hằng này).
+  - Thu: 1, 2, 3, `8. Cấn trừ`, 12, 13. Chi: 4, 5, 6, 7, `8. Cấn trừ`, 9, 10, 11, 13. `Dự thu hoàn tất phiếu dịch vụ` chỉ hợp lệ cho phiếu thu `EXPECTED`.
+  - Nhãn cũ `8. Vật tư tiêu hao`, `6. HH Thưởng` giữ được khi không đổi loại và nội dung.
+- **Luật** (`garage-cashflow-voucher-rules.ts`, kiểm trên trạng thái sau merge, trả 400): R1 số tiền > 0 (phiếu `CANCELLED` bỏ qua mọi luật); R2 phiếu đã thu/chi (`PAID`, phiếu thu `null`) phải có phương thức và nội dung; R3 nội dung đúng loại khi tạo hoặc đổi loại/nội dung/trạng thái, phương thức trong danh sách khi tạo hoặc đổi phương thức; R4 nội dung cần phiếu dịch vụ mà không có thì bắt buộc ghi chú lý do.
+- Hệ quả R2: phiếu cũ trống nội dung phải chọn nội dung ở lần sửa kế tiếp. Phiếu hệ thống tự sinh ghi thẳng repository nên không qua luật.
+- **Đối tác** (`garage-cashflow-partner.ts`): chỉ phiếu THU fallback tên khách của phiếu dịch vụ (tạo, hiển thị, lọc, export). Phiếu chi nhập tay. PUT: không gửi field = giữ nguyên, `null` = xóa. Sắp xếp theo đối tác và ô tìm kiếm chung không đổi.
+- **Quá hạn** (`garage-cashflow-overdue.helper.ts`): số ngày = hôm nay (giờ VN) trừ `trans_date`, chỉ áp cho thu `EXPECTED` và chi `PENDING`/`APPROVED`. Nhóm `NOT_DUE` (<= 0), `D1_30`, `D31_90`, `D90_PLUS`; v1 lọc bằng `column_filters.overdueDays` (list, tổng, tùy chọn cột, export).
+- Breakdown theo phương thức của `GET dashboard` suy từ `erp_bank_transaction_id`, không tách `Chuyển khoản khác`.

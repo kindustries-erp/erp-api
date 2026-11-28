@@ -3,6 +3,11 @@ import { DataSource, EntityManager } from 'typeorm';
 import type { CashflowVoucherStatus } from '@/v2/core/cashflow-vouchers-core';
 import { AbstractDebtFlowService } from '@/v2/core/debts-core';
 import { assertErpBranchExists, branchWhere } from '@/v2/core/branches-core';
+import {
+  assertGarageVoucherRules,
+  type GarageVoucherRuleState,
+} from '@/kgara-api-core/helpers/garage-cashflow-voucher-rules';
+import { defaultGaragePartnerName } from '@/kgara-api-core/helpers/garage-cashflow-partner';
 import { CaseGarage } from '../../cases-garage/entities/case-garage.entity';
 import type { CashflowVoucherGarageRow } from '../../cashflow-vouchers-garage/dto/cashflow-voucher-garage.types';
 import type {
@@ -18,6 +23,25 @@ import {
   GarageDebtsFlowEventsService,
 } from './garage-debts-flow-events.service';
 import { GarageVoucherAllocationService } from './garage-voucher-allocation.service';
+
+/** Phiếu v2 theo hình dạng của luật nhập phiếu dùng chung với v1 (v1 gọi trạng thái là `paymentStatus`). */
+const toRuleState = (v: {
+  voucherType?: string;
+  status?: string | null;
+  amount?: number | string;
+  paymentMethod?: string | null;
+  paymentContent?: string | null;
+  caseId?: string | null;
+  note?: string | null;
+}): GarageVoucherRuleState => ({
+  voucherType: v.voucherType,
+  paymentStatus: v.status,
+  amount: v.amount,
+  paymentMethod: v.paymentMethod,
+  paymentContent: v.paymentContent,
+  caseId: v.caseId,
+  note: v.note,
+});
 
 /**
  * Orchestrator thu chi garage: mỗi lệnh là MỘT transaction gồm ghi phiếu + áp/đảo phân bổ công nợ.
@@ -41,6 +65,10 @@ export class GarageDebtsFlowService extends AbstractDebtFlowService {
     actorId: string | null,
   ): Promise<CashflowVoucherGarageRow> {
     return this.runInTransaction(async (manager, emit) => {
+      // Mặc định như V1: phiếu thu đã thu, phiếu chi chờ duyệt.
+      const status =
+        dto.status ?? (dto.voucherType === 'RECEIPT' ? 'PAID' : 'PENDING');
+      assertGarageVoucherRules(toRuleState({ ...dto, status }));
       const kase = await this.findCase(manager, branchId, dto.caseId);
       if (!kase) await assertErpBranchExists(manager, branchId);
       const voucher = (await this.vouchers.create(manager, {
@@ -49,9 +77,11 @@ export class GarageDebtsFlowService extends AbstractDebtFlowService {
         branchId: kase?.branchId ?? branchId ?? null,
         branchExternalId: kase?.branchExternalId ?? null,
         licensePlate: dto.licensePlate ?? kase?.licensePlate ?? null,
-        // Mặc định như V1: phiếu thu đã thu, phiếu chi chờ duyệt.
-        status:
-          dto.status ?? (dto.voucherType === 'RECEIPT' ? 'PAID' : 'PENDING'),
+        partnerName:
+          dto.partnerName ||
+          defaultGaragePartnerName(dto.voucherType, kase?.customerName) ||
+          null,
+        status,
         payerType:
           dto.payerType ??
           (dto.voucherType === 'RECEIPT'
@@ -80,11 +110,15 @@ export class GarageDebtsFlowService extends AbstractDebtFlowService {
         branchId,
       )) as CashflowVoucherGarage;
       const oldCaseId = before.caseId;
-      if (dto.caseId) await this.findCase(manager, branchId, dto.caseId);
-      await this.allocations.reverseForVoucher(manager, id, actorId);
       const patch = Object.fromEntries(
         Object.entries(dto).filter(([, v]) => v !== undefined),
       );
+      assertGarageVoucherRules(
+        toRuleState({ ...before, ...patch }),
+        toRuleState(before),
+      );
+      if (dto.caseId) await this.findCase(manager, branchId, dto.caseId);
+      await this.allocations.reverseForVoucher(manager, id, actorId);
       const updated = (await this.vouchers.updateActive(
         manager,
         id,
@@ -109,6 +143,15 @@ export class GarageDebtsFlowService extends AbstractDebtFlowService {
     actorId: string | null,
   ): Promise<CashflowVoucherGarageRow> {
     return this.runInTransaction(async (manager, emit) => {
+      const before = (await this.vouchers.lock(
+        manager,
+        id,
+        branchId,
+      )) as CashflowVoucherGarage;
+      assertGarageVoucherRules(
+        toRuleState({ ...before, status: next }),
+        toRuleState(before),
+      );
       const updated = (await this.vouchers.changeStatus(
         manager,
         id,

@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import type { Repository, SelectQueryBuilder } from 'typeorm';
 
 import { applyBranchScope, branchWhere } from '@/v2/core/branches-core';
+import { applyGarageOverdueFilter } from '@/kgara-api-core/helpers/garage-cashflow-overdue.helper';
 import type { TableColumnMap } from '@/common/utils/table-query';
 import {
   AbstractCashflowVoucherQueryService,
@@ -19,6 +20,7 @@ export interface CashflowVoucherGarageListQuery extends CashflowVoucherListQuery
   voucherType?: string;
   status?: string;
   caseId?: string;
+  overdueBucket?: string;
   date_from?: string;
   date_to?: string;
 }
@@ -87,6 +89,12 @@ export class CashflowVoucherGarageQueryService extends AbstractCashflowVoucherQu
     if (q.date_from)
       qb.andWhere('v.trans_date >= :cfFrom', { cfFrom: q.date_from });
     if (q.date_to) qb.andWhere('v.trans_date <= :cfTo', { cfTo: q.date_to });
+    if (q.overdueBucket) {
+      applyGarageOverdueFilter(qb, [q.overdueBucket], {
+        alias: 'v',
+        statusColumn: 'status',
+      });
+    }
     return qb;
   }
 
