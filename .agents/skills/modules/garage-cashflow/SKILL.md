@@ -205,8 +205,11 @@ src/modules/garage/components/
   - **Dọn dẹp Dead Code**: Trang tổng quan `GarageCashflowDashboard` và file `GarageCashflowPage.tsx` đã được xóa bỏ hoàn toàn. Route alias `"garage-cashflow"` trong `App.tsx` tự động chuyển tiếp sang `() => <GaragePartners initialTab="cashflow" />`.
   - **Chuẩn Hóa Column Filter & Query Engine (`GarageCashflowQueryEngine`)**:
     - Hỗ trợ lọc ngày độc lập `transDate` (`from..to`) và `createdAt`.
-    - Hỗ trợ lọc tiền vào (`thu`: `voucher_type = 'RECEIPT'`) và tiền ra (`chi`: `voucher_type = 'PAYMENT'`) theo khoảng tiền `min..max` hoặc danh sách số tiền chính xác.
+    - Hỗ trợ lọc tiền vào (`thu`: `voucher_type = 'RECEIPT'`) và tiền ra (`chi`: `voucher_type = 'PAYMENT'`) theo khoảng tiền `min..max` hoặc danh sách số tiền chính xác. Helper `applyAmountColumnFilter` trong `garage-cashflow-query.engine.ts` xử lý cả hai cột.
+    - `__BLANK__` trên cột `thu`/`chi` nghĩa là phiếu thuộc loại còn lại: Tiền vào trống = phiếu chi (`voucher_type <> 'RECEIPT'`), Tiền ra trống = phiếu thu (`voucher_type <> 'PAYMENT'`). Kết hợp với số tiền bằng OR; khoảng `min..max` vẫn giới hạn đúng loại phiếu của cột.
     - Hỗ trợ lọc rỗng `__BLANK__` cho các trường nullable (`caseCode`, `licensePlate`, `note`).
+    - Sentinel `__ALL_MATCHING__` (popover "Chọn tất cả kết quả tìm kiếm") không bao giờ đi vào SQL: engine bỏ qua mảng có phần tử đầu là sentinel; FE hook cũng loại bỏ trước khi gửi. Cột Trạng thái, Phương thức TT, Nội dung TT dùng `enableSelectAllMatching: false`.
+    - Giá trị lọc `paymentStatus` (`applyPaymentStatusFilter`): tab Dự thu/Dự chi dùng `EXPECTED`, `PENDING`, `APPROVED` (Đã duyệt, chỉ ở tab này); tab Thu/Chi dùng `RECEIPT_PAID` (Đã thu) và `PAYMENT_PAID` (Đã chi). `PAID` cũ vẫn chạy như cả hai nhóm "đã".
     - Phía client: cột `paymentMethod` sử dụng Client Select Filter (`filterOptions`).
   - **Sidebar GARAGE Phẳng Hóa**: Section GARAGE trên Sidebar đã được phẳng hóa thành 3 mục trực tiếp (không còn popup submenu trung gian):
     - **Mục 1**: `Phiếu dịch vụ` (`garage-cases` | Icon: `FileSpreadsheet`)
