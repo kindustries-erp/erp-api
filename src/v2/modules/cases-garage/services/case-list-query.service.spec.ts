@@ -14,6 +14,7 @@ describe('CaseListQueryService', () => {
     linkCounts: jest.fn().mockResolvedValue(new Map()),
     categoryRefs: jest.fn().mockResolvedValue(new Map()),
     grossProfitByCase: jest.fn().mockResolvedValue(new Map()),
+    ojInvoicedCaseIds: jest.fn().mockResolvedValue(new Set()),
   };
 
   beforeEach(async () => {

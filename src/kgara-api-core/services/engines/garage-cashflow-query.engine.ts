@@ -9,6 +9,11 @@ import {
   toKgaraCashflowVoucherResponse,
 } from '../../dto/garage-cashflow.dto';
 import { applyMultiKeywordFilter } from '../../../common/utils/query-builder.util';
+import {
+  applyPartnerNameFilter,
+  GARAGE_PARTNER_NAME_SQL,
+} from '../../helpers/garage-cashflow-partner';
+import { applyGarageOverdueFilter } from '../../helpers/garage-cashflow-overdue.helper';
 
 /** Sentinel popover "Chọn tất cả kết quả tìm kiếm": từ khóa nằm ở column_search, không phải giá trị lọc. */
 const ALL_MATCHING_SENTINEL = '__ALL_MATCHING__';
@@ -94,6 +99,8 @@ function applyAmountColumnFilter(
   if (clauses.length === 0) return;
   qb.andWhere(`(${clauses.join(' OR ')})`, params);
 }
+
+const OVERDUE_TARGET = { alias: 'voucher', statusColumn: 'payment_status' };
 
 @Injectable()
 export class GarageCashflowQueryEngine {
@@ -198,8 +205,7 @@ export class GarageCashflowQueryEngine {
 
     let selectField = '';
     if (column === 'voucherCode') selectField = 'voucher.voucher_code';
-    else if (column === 'partnerName')
-      selectField = 'COALESCE(voucher.partner_name, case.khach_hang_name)';
+    else if (column === 'partnerName') selectField = GARAGE_PARTNER_NAME_SQL;
     else if (column === 'licensePlate')
       selectField = 'COALESCE(voucher.license_plate, case.bien_so_xe)';
     else if (column === 'paymentMethod') selectField = 'voucher.payment_method';
@@ -289,25 +295,7 @@ export class GarageCashflowQueryEngine {
               vvoucherCode: vals,
             });
           } else if (col === 'partnerName') {
-            const hasBlank = vals.includes('__BLANK__');
-            const nonBlank = vals.filter((v) => v !== '__BLANK__');
-            if (hasBlank && nonBlank.length > 0) {
-              qb.andWhere(
-                "((voucher.partner_name IN (:...vpartnerName) OR case.khach_hang_name IN (:...vpartnerName)) OR (COALESCE(voucher.partner_name, case.khach_hang_name) IS NULL OR COALESCE(voucher.partner_name, case.khach_hang_name) = ''))",
-                { vpartnerName: nonBlank },
-              );
-            } else if (hasBlank) {
-              qb.andWhere(
-                "(COALESCE(voucher.partner_name, case.khach_hang_name) IS NULL OR COALESCE(voucher.partner_name, case.khach_hang_name) = '')",
-              );
-            } else {
-              qb.andWhere(
-                '(voucher.partner_name IN (:...vpartnerName) OR case.khach_hang_name IN (:...vpartnerName))',
-                {
-                  vpartnerName: vals,
-                },
-              );
-            }
+            applyPartnerNameFilter(qb, vals, 'vpartnerName');
           } else if (col === 'licensePlate') {
             const hasBlank = vals.includes('__BLANK__');
             const nonBlank = vals.filter((v) => v !== '__BLANK__');
@@ -351,6 +339,8 @@ export class GarageCashflowQueryEngine {
             }
           } else if (col === 'paymentStatus') {
             applyPaymentStatusFilter(qb, vals);
+          } else if (col === 'overdueDays') {
+            applyGarageOverdueFilter(qb, vals, OVERDUE_TARGET);
           } else if (col === 'note') {
             const hasBlank = vals.includes('__BLANK__');
             const nonBlank = vals.filter((v) => v !== '__BLANK__');
@@ -504,25 +494,7 @@ export class GarageCashflowQueryEngine {
               fvoucherCode: arr,
             });
           } else if (col === 'partnerName') {
-            const hasBlank = arr.includes('__BLANK__');
-            const nonBlank = arr.filter((v) => v !== '__BLANK__');
-            if (hasBlank && nonBlank.length > 0) {
-              qb.andWhere(
-                "((voucher.partner_name IN (:...fpartnerName) OR case.khach_hang_name IN (:...fpartnerName)) OR (COALESCE(voucher.partner_name, case.khach_hang_name) IS NULL OR COALESCE(voucher.partner_name, case.khach_hang_name) = ''))",
-                { fpartnerName: nonBlank },
-              );
-            } else if (hasBlank) {
-              qb.andWhere(
-                "(COALESCE(voucher.partner_name, case.khach_hang_name) IS NULL OR COALESCE(voucher.partner_name, case.khach_hang_name) = '')",
-              );
-            } else {
-              qb.andWhere(
-                '(voucher.partner_name IN (:...fpartnerName) OR case.khach_hang_name IN (:...fpartnerName))',
-                {
-                  fpartnerName: arr,
-                },
-              );
-            }
+            applyPartnerNameFilter(qb, arr, 'fpartnerName');
           } else if (col === 'licensePlate') {
             const hasBlank = arr.includes('__BLANK__');
             const nonBlank = arr.filter((v) => v !== '__BLANK__');
@@ -566,6 +538,8 @@ export class GarageCashflowQueryEngine {
             }
           } else if (col === 'paymentStatus') {
             applyPaymentStatusFilter(qb, arr);
+          } else if (col === 'overdueDays') {
+            applyGarageOverdueFilter(qb, arr, OVERDUE_TARGET);
           } else if (col === 'note') {
             const hasBlank = arr.includes('__BLANK__');
             const nonBlank = arr.filter((v) => v !== '__BLANK__');
@@ -600,7 +574,7 @@ export class GarageCashflowQueryEngine {
           if (col === 'partnerName')
             applyMultiKeywordFilter(
               qb,
-              'COALESCE(voucher.partner_name, case.khach_hang_name)',
+              GARAGE_PARTNER_NAME_SQL,
               searchStr,
               'spartnerName',
             );

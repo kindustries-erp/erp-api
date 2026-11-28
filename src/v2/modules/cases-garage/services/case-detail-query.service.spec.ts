@@ -11,6 +11,7 @@ function makeService(row: unknown) {
     linkCounts: jest.fn().mockResolvedValue(new Map()),
     categoryRefs: jest.fn().mockResolvedValue(new Map()),
     grossProfitByCase: jest.fn().mockResolvedValue(new Map()),
+    ojInvoicedCaseIds: jest.fn().mockResolvedValue(new Set()),
   };
   const service = new CaseDetailQueryService(
     repo as unknown as Repository<CaseGarage>,

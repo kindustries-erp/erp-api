@@ -118,4 +118,18 @@ describe('CaseListEnrichmentService', () => {
     expect(map.get(grossProfitKey('VV1', 'KG1'))?.revenue).toBe(100);
     expect(map.get(grossProfitKey('VV1', 'KG2'))?.revenue).toBe(200);
   });
+
+  it('ojInvoicedCaseIds: không có phiếu OJ thì không truy vấn; có thì một truy vấn', async () => {
+    expect(
+      (await service.ojInvoicedCaseIds([{ id: 'c1', classification: 'KHAC' }]))
+        .size,
+    ).toBe(0);
+    expect(cap.calls).toHaveLength(0);
+    cap.respond(() => [{ id: 'c2' }]);
+    const set = await service.ojInvoicedCaseIds([
+      { id: 'c2', classification: 'OJ' },
+    ]);
+    expect(cap.calls).toHaveLength(1);
+    expect(set.has('c2')).toBe(true);
+  });
 });

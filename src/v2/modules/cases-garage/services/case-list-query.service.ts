@@ -117,11 +117,12 @@ export class CaseListQueryService {
       .map((id) => byId.get(id))
       .filter((r): r is CaseGarage => !!r);
 
-    const [sums, links, cats, gp] = await Promise.all([
+    const [sums, links, cats, gp, ojInvoicedIds] = await Promise.all([
       this.enrichment.settlementSums(ids),
       this.enrichment.linkCounts(ids),
       this.enrichment.categoryRefs(ordered.map((r) => r.categoryId)),
       this.enrichment.grossProfitByCase(ordered),
+      this.enrichment.ojInvoicedCaseIds(ordered),
     ]);
     return {
       items: ordered.map((r) =>
@@ -130,6 +131,7 @@ export class CaseListQueryService {
           links: links.get(r.id),
           category: r.categoryId ? (cats.get(r.categoryId) ?? null) : null,
           grossProfit: gp.get(grossProfitKey(r.caseCode, r.branchExternalId)),
+          ojInvoicedIds,
         }),
       ),
       pagination: buildPagination(page, pageSize, Number(count?.total) || 0),

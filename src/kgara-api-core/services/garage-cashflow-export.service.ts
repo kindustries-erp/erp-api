@@ -5,6 +5,11 @@ import { KgaraCashflowVoucher } from '../entities/kgara_cashflow_voucher.entity'
 import { GarageCashflowExportDto } from '../dto/garage-cashflow-export.dto';
 import { GarageCashflowExcelBuilder } from './garage-cashflow-excel.builder';
 import { applyMultiKeywordFilter } from '../../common/utils/query-builder.util';
+import {
+  applyPartnerNameFilter,
+  GARAGE_PARTNER_NAME_SQL,
+} from '../helpers/garage-cashflow-partner';
+import { applyGarageOverdueFilter } from '../helpers/garage-cashflow-overdue.helper';
 import type { ExportProgressReporter } from '@/v2/core/export-jobs-core';
 
 @Injectable()
@@ -255,11 +260,13 @@ export class GarageCashflowExportService {
             qb.andWhere('voucher.payment_status IN (:...cfpStatus)', {
               cfpStatus: arr,
             });
+          } else if (col === 'overdueDays') {
+            applyGarageOverdueFilter(qb, arr, {
+              alias: 'voucher',
+              statusColumn: 'payment_status',
+            });
           } else if (col === 'partnerName') {
-            qb.andWhere(
-              '(voucher.partner_name IN (:...cfpName) OR case.khach_hang_name IN (:...cfpName))',
-              { cfpName: arr },
-            );
+            applyPartnerNameFilter(qb, arr, 'cfpName');
           } else if (col === 'note') {
             qb.andWhere('voucher.note IN (:...cfNote)', { cfNote: arr });
           }
@@ -288,12 +295,7 @@ export class GarageCashflowExportService {
           if (col === 'voucherCode') {
             applyMultiKeywordFilter(qb, 'voucher.voucher_code', str, 'sc_vc');
           } else if (col === 'partnerName') {
-            applyMultiKeywordFilter(
-              qb,
-              'COALESCE(voucher.partner_name, case.khach_hang_name)',
-              str,
-              'sc_pn',
-            );
+            applyMultiKeywordFilter(qb, GARAGE_PARTNER_NAME_SQL, str, 'sc_pn');
           } else if (col === 'licensePlate') {
             applyMultiKeywordFilter(
               qb,
@@ -333,8 +335,7 @@ export class GarageCashflowExportService {
         else if (col === 'createdAt') sortCol = 'voucher.created_at';
         else if (col === 'licensePlate')
           sortCol = 'COALESCE(voucher.license_plate, case.bien_so_xe)';
-        else if (col === 'partnerName')
-          sortCol = 'COALESCE(voucher.partner_name, case.khach_hang_name)';
+        else if (col === 'partnerName') sortCol = GARAGE_PARTNER_NAME_SQL;
 
         if (idx === 0) {
           qb.orderBy(sortCol, dir);

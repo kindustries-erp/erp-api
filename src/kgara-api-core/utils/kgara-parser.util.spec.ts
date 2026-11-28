@@ -105,44 +105,87 @@ describe('kgara-parser.util', () => {
   });
 
   describe('mapKgaraClassificationToErp', () => {
-    it('should map NBPQ to OJ', () => {
-      expect(mapKgaraClassificationToErp('NBPQ', 'Nội Bộ PQ')).toBe('OJ');
-      expect(mapKgaraClassificationToErp('nbpq', 'Nội Bộ PQ')).toBe('OJ');
-      expect(mapKgaraClassificationToErp('', 'Nội Bộ PQ')).toBe('OJ');
-      expect(mapKgaraClassificationToErp('', 'NOI BO PQ')).toBe('OJ');
+    const august = new Date(2026, 7, 1);
+    const nbpq = (vehicle: Parameters<typeof mapKgaraClassificationToErp>[2]) =>
+      mapKgaraClassificationToErp('NBPQ', 'Nội Bộ PQ', vehicle);
+
+    it('NBPQ trước 01/08/2026 là Sửa chữa chung, kể cả xe Omoda', () => {
+      expect(
+        nbpq({ brand: 'OMODA', issuedAt: new Date(2026, 6, 31, 23, 59) }),
+      ).toBe('SUA_CHUA_CHUNG');
+    });
+
+    it('NBPQ từ 01/08/2026, xe có từ khóa ở hãng, dòng xe hoặc biển số là OJ', () => {
+      expect(nbpq({ brand: 'OMODA', issuedAt: august })).toBe('OJ');
+      expect(nbpq({ brand: 'Jaecoo', issuedAt: august })).toBe('OJ');
+      expect(nbpq({ brand: 'KHAC', model: 'J7 PHEV', issuedAt: august })).toBe(
+        'OJ',
+      );
+      expect(nbpq({ model: 'Omoda C5', issuedAt: august })).toBe('OJ');
+      expect(nbpq({ plate: 'J5 BEV 100032', issuedAt: august })).toBe('OJ');
+    });
+
+    it('nhận NBPQ qua tên khi thiếu mã', () => {
+      const car = { brand: 'OMODA', issuedAt: august };
+      expect(mapKgaraClassificationToErp('', 'Nội Bộ PQ', car)).toBe('OJ');
+      expect(mapKgaraClassificationToErp('', 'NOI BO PQ', car)).toBe('OJ');
+      expect(mapKgaraClassificationToErp('nbpq', '', car)).toBe('OJ');
+    });
+
+    it('NBPQ, có thông tin xe nhưng không có từ khóa là Sửa chữa chung', () => {
+      expect(nbpq({ brand: 'MAZDA', model: 'CX-5', issuedAt: august })).toBe(
+        'SUA_CHUA_CHUNG',
+      );
+      expect(nbpq({ model: 'XC50', plate: '51K74182', issuedAt: august })).toBe(
+        'SUA_CHUA_CHUNG',
+      );
+      expect(nbpq({ brand: 'TOYOTA', plate: '29C5-1234' })).toBe(
+        'SUA_CHUA_CHUNG',
+      );
+    });
+
+    it('NBPQ chưa có hãng, dòng xe và biển số không có từ khóa thì để trống', () => {
+      expect(nbpq({ plate: '51K74182', issuedAt: august })).toBeNull();
+      expect(nbpq({ brand: '  ', model: null, issuedAt: august })).toBeNull();
+      expect(nbpq({})).toBeNull();
     });
 
     it('should map Sales tặng to KHAC', () => {
-      expect(mapKgaraClassificationToErp('Sales tặng', 'Sales tặng')).toBe(
+      expect(mapKgaraClassificationToErp('Sales tặng', 'Sales tặng', {})).toBe(
         'KHAC',
       );
-      expect(mapKgaraClassificationToErp('SALES', 'Tặng khách')).toBe('KHAC');
-      expect(mapKgaraClassificationToErp('', 'Sales tặng')).toBe('KHAC');
-      expect(mapKgaraClassificationToErp('', 'SALES TANG')).toBe('KHAC');
+      expect(mapKgaraClassificationToErp('SALES', 'Tặng khách', {})).toBe(
+        'KHAC',
+      );
+      expect(mapKgaraClassificationToErp('', 'Sales tặng', {})).toBe('KHAC');
+      expect(mapKgaraClassificationToErp('', 'SALES TANG', {})).toBe('KHAC');
     });
 
     it('should map other KGara classifications to KY_GUI_NOI_BO', () => {
-      expect(mapKgaraClassificationToErp('Ký gửi NSG', 'Ký gửi NSG')).toBe(
+      expect(mapKgaraClassificationToErp('Ký gửi NSG', 'Ký gửi NSG', {})).toBe(
         'KY_GUI_NOI_BO',
       );
-      expect(mapKgaraClassificationToErp('KY GUI', 'Xe ký gửi')).toBe(
+      expect(mapKgaraClassificationToErp('KY GUI', 'Xe ký gửi', {})).toBe(
         'KY_GUI_NOI_BO',
       );
-      expect(mapKgaraClassificationToErp('Ký gửi PQ', 'Ký gửi PQ')).toBe(
+      expect(mapKgaraClassificationToErp('Ký gửi PQ', 'Ký gửi PQ', {})).toBe(
         'KY_GUI_NOI_BO',
       );
-      expect(mapKgaraClassificationToErp('KG-NB', 'Ký gửi / Nội bộ')).toBe(
+      expect(mapKgaraClassificationToErp('KG-NB', 'Ký gửi / Nội bộ', {})).toBe(
         'KY_GUI_NOI_BO',
       );
-      expect(mapKgaraClassificationToErp('UNKNOWN_CODE', 'Khách lạ')).toBe(
+      expect(mapKgaraClassificationToErp('UNKNOWN_CODE', 'Khách lạ', {})).toBe(
         'KY_GUI_NOI_BO',
       );
     });
 
     it('should return null when both code and name are empty', () => {
-      expect(mapKgaraClassificationToErp(null, null)).toBeNull();
-      expect(mapKgaraClassificationToErp('', '')).toBeNull();
-      expect(mapKgaraClassificationToErp('   ', '   ')).toBeNull();
+      expect(mapKgaraClassificationToErp(null, null, {})).toBeNull();
+      expect(
+        mapKgaraClassificationToErp(null, null, { brand: 'OMODA' }),
+      ).toBeNull();
+      expect(mapKgaraClassificationToErp('', '', {})).toBeNull();
+      expect(mapKgaraClassificationToErp('   ', '   ', {})).toBeNull();
     });
   });
 });

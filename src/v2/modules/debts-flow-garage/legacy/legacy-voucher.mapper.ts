@@ -1,20 +1,13 @@
 import type { KgaraCashflowVoucher } from '@/kgara-api-core/entities/kgara_cashflow_voucher.entity';
 import type { CashflowVoucherGarage } from '../../cashflow-vouchers-garage/entities/cashflow-voucher-garage.entity';
 
-export type LegacyPaymentMethod = 'CASH' | 'BANK_TRANSFER' | 'POS' | 'OTHER';
+export {
+  toLegacyPaymentMethod,
+  type LegacyPaymentMethod,
+} from '@/kgara-api-core/helpers/garage-cashflow-catalog';
 
-/** Tên phương thức hiển thị (V1 lưu chuỗi tiếng Việt) sang enum của settlement V1. Mặc định tiền mặt. */
-export function toLegacyPaymentMethod(
-  method?: string | null,
-): LegacyPaymentMethod {
-  if (method === 'Chuyển khoản') return 'BANK_TRANSFER';
-  if (method === 'Quẹt thẻ' || method === 'Thẻ') return 'POS';
-  if (method && method !== 'Tiền mặt') return 'OTHER';
-  return 'CASH';
-}
-
-const orUndefined = <T>(v: T | null | undefined): T | undefined =>
-  v ?? undefined;
+/** Trống thì ghi null để xóa ở V1; undefined sẽ bị TypeORM bỏ qua và giữ giá trị cũ. */
+export const orNull = <T>(v: T | null | undefined): T => (v ?? null) as T;
 
 /** Cột của phiếu V1 từ phiếu v2 (cùng UUID). V1 không có chi nhánh nên cột đó không được mirror. */
 export function toLegacyVoucherFields(
@@ -26,18 +19,18 @@ export function toLegacyVoucherFields(
     voucherType: v.voucherType,
     amount: Number(v.amount),
     transDate: v.transDate,
-    caseId: orUndefined(v.caseId),
-    licensePlate: orUndefined(v.licensePlate),
-    paymentMethod: orUndefined(v.paymentMethod),
-    paymentContent: orUndefined(v.paymentContent),
+    caseId: orNull(v.caseId),
+    licensePlate: orNull(v.licensePlate),
+    paymentMethod: orNull(v.paymentMethod),
+    paymentContent: orNull(v.paymentContent),
     paymentStatus: v.status,
     isAutoExpected: v.isAutoExpected,
     isAutoCommission: v.isAutoCommission,
-    partnerName: orUndefined(v.partnerName),
-    erpBankTransactionId: orUndefined(v.erpBankTransactionId),
-    erpCashVoucherId: orUndefined(v.erpCashVoucherId),
-    note: orUndefined(v.note),
-    createdBy: orUndefined(v.createdBy),
+    partnerName: orNull(v.partnerName),
+    erpBankTransactionId: orNull(v.erpBankTransactionId),
+    erpCashVoucherId: orNull(v.erpCashVoucherId),
+    note: orNull(v.note),
+    createdBy: v.createdBy ?? undefined,
     pnlPeriodYear: v.pnlPeriodYear ?? null,
     pnlPeriodMonth: v.pnlPeriodMonth ?? null,
     pnlCommissionType: v.pnlCommissionType ?? null,

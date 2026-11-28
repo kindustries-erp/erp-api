@@ -54,8 +54,17 @@ const receipt = (over: object = {}) => ({
   amount: 300,
   transDate: '2026-11-17',
   caseId: 'case-1',
+  paymentMethod: 'Tiền mặt',
+  paymentContent: '2. Tất toán',
   ...over,
 });
+
+const payment = (over: object = {}) =>
+  receipt({
+    voucherType: 'PAYMENT',
+    paymentContent: '9. Phụ tùng / vật tư',
+    ...over,
+  });
 
 describe('luồng thu chi + công nợ garage (integration, DB giả)', () => {
   it('phiếu thu PAID gắn vụ việc: ghi phiếu và trừ nợ trong một transaction, phát sự kiện sau commit', async () => {
@@ -90,11 +99,7 @@ describe('luồng thu chi + công nợ garage (integration, DB giả)', () => {
       partyType: 'SUPPLIER',
       originalAmount: 400,
     });
-    const v = await flow.recordVoucher(
-      'B1',
-      receipt({ voucherType: 'PAYMENT', amount: 150 }),
-      null,
-    );
+    const v = await flow.recordVoucher('B1', payment({ amount: 150 }), null);
     expect(v.status).toBe('PENDING');
     expect(db.allocations()).toHaveLength(0);
     await flow.changeVoucherStatus('B1', v.id, 'PAID', null);
@@ -347,12 +352,7 @@ describe('luồng thu chi + công nợ garage (integration, DB giả)', () => {
     });
     await flow.recordVoucher(
       'B1',
-      receipt({
-        voucherType: 'PAYMENT',
-        amount: 100,
-        status: 'PAID',
-        paymentContent: '4. HHBH',
-      }),
+      payment({ amount: 100, status: 'PAID', paymentContent: '4. HHBH' }),
       null,
     );
     expect(db.allocations()).toHaveLength(0);
@@ -362,11 +362,62 @@ describe('luồng thu chi + công nợ garage (integration, DB giả)', () => {
         voucherType: 'PAYMENT',
         amount: 100,
         status: 'PAID',
-        paymentContent: 'Phụ tùng',
+        paymentContent: '9. Phụ tùng / vật tư',
       }),
       null,
     );
     expect(db.debts()[0]).toMatchObject({ settledAmount: '100.00' });
+  });
+
+  it('đối tác để trống: phiếu thu lấy tên khách của vụ việc, phiếu chi để trống', async () => {
+    const { db, flow } = setup();
+    db.seedCase({ id: 'case-2', customerName: 'Khách A' });
+    await flow.recordVoucher('B1', receipt({ caseId: 'case-2' }), null);
+    await flow.recordVoucher('B1', payment({ caseId: 'case-2' }), null);
+    expect(db.vouchers().map((r) => r.partnerName)).toEqual(['Khách A', null]);
+  });
+
+  it('luật nhập phiếu: tạo sai loại nội dung bị chặn, không ghi phiếu', async () => {
+    const { db, flow } = setup();
+    await expect(
+      flow.recordVoucher(
+        'B1',
+        payment({ paymentContent: '3. BH thanh toán' }),
+        null,
+      ),
+    ).rejects.toThrow('không dùng cho phiếu chi');
+    expect(db.vouchers()).toHaveLength(0);
+  });
+
+  it('luật nhập phiếu: đổi trạng thái sang đã chi phải đủ phương thức, hủy thì không kiểm', async () => {
+    const { db, flow } = setup();
+    db.seedDebt({ direction: 'PAYABLE', partyType: 'SUPPLIER' });
+    const v = await flow.recordVoucher(
+      'B1',
+      payment({ amount: 100, paymentMethod: undefined }),
+      null,
+    );
+    await expect(
+      flow.changeVoucherStatus('B1', v.id, 'PAID', null),
+    ).rejects.toThrow('phải có phương thức');
+    expect(db.vouchers()[0].status).toBe('PENDING');
+    await expect(
+      flow.changeVoucherStatus('B1', v.id, 'CANCELLED', null),
+    ).resolves.toMatchObject({ status: 'CANCELLED' });
+  });
+
+  it('luật nhập phiếu: sửa bỏ phiếu dịch vụ không ghi lý do bị chặn, phân bổ giữ nguyên', async () => {
+    const { db, flow } = setup();
+    db.seedDebt({});
+    const v = await flow.recordVoucher(
+      'B1',
+      receipt({ paymentContent: '1. KH thanh toán' }),
+      null,
+    );
+    await expect(
+      flow.updateVoucher('B1', v.id, { caseId: null as never }, null),
+    ).rejects.toThrow('cần gắn phiếu dịch vụ');
+    expect(db.allocations().filter((a) => !a.reversedAt)).toHaveLength(1);
   });
 
   it('phiếu thu không nêu bên trả: còn nợ bảo hiểm thì BH trước, không thì KH', async () => {

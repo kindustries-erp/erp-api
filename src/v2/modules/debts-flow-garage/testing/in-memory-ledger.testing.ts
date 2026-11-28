@@ -183,6 +183,7 @@ export function createInMemoryLedger() {
         branchId: (over.branchId as string) ?? 'B1',
         branchExternalId: 'KG1',
         licensePlate: (over.bienSoXe as string) ?? '30A-1',
+        customerName: (over.customerName as string) ?? null,
         isDeleted: false,
       });
     },

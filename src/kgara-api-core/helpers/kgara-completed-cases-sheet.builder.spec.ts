@@ -354,3 +354,41 @@ describe('Sheet 1: cột ngày thật và màu nhóm', () => {
     );
   });
 });
+
+describe('Sheet 1: phân biệt OJ và OJ có gắn hóa đơn', () => {
+  const labelOf = (over: Record<string, unknown>) => {
+    const workbook = new ExcelJS.Workbook();
+    const summary = buildSheet1CompletedCases(
+      workbook,
+      [{ ...sampleCase, ...over }],
+      {},
+      {},
+      {},
+      undefined,
+      {},
+      ['classification'],
+    );
+    const sheet = workbook.getWorksheet(SHEET1_NAME) as ExcelJS.Worksheet;
+    return {
+      cell: sheet.getRow(5).getCell(1).value,
+      dashboard: summary.rows[0].classification,
+    };
+  };
+
+  it('OJ có hóa đơn đầu ra mang nhãn riêng, cả ở dòng dashboard', () => {
+    expect(labelOf({ classification: 'OJ', ojHasInvoice: true })).toEqual({
+      cell: 'Xe ngoài (OJ) · Có hóa đơn',
+      dashboard: 'Xe ngoài (OJ) · Có hóa đơn',
+    });
+  });
+
+  it('OJ chưa gắn hóa đơn giữ nhãn cũ', () => {
+    expect(labelOf({ classification: 'OJ', ojHasInvoice: false }).cell).toBe(
+      'Xe ngoài (OJ)',
+    );
+  });
+
+  it('phiếu chưa phân loại vẫn mang nhãn mặc định cũ', () => {
+    expect(labelOf({ classification: null }).cell).toBe('Sửa chữa chung');
+  });
+});

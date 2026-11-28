@@ -55,6 +55,33 @@ describe('GarageCashflowQueryEngine', () => {
     engine = new GarageCashflowQueryEngine(mockRepo);
   });
 
+  describe('lọc nhóm quá hạn', () => {
+    const filters = JSON.stringify({ overdueDays: ['D31_90'] });
+    const overdueCall = () =>
+      qb.andWhere.mock.calls.find(([sql]: [string]) =>
+        sql.includes(':overdue_D31_90_from'),
+      );
+
+    it('listVouchers áp điều kiện trước khi tính tổng', async () => {
+      await engine.listVouchers({ tab: 'forecast', column_filters: filters });
+      expect(overdueCall()).toBeDefined();
+      const overdueOrder = qb.andWhere.mock.invocationCallOrder.at(-1);
+      expect(overdueOrder).toBeLessThan(qb.clone.mock.invocationCallOrder[0]);
+    });
+
+    it('tùy chọn của cột khác cũng theo bộ lọc quá hạn', async () => {
+      await engine.getColumnOptions(
+        'partnerName',
+        '',
+        1,
+        20,
+        filters,
+        'forecast',
+      );
+      expect(overdueCall()).toBeDefined();
+    });
+  });
+
   describe('listVouchers - Default Sorting', () => {
     it('applies transDate DESC as primary order by when sorts is undefined', async () => {
       const result = await engine.listVouchers({});

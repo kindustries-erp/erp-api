@@ -5,11 +5,16 @@ import { ModuleRef } from '@nestjs/core';
 import { DataSource, Repository } from 'typeorm';
 import { KgaraCase } from '../entities/kgara_case.entity';
 import { notifyCaseProjector } from '../hub/case-projector.port';
+import { notifyLedgerProjector } from '../hub/ledger-projector.port';
 import { ErpModuleCategory } from '../../module-config/entities/erp_module_category.entity';
 import { EntityCustomFieldsHelper } from '../../module-config/helpers/entity-custom-fields.helper';
 import { StrictCustomFieldsHelper } from '../../module-config/helpers/strict-custom-fields.helper';
 import { GARAGE_CASE_SEMANTIC } from '../../module-config/registry/module-field-registry';
 import { UpdateCaseConfigDto } from '../dto/update-case-config.dto';
+import {
+  isOjClassification,
+  resolveOjExcludeFromDebt,
+} from '../helpers/kgara-oj-debt-rule.helper';
 
 /**
  * Sub-Service chuyên trách quản lý cấu hình, phân loại danh mục,
@@ -138,11 +143,14 @@ export class KgaraCaseConfigService {
     if (dto.excludeFromReports !== undefined) {
       caseData.excludeFromReports = dto.excludeFromReports;
     }
-    if (dto.excludeFromDebt !== undefined) {
+    if (isOjClassification(caseData.classification)) {
+      // Xe ngoài (OJ): cờ công nợ luôn theo hóa đơn đầu ra, không theo giá trị client gửi
+      caseData.excludeFromDebt = await resolveOjExcludeFromDebt(
+        this.dataSource,
+        caseData.id,
+      );
+    } else if (dto.excludeFromDebt !== undefined) {
       caseData.excludeFromDebt = dto.excludeFromDebt;
-    } else if (caseData.classification === 'OJ') {
-      // Tự động kích hoạt loại trừ công nợ cho phân loại Xe ngoài (OJ) nếu chưa được chỉ định
-      caseData.excludeFromDebt = true;
     }
 
     // 3. Cập nhật ghi chú ERP
@@ -171,8 +179,12 @@ export class KgaraCaseConfigService {
       }
     });
 
-    // 5b. Chiếu bản ghi đã lưu sang v2 (lỗi chỉ log)
+    // 5b. Chiếu bản ghi đã lưu sang v2 rồi sổ nợ (lỗi chỉ log). Đổi phân loại hay cờ
+    // loại trừ làm đổi công nợ, không chờ lần sync KGara sau.
     await notifyCaseProjector(this.moduleRef, this.logger, caseData.id);
+    await notifyLedgerProjector(this.moduleRef, this.logger, (p) =>
+      p.projectCase(caseData.id),
+    );
 
     // 6. Làm giàu dữ liệu EAV Custom Fields
     await EntityCustomFieldsHelper.enrichOne(

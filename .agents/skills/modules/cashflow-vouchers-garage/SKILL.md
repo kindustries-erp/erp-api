@@ -18,3 +18,5 @@ Bảng `cashflow_vouchers_garage` (entity `CashflowVoucherGarage`, kế thừa `
 ## 3. Quy tắc
 - Hủy = `CANCELLED`, không xóa cứng. Không ghi trực tiếp từ module này khi phiếu ảnh hưởng công nợ: dùng `debts-flow-garage`.
 - Test: jest `src/v2/modules/cashflow-vouchers-garage`.
+
+- List nhận `overdueBucket` (`NOT_DUE`, `D1_30`, `D31_90`, `D90_PLUS`), dùng chung `applyGarageOverdueFilter` với v1 (cột trạng thái `status`). Phân trang bằng `pageSize`.

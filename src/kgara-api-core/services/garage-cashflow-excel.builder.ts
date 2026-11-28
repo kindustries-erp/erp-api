@@ -3,6 +3,7 @@ import { Workbook } from 'exceljs';
 import { KgaraCashflowVoucher } from '../entities/kgara_cashflow_voucher.entity';
 import { toVietnamExcelDate } from '../../common/utils/date.util';
 import { classifyVoucher } from '../helpers/garage-ledger-classifier';
+import { defaultGaragePartnerName } from '../helpers/garage-cashflow-partner';
 import { applyForecastColumnStyle } from '../helpers/kgara-excel-style.helper';
 
 export interface GarageCashflowExcelBuildOptions {
@@ -194,7 +195,13 @@ export class GarageCashflowExcelBuilder {
         paymentContent: item.paymentContent || '',
         caseCode: item.case?.soChungTu || '',
         licensePlate: item.licensePlate || item.case?.bienSoXe || '',
-        partnerName: item.partnerName || item.case?.khachHangName || '',
+        partnerName:
+          item.partnerName ||
+          defaultGaragePartnerName(
+            item.voucherType,
+            item.case?.khachHangName,
+          ) ||
+          '',
         note: item.note || '',
         createdBy: item.createdBy || '',
         createdAt: createdAtVal ?? item.createdAt,

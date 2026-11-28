@@ -5,6 +5,7 @@ import { KgaraCaseSettlement } from '@/kgara-api-core/entities/kgara_case_settle
 import { ErpModuleCategory } from '@/module-config/entities/erp_module_category.entity';
 import { KgaraGrossProfit } from '@/kgara-api-core/entities/kgara_gross_profit.entity';
 import { KgaraCaseLinkedInvoice } from '@/kgara-api-core/entities/kgara_case_linked_invoice.entity';
+import { findOjInvoicedCaseIds } from '@/kgara-api-core/helpers/kgara-oj-debt-rule.helper';
 import type {
   CaseCategoryRef,
   CaseGrossProfitRef,
@@ -111,6 +112,13 @@ export class CaseListEnrichmentService {
       map.set(r.caseId, cur);
     }
     return map;
+  }
+
+  /** Phiếu OJ đã gắn hóa đơn đầu ra còn hiệu lực (cùng luật công nợ OJ). */
+  ojInvoicedCaseIds(
+    rows: { id: string; classification: string | null }[],
+  ): Promise<Set<string>> {
+    return findOjInvoicedCaseIds(this.links.manager, rows);
   }
 
   async linkCounts(ids: string[]): Promise<Map<string, CaseLinkCounts>> {

@@ -51,6 +51,7 @@ const receipt = (over: object = {}) => ({
   transDate: '2026-11-17',
   caseId: 'case-1',
   paymentMethod: 'Chuyển khoản',
+  paymentContent: '2. Tất toán',
   ...over,
 });
 
@@ -85,6 +86,29 @@ describe('LegacyKgaraMirrorService (v2 → bảng V1, cùng transaction)', () =>
       }),
       expect.anything(),
     );
+  });
+
+  it('v2 xóa ghi chú, đối tác, biển số thì phiếu và settlement V1 cũng xóa', async () => {
+    const { db, flow } = setup();
+    const v = await flow.recordVoucher(
+      'B1',
+      receipt({ note: 'cũ', partnerName: 'Đối tác cũ' }),
+      null,
+    );
+    await flow.updateVoucher(
+      'B1',
+      v.id,
+      { note: null as never, partnerName: null as never },
+      null,
+    );
+    expect(db.v1Vouchers()[0]).toMatchObject({
+      note: null,
+      partnerName: null,
+    });
+    expect(db.v1Settlements()[0]).toMatchObject({
+      note: null,
+      partnerName: null,
+    });
   });
 
   it('dự thu EXPECTED: có phiếu V1 nhưng không có settlement, vụ việc không đổi', async () => {

@@ -15,6 +15,8 @@ export interface CaseListItem extends Omit<CaseResponse, 'services'> {
   linkedInvoiceCount: number;
   linkedInvoiceOutCount: number;
   linkedInvoiceInCount: number;
+  /** Phiếu OJ: đã gắn hóa đơn đầu ra còn hiệu lực hay chưa. `null` khi không phải OJ. */
+  ojHasInvoice: boolean | null;
 }
 
 export interface CaseListResponse {

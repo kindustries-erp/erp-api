@@ -34,6 +34,9 @@ import { GarageHubService } from '../hub/garage-hub.service';
 import { notifyLedgerProjector } from '../hub/ledger-projector.port';
 import { resolveCaseReceiptPayer } from '../helpers/kgara-case-receipt-payer.helper';
 import { resolveVoucherQrFields } from '../helpers/garage-cashflow-qr-account.helper';
+import { toLegacyPaymentMethod } from '../helpers/garage-cashflow-catalog';
+import { assertGarageVoucherRules } from '../helpers/garage-cashflow-voucher-rules';
+import { defaultGaragePartnerName } from '../helpers/garage-cashflow-partner';
 import type { ReceiptPayerType } from '../helpers/kgara-receipt-payer-resolver.helper';
 
 @Injectable()
@@ -95,6 +98,7 @@ export class GarageCashflowTransactionService {
       } else if (dto.voucherType === 'RECEIPT') {
         paymentStatus = dto.paymentStatus || 'PAID';
       }
+      assertGarageVoucherRules({ ...dto, paymentStatus });
 
       const qrFields = await resolveVoucherQrFields(queryRunner.manager, dto);
       const newVoucher = queryRunner.manager.create(KgaraCashflowVoucher, {
@@ -107,7 +111,9 @@ export class GarageCashflowTransactionService {
         licensePlate: dto.licensePlate || caseRef?.bienSoXe || undefined,
         paymentMethod: dto.paymentMethod || undefined,
         paymentContent: dto.paymentContent || undefined,
-        partnerName: dto.partnerName || caseRef?.khachHangName || undefined,
+        partnerName:
+          dto.partnerName ||
+          defaultGaragePartnerName(dto.voucherType, caseRef?.khachHangName),
         erpBankTransactionId: dto.erpBankTransactionId || undefined,
         erpCashVoucherId: dto.erpCashVoucherId || undefined,
         note: dto.note || undefined,
@@ -137,17 +143,6 @@ export class GarageCashflowTransactionService {
                 dto.payerType,
               )
             : 'KH';
-        let paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'POS' | 'OTHER' = 'CASH';
-        if (dto.paymentMethod === 'Chuyển khoản')
-          paymentMethod = 'BANK_TRANSFER';
-        else if (dto.paymentMethod === 'Tiền mặt') paymentMethod = 'CASH';
-        else if (
-          dto.paymentMethod === 'Quẹt thẻ' ||
-          dto.paymentMethod === 'Thẻ'
-        )
-          paymentMethod = 'POS';
-        else if (dto.paymentMethod) paymentMethod = 'OTHER';
-
         const newSettlement = queryRunner.manager.create(KgaraCaseSettlement, {
           caseId: dto.caseId || undefined,
           settlementType: dto.voucherType,
@@ -156,10 +151,10 @@ export class GarageCashflowTransactionService {
           bankTransactionId: dto.erpBankTransactionId || undefined,
           cashflowVoucherId: savedVoucher.id,
           sourceChannel: 'ON_SYSTEM',
-          paymentMethod,
+          paymentMethod: toLegacyPaymentMethod(dto.paymentMethod),
           payerType: settlementPayer,
           note: dto.note || undefined,
-          partnerName: dto.partnerName || caseRef?.khachHangName || undefined,
+          partnerName: savedVoucher.partnerName,
         });
         await queryRunner.manager.save(newSettlement);
       }
@@ -265,6 +260,7 @@ export class GarageCashflowTransactionService {
           existingVoucher.paymentStatus = 'PAID';
         }
       }
+      assertGarageVoucherRules(existingVoucher, beforeSnapshot);
       if (
         newCaseId &&
         dto.licensePlate === undefined &&
@@ -326,16 +322,9 @@ export class GarageCashflowTransactionService {
             existingSettlement.bankTransactionId = dto.erpBankTransactionId;
 
           if (dto.paymentMethod !== undefined) {
-            let pm: 'CASH' | 'BANK_TRANSFER' | 'POS' | 'OTHER' = 'CASH';
-            if (dto.paymentMethod === 'Chuyển khoản') pm = 'BANK_TRANSFER';
-            else if (dto.paymentMethod === 'Tiền mặt') pm = 'CASH';
-            else if (
-              dto.paymentMethod === 'Quẹt thẻ' ||
-              dto.paymentMethod === 'Thẻ'
-            )
-              pm = 'POS';
-            else if (dto.paymentMethod) pm = 'OTHER';
-            existingSettlement.paymentMethod = pm;
+            existingSettlement.paymentMethod = toLegacyPaymentMethod(
+              dto.paymentMethod,
+            );
           }
           if (dto.partnerName !== undefined) {
             existingSettlement.partnerName = dto.partnerName;
@@ -343,22 +332,9 @@ export class GarageCashflowTransactionService {
           await queryRunner.manager.save(existingSettlement);
         }
       } else if (wantsSettlement) {
-        let partnerName: string | undefined = undefined;
         const kCase = await queryRunner.manager.findOne(KgaraCase, {
           where: { id: newCaseId },
         });
-        if (kCase) partnerName = kCase.khachHangName || undefined;
-
-        let paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'POS' | 'OTHER' = 'CASH';
-        if (dto.paymentMethod === 'Chuyển khoản')
-          paymentMethod = 'BANK_TRANSFER';
-        else if (dto.paymentMethod === 'Tiền mặt') paymentMethod = 'CASH';
-        else if (
-          dto.paymentMethod === 'Quẹt thẻ' ||
-          dto.paymentMethod === 'Thẻ'
-        )
-          paymentMethod = 'POS';
-        else if (dto.paymentMethod) paymentMethod = 'OTHER';
 
         settlementPayer =
           newType === 'RECEIPT'
@@ -377,10 +353,12 @@ export class GarageCashflowTransactionService {
           bankTransactionId: updatedVoucher.erpBankTransactionId || undefined,
           cashflowVoucherId: updatedVoucher.id,
           sourceChannel: 'ON_SYSTEM',
-          paymentMethod,
+          paymentMethod: toLegacyPaymentMethod(updatedVoucher.paymentMethod),
           payerType: settlementPayer,
           note: updatedVoucher.note || undefined,
-          partnerName: dto.partnerName || partnerName,
+          partnerName:
+            updatedVoucher.partnerName ||
+            defaultGaragePartnerName(newType, kCase?.khachHangName),
         });
         await queryRunner.manager.save(newSettlement);
       }
