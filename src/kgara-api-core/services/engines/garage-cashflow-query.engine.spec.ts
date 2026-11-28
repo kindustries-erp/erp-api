@@ -171,4 +171,118 @@ describe('GarageCashflowQueryEngine', () => {
       expect(hasTabClause).toBe(false);
     });
   });
+
+  describe('listVouchers - amount columns thu/chi with __BLANK__', () => {
+    const whereSql = (): string[] =>
+      qb.andWhere.mock.calls.map((c: any[]) => String(c[0]));
+
+    beforeEach(() => qb.andWhere.mockClear());
+
+    it('blank-only Tiền vào means PAYMENT vouchers', async () => {
+      await engine.listVouchers({
+        column_filters: JSON.stringify({ thu: ['__BLANK__'] }),
+      });
+      const clause = whereSql().find((s) => s.includes('<> '));
+      expect(clause).toContain("voucher.voucher_type <> 'RECEIPT'");
+      expect(clause).not.toContain('amount IN');
+    });
+
+    it('blank-only Tiền ra means RECEIPT vouchers', async () => {
+      await engine.listVouchers({
+        column_filters: JSON.stringify({ chi: ['__BLANK__'] }),
+      });
+      const clause = whereSql().find((s) => s.includes('<> '));
+      expect(clause).toContain("voucher.voucher_type <> 'PAYMENT'");
+    });
+
+    it('combines blank with specific amounts using OR', async () => {
+      await engine.listVouchers({
+        column_filters: JSON.stringify({ thu: ['__BLANK__', '1000', '2000'] }),
+      });
+      const clause = whereSql().find((s) => s.includes('IN'));
+      expect(clause).toContain(
+        "voucher.voucher_type = 'RECEIPT' AND voucher.amount IN",
+      );
+      expect(clause).toContain("voucher.voucher_type <> 'RECEIPT'");
+      expect(clause).toContain(' OR ');
+      const params = qb.andWhere.mock.calls.find((c: any[]) =>
+        String(c[0]).includes('IN'),
+      )[1];
+      expect(params).toEqual({ fthuAmounts: [1000, 2000] });
+    });
+
+    it('keeps range a..b restricted to the column voucher type', async () => {
+      await engine.listVouchers({
+        column_filters: JSON.stringify({ chi: ['100..500'] }),
+      });
+      const clause = whereSql().find((s) => s.includes('>='));
+      expect(clause).toContain("voucher.voucher_type = 'PAYMENT'");
+      expect(clause).toContain('voucher.amount <= :fchiTo');
+      expect(clause).not.toContain('<>');
+    });
+  });
+
+  describe('listVouchers - column filters (__ALL_MATCHING__ & paymentStatus)', () => {
+    const whereSql = (): string[] =>
+      qb.andWhere.mock.calls.map((c: any[]) => String(c[0]));
+
+    it('drops __ALL_MATCHING__ sentinel so it never reaches SQL', async () => {
+      await engine.listVouchers({
+        column_filters: JSON.stringify({
+          paymentStatus: ['__ALL_MATCHING__', ''],
+        }),
+      });
+
+      expect(whereSql().some((s) => s.includes('__ALL_MATCHING__'))).toBe(
+        false,
+      );
+      expect(JSON.stringify(qb.andWhere.mock.calls)).not.toContain(
+        '__ALL_MATCHING__',
+      );
+    });
+
+    it('maps forecast statuses (EXPECTED, PENDING, APPROVED) per voucher type', async () => {
+      await engine.listVouchers({
+        column_filters: JSON.stringify({
+          paymentStatus: ['EXPECTED', 'PENDING', 'APPROVED'],
+        }),
+      });
+
+      const clause = whereSql().find((s) => s.includes("'EXPECTED'"));
+      expect(clause).toBeDefined();
+      expect(clause).toContain("voucher.payment_status = 'PENDING'");
+      expect(clause).toContain("voucher.payment_status = 'APPROVED'");
+      expect(clause).toContain("voucher.voucher_type = 'PAYMENT'");
+    });
+
+    it('maps voucher statuses RECEIPT_PAID and PAYMENT_PAID separately', async () => {
+      await engine.listVouchers({
+        column_filters: JSON.stringify({
+          paymentStatus: ['RECEIPT_PAID'],
+        }),
+      });
+      const receiptOnly = whereSql().find((s) => s.includes('NOT IN'));
+      expect(receiptOnly).toContain("voucher.voucher_type = 'RECEIPT'");
+      expect(receiptOnly).not.toContain("voucher.payment_status = 'PAID'");
+
+      qb.andWhere.mockClear();
+      await engine.listVouchers({
+        column_filters: JSON.stringify({ paymentStatus: ['PAYMENT_PAID'] }),
+      });
+      const paymentOnly = whereSql().find((s) =>
+        s.includes("voucher.payment_status = 'PAID'"),
+      );
+      expect(paymentOnly).toContain("voucher.voucher_type = 'PAYMENT'");
+    });
+
+    it('keeps legacy PAID value working as both paid groups', async () => {
+      await engine.listVouchers({
+        column_filters: JSON.stringify({ paymentStatus: ['PAID'] }),
+      });
+
+      const clause = whereSql().find((s) => s.includes('NOT IN'));
+      expect(clause).toContain("voucher.voucher_type = 'PAYMENT'");
+      expect(clause).toContain("voucher.payment_status = 'PAID'");
+    });
+  });
 });

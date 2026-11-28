@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, SelectQueryBuilder } from 'typeorm';
 import { KgaraCashflowVoucher } from '../../entities/kgara_cashflow_voucher.entity';
 import {
   ListKgaraCashflowVoucherQueryDto,
@@ -9,6 +9,91 @@ import {
   toKgaraCashflowVoucherResponse,
 } from '../../dto/garage-cashflow.dto';
 import { applyMultiKeywordFilter } from '../../../common/utils/query-builder.util';
+
+/** Sentinel popover "Chọn tất cả kết quả tìm kiếm": từ khóa nằm ở column_search, không phải giá trị lọc. */
+const ALL_MATCHING_SENTINEL = '__ALL_MATCHING__';
+
+const RECEIPT_PAID_SQL =
+  "(voucher.voucher_type = 'RECEIPT' AND (voucher.payment_status IS NULL OR voucher.payment_status NOT IN ('EXPECTED', 'CANCELLED')))";
+const PAYMENT_PAID_SQL =
+  "(voucher.voucher_type = 'PAYMENT' AND voucher.payment_status = 'PAID')";
+
+/**
+ * Lọc trạng thái theo loại phiếu. Giá trị:
+ * EXPECTED (Dự thu), PENDING (Dự chi), APPROVED (Đã duyệt),
+ * RECEIPT_PAID (Đã thu), PAYMENT_PAID (Đã chi). PAID cũ = cả hai "đã".
+ * Giá trị lạ bị bỏ qua.
+ */
+function applyPaymentStatusFilter(
+  qb: SelectQueryBuilder<KgaraCashflowVoucher>,
+  values: string[],
+): void {
+  const clauses: string[] = [];
+  for (const v of values) {
+    if (v === 'EXPECTED')
+      clauses.push(
+        "(voucher.voucher_type = 'RECEIPT' AND voucher.payment_status = 'EXPECTED')",
+      );
+    else if (v === 'PENDING')
+      clauses.push(
+        "(voucher.voucher_type = 'PAYMENT' AND voucher.payment_status = 'PENDING')",
+      );
+    else if (v === 'APPROVED')
+      clauses.push(
+        "(voucher.voucher_type = 'PAYMENT' AND voucher.payment_status = 'APPROVED')",
+      );
+    else if (v === 'RECEIPT_PAID') clauses.push(RECEIPT_PAID_SQL);
+    else if (v === 'PAYMENT_PAID') clauses.push(PAYMENT_PAID_SQL);
+    else if (v === 'PAID') clauses.push(RECEIPT_PAID_SQL, PAYMENT_PAID_SQL);
+  }
+  if (clauses.length > 0) qb.andWhere(`(${clauses.join(' OR ')})`);
+}
+
+const BLANK_FILTER_VALUE = '__BLANK__';
+
+/**
+ * Lọc cột Tiền vào (RECEIPT) / Tiền ra (PAYMENT).
+ * - Số cụ thể: loại phiếu của cột AND amount IN (...)
+ * - Khoảng a..b: loại phiếu của cột AND amount trong khoảng
+ * - __BLANK__: phiếu thuộc loại còn lại (Tiền vào trống = phiếu chi)
+ * Các điều kiện kết hợp bằng OR.
+ */
+function applyAmountColumnFilter(
+  qb: SelectQueryBuilder<KgaraCashflowVoucher>,
+  voucherType: 'RECEIPT' | 'PAYMENT',
+  values: string[],
+  paramPrefix: string,
+): void {
+  const clauses: string[] = [];
+  const params: Record<string, unknown> = {};
+  const typeSql = `voucher.voucher_type = '${voucherType}'`;
+  const otherTypeSql = `voucher.voucher_type <> '${voucherType}'`;
+  const numeric = values.filter((v) => v !== BLANK_FILTER_VALUE);
+  const rangeValue = numeric.find((v) => v.includes('..'));
+
+  if (rangeValue !== undefined) {
+    const [from, to] = rangeValue.split('..');
+    const parts = [typeSql];
+    if (from) {
+      parts.push(`voucher.amount >= :${paramPrefix}From`);
+      params[`${paramPrefix}From`] = Number(from);
+    }
+    if (to) {
+      parts.push(`voucher.amount <= :${paramPrefix}To`);
+      params[`${paramPrefix}To`] = Number(to);
+    }
+    clauses.push(`(${parts.join(' AND ')})`);
+  } else if (numeric.length > 0) {
+    clauses.push(
+      `(${typeSql} AND voucher.amount IN (:...${paramPrefix}Amounts))`,
+    );
+    params[`${paramPrefix}Amounts`] = numeric.map(Number);
+  }
+
+  if (values.includes(BLANK_FILTER_VALUE)) clauses.push(otherTypeSql);
+  if (clauses.length === 0) return;
+  qb.andWhere(`(${clauses.join(' OR ')})`, params);
+}
 
 @Injectable()
 export class GarageCashflowQueryEngine {
@@ -155,6 +240,7 @@ export class GarageCashflowQueryEngine {
         const filters = JSON.parse(filtersStr) as Record<string, string[]>;
         for (const [col, vals] of Object.entries(filters)) {
           if (!vals || vals.length === 0 || col === column) continue;
+          if (vals[0] === ALL_MATCHING_SENTINEL) continue;
           if (col === 'voucherType') {
             qb.andWhere('voucher.voucher_type IN (:...vtypes)', {
               vtypes: vals,
@@ -180,39 +266,9 @@ export class GarageCashflowQueryEngine {
                 cdTo: range[1] + ' 23:59:59',
               });
           } else if (col === 'thu') {
-            qb.andWhere("voucher.voucher_type = 'RECEIPT'");
-            if (vals[0]?.includes('..')) {
-              const [f, t] = vals[0].split('..');
-              if (f)
-                qb.andWhere('voucher.amount >= :vthuFrom', {
-                  vthuFrom: Number(f),
-                });
-              if (t)
-                qb.andWhere('voucher.amount <= :vthuTo', {
-                  vthuTo: Number(t),
-                });
-            } else {
-              qb.andWhere('voucher.amount IN (:...vthu)', {
-                vthu: vals.map(Number),
-              });
-            }
+            applyAmountColumnFilter(qb, 'RECEIPT', vals, 'vthu');
           } else if (col === 'chi') {
-            qb.andWhere("voucher.voucher_type = 'PAYMENT'");
-            if (vals[0]?.includes('..')) {
-              const [f, t] = vals[0].split('..');
-              if (f)
-                qb.andWhere('voucher.amount >= :vchiFrom', {
-                  vchiFrom: Number(f),
-                });
-              if (t)
-                qb.andWhere('voucher.amount <= :vchiTo', {
-                  vchiTo: Number(t),
-                });
-            } else {
-              qb.andWhere('voucher.amount IN (:...vchi)', {
-                vchi: vals.map(Number),
-              });
-            }
+            applyAmountColumnFilter(qb, 'PAYMENT', vals, 'vchi');
           } else if (col === 'caseCode') {
             const hasBlank = vals.includes('__BLANK__');
             const nonBlank = vals.filter((v) => v !== '__BLANK__');
@@ -294,9 +350,7 @@ export class GarageCashflowQueryEngine {
               });
             }
           } else if (col === 'paymentStatus') {
-            qb.andWhere('voucher.payment_status IN (:...vpaymentStatus)', {
-              vpaymentStatus: vals,
-            });
+            applyPaymentStatusFilter(qb, vals);
           } else if (col === 'note') {
             const hasBlank = vals.includes('__BLANK__');
             const nonBlank = vals.filter((v) => v !== '__BLANK__');
@@ -405,6 +459,7 @@ export class GarageCashflowQueryEngine {
         Object.entries(filters).forEach(([col, vals]) => {
           const arr = vals as string[];
           if (!arr || arr.length === 0) return;
+          if (arr[0] === ALL_MATCHING_SENTINEL) return;
           if (col === 'voucherType') {
             qb.andWhere('voucher.voucher_type IN (:...ftypes)', {
               ftypes: arr,
@@ -424,39 +479,9 @@ export class GarageCashflowQueryEngine {
                 cTo: range[1] + ' 23:59:59',
               });
           } else if (col === 'thu') {
-            qb.andWhere("voucher.voucher_type = 'RECEIPT'");
-            if (arr[0]?.includes('..')) {
-              const [f, t] = arr[0].split('..');
-              if (f)
-                qb.andWhere('voucher.amount >= :fthuFrom', {
-                  fthuFrom: Number(f),
-                });
-              if (t)
-                qb.andWhere('voucher.amount <= :fthuTo', {
-                  fthuTo: Number(t),
-                });
-            } else {
-              qb.andWhere('voucher.amount IN (:...fthu)', {
-                fthu: arr.map(Number),
-              });
-            }
+            applyAmountColumnFilter(qb, 'RECEIPT', arr, 'fthu');
           } else if (col === 'chi') {
-            qb.andWhere("voucher.voucher_type = 'PAYMENT'");
-            if (arr[0]?.includes('..')) {
-              const [f, t] = arr[0].split('..');
-              if (f)
-                qb.andWhere('voucher.amount >= :fchiFrom', {
-                  fchiFrom: Number(f),
-                });
-              if (t)
-                qb.andWhere('voucher.amount <= :fchiTo', {
-                  fchiTo: Number(t),
-                });
-            } else {
-              qb.andWhere('voucher.amount IN (:...fchi)', {
-                fchi: arr.map(Number),
-              });
-            }
+            applyAmountColumnFilter(qb, 'PAYMENT', arr, 'fchi');
           } else if (col === 'caseCode') {
             const hasBlank = arr.includes('__BLANK__');
             const nonBlank = arr.filter((v) => v !== '__BLANK__');
@@ -540,9 +565,7 @@ export class GarageCashflowQueryEngine {
               });
             }
           } else if (col === 'paymentStatus') {
-            qb.andWhere('voucher.payment_status IN (:...fpaymentStatus)', {
-              fpaymentStatus: arr,
-            });
+            applyPaymentStatusFilter(qb, arr);
           } else if (col === 'note') {
             const hasBlank = arr.includes('__BLANK__');
             const nonBlank = arr.filter((v) => v !== '__BLANK__');
