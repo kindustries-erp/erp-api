@@ -9,6 +9,7 @@ import { KgaraBranch } from '../entities/kgara_branch.entity';
 import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
 import { KgaraCaseLinkedInvoice } from '../entities/kgara_case_linked_invoice.entity';
 import { GarageHubService } from '../hub/garage-hub.service';
+import { attachOjHasInvoice } from '../helpers/kgara-oj-debt-rule.helper';
 import { applyCaseListFilters } from '../helpers/kgara-case-filter.helper';
 import { KgaraCostEnricherHelper } from '../helpers/kgara-cost-enricher.helper';
 import {
@@ -75,6 +76,8 @@ export class KgaraCompletedCasesExportService {
     params: CompletedCasesExportParams,
   ): Promise<Buffer> {
     const cases = await this.queryCompletedCases(params);
+    if (this.linkedInvoiceRepo)
+      await attachOjHasInvoice(this.linkedInvoiceRepo.manager, cases);
     const caseDbIds = cases.map((c) => c.id).filter(Boolean);
     const hdIds = cases.map((c) => c.hdPhieuDichVuId).filter(Boolean);
 

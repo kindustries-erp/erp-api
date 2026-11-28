@@ -277,6 +277,69 @@ describe('KgaraCaseConfigService', () => {
       expect(result.excludeFromDebt).toBe(true);
     });
 
+    it('OJ đã gắn hóa đơn đầu ra: luôn tính công nợ, bỏ qua cờ client gửi', async () => {
+      const existingCase = {
+        ...mockCase,
+        classification: 'OJ',
+        excludeFromDebt: true,
+      } as KgaraCase;
+      caseRepo.findOne.mockResolvedValue(existingCase);
+      (dataSource.query as jest.Mock).mockResolvedValue([{ has: true }]);
+
+      const result = await service.updateCaseConfig(existingCase.id, {
+        excludeFromDebt: true,
+      });
+
+      expect(result.excludeFromDebt).toBe(false);
+    });
+
+    it('OJ chưa gắn hóa đơn: không bật được công nợ bằng tay', async () => {
+      const existingCase = {
+        ...mockCase,
+        classification: 'OJ',
+        excludeFromDebt: true,
+      } as KgaraCase;
+      caseRepo.findOne.mockResolvedValue(existingCase);
+
+      const result = await service.updateCaseConfig(existingCase.id, {
+        excludeFromDebt: false,
+      });
+
+      expect(result.excludeFromDebt).toBe(true);
+    });
+
+    it('lưu xong thì chiếu V2 rồi cập nhật sổ nợ của vụ việc', async () => {
+      const calls: string[] = [];
+      mockManager.save.mockImplementation((_entity: unknown, data: unknown) => {
+        calls.push('save');
+        return Promise.resolve(data);
+      });
+      const moduleRef = {
+        get: jest.fn((token: string) => ({
+          projectCase: jest.fn(async (id: string) => {
+            calls.push(`${token}:${id}`);
+          }),
+        })),
+      };
+      const withProjectors = new KgaraCaseConfigService(
+        caseRepo,
+        categoryRepo,
+        dataSource,
+        moduleRef as any,
+      );
+      caseRepo.findOne.mockResolvedValue({ ...mockCase } as KgaraCase);
+
+      await withProjectors.updateCaseConfig(mockCase.id as string, {
+        excludeFromDebt: true,
+      });
+
+      expect(calls).toEqual([
+        'save',
+        `GARAGE_CASE_PROJECTOR:${mockCase.id}`,
+        `GARAGE_LEDGER_PROJECTOR:${mockCase.id}`,
+      ]);
+    });
+
     it('should save only custom attributes via StrictCustomFieldsHelper', async () => {
       const existingCase = { ...mockCase } as KgaraCase;
       caseRepo.findOne.mockResolvedValue(existingCase);

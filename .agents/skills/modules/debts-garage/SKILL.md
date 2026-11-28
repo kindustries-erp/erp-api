@@ -41,3 +41,10 @@ Drill-down `customers/:customerCode/cases`, `suppliers/:supplierId/cases`. Ghi s
 - Đã thu của phiếu = tổng settlement `RECEIPT` nếu phiếu có ít nhất một RECEIPT; chỉ có `PAYMENT` hoặc không có settlement thì giữ `tien_da_thanh_toan` đã lưu (Kgara báo). Dùng `hasReceiptSettlement` / `computeCaseRemaining` (`kgara-case-remaining.helper.ts`), tham số `hasReceipt`. Không dùng `settlements.length > 0` hay `setInfo !== undefined` để chọn nguồn đã thu.
 - Còn phải thu = max(0, số ròng − đã thu). Số ròng của entity đã lưu lấy bằng `resolveStoredNetPayable`, không dùng `extractNetPayableAmount` trên entity (chỉ dùng trên payload Kgara).
 - V1 (`kgara-case-list-query`, `kgara-customer-cases-detail`, sheet xuất) và V2 (`cases-garage`: `CaseSettlementSums.hasReceipt`) cùng quy tắc.
+
+## Nợ của phiếu xe ngoài (OJ) (KINDU-2262, 2026-11-28)
+
+- Phiếu OJ chỉ vào sổ nợ khi đã gắn hóa đơn đầu ra còn hiệu lực (skill `garage-cases` mục 5.18). Gỡ link thì dòng nợ chuyển `VOID`; gắn lại thì `upsertOrigin` mở lại dòng cũ và giữ `settled_amount`, dòng mới bắt đầu từ 0.
+- Phiếu từng bị loại khi đã có cấn trừ: sau khi mở lại phải đối soát `settled_amount` với `debt_allocations_garage`.
+
+- `KgaraCaseConfigService.updateCaseConfig` (đổi phân loại, đổi cờ loại trừ, ghi chú) gọi cổng sổ nợ ngay sau cổng chiếu V2 (KINDU-2276). Trước đó phải chờ sync KGara hoặc gắn link hóa đơn.

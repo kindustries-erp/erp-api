@@ -1,3 +1,8 @@
+import {
+  classifyInternalPqCase,
+  type KgaraClassificationContext,
+} from '../helpers/kgara-internal-pq-classification.helper';
+
 /**
  * Safely parse date from various formats without producing Invalid Date / NaN
  */
@@ -147,17 +152,18 @@ export function extractKgaraClassification(item: any): {
 /**
  * Ánh xạ giá trị NguonGocKhachHang từ KGara → ERP classification.
  * Quy tắc:
- * 1. NBPQ (Nội Bộ PQ) -> 'OJ'
+ * 1. NBPQ (Nội Bộ PQ) -> xét thêm xe và ngày phiếu (`classifyInternalPqCase`)
  * 2. Sales tặng -> 'KHAC'
  * 3. Tất cả các phân loại còn lại từ KGara (Xe ký gửi, Ký gửi NSG, KG-NB...) -> 'KY_GUI_NOI_BO'
- * 4. Không có dữ liệu (null/rỗng) -> null (chờ user phân loại trên ERP)
+ * 4. Không có dữ liệu (null/rỗng) -> null (chờ user phân loại trên ERP), kể cả xe Omoda/Jaecoo
  *
  * Chú ý: Kết quả này CHỈ dùng để tự động điền khi classification trong DB đang là NULL.
  * Không bao giờ dùng để ghi đè classification đã có trên ERP.
  */
 export function mapKgaraClassificationToErp(
-  nguonGocCode?: string | null,
-  nguonGocName?: string | null,
+  nguonGocCode: string | null | undefined,
+  nguonGocName: string | null | undefined,
+  vehicle: KgaraClassificationContext,
 ): string | null {
   const normCode = (nguonGocCode || '').trim().toUpperCase();
   const normName = (nguonGocName || '').trim().toUpperCase();
@@ -167,13 +173,13 @@ export function mapKgaraClassificationToErp(
     return null;
   }
 
-  // 1. NBPQ (Nội Bộ Phú Quốc) -> OJ
+  // 1. NBPQ (Nội Bộ Phú Quốc)
   if (
     normCode === 'NBPQ' ||
     normName.includes('NỘI BỘ PQ') ||
     normName.includes('NOI BO PQ')
   ) {
-    return 'OJ';
+    return classifyInternalPqCase(vehicle);
   }
 
   // 2. Sales tặng -> KHAC

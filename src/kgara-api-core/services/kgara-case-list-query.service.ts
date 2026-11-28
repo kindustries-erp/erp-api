@@ -9,6 +9,10 @@ import { KgaraCase } from '../entities/kgara_case.entity';
 import { KgaraGrossProfit } from '../entities/kgara_gross_profit.entity';
 import { KgaraCaseSettlement } from '../entities/kgara_case_settlement.entity';
 import { KgaraCaseLinkedInvoice } from '../entities/kgara_case_linked_invoice.entity';
+import {
+  findOjInvoicedCaseIds,
+  ojHasInvoiceOf,
+} from '../helpers/kgara-oj-debt-rule.helper';
 import { KgaraSuppliersDebtQueryEngine } from './engines/kgara-suppliers-debt-query.engine';
 import { resolveStoredNetPayable } from '../utils/kgara-parser.util';
 import { EntityCustomFieldsHelper } from '../../module-config/helpers/entity-custom-fields.helper';
@@ -221,6 +225,11 @@ export class KgaraCaseListQueryService {
       }
     }
 
+    const ojInvoicedIds = await findOjInvoicedCaseIds(
+      this.linkedInvoiceRepo.manager,
+      data,
+    );
+
     const enrichedData = data.map((item) => {
       const gp = (item as any).grossProfit;
       const doanhThu = item.doanhThu ?? (gp ? Number(gp.doanhThu) : null);
@@ -288,6 +297,7 @@ export class KgaraCaseListQueryService {
         linkedInvoiceCount: linkInfo?.total || 0,
         linkedInvoiceOutCount: linkInfo?.outCount || 0,
         linkedInvoiceInCount: linkInfo?.inCount || 0,
+        ojHasInvoice: ojHasInvoiceOf(item, ojInvoicedIds),
       };
     });
 

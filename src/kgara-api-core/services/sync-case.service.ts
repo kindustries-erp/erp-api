@@ -25,6 +25,7 @@ import { GarageHubService } from '../hub/garage-hub.service';
 import { notifyLedgerProjector } from '../hub/ledger-projector.port';
 import { notifyCaseProjector } from '../hub/case-projector.port';
 import { resolveCompletionDate } from '../helpers/kgara-completion-date.helper';
+import { resolveOjExcludeFromDebt } from '../helpers/kgara-oj-debt-rule.helper';
 import {
   buildGuidMap,
   KgaraReceivableRow,
@@ -34,6 +35,7 @@ import {
   applyDetailVehicle,
   applyListVehicle,
 } from '../helpers/kgara-case-vehicle.helper';
+import { toClassificationContext } from '../helpers/kgara-internal-pq-classification.helper';
 import {
   KgaraCaseLineInput,
   reconcileCaseLines,
@@ -395,7 +397,10 @@ export class SyncCaseService {
           if (accountKey === KgaraAccountKey.OJ) {
             // Xe tài khoản OJ luôn là OJ: gán cả danh mục, không giữ danh mục cũ (tránh lệch phân loại/danh mục)
             gwCase.classification = 'OJ';
-            gwCase.excludeFromDebt = true;
+            gwCase.excludeFromDebt = await resolveOjExcludeFromDebt(
+              this.caseRepo.manager,
+              gwCase.id,
+            );
             gwCase.categoryId =
               categoryMap.get('OJ') ||
               categoryMap.get('OJ_NGOAI') ||
@@ -419,6 +424,7 @@ export class SyncCaseService {
                 gwCase.classification = mapKgaraClassificationToErp(
                   kgaraClassificationCode,
                   kgaraClassification,
+                  toClassificationContext(gwCase),
                 );
                 if (!gwCase.categoryId && gwCase.classification) {
                   gwCase.categoryId =
@@ -432,7 +438,10 @@ export class SyncCaseService {
               gwCase.classification === 'OJ_NGOAI'
             ) {
               gwCase.classification = 'OJ';
-              gwCase.excludeFromDebt = true;
+              gwCase.excludeFromDebt = await resolveOjExcludeFromDebt(
+                this.caseRepo.manager,
+                gwCase.id,
+              );
               if (!gwCase.categoryId) {
                 gwCase.categoryId =
                   categoryMap.get('OJ') || categoryMap.get('OJ_NGOAI') || null;
@@ -874,7 +883,6 @@ export class SyncCaseService {
 
       if (effectiveAccountKey === KgaraAccountKey.OJ) {
         gwCase.classification = 'OJ';
-        gwCase.excludeFromDebt = true;
       }
 
       // KGara Classification extraction & Zero-Overwrite auto-mapping
@@ -893,6 +901,7 @@ export class SyncCaseService {
           gwCase.classification = mapKgaraClassificationToErp(
             detailClassificationCode,
             detailClassification,
+            toClassificationContext(gwCase),
           );
           if (!gwCase.categoryId && gwCase.classification) {
             const cat =
@@ -928,7 +937,10 @@ export class SyncCaseService {
         gwCase.classification === 'OJ_NGOAI'
       ) {
         gwCase.classification = 'OJ';
-        gwCase.excludeFromDebt = true;
+        gwCase.excludeFromDebt = await resolveOjExcludeFromDebt(
+          this.caseRepo.manager,
+          gwCase.id,
+        );
         // Tài khoản OJ: luôn gán danh mục OJ; phiếu khác chỉ bổ sung khi chưa có danh mục
         if (!gwCase.categoryId || effectiveAccountKey === KgaraAccountKey.OJ) {
           const cat =

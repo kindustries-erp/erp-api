@@ -77,3 +77,7 @@ Dòng: `noi_dung_chi_tiet`→`description`, `san_pham_code/name`, `loai_san_pham
 - Đọc V2: `caseDate`/`completedDate` dùng `vnDateSql` (`AT TIME ZONE 'Asia/Ho_Chi_Minh'`); lọc `from/to` dùng `vnDayBound` (đầu/cuối ngày VN); dashboard `case-dashboard-range.ts` tính ngày/tuần (thứ Hai)/tháng theo lịch VN. Tiện ích chung: `src/v2/core/base-core/helpers/vn-time.util.ts`.
 - Dữ liệu cũ trên production có hai nhóm lệch (−7h từ lần chạy máy +07; 0h từ tiến trình UTC): cần chiếu lại để về một chuẩn (rollout riêng, lưu snapshot `issued_at` trước).
 
+## OJ có hóa đơn đầu ra (KINDU-2262, 2026-11-28)
+
+- `CaseListItem.ojHasInvoice`: `true`/`false` cho phiếu OJ, `null` cho phiếu khác. `CaseListEnrichmentService.ojInvoicedCaseIds` tra theo lô bằng luật ở `kgara-api-core/helpers/kgara-oj-debt-rule.helper.ts` (chi tiết: skill `garage-cases` mục 5.18). Cờ `excludeFromDebt` sang V2 qua projector như cũ.
+

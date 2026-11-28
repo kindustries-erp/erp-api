@@ -6,6 +6,23 @@ import {
   extractKgaraClassification,
   mapKgaraClassificationToErp,
 } from '../utils/kgara-parser.util';
+import { applyDetailVehicle } from '../helpers/kgara-case-vehicle.helper';
+import { toClassificationContext } from '../helpers/kgara-internal-pq-classification.helper';
+import { resolveOjExcludeFromDebt } from '../helpers/kgara-oj-debt-rule.helper';
+
+/** Các cột thô của kgara_cases dùng để phân loại. */
+const toVehicleRow = (row: any) => ({
+  bienSoXe: row.bien_so_xe,
+  ngayPhatSinh: row.ngay_phat_sinh,
+  soKhung: row.so_khung,
+  hangXeCode: row.hang_xe_code,
+  hangXeName: row.hang_xe_name,
+  dongXeCode: row.dong_xe_code,
+  dongXeName: row.dong_xe_name,
+  namSanXuat: row.nam_san_xuat,
+});
+
+const VEHICLE_COLUMNS = `ngay_phat_sinh, so_khung, hang_xe_code, hang_xe_name, dong_xe_code, dong_xe_name, nam_san_xuat`;
 
 // ── Environment resolution ──────────────────────────────────────────────────
 const args = process.argv.slice(2);
@@ -131,7 +148,7 @@ async function run() {
       '─── [PASS 1] Scanning existing raw_data in DB ─────────────────',
     );
     const casesWithRawData = await ds.query(
-      `SELECT id, hd_phieu_dich_vu_id, so_chung_tu, bien_so_xe, classification, kgara_classification, kgara_classification_code, raw_data 
+      `SELECT id, hd_phieu_dich_vu_id, so_chung_tu, bien_so_xe, classification, kgara_classification, kgara_classification_code, raw_data, ${VEHICLE_COLUMNS}
        FROM kgara_cases 
        WHERE raw_data IS NOT NULL`,
     );
@@ -146,6 +163,7 @@ async function run() {
         const autoMapped = mapKgaraClassificationToErp(
           kgaraClassificationCode,
           kgaraClassification,
+          toClassificationContext(toVehicleRow(c)),
         );
         const shouldSetClassification = !c.classification && autoMapped;
 
@@ -158,14 +176,21 @@ async function run() {
           if (shouldSetClassification) pass1ClassifiedCount++;
 
           if (isApply) {
+            const ojExcludeFromDebt = await resolveOjExcludeFromDebt(ds, c.id);
             await ds.query(
               `UPDATE kgara_cases 
                SET kgara_classification = $1, 
                    kgara_classification_code = $2,
                    classification = COALESCE(classification, $3),
-                   exclude_from_debt = CASE WHEN COALESCE(classification, $3) = 'OJ' THEN true ELSE exclude_from_debt END
+                   exclude_from_debt = CASE WHEN COALESCE(classification, $3) = 'OJ' THEN $5::boolean ELSE exclude_from_debt END
                WHERE id = $4`,
-              [kgaraClassification, kgaraClassificationCode, autoMapped, c.id],
+              [
+                kgaraClassification,
+                kgaraClassificationCode,
+                autoMapped,
+                c.id,
+                ojExcludeFromDebt,
+              ],
             );
           }
         }
@@ -188,7 +213,7 @@ async function run() {
         '─── [PASS 2] Fetching KGara Case Detail for remaining cases ────',
       );
       const unclassifiedCases = await ds.query(
-        `SELECT id, hd_phieu_dich_vu_id, branch_external_id, so_chung_tu, bien_so_xe, classification, kgara_classification
+        `SELECT id, hd_phieu_dich_vu_id, branch_external_id, so_chung_tu, bien_so_xe, classification, kgara_classification, ${VEHICLE_COLUMNS}
          FROM kgara_cases 
          WHERE kgara_classification IS NULL 
            AND kgara_deleted_at IS NULL
@@ -242,9 +267,12 @@ async function run() {
                 if (detailData) {
                   const { kgaraClassification, kgaraClassificationCode } =
                     extractKgaraClassification(detailData);
+                  const vehicleRow = toVehicleRow(caseItem);
+                  applyDetailVehicle(vehicleRow, detailData);
                   const autoMapped = mapKgaraClassificationToErp(
                     kgaraClassificationCode,
                     kgaraClassification,
+                    toClassificationContext(vehicleRow),
                   );
                   const shouldSetClassification =
                     !caseItem.classification && autoMapped;
@@ -254,12 +282,16 @@ async function run() {
                     if (shouldSetClassification) pass2AutoMappedCount++;
 
                     if (isApply) {
+                      const ojExcludeFromDebt = await resolveOjExcludeFromDebt(
+                        ds,
+                        caseItem.id,
+                      );
                       await ds.query(
                         `UPDATE kgara_cases 
                          SET kgara_classification = $1, 
                              kgara_classification_code = $2,
                              classification = COALESCE(classification, $3),
-                             exclude_from_debt = CASE WHEN COALESCE(classification, $3) = 'OJ' THEN true ELSE exclude_from_debt END,
+                             exclude_from_debt = CASE WHEN COALESCE(classification, $3) = 'OJ' THEN $6::boolean ELSE exclude_from_debt END,
                              raw_data = $4
                          WHERE id = $5`,
                         [
@@ -268,6 +300,7 @@ async function run() {
                           autoMapped,
                           detailData,
                           caseItem.id,
+                          ojExcludeFromDebt,
                         ],
                       );
                     }

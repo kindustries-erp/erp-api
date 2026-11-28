@@ -72,6 +72,7 @@ describe('KgaraCaseListQueryService - Cumulative & Totals Calculation', () => {
   };
 
   const mockLinkedInvoiceRepo = {
+    manager: { query: jest.fn().mockResolvedValue([{ id: 'oj-1' }]) },
     createQueryBuilder: jest.fn().mockReturnValue({
       select: jest.fn().mockReturnThis(),
       addSelect: jest.fn().mockReturnThis(),
@@ -182,6 +183,28 @@ describe('KgaraCaseListQueryService - Cumulative & Totals Calculation', () => {
       dongXeName: 'Hi-lander',
       namSanXuat: 2019,
     });
+  });
+
+  it('V1 trả ojHasInvoice: true/false cho phiếu OJ, null cho phiếu khác', async () => {
+    mockQueryBuilder.getManyAndCount.mockResolvedValue([
+      [
+        { id: 'oj-1', classification: 'OJ' },
+        { id: 'oj-2', classification: 'OJ' },
+        { id: 'sc-1', classification: 'SUA_CHUA_CHUNG' },
+      ],
+      3,
+    ]);
+
+    const res = await service.findCases({ page: 1, pageSize: 20 });
+
+    expect(res.data.map((r: any) => r.ojHasInvoice)).toEqual([
+      true,
+      false,
+      null,
+    ]);
+    expect(mockLinkedInvoiceRepo.manager.query.mock.calls[0][1]).toEqual([
+      ['oj-1', 'oj-2'],
+    ]);
   });
 
   it('Page 2: should query cumulative rows and correctly accumulate without fallback to tien_co_thue', async () => {

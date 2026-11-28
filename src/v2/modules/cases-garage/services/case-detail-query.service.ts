@@ -49,17 +49,19 @@ export class CaseDetailQueryService {
       relations: ['services'],
     });
     if (!row) throw new NotFoundException('Không tìm thấy vụ việc.');
-    const [sums, links, cats, gp] = await Promise.all([
+    const [sums, links, cats, gp, ojInvoicedIds] = await Promise.all([
       this.enrichment.settlementSums([row.id]),
       this.enrichment.linkCounts([row.id]),
       this.enrichment.categoryRefs([row.categoryId]),
       this.enrichment.grossProfitByCase([row]),
+      this.enrichment.ojInvoicedCaseIds([row]),
     ]);
     const item = toCaseListItem(row, {
       settlement: sums.get(row.id),
       links: links.get(row.id),
       category: row.categoryId ? (cats.get(row.categoryId) ?? null) : null,
       grossProfit: gp.get(grossProfitKey(row.caseCode, row.branchExternalId)),
+      ojInvoicedIds,
     });
     return { ...item, services: toCaseResponse(row).services };
   }

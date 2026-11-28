@@ -27,6 +27,16 @@ export const CLASSIFICATION_LABELS: Record<string, string> = {
   KHAC: 'Khác',
 };
 
+/** Nhãn phân loại của phiếu; phiếu OJ đã gắn hóa đơn đầu ra mang nhãn riêng. */
+export function classificationLabel(c: {
+  classification?: string | null;
+  ojHasInvoice?: boolean | null;
+}): string {
+  if (!c.classification) return 'Sửa chữa chung';
+  const label = CLASSIFICATION_LABELS[c.classification] || c.classification;
+  return c.ojHasInvoice ? `${label} · Có hóa đơn` : label;
+}
+
 /**
  * Ngày làm giá trị ô Excel (kiểu ngày thật, để lọc/nhóm/pivot). Lấy ngày/giờ theo getter
  * local, cùng cách hiển thị cũ, rồi dựng Date theo thành phần UTC để ExcelJS ghi đúng
@@ -377,9 +387,7 @@ export function buildSheet1CompletedCases(
 
     const branchName =
       branchNameMap[c.branchExternalId] || c.branchExternalId || '—';
-    const classLabel = c.classification
-      ? CLASSIFICATION_LABELS[c.classification] || c.classification
-      : 'Sửa chữa chung';
+    const classLabel = classificationLabel(c);
 
     dashboardRows.push({
       caseNo: c.soChungTu || '—',
@@ -635,9 +643,7 @@ export function buildSheet2PnlTracking(
 
     const branchName =
       branchNameMap[c.branchExternalId] || c.branchExternalId || '—';
-    const classLabel = c.classification
-      ? CLASSIFICATION_LABELS[c.classification] || c.classification
-      : 'Sửa chữa chung';
+    const classLabel = classificationLabel(c);
 
     const row = sheet.addRow({
       index: idx + 1,

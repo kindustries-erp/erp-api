@@ -622,31 +622,39 @@ describe('KgaraSyncService', () => {
       );
     });
 
-    it('should auto-map NBPQ to OJ and store kgara_classification when classification is NULL', async () => {
-      clientService.getCaseDetail.mockResolvedValue({
-        data: {
-          HdPhieuDichVuID: 'c-nbpq-1',
-          SoChungTu: 'SC-NBPQ',
-          NguonGocKhachHangCode: 'NBPQ',
-          NguonGocKhachHangName: 'Nội Bộ PQ',
-          TinhTrangDichVu: 3,
-          TongTienThanhToan: 1000000,
-        },
-      });
+    it.each([
+      ['OMODA', 'OJ'],
+      ['MAZDA', 'SUA_CHUA_CHUNG'],
+    ])(
+      'NBPQ chưa phân loại, xe %s trong payload chi tiết thì thành %s',
+      async (brand, expected) => {
+        clientService.getCaseDetail.mockResolvedValue({
+          data: {
+            HdPhieuDichVuID: 'c-nbpq-1',
+            SoChungTu: 'SC-NBPQ',
+            NguonGocKhachHangCode: 'NBPQ',
+            NguonGocKhachHangName: 'Nội Bộ PQ',
+            NgayPhatSinh: '2026-09-15T08:00:00',
+            HoSoPhuongTien: { ThuongHieuName: brand },
+            TinhTrangDichVu: 3,
+            TongTienThanhToan: 1000000,
+          },
+        });
 
-      caseRepo.findOne.mockResolvedValue(null);
+        caseRepo.findOne.mockResolvedValue(null);
 
-      await service.syncCaseDetail('br-1', 'c-nbpq-1');
+        await service.syncCaseDetail('br-1', 'c-nbpq-1');
 
-      expect(caseRepo.save).toHaveBeenCalledWith(
-        expect.objectContaining({
-          hdPhieuDichVuId: 'c-nbpq-1',
-          kgaraClassification: 'Nội Bộ PQ',
-          kgaraClassificationCode: 'NBPQ',
-          classification: 'OJ',
-        }),
-      );
-    });
+        expect(caseRepo.save).toHaveBeenCalledWith(
+          expect.objectContaining({
+            hdPhieuDichVuId: 'c-nbpq-1',
+            kgaraClassification: 'Nội Bộ PQ',
+            kgaraClassificationCode: 'NBPQ',
+            classification: expected,
+          }),
+        );
+      },
+    );
 
     it('should NOT auto-map classification when the user manually cleared it', async () => {
       clientService.getCaseDetail.mockResolvedValue({

@@ -25,6 +25,17 @@ const header = (over: Record<string, unknown> = {}) =>
   }) as unknown as CaseGarage;
 
 describe('toCaseListItem', () => {
+  it('ojHasInvoice: true/false cho phiếu OJ, null cho phiếu khác', () => {
+    const invoiced = { ojInvoicedIds: new Set(['c1']) };
+    expect(
+      toCaseListItem(header({ classification: 'OJ' }), invoiced).ojHasInvoice,
+    ).toBe(true);
+    expect(toCaseListItem(header({ classification: 'OJ' })).ojHasInvoice).toBe(
+      false,
+    );
+    expect(toCaseListItem(header(), invoiced).ojHasInvoice).toBeNull();
+  });
+
   it('trả trường xe, payer và origin bằng tên EN; không rawData/services', () => {
     const item = toCaseListItem(header());
     expect(item).toMatchObject({
